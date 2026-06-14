@@ -30,6 +30,13 @@ impl<'a> HirBuilder<'a> {
             );
         };
 
+        if template
+            .reactive_template_metadata()
+            .is_some_and(|metadata| metadata.has_runtime_dependency())
+        {
+            return self.lower_runtime_reactive_linear_template_expression(plan, location);
+        }
+
         let accumulator = self.initialize_runtime_template_accumulator(location)?;
         self.append_template_render_plan_to_accumulator(plan, accumulator, location)?;
 

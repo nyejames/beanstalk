@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0064"]
+message_contains = ["JavaScript", "reactive external-call sink"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0064"]
+message_contains = ["Wasm", "reactive template runtime"]

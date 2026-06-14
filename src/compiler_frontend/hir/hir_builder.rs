@@ -41,6 +41,7 @@ use crate::return_hir_transformation_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 mod metadata;
+mod reactivity;
 
 // -----------
 // Entry Point

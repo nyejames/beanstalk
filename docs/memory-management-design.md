@@ -136,6 +136,18 @@ This guarantees:
 
 Infinite loops require no destruction unless they can exit.
 
+## Reactive Cells and Subscriptions
+Reactivity V1 uses stable reactive sources observed by template subscriptions.
+Subscriptions are not mutable borrows and do not hold exclusive access to the source.
+
+Under the GC baseline, reactive cells and mounted template instances stay alive through ordinary
+reachability. Ownership-aware lowerings must preserve the same semantics by ensuring a reactive
+cell or template-instance state is not deterministically freed while a live subscription or mounted
+fragment can still observe it.
+
+Reactive invalidation is source-level in V1. Field, item, and path-level invalidation are later
+optimizations and must not change the ownership semantics of the underlying value.
+
 ## Unified ABI (Deferred Responsibility)
 Beanstalk is designed to support a unified ABI when ownership lowering is active. It deliberately avoids generating separate functions for borrowed vs owned arguments.
 

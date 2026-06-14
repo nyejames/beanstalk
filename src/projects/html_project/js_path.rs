@@ -18,6 +18,9 @@ use crate::build_system::build::{FileKind, Module, OutputFile, ResolvedConstFrag
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::reachability::{
+    ReachableReactiveSinkKind, collect_reachability_from_start,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
@@ -43,6 +46,9 @@ pub(crate) struct HtmlDocumentRenderInput<'a> {
     pub js_bundle: &'a str,
     pub function_names: &'a HashMap<FunctionId, String>,
     pub entry_runtime_fragment_count: usize,
+    /// Whether the emitted JS bundle contains reactive runtime fragments that need the DOM mount
+    /// helper instead of plain-string slot insertion.
+    pub uses_reactive_runtime_fragments: bool,
     /// Optional import-map HTML to inject into `<head>` before module scripts.
     pub import_map_html: Option<String>,
     /// Whether the runtime bundle must be emitted as an ES module script.
@@ -79,6 +85,10 @@ pub(crate) fn compile_html_module_js(
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
+    let uses_reactive_runtime_fragments =
+        html_module_uses_reactive_runtime_fragments(input.hir_module)
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
     // Generate glue modules and import preamble only for external module exports referenced by
     // emitted JS. In HTML page bundles, JS lowering has already filtered unreachable wrappers.
     let glue_result = generate_module_glue(
@@ -107,6 +117,7 @@ pub(crate) fn compile_html_module_js(
         js_bundle: &bundle_with_imports,
         function_names: &js_module.function_name_by_id,
         entry_runtime_fragment_count: input.entry_runtime_fragment_count,
+        uses_reactive_runtime_fragments,
         import_map_html: glue_result.import_map_html,
         use_module_script,
     })?;
@@ -119,6 +130,49 @@ pub(crate) fn compile_html_module_js(
         output_files,
         html_output_path: output_path,
     })
+}
+
+/// Returns true when the JS bootstrap must route runtime fragments through the reactive mount
+/// helper.
+///
+/// WHAT: HIR can carry placeholder template metadata for ordinary `String` parameters so helper
+/// functions can preserve reactive template objects when callers provide them. Those placeholders
+/// should not by themselves make a non-reactive page reference the mount helper. A runtime fragment
+/// needs mounting only when it has a direct source dependency, or when a placeholder dependency can
+/// be satisfied by a concrete reachable reactive source in this emitted page.
+/// WHY: this mirrors JS helper gating and keeps ordinary pages on the plain insertion path.
+fn html_module_uses_reactive_runtime_fragments(
+    hir_module: &HirModule,
+) -> Result<bool, CompilerError> {
+    let reachability = collect_reachability_from_start(hir_module)?;
+    let reachable_reactive_sources = hir_module
+        .blocks
+        .iter()
+        .filter(|block| reachability.reachable_blocks.contains(&block.id))
+        .flat_map(|block| block.locals.iter())
+        .any(|local| {
+            hir_module
+                .side_table
+                .reactive_source_id_for_local(local.id)
+                .is_some()
+        });
+
+    Ok(reachability.reachable_reactive_sinks.iter().any(|sink| {
+        if !matches!(sink.kind, ReachableReactiveSinkKind::RuntimeFragment) {
+            return false;
+        }
+
+        let Some(template) = hir_module
+            .side_table
+            .reactive_templates()
+            .find(|template| template.id == sink.template_id)
+        else {
+            return false;
+        };
+
+        !template.dependencies.is_empty()
+            || (reachable_reactive_sources && !template.template_value_parameters.is_empty())
+    }))
 }
 
 /// Renders entry-file start fragments into static HTML and an ordered list of slot IDs.
@@ -199,6 +253,7 @@ pub(crate) fn render_html_document(
         input.js_bundle,
         &slot_ids,
         input.use_module_script,
+        input.uses_reactive_runtime_fragments,
     );
 
     Ok(render_html_document_shell(
@@ -217,6 +272,7 @@ fn render_runtime_bootstrap_script_html(
     js_bundle: &str,
     slot_ids: &[String],
     is_module_script: bool,
+    uses_reactive_runtime_fragments: bool,
 ) -> String {
     // Escape the bundle so any `</script>` sequence inside string literals or comments cannot
     // prematurely terminate the HTML script tag and corrupt the page.
@@ -229,7 +285,13 @@ fn render_runtime_bootstrap_script_html(
         html.push_str("<script type=\"module\">\n");
         html.push_str(&safe_bundle);
         html.push('\n');
-        append_runtime_bootstrap(&mut html, start_function_name, slot_ids, "");
+        append_runtime_bootstrap(
+            &mut html,
+            start_function_name,
+            slot_ids,
+            "",
+            uses_reactive_runtime_fragments,
+        );
         html.push_str("</script>\n");
         html
     } else {
@@ -240,7 +302,13 @@ fn render_runtime_bootstrap_script_html(
         html.push_str("\n</script>\n");
         html.push_str("<script>\n");
         html.push_str("(function () {\n");
-        append_runtime_bootstrap(&mut html, start_function_name, slot_ids, "  ");
+        append_runtime_bootstrap(
+            &mut html,
+            start_function_name,
+            slot_ids,
+            "  ",
+            uses_reactive_runtime_fragments,
+        );
         html.push_str("})();\n");
         html.push_str("</script>\n");
         html
@@ -252,6 +320,7 @@ fn append_runtime_bootstrap(
     start_function_name: &str,
     slot_ids: &[String],
     indent: &str,
+    uses_reactive_runtime_fragments: bool,
 ) {
     if slot_ids.is_empty() {
         html.push_str(&format!(
@@ -280,9 +349,21 @@ fn append_runtime_bootstrap(
     html.push_str(&format!(
         "{indent}  if (!el) throw new Error(\"Missing runtime mount slot: \" + bst_slots[i]);\n"
     ));
-    html.push_str(&format!(
-        "{indent}  el.insertAdjacentHTML(\"beforeend\", bst_frags[i] || \"\");\n"
-    ));
+
+    if uses_reactive_runtime_fragments {
+        // Reactive pages use the backend mount helper so template fragments can register for
+        // rerendering. The helper also handles plain-string fragments, preserving source order.
+        html.push_str(&format!(
+            "{indent}  __bs_mount_template_fragment(el, bst_frags[i]);\n"
+        ));
+    } else {
+        // Non-reactive pages keep the plain direct insertion path and avoid referencing the
+        // optional mount helper global.
+        html.push_str(&format!(
+            "{indent}  el.insertAdjacentHTML(\"beforeend\", bst_frags[i] || \"\");\n"
+        ));
+    }
+
     html.push_str(&format!("{indent}}}\n"));
 }
 

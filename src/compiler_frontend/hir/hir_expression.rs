@@ -535,6 +535,7 @@ impl<'a> HirBuilder<'a> {
             }
         }?;
 
+        self.bind_reactive_metadata_for_expression(expr, &lowered.value)?;
         self.log_expression_output(expr, &lowered.value);
         Ok(lowered)
     }

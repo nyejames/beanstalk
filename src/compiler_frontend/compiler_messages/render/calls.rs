@@ -44,6 +44,9 @@ pub(crate) fn invalid_call_shape_message(reason: InvalidCallShapeReason) -> Stri
         InvalidCallShapeReason::MutableAccessOnImmutablePlace { .. } => {
             "Mutable access (~) requires a mutable place, but an immutable place was provided.".to_string()
         }
+        InvalidCallShapeReason::ReactiveSourceRequired { .. } => {
+            "This parameter requires an existing reactive source. Pass a value declared with `$Type` or `$=` instead of an ordinary value.".to_string()
+        }
     }
 }
 

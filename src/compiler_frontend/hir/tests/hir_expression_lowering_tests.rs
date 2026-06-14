@@ -12,12 +12,14 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
 use crate::compiler_frontend::ast::expressions::expression::{
     ConstRecordState, Expression, ExpressionKind,
     FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleHandling, Operator,
+    ReactiveSource, ReactiveSourceKind,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent,
+    ReactiveSubscription, SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent,
+    TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
@@ -56,6 +58,9 @@ use crate::compiler_frontend::hir::ids::{
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::reactivity::{
+    HirReactiveSource, HirReactiveSourceKind, ReactiveSourceId,
+};
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -1606,6 +1611,78 @@ fn runtime_template_inline_accumulator_coerces_non_string_segments() {
 }
 
 #[test]
+fn reactive_linear_template_keeps_subscription_chunks_lazy() {
+    let mut string_table = StringTable::new();
+    let location = location(12);
+    let count_path = InternedPath::from_single_str("count", &mut string_table);
+    let count_local = LocalId(24);
+    let count_source = ReactiveSource {
+        path: count_path.clone(),
+        kind: ReactiveSourceKind::Declaration,
+    };
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        count_path.clone(),
+        count_local,
+        builtin_type_ids::INT,
+        location.clone(),
+    );
+    builder.side_table.bind_reactive_source(HirReactiveSource {
+        id: ReactiveSourceId(0),
+        local_id: count_local,
+        path: count_path.clone(),
+        kind: HirReactiveSourceKind::Declaration,
+        type_id: builtin_type_ids::INT,
+        location: location.clone(),
+    });
+
+    let count_expression = reference_expr(
+        count_path,
+        builtin_type_ids::INT,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    )
+    .with_reactive_source(count_source.clone());
+    let subscription = ReactiveSubscription {
+        source: count_source,
+        type_id: builtin_type_ids::INT,
+        location: location.clone(),
+    };
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.content.add_reactive_subscription(
+        count_expression,
+        TemplateSegmentOrigin::Head,
+        subscription,
+    );
+    template.resync_runtime_metadata();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+
+    let lowered = builder
+        .lower_expression(&expression)
+        .expect("reactive runtime template should lower lazily");
+
+    assert!(
+        expression_contains_load_of_local(&lowered.value, count_local),
+        "reactive template snapshot body should reread the subscribed source"
+    );
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(
+        entry_block.statements.is_empty(),
+        "direct subscription chunks should not be materialized into eager snapshot statements"
+    );
+}
+
+#[test]
 fn runtime_template_lowers_nested_templates_in_order() {
     let mut string_table = StringTable::new();
     let a = string_table.intern("A");
@@ -2593,6 +2670,23 @@ fn block_assigns_string_literal(block: &HirBlock, expected: &str) -> bool {
             HirExpressionKind::StringLiteral(ref value) if value == expected
         )
     })
+}
+
+fn expression_contains_load_of_local(
+    expression: &crate::compiler_frontend::hir::expressions::HirExpression,
+    expected: LocalId,
+) -> bool {
+    match &expression.kind {
+        HirExpressionKind::Load(HirPlace::Local(local))
+        | HirExpressionKind::Copy(HirPlace::Local(local)) => *local == expected,
+
+        HirExpressionKind::BinOp { left, right, .. } => {
+            expression_contains_load_of_local(left, expected)
+                || expression_contains_load_of_local(right, expected)
+        }
+
+        _ => false,
+    }
 }
 
 fn block_marks_loop_emitted(block: &HirBlock) -> bool {

@@ -24,6 +24,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_expression::LoweredExpression;
 use crate::compiler_frontend::hir::ids::{LocalId, RegionId};
 use crate::compiler_frontend::hir::operators::HirBinOp;
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -36,6 +37,54 @@ use super::aggregate::RuntimeTemplateAggregateAppend;
 use super::append_context::{RuntimeSlotLoopControlFlush, RuntimeTemplateAppendContext};
 
 impl<'a> HirBuilder<'a> {
+    /// Lowers a reactive linear template into a lazy string expression.
+    ///
+    /// WHAT: direct `$(source)` pieces and nested reactive template values stay in the returned
+    /// expression tree so JS snapshot functions reread them on each render. Ordinary dynamic
+    /// pieces are materialized before the template object is created, preserving `[source]` as a
+    /// snapshot read.
+    /// WHY: the accumulator path eagerly stores rendered text, which is correct for ordinary
+    /// templates but would make reactive rerenders replay stale subscription values.
+    pub(super) fn lower_runtime_reactive_linear_template_expression(
+        &mut self,
+        render_plan: &TemplateRenderPlan,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let string_ty = builtin_type_ids::STRING;
+        let region = self.current_region_or_error(location)?;
+        let mut rendered = self.make_expression(
+            location,
+            HirExpressionKind::StringLiteral(String::new()),
+            string_ty,
+            ValueKind::Const,
+            region,
+        );
+
+        for piece in &render_plan.pieces {
+            let Some(chunk) = self.lower_reactive_linear_render_piece(piece, location)? else {
+                continue;
+            };
+
+            let region = self.current_region_or_error(location)?;
+            rendered = self.make_expression(
+                location,
+                HirExpressionKind::BinOp {
+                    left: Box::new(rendered),
+                    op: HirBinOp::Add,
+                    right: Box::new(chunk),
+                },
+                string_ty,
+                ValueKind::RValue,
+                region,
+            );
+        }
+
+        Ok(LoweredExpression {
+            prelude: vec![],
+            value: rendered,
+        })
+    }
+
     pub(super) fn initialize_runtime_template_accumulator(
         &mut self,
         location: &SourceLocation,
@@ -259,6 +308,101 @@ impl<'a> HirBuilder<'a> {
                 fallback_location,
             ),
         }
+    }
+
+    fn lower_reactive_linear_render_piece(
+        &mut self,
+        piece: &RenderPiece,
+        fallback_location: &SourceLocation,
+    ) -> Result<Option<HirExpression>, CompilerError> {
+        match piece {
+            RenderPiece::Text(text) | RenderPiece::HeadContent(text) => {
+                let text_value = self.string_table.resolve(text.text).to_owned();
+                let region = self.current_region_or_error(&text.location)?;
+                Ok(Some(self.make_expression(
+                    &text.location,
+                    HirExpressionKind::StringLiteral(text_value),
+                    builtin_type_ids::STRING,
+                    ValueKind::Const,
+                    region,
+                )))
+            }
+
+            RenderPiece::DynamicExpression(dynamic) => self
+                .lower_reactive_linear_expression_chunk(
+                    &dynamic.expression,
+                    dynamic.reactive_subscription.is_some(),
+                )
+                .map(Some),
+
+            RenderPiece::ChildTemplate(child) => self
+                .lower_reactive_linear_expression_chunk(&child.expression, false)
+                .map(Some),
+
+            RenderPiece::Slot(_) => Ok(None),
+
+            RenderPiece::LoopControl(signal) => return_hir_transformation_error!(
+                "Reactive linear template lowering received template loop control. Control-flow reactive templates must use the control-flow lowering path.",
+                self.hir_error_location(&signal.location)
+            ),
+
+            RenderPiece::RuntimeSlotSite(_) => return_hir_transformation_error!(
+                "Reactive linear template lowering received a runtime slot site outside a slot application.",
+                self.hir_error_location(fallback_location)
+            ),
+        }
+    }
+
+    fn lower_reactive_linear_expression_chunk(
+        &mut self,
+        expression: &Expression,
+        direct_subscription: bool,
+    ) -> Result<HirExpression, CompilerError> {
+        let lowered = self.lower_expression_value_to_current_block(expression)?;
+        let location = &expression.location;
+        let string_ty = builtin_type_ids::STRING;
+        let region = self.current_region_or_error(location)?;
+        let chunk_as_string =
+            self.coerce_expression_to_string(lowered, location, string_ty, region);
+
+        if direct_subscription
+            || expression
+                .reactive_template
+                .as_ref()
+                .is_some_and(|metadata| metadata.has_runtime_dependency())
+        {
+            return Ok(chunk_as_string);
+        }
+
+        // Non-reactive chunks inside a reactive template are snapshots. Store the rendered chunk
+        // once so later rerenders do not accidentally turn ordinary `[source]` reads live.
+        self.materialize_reactive_template_snapshot_chunk(chunk_as_string, location)
+    }
+
+    fn materialize_reactive_template_snapshot_chunk(
+        &mut self,
+        chunk: HirExpression,
+        location: &SourceLocation,
+    ) -> Result<HirExpression, CompilerError> {
+        let string_ty = builtin_type_ids::STRING;
+        let snapshot = self.allocate_temp_local(string_ty, Some(location.clone()))?;
+
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: HirPlace::Local(snapshot),
+                value: chunk,
+            },
+            location,
+        )?;
+
+        let region = self.current_region_or_error(location)?;
+        Ok(self.make_expression(
+            location,
+            HirExpressionKind::Load(HirPlace::Local(snapshot)),
+            string_ty,
+            ValueKind::Place,
+            region,
+        ))
     }
 
     fn append_runtime_template_expression_to_accumulator(

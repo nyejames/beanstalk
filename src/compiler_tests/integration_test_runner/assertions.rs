@@ -1024,7 +1024,8 @@ fn combine_rendered_output(output: &RenderedOutput) -> String {
 /// Executes the script blocks from compiled HTML through a minimal Node.js harness.
 ///
 /// The harness stubs `document.getElementById` to capture `insertAdjacentHTML` calls,
-/// intercepts `console.log`, and emits a JSON summary to stdout for parsing.
+/// intercepts `console.log`, and emits a JSON summary after one microtask tick so
+/// runtime assertions can observe batched reactive flushes queued by the page bundle.
 fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
     let scripts = extract_script_blocks(html);
     if scripts.is_empty() {
@@ -1107,16 +1108,32 @@ fn remove_temp_harness_file_with_retry(path: &Path) -> Result<(), std::io::Error
 fn build_node_harness(scripts: &[String]) -> String {
     let prefix = r#"const __bst_io = [];
 const __bst_slots = [];
+const __bst_slot_by_id = new Map();
 console.log = (...args) => __bst_io.push(args.map(String).join(' '));
+function __bst_get_slot(id) {
+    if (!__bst_slot_by_id.has(id)) {
+        const slot = {
+            id,
+            innerHTML: "",
+            insertAdjacentHTML: (_, html) => {
+                const text = String(html);
+                slot.innerHTML += text;
+                __bst_slots.push({ id, html: text });
+            }
+        };
+        __bst_slot_by_id.set(id, slot);
+    }
+    return __bst_slot_by_id.get(id);
+}
 const document = {
-    getElementById: (id) => ({
-        insertAdjacentHTML: (_, html) => __bst_slots.push({ id, html })
-    })
+    getElementById: __bst_get_slot
 };
 "#;
 
     let suffix = r#"
-process.stdout.write(JSON.stringify({ io: __bst_io, slots: __bst_slots }) + '\n');
+Promise.resolve().then(() => {
+    process.stdout.write(JSON.stringify({ io: __bst_io, slots: __bst_slots }) + '\n');
+});
 "#;
 
     format!("{prefix}{}\n{suffix}", scripts.join("\n"))

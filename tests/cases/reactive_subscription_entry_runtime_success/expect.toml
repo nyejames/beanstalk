@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["reactive_subscription_entry_runtime_success Count: 4"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_mount_template_fragment(",
+    "__bs_mount_template_fragment(el, bst_frags[i])",
+]

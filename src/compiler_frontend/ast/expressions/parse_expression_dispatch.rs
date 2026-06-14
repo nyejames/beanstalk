@@ -39,7 +39,7 @@ use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCastReason,
-    InvalidControlFlowStatementReason, TypeMismatchContext,
+    InvalidControlFlowStatementReason, InvalidTemplateStructureReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;
@@ -502,6 +502,16 @@ pub(super) fn dispatch_expression_token(
             }
 
             Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Reactive
+            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) =>
+        {
+            Err(CompilerDiagnostic::invalid_template_structure(
+                InvalidTemplateStructureReason::ReactiveSubscriptionOutsideTemplate,
+                token_stream.current_location(),
+            )
+            .into())
         }
 
         TokenKind::Cast | TokenKind::CastBang => {

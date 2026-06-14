@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0046"]
+message_contains = ["Assertion messages must be string literals"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0046"]
+message_contains = ["Assertion messages must be string literals"]

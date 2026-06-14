@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["reactive_declaration_composite_success", "user=Ada", "maybe=Ada", "status=busy"]

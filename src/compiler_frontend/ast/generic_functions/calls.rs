@@ -725,6 +725,7 @@ fn substitute_return_slot(
     ReturnSlot {
         value,
         type_id: Some(type_id),
+        reactive_template: slot.reactive_template.clone(),
         channel: slot.channel,
     }
 }

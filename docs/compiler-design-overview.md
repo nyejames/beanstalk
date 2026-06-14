@@ -488,6 +488,24 @@ AST-prepared slot source/site plans only; it does not parse directives or
 validate slot schemas.
 Compile-time page fragments stay outside HIR.
 
+### Reactivity V1
+
+Reactivity V1 is frontend-owned source and template metadata that later stages preserve for
+backend feature validation and HTML-JS lowering. It must not become a second type system or a
+general closure/function-value model.
+
+Stage ownership:
+- Declaration syntax parses `$Type`, `$=`, and `$T` parameter access markers as syntax only.
+- AST resolves the underlying ordinary `TypeId`, assigns reactive source identity, validates
+  `$(source)` template subscriptions, and preserves reactive template string metadata.
+- HIR carries backend-facing reactive source/template metadata and reachability facts without
+  reparsing template directives or becoming a backend render-plan language.
+- Borrow validation treats subscriptions as read-only source dependencies, not active borrow
+  lifetimes, while ordinary mutations continue to follow existing mutable/exclusive rules.
+- Backend feature validation rejects unsupported reactive sinks and unsupported backends before
+  lowering. HTML-JS V1 mounts top-level runtime fragments and rerenders whole slots; HTML-Wasm
+  remains rejected until a complete reactive runtime design exists.
+
 ## Stage 5: HIR Generation
 
 Path: `src/compiler_frontend/hir/`

@@ -70,7 +70,7 @@ fn receiver_reference_node(
             scope: context.scope.clone(),
         }
     } else {
-        let ref_expr = Expression::reference_with_type_id(
+        let mut ref_expr = Expression::reference_with_type_id(
             reference_arg.id.to_owned(),
             reference_arg.value.diagnostic_type.to_owned(),
             reference_arg.value.type_id,
@@ -78,6 +78,13 @@ fn receiver_reference_node(
             reference_arg.value.value_mode.to_owned(),
             reference_arg.value.const_record_state,
         );
+        if let Some(source) = reference_arg.value.reactive_source.clone() {
+            ref_expr = ref_expr.with_reactive_source(source);
+        }
+        if let Some(template_metadata) = reference_arg.value.reactive_template.clone() {
+            ref_expr = ref_expr.with_reactive_template_metadata(template_metadata);
+        }
+
         AstNode {
             kind: NodeKind::Rvalue(ref_expr),
             scope: context.scope.to_owned(),

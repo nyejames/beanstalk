@@ -10,7 +10,7 @@ use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::functions::HirFunction;
-use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, LocalId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -91,11 +91,16 @@ impl<'hir> JsEmitter<'hir> {
                 // WHAT: lower a fragment push into a JS vec push call against the unwrapped array.
                 // WHY: locals are stored as binding wrappers `{ value: ... }` so `.push` cannot be
                 //      called on the binding itself. __bs_read returns the underlying array.
+                //      Assignment value context preserves reactive template objects for Phase 7
+                //      mounting instead of snapshotting them to plain strings here.
                 let vec_name = self.local_name(*vec_local)?.to_owned();
-                let value_expr = self.lower_expr(value)?;
+                let value_expr =
+                    self.lower_expression_for_use(value, JsValueUse::AssignmentValue)?;
                 self.emit_line(&format!("__bs_read({vec_name}).push({value_expr});"));
             }
         }
+
+        self.emit_reactive_invalidations_for_statement(statement.id);
 
         Ok(())
     }
@@ -194,7 +199,13 @@ impl<'hir> JsEmitter<'hir> {
         match &value.kind {
             HirExpressionKind::Load(place) => {
                 let source = self.lower_place(place)?;
-                if alias_only {
+                if self.local_is_reactive_source(local_id) {
+                    // Reactive declarations own stable source storage. Assignment updates that
+                    // storage with the source's current value rather than rebinding it as an alias.
+                    self.emit_line(&format!(
+                        "__bs_assign_value({local_name}, __bs_read({source}));",
+                    ));
+                } else if alias_only {
                     self.emit_line(&format!("__bs_write({local_name}, __bs_read({source}));",));
                 } else {
                     self.emit_line(&format!("__bs_assign_borrow({local_name}, {source});"));
@@ -211,6 +222,30 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         Ok(())
+    }
+
+    fn emit_reactive_invalidations_for_statement(&mut self, statement_id: HirNodeId) {
+        let Some(invalidations) = self
+            .borrow_analysis
+            .analysis
+            .reactive_invalidations
+            .get(&statement_id)
+        else {
+            return;
+        };
+
+        let mut source_ids = invalidations
+            .iter()
+            .map(|fact| fact.source.0)
+            .collect::<Vec<_>>();
+        source_ids.sort_unstable();
+        source_ids.dedup();
+
+        // Borrow validation owns conservative invalidation detection. JS lowering only schedules
+        // the dirty sources after the statement's ordinary semantics have run.
+        for source_id in source_ids {
+            self.emit_line(&format!("__bs_reactive_schedule({source_id});"));
+        }
     }
 
     fn local_is_alias_only_before_statement(

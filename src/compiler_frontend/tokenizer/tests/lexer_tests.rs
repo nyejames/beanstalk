@@ -827,22 +827,43 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
 }
 
 #[test]
-fn rejects_style_directives_outside_template_heads() {
-    let mut string_table = StringTable::new();
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+fn tokenizes_reactive_marker_outside_template_heads() {
+    let (file_tokens, _string_table) = tokenize_source("$String\n");
 
-    let result = tokenize(
-        "$markdown\n",
-        &source_path,
-        TokenizerEntryMode::SourceFile,
-        &style_directives,
-        &mut string_table,
-        None,
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Reactive),
+        "`$` in ordinary code should be the reactive marker"
     );
     assert!(
-        result.is_err(),
-        "style directives outside template heads should fail"
+        matches!(file_tokens.tokens[2].kind, TokenKind::DatatypeString),
+        "reactive marker should not turn the following identifier into a style directive"
+    );
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::StyleDirective(_))),
+        "ordinary code should not produce style directive tokens"
+    );
+}
+
+#[test]
+fn tokenizes_template_reactive_subscription_marker() {
+    let (file_tokens, _string_table) = tokenize_source("[:[$(count)]]");
+
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Reactive)),
+        "`$(` in a template head should produce the reactive marker"
+    );
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::StyleDirective(_))),
+        "`$(` is subscription syntax, not a style directive"
     );
 }
 

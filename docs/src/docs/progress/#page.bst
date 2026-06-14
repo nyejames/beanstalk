@@ -597,6 +597,111 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [header: [: Surface] [: Status] [: Canonical diagnostic direction] [: Notes] ]
 
         [data:
+            [: Reactive declarations and parameters]
+            [: Partial]
+            [: Frontend syntax, AST source metadata, HIR reactive source side-table metadata, borrow invalidation facts, [$html:<code>$T</code>] call validation, template subscription source validation, JS reactive binding/scheduler helper lowering, HTML-JS runtime-fragment mounting, and unsupported sink/backend diagnostics are implemented.]
+            [: Accepted V1 syntax is [$html:<code>$Type</code>] / [$html:<code>$=</code>] declarations and [$html:<code>$T</code>] parameters. Reactive identity is source metadata, not a wrapper type or separate [$html:<code>TypeId</code>]. HIR preserves reactive declarations and parameters as ordinary locals with side-table source IDs, borrow validation records conservative source-level invalidation facts for writes that may dirty those sources, and the JS backend lowers reactive locals to backend-owned reactive binding records while scheduling dirty sources from those facts. Reactive declarations are runtime-local, cannot become importable/exportable top-level declarations, ordinary [$html:<code>T</code>] parameters receive snapshot reads, and HTML-Wasm rejects reachable reactive template runtime features until a Wasm runtime design exists.]
+        ]
+
+        [data:
+            [: Reactive template subscriptions]
+            [: Partial]
+            [: Frontend tokenization, template-head parsing, AST source validation, subscription segment metadata, AST-level reactive template-string value propagation, HIR value side-table metadata, HIR invariant validation, HIR reachability facts for runtime fragments / external-call sinks, borrow invalidation facts, JS template-string helper lowering, HTML-JS runtime-fragment mounting, and unsupported sink/backend diagnostics are implemented.]
+            [: Accepted V1 syntax is [$html:<code>["$(source)"]</code>] in template head/capture positions only. V1 accepts one bare reactive source identifier; field paths, calls, operators, computed expressions, mutable access forms, nested templates/literals, ordinary expression-position use, and compile-time templates are rejected. Ordinary [$html:<code>["[source]"]</code>] captures stay snapshot reads. Runtime template values keep ordinary [$html:<code>String</code>] type while carrying direct metadata through template composition, assignment, returns, direct call arguments, ordinary [$html:<code>String</code>] parameter passthroughs, HIR lowering, JS backend-owned template-string objects, and HTML-JS top-level runtime-fragment mounting. Ordinary and host string contexts snapshot those objects; direct subscription-bearing external-call sinks are rejected in JS, and HTML-Wasm rejects reachable subscription-bearing template runtime values before Wasm lowering. Ordinary string operations still snapshot and do not preserve reactive template metadata.]
+        ]
+
+        [data:
+            [: HTML-JS reactive runtime fragments]
+            [: Partial]
+            [: JS reactive source, scheduler, template-string runtime helpers, HTML slot mounting/rerender registration, direct unsupported sink diagnostics, and HTML-Wasm rejection are implemented.]
+            [: V1 live sink support is top-level runtime HTML fragments in the HTML-JS builder. The JS backend can create reactive bindings, collect template dependencies, preserve backend-owned template-string values in runtime fragment arrays, mount them into [$html:<code>bst-slot-N</code>] placeholders, register mounted fragments against dependency source IDs, and rerender whole slots during dirty-source scheduler flushes. Non-reactive runtime fragments keep the plain direct insertion path. Direct subscription-bearing external-call sinks are rejected for JS, reachable subscription-bearing reactive template runtime values are rejected for HTML-Wasm, and fine-grained DOM updates remain future backend optimization.]
+        ]
+
+        [data:
+            [: Reactive template control flow]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: Reactive-aware template [$html:<code>if</code>] and [$html:<code>loop</code>] behavior is future work beyond bare-source subscriptions.]
+        ]
+
+        [data:
+            [: Field/path subscriptions]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: V1 subscriptions are source-level only. Field and path-level invalidation require separate design.]
+        ]
+
+        [data:
+            [: Collection item subscriptions]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: V1 invalidates whole reactive sources when collection or hashmap mutations may write through them. Item-level subscriptions and invalidation require a separate design.]
+        ]
+
+        [data:
+            [: Expression dependency tracking]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: V1 does not infer dependencies from computed expressions.]
+        ]
+
+        [data:
+            [: Derived reactive values]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: Derived values require a later explicit design and must not become implicit expression dependency tracking.]
+        ]
+
+        [data:
+            [: Reactive IO sinks]
+            [: Deferred]
+            [: Direct subscription-bearing external-call sinks are rejected with unsupported backend feature diagnostics.]
+            [: Live IO/side-effect sinks are deferred until the side-effect model is designed. V1 permits live updates only for top-level HTML-JS runtime fragments.]
+        ]
+
+        [data:
+            [: Fine-grained reactive DOM updates]
+            [: Deferred]
+            [: Backend optimization, not current surface.]
+            [: Text, attribute, and style update strategies are deferred after whole-fragment HTML-JS rerendering.]
+        ]
+
+        [data:
+            [: Nested reactive regions]
+            [: Deferred]
+            [: Backend optimization, not current surface.]
+            [: V1 rerenders whole top-level runtime fragment mount slots. Nested live regions require a later backend/runtime design.]
+        ]
+
+        [data:
+            [: Keyed loop diffing and stable child identity]
+            [: Deferred]
+            [: Backend optimization, not current surface.]
+            [: V1 does not diff keyed children or preserve child identity across rerenders beyond whole-fragment replacement.]
+        ]
+
+        [data:
+            [: Template-owned event/action/effect syntax]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: Future UI work. It must not imply general closures, anonymous function values, or general function-value semantics.]
+        ]
+
+        [data:
+            [: `$bind(...)` and typed component messages]
+            [: Deferred]
+            [: No accepted syntax.]
+            [: Form binding helpers and typed component events/messages belong to later UI design work.]
+        ]
+
+        [data:
+            [: HTML-Wasm reactive runtime support]
+            [: Deferred]
+            [: Reachable subscription-bearing template runtime values are rejected with unsupported backend feature diagnostics.]
+            [: HTML-Wasm rejects reachable reactive runtime features before Wasm lowering until a complete Wasm reactive runtime design exists.]
+        ]
+
+        [data:
             [: Trait ecosystem extensions]
             [: Deferred]
             [: Current trait diagnostics and implemented trait fixtures are listed in the core Traits row.]
@@ -849,17 +954,31 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
+            [: General closures]
+            [: Outside Scope]
+            [: Rejected if syntax is introduced before an explicit language-philosophy change.]
+            [: Not a current roadmap item. Reactivity is the constrained UI mechanism intended to cover many closure-heavy template cases without adding general function-value semantics.]
+        ]
+
+        [data:
+            [: Anonymous function values]
+            [: Outside Scope]
+            [: Rejected if syntax is introduced before an explicit language-philosophy change.]
+            [: Not a current roadmap item. Template-owned event/action/effect syntax, if added later, must not become hidden anonymous function values.]
+        ]
+
+        [data:
             [: Generic function values]
-            [: Rejected / Deferred]
+            [: Outside Scope]
             [: [$html:<code>generic_fn_value_use_grouped_rejected</code>], [$html:<code>generic_fn_value_use_namespace_rejected</code>], [$html:<code>generic_fn_value_use_collection_rejected</code>], [$html:<code>generic_fn_value_use_argument_rejected</code>], [$html:<code>generic_fn_value_use_return_rejected</code>], [$html:<code>generic_fn_value_use_facade_rejected</code>]]
-            [: Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values.]
+            [: Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values. This is not a current roadmap item.]
         ]
 
         [data:
             [: Higher-order polymorphism]
-            [: Deferred]
+            [: Outside Scope]
             [: None]
-            [: Generic function values, polymorphic function parameters, and higher-order generic calls are outside the Alpha surface.]
+            [: Generic function values, polymorphic function parameters, and higher-order generic calls are outside the current language design scope.]
         ]
 
         [data:

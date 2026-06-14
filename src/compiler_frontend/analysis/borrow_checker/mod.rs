@@ -20,7 +20,10 @@ pub(crate) use error::BorrowCheckError;
 pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowDropSiteKind, LocalMode};
 
 #[cfg(test)]
-pub(crate) use types::{BorrowDropSite, BorrowStateSnapshot, LocalBorrowSnapshot};
+pub(crate) use types::{
+    BorrowDropSite, BorrowStateSnapshot, LocalBorrowSnapshot, ReactiveInvalidationFact,
+    ReactiveInvalidationKind,
+};
 pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::compiler_frontend::analysis::borrow_checker::engine::BorrowChecker;

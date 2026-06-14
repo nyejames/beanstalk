@@ -33,6 +33,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 | Surface | Reason |
 |---|---|
 | General-purpose macros, procedural macros, derive macros, and AST macros | They create a second compile-time language and make code harder to inspect. Templates, constants, and builder directives are the constrained compile-time surface. |
+| General closures, anonymous function values, generic function values, and higher-order polymorphism | They add broad function-value semantics and solver pressure. Reactivity is the constrained UI-oriented mechanism intended to cover many closure-heavy template cases without adding general function values. |
 | Dynamic trait values / trait objects | They require erased wrappers, runtime dispatch, dynamic-safety rules, backend-specific runtime support, and a second meaning for trait names. Use choices for runtime heterogeneity and generic trait bounds for static reuse. |
 | Trait inheritance, trait aliases, trait composition, default methods, associated types, and associated constants | These turn traits into a type-level programming system rather than simple method contracts. |
 | Generic traits and generic trait methods | These make trait solving significantly more complex and create Rust-like abstraction patterns. |
@@ -616,6 +617,31 @@ blue = [$insert("style"): color: blue;]
 ```
 
 Nested `$children(...)` wrappers remain scoped to direct children, so row/cell-style helpers can be layered without wrapper leakage.
+
+### Reactivity V1
+
+Reactivity V1 is a constrained template/UI mechanism, not a general closure or
+function-value support.
+
+Current V1 syntax:
+- reactive declarations: `name $Type = value` and `name $= value`
+- reactive parameters: `param $Type`
+- template subscriptions: `$(source)` in template head/capture positions only
+
+Rules:
+- `$Type` is reactive access syntax, not a first-class wrapper type.
+- Reactive identity is binding/source metadata, not semantic `TypeId` identity.
+- A reactive declaration owns stable mutation-capable runtime storage in its declaring scope.
+- A reactive parameter is a read/subscription handle to an existing source; it does not grant mutation permission.
+- `$(source)` accepts exactly one bare reactive source identifier in V1.
+- `$(source)` captures stable source identity and read-only subscription metadata; it never captures
+  a mutable borrow, copied value, or computed expression.
+- Top-level runtime HTML fragments in the HTML-JS builder are the first live sink. The backend
+  mounts reactive template strings and rerenders the whole mount slot when any dependency source is
+  invalidated.
+- Field/path subscriptions, expression dependency tracking, reactive IO sinks, fine-grained DOM updates, template-owned event/action/effect syntax, `$bind(...)`, typed component messages, and HTML-Wasm runtime support are deferred follow-ups.
+- `[source]` remains a snapshot template read.
+- General closures, anonymous function values, generic function values, and higher-order polymorphism are outside the current language design scope.
 
 ### Template Head Suffix Control Flow
 

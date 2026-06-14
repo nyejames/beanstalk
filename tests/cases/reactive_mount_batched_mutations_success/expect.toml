@@ -1,0 +1,18 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "reactive_mount_batched_mutations_success 3\nreactive_mount_batched_mutations_success 3",
+]
+rendered_output_not_contains = [
+    "reactive_mount_batched_mutations_success 3\nreactive_mount_batched_mutations_success 3\nreactive_mount_batched_mutations_success 3",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_reactive_schedule(sourceId)",
+    "if (__bs_reactive_flush_scheduled)",
+    "queueMicrotask(__bs_reactive_flush)",
+]

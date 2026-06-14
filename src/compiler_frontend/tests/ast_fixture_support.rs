@@ -88,6 +88,7 @@ pub(crate) fn fresh_success_returns(result_type_ids: Vec<TypeId>) -> Vec<ReturnS
         .map(|type_id| ReturnSlot {
             value: FunctionReturn::Value(DataType::Inferred),
             type_id: Some(type_id),
+            reactive_template: None,
             channel: ReturnChannel::Success,
         })
         .collect()

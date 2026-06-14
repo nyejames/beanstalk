@@ -12,23 +12,6 @@ use crate::compiler_frontend::hir::terminators::HirTerminator;
 // Runtime helper contract tests
 // ---------------------------------------------------------------------------
 
-/// Returns the source text of a single JS helper function, bounded by the next
-/// `function ` declaration or end of file. This keeps assertions focused on one
-/// helper at a time instead of the whole prelude.
-fn helper_source<'a>(source: &'a str, name: &str) -> &'a str {
-    let prefix = format!("function {name}(");
-    let start = source
-        .find(&prefix)
-        .unwrap_or_else(|| panic!("helper {name} must be present in emitted JS"));
-    let rest = &source[start..];
-    // Find the next top-level function declaration after this one.
-    let end = rest[1..]
-        .find("function ")
-        .map(|i| i + 1)
-        .unwrap_or(rest.len());
-    &rest[..end]
-}
-
 /// Verifies that `__bs_result_propagate` unwraps ok values and throws a structured
 /// sentinel for err values. [result]
 #[test]

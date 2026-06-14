@@ -1,967 +1,214 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Reactivity in Beanstalk Templates"
-page_description #= "Design draft for explicit, place-based reactivity in Beanstalk templates using reactive type access."
+page_description #= "Current support for explicit reactive sources and template subscriptions in Beanstalk."
 page_head #= theme_head
 
 #[navbar]
 #[title, center: REACTIVITY IN BEANSTALK TEMPLATES]
 
 #[section, $markdown:
-    **Design draft:** This page is a future-facing design document for language and compiler planning.
-    It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.
+    Reactivity V1 is Beanstalk's constrained UI-oriented alternative to adding general closures, anonymous function values, generic function values, or higher-order polymorphism.
+    It is built from explicit reactive sources, explicit template subscriptions, and backend-owned runtime updates.
 
-    This document describes the design and semantics of **reactivity in Beanstalk templates**.
+    V1 syntax:
 
-    Reactivity in Beanstalk is **explicit**, **place-based**, and tied to compiler-managed template rendering.
+    - reactive declarations use `$Type` or `$=`
+    - reactive parameters use `$Type`
+    - template subscriptions use `["$(source)"]`
+    - ordinary `["[source]"]` template captures remain snapshot reads
 
-    Reactive values are declared with **reactive type access**:
+    V1 does not include event/action/effect syntax, field/path subscriptions, expression dependency tracking, reactive IO sinks, fine-grained DOM updates, or HTML-Wasm runtime support.
+    The current live backend sink is top-level runtime HTML fragments in the HTML-JS builder.
+]
+
+#[section, $markdown:
+    # Reactive sources
+
+    A reactive declaration creates stable mutation-capable storage in the declaring runtime scope.
 
     [codeblock, $code("bst"):
         count $Int = 0
         message $String = [:Hello]
+
+        enabled $= true
     ]
 
-    Templates subscribe to reactive values with `~` inside template captures:
+    `$Type` is reactive access syntax, not a user-facing wrapper type. The value still has the underlying semantic type:
 
-    [codeblock, $code("bst"):
-        [~count]
-    ]
+    - `count $Int` stores an `Int`
+    - `message $String` stores a `String`
+    - `items ${String}` stores a `{String}`
+    - `scores ${String = Int}` stores a `{String = Int}`
 
-    Regular code can still read reactive values normally:
-
-    [codeblock, $code("bst"):
-        doubled = count * 2
-    ]
+    Reactive identity belongs to the binding/source metadata. It is not a separate `TypeId`.
 ]
 
 #[section, $markdown:
-    # Design goals
+    # Reads and subscriptions
 
-    Reactivity in Beanstalk is designed to:
+    Ordinary reads snapshot the current value. In templates, `["[source]"]` is still a normal snapshot capture.
 
-    - Be explicit and predictable
-    - Keep reactive storage visible at declaration sites
-    - Keep subscriptions visible inside templates
-    - Reuse existing language concepts: types, places, mutability, and template captures
-    - Avoid hidden reactive promotion
-    - Avoid virtual DOM diffing
-    - Enable fine-grained node-level updates
-    - Integrate cleanly with Beanstalk's GC-first memory model
-    - Keep templates read-only
+    A live subscription uses `["$(source)"]` in a template head or capture position. V1 accepts only one bare source identifier.
 
-    Reactivity is not a separate framework layered on top of the language.
+    - `["[source]"]` snapshots the current value
+    - `["$(source)"]` creates a read-only subscription to a stable reactive source
 
-    It is compiler-owned rendering behavior built around stable reactive places.
+    `["$(source)"]` captures stable source identity and dependency metadata. It does not capture a mutable borrow, copy the value, or run a computed expression.
 ]
 
 #[section, $markdown:
-    # Core idea
+    # Subscription restrictions
 
-    Reactive values are declared by prefixing the value type with `$`.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-    ]
-
-    This means:
-
-    - `count` has value type `Int`
-    - `count` is stored as a reactive source
-    - `count` has stable identity
-    - templates can subscribe to `count` with `["[~count]"]`
-    - assignment to `count` invalidates subscribers
-
-    Regular code does not need special syntax to read it:
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-
-        next = count + 1
-        label = [:Count: [count]]
-    ]
-
-    In a template, `["[count]"]` is a snapshot read.
-
-    In a template, `["[~count]"]` is a reactive subscription.
-]
-
-#[section, $markdown:
-    # Reactive type access
-
-    Reactive type access uses `$Type`.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-        enabled $Bool = true
-        message $String = [:Hello]
-    ]
-
-    It works with user-defined types too:
-
-    [codeblock, $code("bst"):
-        ReactiveData = |
-            time Int
-        |
-
-        data $ReactiveData = ReactiveData(1)
-    ]
-
-    `$Type` does not create a new user-facing wrapper type.
-
-    This:
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-    ]
-
-    does not mean `count` has type `State<Int>`.
-
-    It means `count` is an `Int` stored in compiler-managed reactive storage.
-]
-
-#[section, $markdown:
-    # Inferred reactive declarations
-
-    Reactive declarations can also infer their value type from the initializer.
-
-    [codeblock, $code("bst"):
-        count $= 0
-        message $= [:Hello]
-
-        ReactiveData = |
-            time Int
-        |
-
-        data $= ReactiveData(1)
-    ]
-
-    `$=` is an inferred reactive declaration.
-
-    It is declaration syntax, not assignment syntax.
-
-    After declaration, reassignment uses normal assignment:
-
-    [codeblock, $code("bst"):
-        count $= 0
-
-        count = 1
-        count += 1
-    ]
-
-    This is invalid:
-
-    [codeblock, $code("bst"):
-        count $= 0
-
-        count $= 1 -- invalid
-    ]
-
-    `$=` is only used when declaring a new reactive value.
-]
-
-#[section, $markdown:
-    # Snapshot vs subscription
-
-    Templates can read a reactive value in two ways.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-
-        snapshot = [count]
-        reactive = [~count]
-    ]
-
-    `["[count]"]` reads the current value.
-
-    `["[~count]"]` subscribes to the reactive source.
-
-    If `count` changes later, `snapshot` does not update, but `reactive` does.
-
-    This makes snapshot and reactive rendering explicit at the place where the template uses the value.
-]
-
-#[section, $markdown:
-    # Template subscription
-
-    Inside templates, `~reactive_value` subscribes to a reactive source.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-
-        [~count]
-    ]
-
-    This is only valid for reactive values.
-
-    This is invalid:
-
-    [codeblock, $code("bst"):
-        count ~= 0
-
-        [~count]
-    ]
-
-    `count` is mutable, but it is not reactive.
-
-    The compiler should produce a clear error:
-
-    [codeblock, $code("text"):
-        Cannot subscribe to 'count' because it is not reactive.
-        Use '[count]' for a snapshot, or declare it with '$Int' or '$='.
-    ]
-]
-
-#[section, $markdown:
-    # Meaning of ~
-
-    `~` keeps its normal meaning outside templates.
-
-    [codeblock, $code("bst"):
-        increment |count ~Int|:
-            count += 1
-        ;
-
-        count $Int = 0
-        increment(~count)
-    ]
-
-    Outside templates, `~count` requests mutable/exclusive access.
-
-    Inside templates, `["[~count]"]` subscribes to a reactive value.
-
-    Templates still cannot mutate values.
-
-    The two meanings are context-specific:
-
-    [styled_table:
-        [header: [: Syntax] [: Context] [: Meaning] ]
-
-        [data:
-            [: [$html:<code>~count</code>] ]
-            [: Normal code / call argument ]
-            [: Mutable/exclusive access ]
-        ]
-
-        [data:
-            [: [$html:<code>["[~count]"]</code>] ]
-            [: Template capture ]
-            [: Reactive read subscription ]
-        ]
-    ]
-]
-
-#[section, $markdown:
-    # Reactive declarations imply mutable storage
-
-    Reactive declarations are mutation-capable by definition.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-
-        count = 1
-        count += 1
-    ]
-
-    This is deliberate.
-
-    Reactivity exists to observe changes, so a reactive source must be able to change.
-
-    These forms are invalid because they mix reactive storage syntax with mutable declaration syntax:
-
-    [codeblock, $code("bst"):
-        count $Int ~= 0
-        count ~$Int = 0
-        count $~Int = 0
-    ]
-
-    Use this instead:
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-    ]
-]
-
-#[section, $markdown:
-    # Function boundaries
-
-    Functions that need a reactive source use reactive type access in the parameter type.
-
-    [codeblock, $code("bst"):
-        counter_view |count $Int| -> String:
-            return [:
-                Current Count: [~count]
-                Starting Count: [count]
-            ]
-        ;
-    ]
-
-    The caller passes the value normally:
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-        view = counter_view(count)
-    ]
-
-    The function signature requests a reactive source.
-
-    The call site does not use `~`, because `~` outside templates means mutable access.
-
-    This is invalid:
-
-    [codeblock, $code("bst"):
-        count ~= 0
-        view = counter_view(count)
-    ]
-
-    `counter_view` requires `$Int`, but `count` is a normal mutable `Int`.
-
-    The compiler should produce a clear error:
-
-    [codeblock, $code("text"):
-        Function 'counter_view' requires reactive argument '$Int' for parameter 'count'.
-        Declare the argument with '$Int' or '$=' if it should be reactive.
-    ]
-]
-
-#[section, $markdown:
-    # Reactive parameters are not mutable parameters
-
-    A reactive parameter can be subscribed to, but it does not grant mutation permission by itself.
-
-    [codeblock, $code("bst"):
-        counter_view |count $Int| -> String:
-            return [~count]
-        ;
-    ]
-
-    Mutation still requires a mutable parameter:
-
-    [codeblock, $code("bst"):
-        increment |count ~Int|:
-            count += 1
-        ;
-    ]
-
-    These are different capabilities:
-
-    - `count $Int` requires a reactive `Int` source
-    - `count ~Int` requires mutable/exclusive access to an `Int`
-
-    A parameter cannot combine `$` and `~`.
-
-    Invalid:
-
-    [codeblock, $code("bst"):
-        bad |count ~$Int|:
-            count += 1
-        ;
-
-        also_bad |count $~Int|:
-            count += 1
-        ;
-    ]
-]
-
-#[section, $markdown:
-    # Full example
-
-    [codeblock, $code("bst"):
-        @html/Basic
-
-        count $Int = 0
-
-        increment_count |count ~Int|:
-            count += 1
-        ;
-
-        counter_view |count $Int| -> String:
-            return [:
-                Current Count: [~count]
-                Starting Count: [count]
-            ]
-        ;
-
-        [Basic.section:
-            [counter_view(count)]
-
-            [Basic.button, Basic.onclick(
-                ||: increment_count(~count)
-            ):
-                click me to increase the count!
-            ]
-        ]
-    ]
-
-    In this example:
-
-    - `count $Int = 0` declares a reactive source
-    - `["[~count]"]` subscribes to that source
-    - `["[count]"]` snapshots its current value
-    - `increment_count(~count)` mutates it
-    - mutation invalidates template bindings subscribed to `["[count]"]`
-
-    The callback is not reactive by itself.
-
-    It is ordinary Beanstalk code that mutates a value.
-    Reactivity occurs because a template binding explicitly subscribed to a reactive source.
-]
-
-#[section, $markdown:
-    # Compiler directive namespace
-
-    `$` should be treated as a compiler-owned marker with different legal forms in different syntax positions.
-
-    Lowercase names are template/style directives:
-
-    [codeblock, $code("bst"):
-        [$markdown:
-            # Title
-        ]
-    ]
-
-    PascalCase names after `$` in type position are reactive type access:
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-        data $ReactiveData = ReactiveData(1)
-    ]
-
-    `$=` is inferred reactive declaration syntax:
-
-    [codeblock, $code("bst"):
-        count $= 0
-    ]
-
-    This relies on Beanstalk's naming rules:
-
-    - types use PascalCase
-    - variables and functions use snake_case
-    - template/style directives use lowercase names
-
-    Because these naming conventions are enforced, `$markdown` and `$Int` cannot collide.
-]
-
-#[section, $markdown:
-    # Invalid directive forms
-
-    The parser should reject invalid `$` usage clearly.
-
-    Invalid lowercase directive in type position:
-
-    [codeblock, $code("bst"):
-        count $markdown = 0
-    ]
-
-    Invalid PascalCase type directive in template directive position:
-
-    [codeblock, $code("bst"):
-        [$Int:
-            content
-        ]
-    ]
-
-    Invalid reactive type without initializer:
-
-    [codeblock, $code("bst"):
-        count $Int
-    ]
-
-    Invalid inferred reactive declaration without initializer:
-
-    [codeblock, $code("bst"):
-        count $=
-    ]
-
-    Invalid reactive type after the initializer:
-
-    [codeblock, $code("bst"):
-        count Int = $0
-        count Int = 0 $Int
-    ]
-
-    Invalid subscription to a non-reactive value:
-
-    [codeblock, $code("bst"):
-        count ~= 0
-        [~count]
-    ]
-
-    Invalid subscription to a computed expression:
-
-    [codeblock, $code("bst"):
-        [~(count + 1)]
-        [~get_count()]
-        [~[:Hello]]
-    ]
-
-    Reactive subscriptions require a named reactive source with stable identity.
-]
-
-#[section, $markdown:
-    # What is being captured
-
-    A reactive template capture does not capture:
-
-    - A copied value
-    - A string output
-    - A computed expression
-    - A mutable borrow
-
-    It captures:
-
-    - A stable reactive source identity
-    - A read-only subscription to that source
-
-    The template never owns mutable access.
-
-    It only observes changes.
-]
-
-#[section, $markdown:
-    # Valid reactive sources
-
-    Initially, template subscriptions should be limited to simple reactive places.
+    V1 deliberately keeps subscriptions narrow.
 
     Valid:
 
     [codeblock, $code("bst"):
         count $Int = 0
-        view = [~count]
+        subscription = ["$(count)"]
     ]
 
-    Invalid:
+    Deferred or invalid:
 
     [codeblock, $code("bst"):
-        count ~= 0
-
-        view = [~count]
-        view = [~1]
-        view = [~get_count()]
-        view = [~[:Hello]]
+        ["$(source.field)"]
+        ["$(items.get(0)!)"]
+        ["$(get_count())"]
+        ["$(source + 1)"]
+        ["$(~source)"]
+        ["$()"]
+        ["$(a, b)"]
     ]
 
-    Future versions may support field paths and collection paths:
+    `["$("]` is recognized only when `$` is immediately followed by `(`. `$ (source)` is not subscription syntax.
 
-    [codeblock, $code("bst"):
-        [~user.name]
-        [~items.get(0)!]
-    ]
-
-    These should be added only after the basic reactive source model is stable.
+    `["$(source)"]` is invalid in compile-time templates, constants, ordinary expression positions, and non-template syntax positions.
 ]
 
 #[section, $markdown:
-    # Assignment semantics
+    # Function boundaries
 
-    Assignment to a reactive value updates the same stable source.
-
-    [codeblock, $code("bst"):
-        message $String = [:Hello]
-        view = [~message]
-
-        message = [:Goodbye]
-    ]
-
-    The assignment does not break the subscription.
-
-    It means:
-
-    - The same reactive source still exists
-    - The value stored in that source changes
-    - Subscribers to `["[message]"]` are invalidated
-    - Render bindings subscribed with `["[~message]"]` update
-
-    A reactive source has stable identity.
-
-    Assignment updates the source value, not the subscription target.
-]
-
-#[section, $markdown:
-    # Regular reads
-
-    Reactive values can be read as ordinary values.
-
-    [codeblock, $code("bst"):
-        count $Int = 0
-
-        doubled = count * 2
-        label = [:Count: [count]]
-    ]
-
-    This does not create a subscription.
-
-    A regular read sees the current value.
-
-    A template snapshot captures the current rendered value.
-
-    Only `["[~count]"]` subscribes.
-]
-
-#[section, $markdown:
-    # Passing reactive values to ordinary functions
-
-    A reactive value can be passed to ordinary parameters as a normal value.
-
-    [codeblock, $code("bst"):
-        double |value Int| -> Int:
-            return value * 2
-        ;
-
-        count $Int = 0
-        result = double(count)
-    ]
-
-    This is a normal read.
-
-    It does not subscribe `double` to `count`.
-
-    A function must explicitly request reactive access with `$Int` if it needs to subscribe:
+    A function that needs to preserve reactive source identity asks for a reactive parameter.
 
     [codeblock, $code("bst"):
         counter_view |count $Int| -> String:
-            return [~count]
+            return [: Count subscription: ["$(count)"]]
         ;
     ]
+
+    A `$T` parameter is a read/subscription handle to an existing reactive source. It does not grant mutation permission.
+
+    A reactive source passed to an ordinary `T` parameter is a snapshot read, except that reactive template string values may keep their template metadata when passed through ordinary `String` parameters and inserted into another template.
+
+    A non-reactive value cannot satisfy a `$T` parameter.
 ]
 
 #[section, $markdown:
-    # Callbacks and events
+    # Mutation and invalidation
 
-    Callbacks in Beanstalk templates are ordinary closures with normal access rules.
-
-    [codeblock, $code("bst"):
-        Basic.onclick(||:
-            increment_count(~count)
-        )
-    ]
-
-    Key properties:
-
-    - Closures capture values using normal language rules
-    - Mutable access must be explicit
-    - Callbacks do not create reactivity by themselves
-    - Reactivity occurs as a result of mutation to a reactive source observed with `["[~value]"]`
-
-    This should remain true even when higher-level event helpers are added.
-]
-
-#[section, $markdown:
-    # Declarative event syntax
-
-    Higher-level declarative event syntax may be introduced later as sugar:
+    Assignment to a reactive declaration updates the same stable source and invalidates subscribers.
 
     [codeblock, $code("bst"):
-        [Basic.button:
-            on click:
-                increment_count(~count)
-            ;
-            click me
-        ]
-    ]
+        count $Int = 0
 
-    This should lower to ordinary callback passing.
-
-    It must not change the underlying access rules.
-]
-
-#[section, $markdown:
-    # Reactive sinks
-
-    Reactive captures may bind to backend render targets such as:
-
-    - Text nodes
-    - Attributes
-    - Styles
-    - Future backend-defined node targets
-
-    The HTML backend should lower reactive templates into a node-level render plan.
-
-    There is no virtual DOM diffing step.
-
-    The backend knows which render targets depend on which reactive sources and can update those targets directly.
-
-    Example:
-
-    [codeblock, $code("bst"):
-        message $String = [:Hello]
-
-        [Basic.section:
-            [~message]
-        ]
-    ]
-
-    This can lower to a text-node binding whose contents are updated whenever `message` changes.
-]
-
-#[section, $markdown:
-    # Runtime update scheduling
-
-    Reactive updates should be scheduled and batched by the backend runtime.
-
-    Multiple mutations in one synchronous block should not cause multiple independent DOM updates.
-
-    Conceptually:
-
-    [codeblock, $code("bst"):
-        name = "Nye"
         count = 1
-        enabled = true
     ]
 
-    should produce one update flush, not three separate render passes, when those assignments affect reactive sources.
+    Mutating through a reactive source invalidates the whole source in V1:
 
-    The scheduler is backend-owned.
+    - assignment
+    - field writes
+    - collection or hashmap mutation
+    - mutable write-through calls
 
-    It is not a user-facing global state system.
-
-    The user-facing rule remains:
-
-    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with `~` inside templates.
-]
-
-#[section, $markdown:
-    # Render plans
-
-    Reactive templates should not be implemented as ordinary string rerendering.
-
-    The compiler should produce a render plan that distinguishes:
-
-    - Static text
-    - Snapshot expressions
-    - Reactive subscriptions
-    - Child templates
-    - Attributes
-    - Styles
-    - Backend-specific render targets
-
-    A simplified internal model:
-
-    [codeblock, $code("rust"):
-        enum TemplateFragment {
-            StaticText(StringId),
-            SnapshotExpression(ExpressionId),
-            ReactiveExpression(ReactiveCaptureId),
-            ChildTemplate(TemplatePlanId),
-        }
-
-        struct ReactiveCapture {
-            source: ReactiveSourceId,
-            value_type: DataType,
-            location: SourceLocation,
-        }
-    ]
-
-    The frontend should preserve semantic reactivity in the template representation.
-
-    The backend decides how to lower it.
-
-    For HTML, this should eventually become node-level DOM update code rather than string replacement where practical.
-]
-
-#[section, $markdown:
-    # Initial implementation strategy
-
-    The first implementation should be conservative.
-
-    ## Phase 1: Reactive type syntax
-
-    Add parsing and validation for:
-
-    - explicit reactive declarations: `count $Int = 0`
-    - inferred reactive declarations: `count $= 0`
-    - reactive parameters: `count $Int`
-    - template subscriptions: `["[~count]"]`
-
-    Reject invalid combinations clearly.
-
-    ## Phase 2: Reactive source validation
-
-    Validate that:
-
-    - `$Type` uses a real value type
-    - `$=` has an initializer
-    - reactive declarations are not combined with `~=`
-    - reactive parameters are not combined with `~`
-    - `["[~value]"]` only targets reactive sources
-    - `["[~value]"]` is only used with stable places
-    - templates can observe reactive values, but never mutate them
-
-    ## Phase 3: Runtime reactive cells
-
-    Lower reactive declarations to stable reactive storage.
-
-    In GC-backed builds, this can be represented as a heap-managed reactive cell.
-
-    Assignment to a reactive value becomes a cell update plus invalidation.
-
-    ## Phase 4: Reactive template plans
-
-    Extend template render plans to preserve reactive captures.
-
-    The template system should distinguish:
-
-    - `["[count]"]` as snapshot capture
-    - `["[~count]"]` as reactive subscription
-
-    ## Phase 5: HTML backend node updates
-
-    Lower reactive captures to node-level update bindings.
-
-    Start with simple targets:
-
-    - Text node contents
-    - Attribute values
-    - Style values
-
-    ## Phase 6: Coarser fallbacks
-
-    Where direct node updates are too complex, the backend may rerender a bounded template region.
-
-    This should be a fallback, not the core model.
-]
-
-#[section, $markdown:
-    # Lifetime and scope constraints
-
-    Reactive subscriptions are not mutable borrows and do not hold exclusive access.
-
-    Reactive values are already declared as stable reactive sources.
-
-    In GC-backed builds, reactive cells can be kept alive by normal GC reachability.
-
-    In future ownership-optimized Wasm builds, the compiler must ensure that reactive cells are not freed while live subscriptions exist.
-
-    The compiler should reject reactive subscriptions to places that cannot be safely represented by the target backend.
+    V1 has no field, item, or path-level invalidation. Those are follow-up backend and language work.
 ]
 
 #[section, $markdown:
     # Relationship to borrowing
 
-    Reactive template subscription is separate from mutable borrowing.
+    Reactive subscriptions are not mutable borrows and should not block later ordinary mutable access.
 
-    [codeblock, $code("bst"):
-        count $Int = 0
+    A subscription observes a source. Mutation still follows ordinary Beanstalk rules, including explicit `~` for mutable/exclusive call access.
 
-        view = [~count]
-        increment_count(~count)
-    ]
-
-    The template subscription does not block later mutable access to `count`, because it is not a mutable borrow.
-
-    The mutation invalidates subscribers.
-
-    This is the intended interaction:
-
-    - `["[~count]"]` observes changes in templates
-    - `~count` mutates the place in normal code
-    - mutation triggers reactive updates
-
-    The borrow checker should not model `["[~count]"]` as an active mutable borrow.
-
-    It should model it as a subscription to a stable reactive source.
+    The borrow checker treats subscriptions as read-only source dependency metadata, not active borrow lifetimes.
 ]
 
 #[section, $markdown:
-    # Structs and fields
+    # Reactive template strings
 
-    Field-level reactive tracking should be deferred.
+    A runtime template containing a subscription still has language type `String`.
 
-    Initial reactivity should focus on simple named reactive sources.
+    The compiler preserves extra template metadata:
 
-    Later, this may become valid:
+    - source dependencies
+    - subscription source locations
+    - whether the string is plain, template-backed, or template-backed with dependencies
 
-    [codeblock, $code("bst"):
-        User = |
-            name String
-            age Int
-        |
+    Metadata propagation is intentionally direct:
 
-        user $User = User("Nye", 30)
+    - template composition
+    - assignment
+    - return
+    - direct argument passing
+    - ordinary `String` parameters inserted into templates
 
-        view = [~user.name]
-    ]
-
-    The first version can use coarse invalidation:
-
-    - any mutation to `user` invalidates subscriptions to `user`
-    - field-specific invalidation can be added later
-
-    Fine-grained path tracking should not block the first implementation.
+    Ordinary string operations do not preserve reactivity in V1. They either snapshot once or produce a structured diagnostic according to the sink or operation contract.
 ]
 
 #[section, $markdown:
-    # Collections
+    # Runtime sinks
 
-    Reactive collections should also be deferred beyond the basic model.
+    V1 has one live sink: top-level runtime HTML fragments in the HTML-JS builder.
 
-    A conservative first version may treat a collection as one reactive source.
+    HTML-JS V1 mounts reactive template strings and rerenders the whole mount slot when any dependency source is invalidated.
+    Plain string fragments keep the current insertion behavior.
 
-    [codeblock, $code("bst"):
-        items ${String} = {}
+    Unsupported or deferred sinks must not silently become live:
 
-        view = [~items]
-    ]
-
-    Any mutation to `items` invalidates the whole binding.
-
-    Later versions may support:
-
-    - Item-level subscriptions
-    - Collection-shape subscriptions
-    - Keyed loops
-    - Stable child template identity
-
-    Keyed loop syntax and list diffing should be designed separately.
-
-    The exact syntax for reactive collection types may need special parser treatment because collection types use braces.
+    - `io(...)` with direct subscription-bearing reactive templates is rejected until the IO/side-effect model is designed
+    - `assert(...)` messages are string literals only, so reactive/runtime template messages are rejected
+    - HTML-Wasm rejects reachable reactive runtime features before Wasm lowering
 ]
 
 #[section, $markdown:
-    # Mutation during render
+    # Backend ownership
 
-    Templates are read-only.
+    Reactive runtime helpers are backend artifacts, not user-visible closures or function values.
 
-    A template may observe reactive values, but it may not mutate values during rendering.
+    The frontend records reactive source and template metadata. HIR carries backend-facing metadata and reachability facts. Backend feature validation decides which targets can lower a reachable reactive use.
 
-    This avoids:
-
-    - Render loops
-    - Re-entrant update bugs
-    - Ordering ambiguity
-    - Hidden side effects in templates
-
-    Rendering should remain a pure description of output from current values.
+    For the first HTML-JS implementation, whole-fragment rerendering is acceptable. Fine-grained text, attribute, style, keyed-loop, and nested-region updates are deferred optimizations.
 ]
 
 #[section, $markdown:
-    # Summary
+    # Deferred follow-ups
 
-    Reactivity in Beanstalk is:
+    Future reactivity work includes:
 
-    - Explicit: reactive sources are declared with ` $Type` or `$=`
-    - Template-specific: subscriptions are written as `["[~value]"]` inside templates
-    - Place-based: subscriptions target stable reactive sources
-    - Mutation-driven: updates occur when subscribed reactive sources are mutated
-    - Read-only from templates: templates can observe but never mutate
-    - Compiler-owned: `$` marks compiler-managed behavior
-    - Backend-owned: render plans decide how updates are applied efficiently
+    - reactive template control flow
+    - field/path subscriptions
+    - collection item subscriptions
+    - expression dependency tracking
+    - derived reactive values
+    - reactive IO sinks
+    - fine-grained DOM text, attribute, and style updates
+    - nested reactive regions
+    - keyed loop diffing and stable child identity
+    - template-owned event/action/effect syntax
+    - `$bind(...)` form binding helpers
+    - typed component events/messages
+    - HTML-Wasm reactive runtime support
 
-    [codeblock, $code("bst"):
-        count $Int = 0
+    These are future UI and backend surfaces, not general function-value features.
+]
 
-        snapshot = [count]
-        reactive = [~count]
+#[section, $markdown:
+    # Outside scope
 
-        count = 1
-    ]
+    General closures, anonymous function values, generic function values, and higher-order polymorphism are outside the current Beanstalk language design scope.
 
-    `snapshot` sees the original value.
-
-    `reactive` observes the reactive source and updates.
-
-    The core rule is:
-
-    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with `~` inside templates.
+    They may be reevaluated after Alpha only if the language philosophy explicitly changes.
 ]

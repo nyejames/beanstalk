@@ -108,6 +108,17 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         let _ = const_fragments_start;
 
         // ----------------------------
+        //  Propagate reactive template metadata
+        // ----------------------------
+        let reactive_template_metadata_start = Instant::now();
+        self.propagate_reactive_template_metadata(&mut emitted.ast);
+        timer_log!(
+            reactive_template_metadata_start,
+            "AST/finalize/reactive template metadata propagated in: "
+        );
+        let _ = reactive_template_metadata_start;
+
+        // ----------------------------
         //  Normalize AST templates for HIR
         // ----------------------------
         let ast_template_normalization_start = Instant::now();

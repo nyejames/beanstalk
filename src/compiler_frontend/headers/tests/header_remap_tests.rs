@@ -59,6 +59,7 @@ fn make_signature_member(name: &str, string_table: &mut StringTable) -> Signatur
     SignatureMemberSyntax {
         id: InternedPath::from_single_str(name, string_table),
         value_mode: ValueMode::ImmutableOwned,
+        is_reactive: false,
         type_annotation: ParsedTypeRef::BuiltinInt {
             location: location.clone(),
         },

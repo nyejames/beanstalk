@@ -12,8 +12,12 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ReactiveSource,
+};
+use crate::compiler_frontend::ast::templates::template::{
+    ReactiveSubscription, TemplateSegmentOrigin, TemplateType,
+};
 use crate::compiler_frontend::ast::templates::template_renderability::is_template_renderable_type;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_messages::{
@@ -149,9 +153,53 @@ pub(super) fn push_template_head_expression(
         *foldable = false;
     }
 
+    // Ordinary `[source]` insertion is a snapshot read. Keep reactive source identity only for
+    // the explicit `$(source)` subscription path.
+    let mut snapshot_expression = expression;
+    snapshot_expression.clear_reactive_source();
     parent_template
         .content
-        .add_with_origin(expression, TemplateSegmentOrigin::Head);
+        .add_with_origin(snapshot_expression, TemplateSegmentOrigin::Head);
+    Ok(())
+}
+
+/// Pushes an explicit `$(source)` subscription into the head content.
+///
+/// WHAT: reuses the ordinary reference expression for current rendering while attaching V1
+/// subscription metadata to the segment.
+/// WHY: the language type stays `String`/underlying scalar rendering; the reactive dependency is
+/// a template fact for later HIR/backend phases, not a value type or borrow.
+pub(super) fn push_template_head_reactive_subscription(
+    expression: Expression,
+    source: ReactiveSource,
+    context: &ScopeContext,
+    type_environment: &TypeEnvironment,
+    parent_template: &mut Template,
+    foldable: &mut bool,
+    location: &SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    if context.kind.is_constant_context() {
+        return Err(CompilerDiagnostic::invalid_template_structure(
+            InvalidTemplateStructureReason::ReactiveSubscriptionInConstTemplate,
+            location.to_owned(),
+        ));
+    }
+
+    validate_template_head_value_type(&expression, location, type_environment)?;
+
+    *foldable = false;
+
+    let subscription = ReactiveSubscription {
+        source,
+        type_id: expression.type_id,
+        location: location.to_owned(),
+    };
+    parent_template.content.add_reactive_subscription(
+        expression,
+        TemplateSegmentOrigin::Head,
+        subscription,
+    );
+
     Ok(())
 }
 

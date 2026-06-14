@@ -191,6 +191,7 @@ pub(super) fn signature_from_trait_requirement(
             ReturnSlot {
                 value: FunctionReturn::Value(diagnostic_type_spelling(type_id, type_environment)),
                 type_id: Some(type_id),
+                reactive_template: None,
                 channel: return_slot.channel,
             }
         })

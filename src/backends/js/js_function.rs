@@ -113,7 +113,8 @@ impl<'hir> JsEmitter<'hir> {
 
         for local_id in local_ids {
             let local_name = self.local_name(local_id)?;
-            self.emit_line(&format!("let {local_name} = __bs_binding(undefined);"));
+            let initializer = self.reactive_local_initializer(local_id);
+            self.emit_line(&format!("let {local_name} = {initializer};"));
         }
 
         if !reachable_blocks.is_empty() || !function.params.is_empty() {
@@ -121,6 +122,21 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         Ok(())
+    }
+
+    /// Returns the JS initializer for a local declaration.
+    ///
+    /// WHAT: reactive source locals receive `__bs_reactive_binding(sourceId, undefined)` so writes
+    /// through the binding can schedule source dirtying. Ordinary locals keep the existing
+    /// `__bs_binding(undefined)` initializer.
+    /// WHY: reactive source identity is HIR metadata, not a type distinction, so JS lowering must
+    /// tag the runtime binding with the stable source id.
+    fn reactive_local_initializer(&self, local_id: LocalId) -> String {
+        let Some(source_id) = self.hir.side_table.reactive_source_id_for_local(local_id) else {
+            return "__bs_binding(undefined)".to_owned();
+        };
+
+        format!("__bs_reactive_binding({}, undefined)", source_id.0)
     }
 
     fn function_is_fallible(&self, function: &HirFunction) -> bool {

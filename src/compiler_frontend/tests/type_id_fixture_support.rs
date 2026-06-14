@@ -52,6 +52,7 @@ pub(crate) fn success_return_slot(type_id: TypeId) -> ReturnSlot {
     ReturnSlot {
         value: FunctionReturn::Value(DataType::Inferred),
         type_id: Some(type_id),
+        reactive_template: None,
         channel: ReturnChannel::Success,
     }
 }
@@ -60,6 +61,7 @@ pub(crate) fn error_return_slot(type_id: TypeId) -> ReturnSlot {
     ReturnSlot {
         value: FunctionReturn::Value(DataType::Inferred),
         type_id: Some(type_id),
+        reactive_template: None,
         channel: ReturnChannel::Error,
     }
 }
@@ -316,6 +318,7 @@ pub(crate) fn alias_candidates_return_slot(
             data_type: DataType::Inferred,
         },
         type_id: Some(type_id),
+        reactive_template: None,
         channel: ReturnChannel::Success,
     }
 }

@@ -5,10 +5,11 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression::ReactiveTemplateMetadata;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
-    TemplateType,
+    ReactiveSubscription, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateLoopControlSignal,
@@ -70,6 +71,7 @@ pub struct RenderChildPiece {
 pub struct RenderExpressionPiece {
     pub expression: Expression,
     pub origin: TemplateSegmentOrigin,
+    pub reactive_subscription: Option<ReactiveSubscription>,
 }
 
 impl TemplateRenderPlan {
@@ -78,6 +80,12 @@ impl TemplateRenderPlan {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for piece in &mut self.pieces {
             piece.remap_string_ids(remap);
+        }
+    }
+
+    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        for piece in &self.pieces {
+            piece.merge_reactive_template_metadata(metadata);
         }
     }
 }
@@ -110,6 +118,26 @@ impl RenderPiece {
             RenderPiece::RuntimeSlotSite(_) => {}
         }
     }
+
+    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        match self {
+            RenderPiece::DynamicExpression(dynamic) => {
+                dynamic.merge_reactive_template_metadata(metadata);
+            }
+
+            RenderPiece::ChildTemplate(child) => {
+                if let Some(child_metadata) = &child.expression.reactive_template {
+                    metadata.merge_from(child_metadata);
+                }
+            }
+
+            RenderPiece::Text(_)
+            | RenderPiece::HeadContent(_)
+            | RenderPiece::LoopControl(_)
+            | RenderPiece::Slot(_)
+            | RenderPiece::RuntimeSlotSite(_) => {}
+        }
+    }
 }
 
 impl RenderTextPiece {
@@ -130,10 +158,23 @@ impl RenderChildPiece {
 }
 
 impl RenderExpressionPiece {
-    /// Remap the dynamic expression.
+    /// Remap the dynamic expression and any attached subscription metadata.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.expression.remap_string_ids(remap);
+        if let Some(subscription) = &mut self.reactive_subscription {
+            subscription.remap_string_ids(remap);
+        }
+    }
+
+    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        if let Some(subscription) = &self.reactive_subscription {
+            metadata.push_subscription(subscription.clone());
+        }
+
+        if let Some(expression_metadata) = &self.expression.reactive_template {
+            metadata.merge_from(expression_metadata);
+        }
     }
 }
 
@@ -258,6 +299,7 @@ impl TemplateRenderPlan {
                             pieces.push(RenderPiece::DynamicExpression(RenderExpressionPiece {
                                 expression: segment.expression.clone(),
                                 origin: segment.origin,
+                                reactive_subscription: segment.reactive_subscription.clone(),
                             }));
                         } else {
                             pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
@@ -283,6 +325,7 @@ impl TemplateRenderPlan {
                         pieces.push(RenderPiece::DynamicExpression(RenderExpressionPiece {
                             expression: segment.expression.clone(),
                             origin: segment.origin,
+                            reactive_subscription: segment.reactive_subscription.clone(),
                         }));
                     }
                 }
@@ -337,6 +380,8 @@ impl TemplateRenderPlan {
                             diagnostic_type: DataType::Template,
                             function_receiver: None,
                             value_mode: ValueMode::ImmutableOwned,
+                            reactive_source: None,
+                            reactive_template: child_piece.expression.reactive_template.clone(),
                             const_record_state: ConstRecordState::RuntimeValue,
                             location: child_piece.expression.location.clone(),
                             contains_regular_division: child_piece
@@ -345,15 +390,18 @@ impl TemplateRenderPlan {
                         },
                         origin: TemplateSegmentOrigin::Body,
                         is_child_template_output: true,
+                        reactive_subscription: None,
                         source_child_template: None,
                     }));
                 }
 
                 RenderPiece::DynamicExpression(expression_piece) => {
-                    atoms.push(TemplateAtom::Content(TemplateSegment::new(
+                    let mut segment = TemplateSegment::new(
                         expression_piece.expression.clone(),
                         expression_piece.origin,
-                    )));
+                    );
+                    segment.reactive_subscription = expression_piece.reactive_subscription.clone();
+                    atoms.push(TemplateAtom::Content(segment));
                 }
 
                 RenderPiece::LoopControl(signal) => {

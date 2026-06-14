@@ -21,6 +21,7 @@ mod collections;
 mod errors;
 mod maps;
 mod places;
+mod reactivity;
 mod results;
 mod strings;
 
@@ -46,10 +47,16 @@ impl<'hir> JsEmitter<'hir> {
     ///   string helpers          — value-to-string conversion and IO output
     ///   cast helpers            — numeric and string casting with Result-typed errors
     ///   choice helpers          — structural equality for nominal choice carriers
+    ///   reactivity helpers      — reactive source bindings, scheduler, and template-string values
     ///
     /// All groups use JS `function` declarations, which are hoisted by the JS engine.
     /// Ordering here is for readability only; correctness does not depend on it.
-    pub(crate) fn emit_runtime_prelude(&mut self, emitted_code_uses_maps: bool) {
+    pub(crate) fn emit_runtime_prelude(
+        &mut self,
+        emitted_code_uses_maps: bool,
+        emitted_code_uses_reactive_sources: bool,
+        emitted_code_uses_reactive_templates: bool,
+    ) {
         self.emit_runtime_binding_helpers();
         self.emit_runtime_alias_helpers();
         self.emit_runtime_computed_place_helpers();
@@ -62,5 +69,12 @@ impl<'hir> JsEmitter<'hir> {
         }
         self.emit_runtime_string_helpers(emitted_code_uses_maps);
         self.emit_runtime_cast_helpers();
+        if emitted_code_uses_reactive_sources {
+            self.emit_runtime_reactive_source_helpers();
+        }
+        if emitted_code_uses_reactive_templates {
+            self.emit_runtime_template_string_helpers();
+            self.emit_runtime_mount_helper();
+        }
     }
 }

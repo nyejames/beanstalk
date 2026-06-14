@@ -7337,3 +7337,188 @@ tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
 id = "cast_string_to_float_demand_helpers"
 path = "cast_string_to_float_demand_helpers"
 tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
+
+[[case]]
+id = "reactive_declaration_scalar_success"
+path = "reactive_declaration_scalar_success"
+tags = ["integration", "language", "reactivity"]
+
+[[case]]
+id = "reactive_declaration_inferred_success"
+path = "reactive_declaration_inferred_success"
+tags = ["integration", "language", "reactivity"]
+
+[[case]]
+id = "reactive_declaration_composite_success"
+path = "reactive_declaration_composite_success"
+tags = ["integration", "language", "reactivity", "structs", "choices"]
+
+[[case]]
+id = "reactive_declaration_collections_success"
+path = "reactive_declaration_collections_success"
+tags = ["integration", "language", "reactivity", "collections", "hashmaps"]
+
+[[case]]
+id = "reactive_parameter_success"
+path = "reactive_parameter_success"
+tags = ["integration", "language", "reactivity", "functions"]
+
+[[case]]
+id = "reactive_declaration_missing_initializer_rejected"
+path = "reactive_declaration_missing_initializer_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "reactive_declaration_mixed_markers_rejected"
+path = "reactive_declaration_mixed_markers_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "reactive_type_ordinary_position_rejected"
+path = "reactive_type_ordinary_position_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "reactive_non_entry_top_level_rejected"
+path = "reactive_non_entry_top_level_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "reactive_facade_export_rejected"
+path = "reactive_facade_export_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "reactive_parameter_requires_source_rejected"
+path = "reactive_parameter_requires_source_rejected"
+tags = ["integration", "language", "reactivity", "diagnostics", "functions"]
+
+[[case]]
+id = "reactive_subscription_entry_runtime_success"
+path = "reactive_subscription_entry_runtime_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_subscription_head_argument_success"
+path = "reactive_subscription_head_argument_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_subscription_helper_success"
+path = "reactive_subscription_helper_success"
+tags = ["integration", "language", "reactivity", "templates", "functions"]
+
+[[case]]
+id = "reactive_subscription_nested_runtime_success"
+path = "reactive_subscription_nested_runtime_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_template_assign_insert_success"
+path = "reactive_template_assign_insert_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_template_return_helper_insert_success"
+path = "reactive_template_return_helper_insert_success"
+tags = ["integration", "language", "reactivity", "templates", "functions"]
+
+[[case]]
+id = "reactive_template_string_parameter_passthrough_success"
+path = "reactive_template_string_parameter_passthrough_success"
+tags = ["integration", "language", "reactivity", "templates", "functions"]
+
+[[case]]
+id = "reactive_template_parameter_source_identity_success"
+path = "reactive_template_parameter_source_identity_success"
+tags = ["integration", "language", "reactivity", "templates", "functions"]
+
+[[case]]
+id = "reactive_mount_multiple_sources_success"
+path = "reactive_mount_multiple_sources_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_mount_batched_mutations_success"
+path = "reactive_mount_batched_mutations_success"
+tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "reactive_subscription_non_reactive_source_rejected"
+path = "reactive_subscription_non_reactive_source_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_spaced_marker_rejected"
+path = "reactive_subscription_spaced_marker_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_empty_rejected"
+path = "reactive_subscription_empty_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_multiple_sources_rejected"
+path = "reactive_subscription_multiple_sources_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_field_path_rejected"
+path = "reactive_subscription_field_path_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_call_rejected"
+path = "reactive_subscription_call_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_operator_rejected"
+path = "reactive_subscription_operator_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_mutable_access_rejected"
+path = "reactive_subscription_mutable_access_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_nested_template_rejected"
+path = "reactive_subscription_nested_template_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_literal_rejected"
+path = "reactive_subscription_literal_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_expression_position_rejected"
+path = "reactive_subscription_expression_position_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_subscription_const_context_rejected"
+path = "reactive_subscription_const_context_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_assert_message_rejected"
+path = "reactive_assert_message_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_external_call_sink_rejected"
+path = "reactive_external_call_sink_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_wasm_reachable_template_rejected"
+path = "reactive_wasm_reachable_template_rejected"
+tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
+
+[[case]]
+id = "reactive_wasm_unreachable_helper_ignored"
+path = "reactive_wasm_unreachable_helper_ignored"
+tags = ["integration", "language", "reactivity", "templates"]

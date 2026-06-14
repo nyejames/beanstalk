@@ -21,6 +21,7 @@ use super::head_expressions::{
     handle_template_value_in_template_head, push_template_head_expression,
     push_template_head_path_expression,
 };
+use super::reactive_subscriptions::parse_reactive_subscription;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -237,6 +238,23 @@ pub fn parse_template_head(
                     InvalidTemplateStructureReason::ElseInTemplateHead,
                     token_stream.current_location(),
                 ));
+            }
+
+            TokenKind::Reactive => {
+                enforce_head_compatibility(
+                    &head_state,
+                    &meaningful_item_compatibility,
+                    token_stream,
+                )?;
+                parse_reactive_subscription(
+                    token_stream,
+                    context,
+                    type_interner.environment(),
+                    template,
+                    foldable,
+                )?;
+                defer_comma_advance = true;
+                apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
             // Variable and template references

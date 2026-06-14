@@ -462,7 +462,8 @@ impl DiagnosticPayload {
                     | InvalidCallShapeReason::MutableAccessOnImmutablePlace {
                         parameter_name,
                         ..
-                    } => {
+                    }
+                    | InvalidCallShapeReason::ReactiveSourceRequired { parameter_name, .. } => {
                         if let Some(parameter_name) = parameter_name {
                             *parameter_name = remap.get(*parameter_name);
                         }

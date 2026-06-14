@@ -3,7 +3,11 @@
 //! WHAT: defines the immutable analysis records produced while validating HIR borrows.
 //! WHY: transfer and diagnostics need a shared vocabulary for states, facts, and summaries.
 
+use crate::compiler_frontend::compiler_errors::SourceLocation;
+use crate::compiler_frontend::external_packages::CallTarget;
+use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId, LocalId};
+use crate::compiler_frontend::hir::reactivity::ReactiveSourceId;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
@@ -27,6 +31,11 @@ pub(crate) struct BorrowAnalysis {
     pub statement_facts: FxHashMap<HirNodeId, StatementBorrowFact>,
     pub terminator_facts: FxHashMap<BlockId, TerminatorBorrowFact>,
     pub value_facts: FxHashMap<HirValueId, ValueBorrowFact>,
+    /// Conservative source-level invalidation facts for reactive sources.
+    ///
+    /// WHY: backend lowering needs to know which statements may dirty a stable reactive source,
+    /// while borrow validation must keep those subscriptions out of the active borrow state.
+    pub reactive_invalidations: FxHashMap<HirNodeId, Vec<ReactiveInvalidationFact>>,
     /// Advisory drop insertion points for later lowering stages.
     ///
     /// WHY: borrow checking must not mutate HIR, but lowering still needs
@@ -55,6 +64,14 @@ impl BorrowAnalysis {
     #[cfg(test)]
     pub(crate) fn value_fact(&self, id: HirValueId) -> Option<&ValueBorrowFact> {
         self.value_facts.get(&id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reactive_invalidations_for_statement(
+        &self,
+        id: HirNodeId,
+    ) -> Option<&[ReactiveInvalidationFact]> {
+        self.reactive_invalidations.get(&id).map(Vec::as_slice)
     }
 
     pub(crate) fn drop_sites_for_block(&self, block: BlockId) -> Option<&[BorrowDropSite]> {
@@ -112,6 +129,31 @@ pub(crate) struct TerminatorBorrowFact {
 pub(crate) struct ValueBorrowFact {
     pub classification: ValueAccessClassification,
     pub roots: Vec<LocalId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReactiveInvalidationFact {
+    pub statement_id: HirNodeId,
+    pub source: ReactiveSourceId,
+    pub kind: ReactiveInvalidationKind,
+    pub location: SourceLocation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ReactiveInvalidationKind {
+    Assignment,
+    PlaceWrite(ReactivePlaceWriteKind),
+    MapMutation(HirMapOp),
+    MutableCallArgument {
+        target: CallTarget,
+        argument_index: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReactivePlaceWriteKind {
+    Field,
+    Index,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

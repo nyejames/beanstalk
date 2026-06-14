@@ -1,0 +1,11 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["reactive_template_string_parameter_passthrough_success wrapped=inner=10"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_mount_template_fragment(",
+]

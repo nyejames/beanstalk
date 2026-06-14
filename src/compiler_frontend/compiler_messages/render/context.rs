@@ -107,6 +107,7 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::Import => "`import`".to_owned(),
         TokenKind::Export => "`export`".to_owned(),
         TokenKind::Hash => "`#`".to_owned(),
+        TokenKind::Reactive => "`$`".to_owned(),
         TokenKind::Arrow => "`->`".to_owned(),
         TokenKind::Symbol(name) => format!("name `{}`", string_table.resolve(*name)),
         TokenKind::StyleDirective(name) => {

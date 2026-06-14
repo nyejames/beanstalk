@@ -135,6 +135,7 @@ pub(crate) struct ParameterExpectation {
     /// package does not expose a resolved frontend type.
     pub expected_type: ExpectedParameterType,
     pub access_mode: ExpectedAccessMode,
+    pub requires_reactive_source: bool,
     pub default_value: Option<Expression>,
 }
 
@@ -169,9 +170,14 @@ pub(crate) fn expectations_from_user_parameters(
             } else {
                 ExpectedAccessMode::Shared
             },
+            requires_reactive_source: parameter.value.reactive_source.is_some(),
             default_value: match parameter.value.kind {
                 ExpressionKind::NoValue => None,
-                _ => Some(parameter.value.clone()),
+                _ => {
+                    let mut default_value = parameter.value.clone();
+                    default_value.reactive_template = None;
+                    Some(default_value)
+                }
             },
         })
         .collect()
@@ -202,6 +208,7 @@ fn parameter_expectation_from_external(
             ExternalAccessKind::Shared => ExpectedAccessMode::Shared,
             ExternalAccessKind::Mutable => ExpectedAccessMode::Mutable,
         },
+        requires_reactive_source: false,
         default_value: None,
     }
 }
@@ -229,6 +236,7 @@ pub(crate) fn expectations_from_constructor_fields(
                 ConstructorFieldAccessMode::Shared => ExpectedAccessMode::Shared,
                 ConstructorFieldAccessMode::Mutable => ExpectedAccessMode::Mutable,
             },
+            requires_reactive_source: false,
             default_value: field.default_value.clone(),
         })
         .collect()
@@ -380,15 +388,32 @@ fn resolve_call_arguments_with_type_policy(
             string_table,
         )?;
 
+        if expectation.requires_reactive_source && !argument.value.is_reactive_source() {
+            return Err(CompilerDiagnostic::invalid_call_shape(
+                InvalidCallShapeReason::ReactiveSourceRequired {
+                    parameter_name: expectation.name,
+                    parameter_index: slot,
+                },
+                Some(string_table.intern(diagnostics.callee_name)),
+                argument.location.clone(),
+            )
+            .into());
+        }
+
+        let mut normalized_argument = argument.with_passing_mode(passing_mode);
+        if !expectation.requires_reactive_source {
+            normalized_argument.value.clear_reactive_source();
+        }
+
         let expected_type_id = match expectation.expected_type {
             ExpectedParameterType::Known(type_id) => type_id,
             ExpectedParameterType::UnknownExternal => {
                 // Unknown external types skip compatibility checking.
-                ordered.push(argument.with_passing_mode(passing_mode));
+                ordered.push(normalized_argument);
                 continue;
             }
         };
-        let actual_type_id = argument.value.type_id;
+        let actual_type_id = normalized_argument.value.type_id;
 
         if let CallTypeValidation::Validate(compatibility_cache) = &mut type_validation
             && !is_call_argument_type_compatible(
@@ -412,12 +437,11 @@ fn resolve_call_arguments_with_type_policy(
                 expected_type_id,
                 actual_type_id,
                 mismatch_context,
-                argument.location.clone(),
+                normalized_argument.location.clone(),
             )
             .into());
         }
 
-        let mut normalized_argument = argument.with_passing_mode(passing_mode);
         normalized_argument.value = coerce_expression_to_declared_type(
             normalized_argument.value,
             expected_type_id,

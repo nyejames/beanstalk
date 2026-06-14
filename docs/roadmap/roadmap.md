@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- first class Reactivity syntax with message / action patterns in templates: `docs/roadmap/plans/reactivity-implementation-plan.md`
 - Float-to-string cast parity: define one formatting contract shared by AST folding and JS/Wasm/runtime lowering for `Float -> String`, including exponent thresholds, signed zero, non-finite rejection/formatting policy, and backend-stable output tests.
 - Full-width `Int` runtime semantics beyond the Alpha JS-safe integer cast policy: decide whether JS uses BigInt/boxed integers or whether `Int` remains a portable safe-integer type for the JS target.
 - Build out core IO library
@@ -53,8 +52,22 @@ changed first:
   macro systems.
 - User-defined cast targets, generic cast targets, external opaque cast targets, generic cast
   traits, and broad return-type-directed conversion.
+- General closures, anonymous function values, generic function values, and higher-order
+  polymorphism. Reactivity is the constrained UI-oriented mechanism intended to cover many
+  closure-heavy UI patterns without adding general function-value semantics.
 
 # Notes
+- Reactivity V1 is complete in `docs/roadmap/plans/reactivity-v1-implementation-plan.md`:
+  explicit reactive sources, `$(source)` template subscriptions, frontend/HIR/borrow metadata,
+  HTML-JS top-level runtime-fragment rerendering, unsupported sink diagnostics, and HTML-Wasm
+  rejection.
+
+- Reactivity follow-ups after V1: reactive template control flow, field/path subscriptions,
+  collection item subscriptions, expression dependency tracking, derived reactive values,
+  template-owned event/action/effect syntax, `$bind(...)`, typed component messages, IO sink
+  design, fine-grained DOM updates, nested reactive regions, keyed loop diffing, and HTML-Wasm
+  support.
+
 - Initial explicit `cast` operator implementation is complete: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and the initial docs/progress matrix/final audit validation passed. Follow-up cleanup and policy parity are tracked in `docs/roadmap/plans/cast_followup_cleanup_plan.md`.
 
 - Cast operator cleanup is complete in `docs/roadmap/plans/cast_followup_cleanup_plan.md`: `String -> Int` and `Float -> Int` now share the Alpha JS-safe integer cast policy across folding and JS runtime lowering, optional target recovery wraps only after inner-value recovery, expression parsing uses named input structs instead of cast-target wrapper entrypoints, core cast trait metadata has one authoritative row table, JS cast helpers emit on demand, redundant scalar-constructor fixtures were pruned, docs/progress/generated docs were updated, and final audit plus validation passed.

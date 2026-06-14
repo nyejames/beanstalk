@@ -14,8 +14,8 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::analysis::borrow_checker::types::{
-    BorrowStateSnapshot, FunctionReturnAliasSummary, StatementBorrowFact, TerminatorBorrowFact,
-    ValueBorrowFact,
+    BorrowStateSnapshot, FunctionReturnAliasSummary, ReactiveInvalidationFact, StatementBorrowFact,
+    TerminatorBorrowFact, ValueBorrowFact,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
@@ -52,6 +52,7 @@ pub(super) struct BlockTransferStats {
     pub statement_facts: Vec<(HirNodeId, StatementBorrowFact)>,
     pub terminator_fact: Option<(BlockId, TerminatorBorrowFact)>,
     pub value_facts: Vec<(HirValueId, ValueBorrowFact)>,
+    pub reactive_invalidations: Vec<(HirNodeId, Vec<ReactiveInvalidationFact>)>,
 }
 
 /// Executes one forward transfer step for a single basic block.

@@ -209,6 +209,16 @@ impl<'a> BorrowChecker<'a> {
             for (value_id, fact) in block_stats.value_facts {
                 report.analysis.value_facts.insert(value_id, fact);
             }
+            for (statement_id, invalidations) in block_stats.reactive_invalidations {
+                if invalidations.is_empty() {
+                    report.analysis.reactive_invalidations.remove(&statement_id);
+                } else {
+                    report
+                        .analysis
+                        .reactive_invalidations
+                        .insert(statement_id, invalidations);
+                }
+            }
 
             if output_state.has_any_alias_conflict() {
                 alias_heavy.insert(block_id);

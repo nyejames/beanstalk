@@ -127,6 +127,12 @@ fn parse_type_atom(
 
         TokenKind::OpenCurly => parse_collection_type(token_stream, context, string_table),
 
+        TokenKind::Reactive => Err(CompilerDiagnostic::invalid_type_annotation(
+            context,
+            InvalidTypeAnnotationReason::ReactiveAccessNotAllowed,
+            token_stream.current_location(),
+        )),
+
         TokenKind::As => Err(CompilerDiagnostic::invalid_type_annotation(
             context,
             InvalidTypeAnnotationReason::AsNotValidHere,
@@ -241,6 +247,17 @@ fn parse_collection_type(
             location,
             fixed_capacity: None,
         });
+    }
+
+    if let Some(reactive_token) = inner_tokens
+        .iter()
+        .find(|token| token.kind == TokenKind::Reactive)
+    {
+        return Err(CompilerDiagnostic::invalid_type_annotation(
+            context,
+            InvalidTypeAnnotationReason::ReactiveAccessNotAllowed,
+            reactive_token.location.clone(),
+        ));
     }
 
     // Map type syntax `{K = V}` takes precedence over collection capacity splitting.

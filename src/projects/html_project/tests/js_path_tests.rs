@@ -43,6 +43,7 @@ fn bootstrap_script_calls_start_once_and_hydrates_slots() {
         "function start_entry() { return []; }",
         &slot_ids,
         false,
+        false,
     );
 
     assert!(
@@ -105,6 +106,7 @@ fn no_runtime_fragments_still_emits_start_call() {
             js_bundle: "function start_entry() { return []; }",
             function_names: &function_names,
             entry_runtime_fragment_count: 0,
+            uses_reactive_runtime_fragments: false,
             import_map_html: None,
             use_module_script: false,
         },
@@ -150,6 +152,7 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
             js_bundle: "const msg = \"</script>\";\n",
             function_names: &function_names,
             entry_runtime_fragment_count: 0,
+            uses_reactive_runtime_fragments: false,
             import_map_html: None,
             use_module_script: false,
         },
@@ -163,5 +166,50 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     assert!(
         html.contains("<\\/script>"),
         "the closing-tag sequence must be escaped as <\\/script> in the output"
+    );
+}
+
+#[test]
+fn bootstrap_uses_mount_helper_for_reactive_runtime_fragments() {
+    // WHAT: when the module has reachable reactive runtime fragments, the bootstrap must call the
+    // backend mount helper so template objects register for rerendering instead of being snapshot.
+    let slot_ids = vec![String::from("bst-slot-0")];
+    let script = render_runtime_bootstrap_script_html(
+        "start_entry",
+        "function start_entry() { return []; }",
+        &slot_ids,
+        false,
+        true,
+    );
+
+    assert!(
+        script.contains("__bs_mount_template_fragment(el, bst_frags[i])"),
+        "reactive bootstrap must hydrate slots through the mount helper"
+    );
+    assert!(
+        !script.contains("el.insertAdjacentHTML(\"beforeend\", bst_frags[i] || \"\")"),
+        "reactive bootstrap must not use the plain direct insertion path"
+    );
+}
+
+#[test]
+fn bootstrap_uses_plain_insertion_for_non_reactive_runtime_fragments() {
+    // WHAT: non-reactive pages must not reference the optional mount helper global.
+    let slot_ids = vec![String::from("bst-slot-0")];
+    let script = render_runtime_bootstrap_script_html(
+        "start_entry",
+        "function start_entry() { return []; }",
+        &slot_ids,
+        false,
+        false,
+    );
+
+    assert!(
+        script.contains("el.insertAdjacentHTML(\"beforeend\", bst_frags[i] || \"\")"),
+        "non-reactive bootstrap must keep the plain direct insertion path"
+    );
+    assert!(
+        !script.contains("__bs_mount_template_fragment"),
+        "non-reactive bootstrap must not reference the mount helper"
     );
 }

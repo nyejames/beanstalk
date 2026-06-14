@@ -691,6 +691,9 @@ fn normalize_expression_templates_with_context(
         expression.kind = ExpressionKind::StringSlice(folded_template);
         expression.diagnostic_type = DataType::StringSlice;
         expression.value_mode = ValueMode::ImmutableOwned;
+        expression.reactive_template = None;
+    } else if let ExpressionKind::Template(template) = &expression.kind {
+        expression.reactive_template = template.reactive_template_metadata();
     }
 
     Ok(())

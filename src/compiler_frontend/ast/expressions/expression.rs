@@ -14,7 +14,9 @@ pub use crate::compiler_frontend::ast::expressions::expression_types::{
     ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleHandling,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template::{
+    ReactiveSubscription, TemplateConstValueKind,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey;
@@ -62,6 +64,20 @@ pub struct Expression {
     pub value_mode: ValueMode,
     /// Source location where this expression was parsed.
     pub location: SourceLocation,
+    /// Reactive source identity carried independently of the expression type.
+    ///
+    /// WHAT: marks declarations and parameter references that are stable reactive sources.
+    /// WHY: `$T` is access syntax, not a wrapper type, so the underlying `TypeId` remains the
+    /// ordinary value type while call/template validation can still require a source identity.
+    pub reactive_source: Option<ReactiveSource>,
+    /// Reactive template-string metadata carried independently of the expression type.
+    ///
+    /// WHAT: marks `String` values that are backed by a runtime template or by a direct
+    /// template-value parameter passthrough.
+    /// WHY: reactive templates still have ordinary semantic type `String`; backend-facing
+    /// dependency information must therefore travel as value metadata rather than as a wrapper
+    /// type or an inferred expression dependency graph.
+    pub reactive_template: Option<ReactiveTemplateMetadata>,
     /// Explicit value-level const-record classification.
     ///
     /// WHAT: `ConstRecord` means this expression is a compile-time member group
@@ -76,6 +92,192 @@ pub struct Expression {
     /// value comes from `/`, even when constant folding removed the original
     /// operator node.
     pub contains_regular_division: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReactiveSourceKind {
+    Declaration,
+    Parameter,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReactiveSource {
+    pub path: InternedPath,
+    pub kind: ReactiveSourceKind,
+}
+
+impl ReactiveSource {
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.path.remap_string_ids(remap);
+    }
+}
+
+/// A `String` parameter whose runtime value may itself be a template string.
+///
+/// WHAT: records the parameter identity used by a template body, for example `[content]` where
+/// `content String` can receive a reactive template value from a caller.
+/// WHY: V1 preserves only direct argument/return/template value flow. This placeholder lets call
+/// metadata substitute the concrete argument metadata without adding closures or whole-program
+/// dependency solving.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReactiveTemplateParameterDependency {
+    pub parameter: InternedPath,
+    pub location: SourceLocation,
+}
+
+impl ReactiveTemplateParameterDependency {
+    pub fn new(parameter: InternedPath, location: SourceLocation) -> Self {
+        Self {
+            parameter,
+            location,
+        }
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.parameter.remap_string_ids(remap);
+        self.location.remap_string_ids(remap);
+    }
+}
+
+/// Value-level metadata for template-backed strings.
+///
+/// Plain strings carry `None`. Template expressions and values that directly pass template
+/// strings through ordinary `String` parameters carry `Some`, with concrete subscriptions when
+/// known and parameter placeholders when the dependency is supplied by a caller.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReactiveTemplateMetadata {
+    pub subscriptions: Vec<ReactiveSubscription>,
+    pub template_value_parameters: Vec<ReactiveTemplateParameterDependency>,
+    pub template_backed: bool,
+}
+
+impl ReactiveTemplateMetadata {
+    pub fn template_backed() -> Self {
+        Self {
+            subscriptions: Vec::new(),
+            template_value_parameters: Vec::new(),
+            template_backed: true,
+        }
+    }
+
+    pub fn from_template_value_parameter(
+        parameter: InternedPath,
+        location: SourceLocation,
+    ) -> Self {
+        let mut metadata = Self::template_backed();
+        metadata.push_template_value_parameter(ReactiveTemplateParameterDependency::new(
+            parameter, location,
+        ));
+        metadata
+    }
+
+    pub fn push_subscription(&mut self, subscription: ReactiveSubscription) {
+        self.template_backed = true;
+        if !self.subscriptions.contains(&subscription) {
+            self.subscriptions.push(subscription);
+        }
+    }
+
+    pub fn push_template_value_parameter(
+        &mut self,
+        dependency: ReactiveTemplateParameterDependency,
+    ) {
+        self.template_backed = true;
+        if !self.template_value_parameters.contains(&dependency) {
+            self.template_value_parameters.push(dependency);
+        }
+    }
+
+    pub fn merge_from(&mut self, other: &ReactiveTemplateMetadata) {
+        self.template_backed |= other.template_backed;
+
+        for subscription in &other.subscriptions {
+            self.push_subscription(subscription.clone());
+        }
+
+        for dependency in &other.template_value_parameters {
+            self.push_template_value_parameter(dependency.clone());
+        }
+    }
+
+    /// Returns whether this template value needs live runtime dependency handling.
+    ///
+    /// Template-backed strings with no subscriptions are still templates, but only concrete
+    /// `$(source)` subscriptions or template-value parameter placeholders need reactive mounting
+    /// and lazy snapshot lowering.
+    pub fn has_runtime_dependency(&self) -> bool {
+        !self.subscriptions.is_empty() || !self.template_value_parameters.is_empty()
+    }
+
+    /// Substitute direct call arguments for parameter placeholders.
+    ///
+    /// WHAT:
+    /// - `$T` subscriptions captured inside a callee are rebound to the caller's reactive source.
+    /// - Ordinary `String` parameter placeholders merge the argument's template metadata.
+    ///
+    /// WHY: this is the V1 direct value-flow boundary. It deliberately does not inspect arbitrary
+    /// string operations or infer dependencies from expression structure.
+    pub fn instantiate_for_call(
+        &self,
+        parameters: &[Declaration],
+        arguments: &[CallArgument],
+    ) -> Option<Self> {
+        let mut instantiated = Self {
+            subscriptions: Vec::new(),
+            template_value_parameters: Vec::new(),
+            template_backed: self.template_backed,
+        };
+
+        for subscription in &self.subscriptions {
+            let mut resolved_subscription = subscription.clone();
+            if resolved_subscription.source.kind == ReactiveSourceKind::Parameter
+                && let Some(parameter_index) =
+                    parameter_index_by_path(parameters, &resolved_subscription.source.path)
+                && let Some(argument_source) = arguments
+                    .get(parameter_index)
+                    .and_then(|argument| argument.value.reactive_source.clone())
+            {
+                resolved_subscription.source = argument_source;
+            }
+            instantiated.push_subscription(resolved_subscription);
+        }
+
+        for dependency in &self.template_value_parameters {
+            let Some(parameter_index) = parameter_index_by_path(parameters, &dependency.parameter)
+            else {
+                instantiated.push_template_value_parameter(dependency.clone());
+                continue;
+            };
+
+            if let Some(argument_metadata) = arguments
+                .get(parameter_index)
+                .and_then(|argument| argument.value.reactive_template.as_ref())
+            {
+                instantiated.merge_from(argument_metadata);
+            }
+        }
+
+        (instantiated.template_backed
+            || !instantiated.subscriptions.is_empty()
+            || !instantiated.template_value_parameters.is_empty())
+        .then_some(instantiated)
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        for subscription in &mut self.subscriptions {
+            subscription.remap_string_ids(remap);
+        }
+
+        for dependency in &mut self.template_value_parameters {
+            dependency.remap_string_ids(remap);
+        }
+    }
+}
+
+fn parameter_index_by_path(parameters: &[Declaration], path: &InternedPath) -> Option<usize> {
+    parameters
+        .iter()
+        .position(|parameter| &parameter.id == path)
 }
 
 /// Canonical and diagnostic type data for a collection expression.
@@ -291,6 +493,8 @@ impl Expression {
             kind,
             location,
             value_mode,
+            reactive_source: None,
+            reactive_template: None,
             const_record_state: ConstRecordState::RuntimeValue,
             contains_regular_division: false,
         }
@@ -304,6 +508,28 @@ impl Expression {
     /// Marks whether this expression originates from a regular division operator.
     pub fn with_regular_division_provenance(mut self, contains: bool) -> Self {
         self.contains_regular_division = contains;
+        self
+    }
+
+    /// Mark this expression as a reference to stable reactive storage.
+    pub fn with_reactive_source(mut self, source: ReactiveSource) -> Self {
+        self.reactive_source = Some(source);
+        self
+    }
+
+    /// Remove reactive identity at a snapshot boundary.
+    pub fn clear_reactive_source(&mut self) {
+        self.reactive_source = None;
+    }
+
+    /// Returns whether the expression can satisfy a `$T` parameter or subscription source.
+    pub fn is_reactive_source(&self) -> bool {
+        self.reactive_source.is_some()
+    }
+
+    /// Mark this `String` expression as a template-backed value.
+    pub fn with_reactive_template_metadata(mut self, metadata: ReactiveTemplateMetadata) -> Self {
+        self.reactive_template = Some(metadata);
         self
     }
 
@@ -589,6 +815,8 @@ impl Expression {
     pub fn coerced(value: Expression, to_type: TypeId) -> Self {
         let location = value.location.clone();
         let value_mode = value.value_mode.to_owned();
+        let reactive_source = value.reactive_source.clone();
+        let reactive_template = value.reactive_template.clone();
         let contains_regular_division = value.contains_regular_division;
         let const_record_state = value.const_record_state;
         let mut expression = Self::new(
@@ -605,6 +833,8 @@ impl Expression {
         )
         .with_regular_division_provenance(contains_regular_division);
         expression.const_record_state = const_record_state;
+        expression.reactive_source = reactive_source;
+        expression.reactive_template = reactive_template;
         expression
     }
 
@@ -786,13 +1016,16 @@ impl Expression {
     /// Constructs a template expression.
     pub fn template(template: Template, value_mode: ValueMode) -> Self {
         let location = template.location.to_owned();
-        Self::new(
+        let reactive_template = template.reactive_template_metadata();
+        let mut expression = Self::new(
             ExpressionKind::Template(Box::new(template)),
             location,
             builtin_type_ids::STRING,
             DataType::Template,
             value_mode,
-        )
+        );
+        expression.reactive_template = reactive_template;
+        expression
     }
 
     /// Constructs a copy expression from an AST node place.
@@ -1012,6 +1245,12 @@ impl Expression {
         self.diagnostic_type.remap_string_ids(remap);
         if let Some(receiver) = &mut self.function_receiver {
             receiver.remap_string_ids(remap);
+        }
+        if let Some(source) = &mut self.reactive_source {
+            source.remap_string_ids(remap);
+        }
+        if let Some(metadata) = &mut self.reactive_template {
+            metadata.remap_string_ids(remap);
         }
         self.location.remap_string_ids(remap);
         self.kind.remap_string_ids(remap);

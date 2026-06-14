@@ -433,6 +433,7 @@ pub enum InvalidTypeAnnotationReason {
     TraitThisMustBeDirect,
     AsNotValidHere,
     UnexpectedColon,
+    ReactiveAccessNotAllowed,
     InvalidTokenAfterName { token: TokenKind },
     ExpectedTypeAnnotation { found: TokenKind },
     DuplicateOptional,
@@ -545,6 +546,12 @@ pub enum InvalidTemplateStructureReason {
     UnsupportedTypeInTemplateHead { type_id: TypeId },
     RuntimeTemplateInConst,
     RuntimeValueInConstTemplateHead,
+    ReactiveSubscriptionEmpty,
+    ReactiveSubscriptionMultipleSources,
+    ReactiveSubscriptionComplexExpression,
+    ReactiveSubscriptionNonReactiveSource,
+    ReactiveSubscriptionInConstTemplate,
+    ReactiveSubscriptionOutsideTemplate,
     EmptyPathInTemplateHead,
     PathAliasInTemplateHead,
     IncompatibleHeadItem,
@@ -600,6 +607,8 @@ pub enum InvalidSignatureMemberReason {
     TraitMutableThisOnlyFirstParameter,
     TraitBareThisOnlyReceiver,
     TraitRequirementDefaultValue,
+    ReactiveAccessNotAllowed,
+    ReactiveParameterDefaultValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1215,6 +1224,11 @@ pub enum InvalidCallShapeReason {
         parameter_name: Option<StringId>,
         parameter_index: usize,
     },
+
+    ReactiveSourceRequired {
+        parameter_name: Option<StringId>,
+        parameter_index: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1365,6 +1379,7 @@ pub enum CommonSyntaxMistakeReason {
     SignatureAsKeyword,
     InvalidCompileTimeBindingSpacing,
     InvalidMutableBindingSpacing,
+    InvalidReactiveBindingSpacing,
 }
 
 impl CommonSyntaxMistakeReason {
@@ -1390,7 +1405,8 @@ impl CommonSyntaxMistakeReason {
             | CommonSyntaxMistakeReason::SignatureParenthesisDelimiter
             | CommonSyntaxMistakeReason::SignatureAsKeyword
             | CommonSyntaxMistakeReason::InvalidCompileTimeBindingSpacing
-            | CommonSyntaxMistakeReason::InvalidMutableBindingSpacing => {}
+            | CommonSyntaxMistakeReason::InvalidMutableBindingSpacing
+            | CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {}
         }
     }
 }

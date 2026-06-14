@@ -15,6 +15,7 @@ mod host;
 mod inline_expressions;
 mod map_statements;
 mod prelude;
+mod reactivity;
 mod receiver_methods;
 mod results;
 mod runtime_helpers;

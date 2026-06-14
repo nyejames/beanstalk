@@ -16,6 +16,7 @@ use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::reactivity::ReactiveTemplateId;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 
@@ -33,6 +34,8 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_external_functions: FxHashSet<ExternalFunctionId>,
     pub(crate) reachable_external_calls: Vec<ReachableExternalCall>,
     pub(crate) reachable_map_uses: Vec<ReachableMapUse>,
+    pub(crate) reachable_reactive_templates: Vec<ReachableReactiveTemplateUse>,
+    pub(crate) reachable_reactive_sinks: Vec<ReachableReactiveSinkUse>,
 }
 
 /// A reachable map construction or use at the HIR statement or expression that produces it.
@@ -60,6 +63,33 @@ pub(crate) struct ReachableExternalCall {
     pub(crate) function_id: ExternalFunctionId,
     pub(crate) statement_id: HirNodeId,
     pub(crate) location: SourceLocation,
+}
+
+/// A reachable reactive template-backed value.
+///
+/// WHY: unsupported-backend validation needs to reject reachable reactive runtime features even
+/// when they are produced inside helper functions rather than directly pushed into the page.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableReactiveTemplateUse {
+    pub(crate) template_id: ReactiveTemplateId,
+    pub(crate) location: SourceLocation,
+}
+
+/// A reachable sink that consumes a reactive template-backed value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableReactiveSinkUse {
+    pub(crate) kind: ReachableReactiveSinkKind,
+    pub(crate) template_id: ReactiveTemplateId,
+    pub(crate) location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ReachableReactiveSinkKind {
+    RuntimeFragment,
+    ExternalCallArgument {
+        function_id: ExternalFunctionId,
+        argument_index: usize,
+    },
 }
 
 pub(crate) struct HirReachabilityInput<'a> {
@@ -193,13 +223,28 @@ impl<'a> HirReachabilityContext<'a> {
                 self.collect_runtime_feature_uses_from_expression(value, &statement.location);
             }
 
-            HirStatementKind::Call { args, .. } => {
-                for arg in args {
+            HirStatementKind::Call { target, args, .. } => {
+                for (argument_index, arg) in args.iter().enumerate() {
+                    if let CallTarget::ExternalFunction(function_id) = target {
+                        self.collect_reactive_sink_from_expression(
+                            ReachableReactiveSinkKind::ExternalCallArgument {
+                                function_id: *function_id,
+                                argument_index,
+                            },
+                            arg,
+                            &statement.location,
+                        );
+                    }
                     self.collect_runtime_feature_uses_from_expression(arg, &statement.location);
                 }
             }
 
             HirStatementKind::PushRuntimeFragment { value, .. } => {
+                self.collect_reactive_sink_from_expression(
+                    ReachableReactiveSinkKind::RuntimeFragment,
+                    value,
+                    &statement.location,
+                );
                 self.collect_runtime_feature_uses_from_expression(value, &statement.location);
             }
 
@@ -275,6 +320,23 @@ impl<'a> HirReachabilityContext<'a> {
             .value_source_location(expression.id)
             .unwrap_or(fallback_location)
             .clone();
+
+        // Only templates with actual runtime subscriptions are unsupported reactive runtime
+        // features. Plain runtime templates with variable interpolations are snapshots, not live
+        // reactive values, and are rejected by other backend-specific checks if needed.
+        if let Some(template) = self
+            .hir
+            .side_table
+            .reactive_template_for_value(expression.id)
+            && !template.dependencies.is_empty()
+        {
+            self.reachability
+                .reachable_reactive_templates
+                .push(ReachableReactiveTemplateUse {
+                    template_id: template.id,
+                    location: expression_location.clone(),
+                });
+        }
 
         match &expression.kind {
             // Map literals.
@@ -356,6 +418,37 @@ impl<'a> HirReachabilityContext<'a> {
             | HirExpressionKind::Load(_)
             | HirExpressionKind::Copy(_) => {}
         }
+    }
+
+    fn collect_reactive_sink_from_expression(
+        &mut self,
+        kind: ReachableReactiveSinkKind,
+        expression: &HirExpression,
+        fallback_location: &SourceLocation,
+    ) {
+        let Some(template) = self
+            .hir
+            .side_table
+            .reactive_template_for_value(expression.id)
+            .filter(|template| template.has_runtime_reactive_dependency())
+        else {
+            return;
+        };
+
+        let location = self
+            .hir
+            .side_table
+            .value_source_location(expression.id)
+            .unwrap_or(fallback_location)
+            .clone();
+
+        self.reachability
+            .reachable_reactive_sinks
+            .push(ReachableReactiveSinkUse {
+                kind,
+                template_id: template.id,
+                location,
+            });
     }
 
     fn enqueue_terminator_successors(

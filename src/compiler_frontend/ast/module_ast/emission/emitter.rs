@@ -98,7 +98,22 @@ fn rebase_signature_parameters(signature: &mut FunctionSignature, function_path:
             continue;
         };
 
+        let old_parameter_id = parameter.id.clone();
         parameter.id = function_path.append(parameter_name);
+
+        if let Some(source) = &mut parameter.value.reactive_source
+            && source.path == old_parameter_id
+        {
+            source.path = parameter.id.clone();
+        }
+
+        if let Some(metadata) = &mut parameter.value.reactive_template {
+            for dependency in &mut metadata.template_value_parameters {
+                if dependency.parameter == old_parameter_id {
+                    dependency.parameter = parameter.id.clone();
+                }
+            }
+        }
     }
 }
 
@@ -860,6 +875,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             returns: vec![ReturnSlot {
                 value: FunctionReturn::Value(start_return_type),
                 type_id: Some(start_return_type_id),
+                reactive_template: None,
                 channel: ReturnChannel::Success,
             }],
         };

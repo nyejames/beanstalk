@@ -35,6 +35,20 @@ impl<'hir> JsEmitter<'hir> {
         &mut self,
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
+        // Reactive template values have language type `String` but need a backend-owned runtime
+        // representation. In ordinary expression contexts we snapshot them to a plain string.
+        if self.value_is_reactive_template(expression.id) {
+            let template_value = self.lower_reactive_template_value(expression)?;
+            return Ok(format!("__bs_template_snapshot({template_value})"));
+        }
+
+        self.lower_expr_without_reactive_snapshot(expression)
+    }
+
+    fn lower_expr_without_reactive_snapshot(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
         // WHAT: dispatch lowering by the fully resolved HIR expression shape.
         // WHY: HIR has already linearized side effects, so expression lowering can stay a direct
         //      semantic mapping from each variant to the exact JS runtime helper sequence it needs.
@@ -484,6 +498,93 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         Ok(format!("__bs_map_new([{}])", lowered_entries.join(", ")))
+    }
+
+    /// Lower a reactive template value to the backend-owned template-string runtime representation.
+    ///
+    /// WHAT: returns `__bs_template_string(() => snapshot, __bs_template_collect_dependencies(...))`
+    /// carrying a snapshot function and the transitive reactive source dependencies.
+    /// WHY: template-string values must preserve dependency metadata for Phase 7 mounting and
+    /// rerendering while still snapshotting to plain strings in ordinary string contexts.
+    pub(crate) fn lower_reactive_template_value(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
+        let Some(template) = self
+            .hir
+            .side_table
+            .reactive_template_for_value(expression.id)
+        else {
+            return self.lower_expr(expression);
+        };
+
+        let snapshot_body = self.lower_reactive_template_snapshot_body(expression)?;
+        let direct_dependencies = self.lower_reactive_template_direct_dependencies(template);
+        let nested_values = self.lower_reactive_template_nested_values(template)?;
+
+        Ok(format!(
+            "__bs_template_string(() => {snapshot_body}, __bs_template_collect_dependencies({direct_dependencies}, {nested_values}))"
+        ))
+    }
+
+    /// Lower the snapshot body of a reactive template value.
+    ///
+    /// WHAT: for the common accumulator-local result produced by HIR template lowering, the
+    /// snapshot re-reads the current local value. Other shapes fall back to ordinary expression
+    /// lowering without the reactive wrapper.
+    /// WHY: the snapshot function must produce a plain string each time it is called.
+    fn lower_reactive_template_snapshot_body(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
+        match &expression.kind {
+            HirExpressionKind::Load(place) => {
+                let place_js = self.lower_place(place)?;
+                Ok(format!("__bs_template_snapshot(__bs_read({place_js}))"))
+            }
+
+            HirExpressionKind::Copy(place) => {
+                let place_js = self.lower_place(place)?;
+                Ok(format!("__bs_template_snapshot(__bs_read({place_js}))"))
+            }
+
+            _ => self.lower_expr_without_reactive_snapshot(expression),
+        }
+    }
+
+    fn lower_reactive_template_direct_dependencies(
+        &self,
+        template: &crate::compiler_frontend::hir::reactivity::HirReactiveTemplate,
+    ) -> String {
+        if template.dependencies.is_empty() {
+            return "[]".to_owned();
+        }
+
+        let ids = template
+            .dependencies
+            .iter()
+            .map(|dependency| dependency.source.0.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        format!("[{ids}]")
+    }
+
+    fn lower_reactive_template_nested_values(
+        &self,
+        template: &crate::compiler_frontend::hir::reactivity::HirReactiveTemplate,
+    ) -> Result<String, CompilerError> {
+        if template.template_value_parameters.is_empty() {
+            return Ok("[]".to_owned());
+        }
+
+        let mut values = Vec::with_capacity(template.template_value_parameters.len());
+        for dependency in &template.template_value_parameters {
+            let local_name = self.local_name(dependency.parameter)?;
+            values.push(format!("__bs_read({local_name})"));
+        }
+
+        Ok(format!("[{}]", values.join(", ")))
     }
 }
 

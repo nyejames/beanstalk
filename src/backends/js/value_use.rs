@@ -49,13 +49,38 @@ impl<'hir> JsEmitter<'hir> {
         use_context: JsValueUse,
     ) -> Result<String, CompilerError> {
         match use_context {
-            JsValueUse::PlainExpression
-            | JsValueUse::AssignmentValue
-            | JsValueUse::HostCallArgument => self.lower_concrete_value(expression),
+            JsValueUse::PlainExpression | JsValueUse::HostCallArgument => {
+                // Ordinary string contexts receive a plain string snapshot.
+                self.lower_concrete_value(expression)
+            }
 
-            JsValueUse::BeanstalkCallArgument => self.lower_call_argument_value(expression),
+            JsValueUse::AssignmentValue => {
+                // Assignment preserves reactive template values so they can be inserted later.
+                if self.value_is_reactive_template(expression.id) {
+                    self.lower_reactive_template_value(expression)
+                } else {
+                    self.lower_concrete_value(expression)
+                }
+            }
 
-            JsValueUse::ReturnValue => self.lower_return_value(expression),
+            JsValueUse::BeanstalkCallArgument => {
+                // String parameters that receive reactive templates should pass the template value
+                // object, not a binding wrapper, so the callee can preserve reactivity.
+                if self.value_is_reactive_template(expression.id) {
+                    self.lower_reactive_template_value(expression)
+                } else {
+                    self.lower_call_argument_value(expression)
+                }
+            }
+
+            JsValueUse::ReturnValue => {
+                // Returns preserve reactive template values so callers can mount or compose them.
+                if self.value_is_reactive_template(expression.id) {
+                    self.lower_reactive_template_value(expression)
+                } else {
+                    self.lower_return_value(expression)
+                }
+            }
         }
     }
 

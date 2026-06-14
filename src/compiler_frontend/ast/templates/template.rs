@@ -5,7 +5,9 @@
 //! WHY: templates are a first-class Beanstalk construct; this module owns the shared
 //!      vocabulary used by parsing, folding, slot routing, and render-plan preparation.
 
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ReactiveSource, ReactiveTemplateMetadata,
+};
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterOutput,
@@ -13,7 +15,9 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use std::sync::Arc;
 
@@ -234,6 +238,17 @@ impl TemplateContent {
         )));
     }
 
+    pub fn add_reactive_subscription(
+        &mut self,
+        expression: Expression,
+        origin: TemplateSegmentOrigin,
+        subscription: ReactiveSubscription,
+    ) {
+        self.atoms.push(TemplateAtom::Content(
+            TemplateSegment::reactive_subscription(expression, origin, subscription),
+        ));
+    }
+
     pub fn push_slot_with_wrappers(
         &mut self,
         key: SlotKey,
@@ -274,6 +289,12 @@ impl TemplateContent {
                 TemplateAtom::Slot(_) => None,
             })
             .collect()
+    }
+
+    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        for atom in &self.atoms {
+            atom.merge_reactive_template_metadata(metadata);
+        }
     }
 
     pub fn extend(&mut self, other: TemplateContent) {
@@ -380,6 +401,16 @@ impl TemplateAtom {
             }
         }
     }
+
+    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        match self {
+            TemplateAtom::Content(segment) => {
+                segment.merge_reactive_template_metadata(metadata);
+            }
+
+            TemplateAtom::Slot(_) => {}
+        }
+    }
 }
 
 // -------------------------
@@ -403,9 +434,32 @@ pub struct TemplateSegment {
     pub expression: Expression,
     pub origin: TemplateSegmentOrigin,
     pub is_child_template_output: bool,
+    pub reactive_subscription: Option<ReactiveSubscription>,
     /// Thread-safe sharing keeps template values legal inside style directive registries that are
     /// read by parallel per-file frontend preparation workers.
     pub source_child_template: Option<Arc<Template>>,
+}
+
+/// Metadata for a V1 `$(source)` template subscription.
+///
+/// WHAT: records the resolved reactive source identity, ordinary underlying value type, and
+/// authored source location without changing the segment expression's semantic `TypeId`.
+/// WHY: subscriptions are template metadata, not a wrapper type or borrow. Later HIR/backend
+/// stages can preserve this dependency while ordinary `[source]` head captures remain snapshots.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReactiveSubscription {
+    pub source: ReactiveSource,
+    pub type_id: TypeId,
+    pub location: SourceLocation,
+}
+
+impl ReactiveSubscription {
+    /// Remap source identity and location across per-file string-table merges.
+    // Called by per-file frontend output remapping before module-wide dependency sorting.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.source.remap_string_ids(remap);
+        self.location.remap_string_ids(remap);
+    }
 }
 
 impl TemplateSegment {
@@ -414,6 +468,21 @@ impl TemplateSegment {
             expression,
             origin,
             is_child_template_output: false,
+            reactive_subscription: None,
+            source_child_template: None,
+        }
+    }
+
+    pub fn reactive_subscription(
+        expression: Expression,
+        origin: TemplateSegmentOrigin,
+        subscription: ReactiveSubscription,
+    ) -> Self {
+        Self {
+            expression,
+            origin,
+            is_child_template_output: false,
+            reactive_subscription: Some(subscription),
             source_child_template: None,
         }
     }
@@ -427,6 +496,7 @@ impl TemplateSegment {
             expression,
             origin,
             is_child_template_output: true,
+            reactive_subscription: None,
             source_child_template: Some(Arc::new(source_child_template)),
         }
     }
@@ -435,8 +505,28 @@ impl TemplateSegment {
     // Called by per-file frontend output remapping before module-wide dependency sorting.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.expression.remap_string_ids(remap);
+        if let Some(subscription) = &mut self.reactive_subscription {
+            subscription.remap_string_ids(remap);
+        }
         if let Some(source_child) = &mut self.source_child_template {
             Arc::make_mut(source_child).remap_string_ids(remap);
+        }
+    }
+
+    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
+        if let Some(subscription) = &self.reactive_subscription {
+            metadata.push_subscription(subscription.clone());
+        }
+
+        if let Some(expression_metadata) = &self.expression.reactive_template {
+            metadata.merge_from(expression_metadata);
+            return;
+        }
+
+        if let ExpressionKind::Template(template) = &self.expression.kind
+            && let Some(template_metadata) = template.reactive_template_metadata()
+        {
+            metadata.merge_from(&template_metadata);
         }
     }
 }

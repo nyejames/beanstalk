@@ -847,6 +847,111 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Reactive declarations and parameters</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend syntax, AST source metadata, HIR reactive source side-table metadata, borrow invalidation facts, <code>$T</code> call validation, template subscription source validation, JS reactive binding/scheduler helper lowering, HTML-JS runtime-fragment mounting, and unsupported sink/backend diagnostics are implemented.</td>
+     <td style="padding: 0.2em 0.5em;  "> Accepted V1 syntax is <code>$Type</code> / <code>$=</code> declarations and <code>$T</code> parameters. Reactive identity is source metadata, not a wrapper type or separate <code>TypeId</code>. HIR preserves reactive declarations and parameters as ordinary locals with side-table source IDs, borrow validation records conservative source-level invalidation facts for writes that may dirty those sources, and the JS backend lowers reactive locals to backend-owned reactive binding records while scheduling dirty sources from those facts. Reactive declarations are runtime-local, cannot become importable/exportable top-level declarations, ordinary <code>T</code> parameters receive snapshot reads, and HTML-Wasm rejects reachable reactive template runtime features until a Wasm runtime design exists.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Reactive template subscriptions</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend tokenization, template-head parsing, AST source validation, subscription segment metadata, AST-level reactive template-string value propagation, HIR value side-table metadata, HIR invariant validation, HIR reachability facts for runtime fragments / external-call sinks, borrow invalidation facts, JS template-string helper lowering, HTML-JS runtime-fragment mounting, and unsupported sink/backend diagnostics are implemented.</td>
+     <td style="padding: 0.2em 0.5em;  "> Accepted V1 syntax is <code>$(source)</code> in template head/capture positions only. V1 accepts one bare reactive source identifier; field paths, calls, operators, computed expressions, mutable access forms, nested templates/literals, ordinary expression-position use, and compile-time templates are rejected. Ordinary <code>[source]</code> captures stay snapshot reads. Runtime template values keep ordinary <code>String</code> type while carrying direct metadata through template composition, assignment, returns, direct call arguments, ordinary <code>String</code> parameter passthroughs, HIR lowering, JS backend-owned template-string objects, and HTML-JS top-level runtime-fragment mounting. Ordinary and host string contexts snapshot those objects; direct subscription-bearing external-call sinks are rejected in JS, and HTML-Wasm rejects reachable subscription-bearing template runtime values before Wasm lowering. Ordinary string operations still snapshot and do not preserve reactive template metadata.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> HTML-JS reactive runtime fragments</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> JS reactive source, scheduler, template-string runtime helpers, HTML slot mounting/rerender registration, direct unsupported sink diagnostics, and HTML-Wasm rejection are implemented.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 live sink support is top-level runtime HTML fragments in the HTML-JS builder. The JS backend can create reactive bindings, collect template dependencies, preserve backend-owned template-string values in runtime fragment arrays, mount them into <code>bst-slot-N</code> placeholders, register mounted fragments against dependency source IDs, and rerender whole slots during dirty-source scheduler flushes. Non-reactive runtime fragments keep the plain direct insertion path. Direct subscription-bearing external-call sinks are rejected for JS, reachable subscription-bearing reactive template runtime values are rejected for HTML-Wasm, and fine-grained DOM updates remain future backend optimization.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Reactive template control flow</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> Reactive-aware template <code>if</code> and <code>loop</code> behavior is future work beyond bare-source subscriptions.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Field/path subscriptions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 subscriptions are source-level only. Field and path-level invalidation require separate design.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Collection item subscriptions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 invalidates whole reactive sources when collection or hashmap mutations may write through them. Item-level subscriptions and invalidation require a separate design.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Expression dependency tracking</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 does not infer dependencies from computed expressions.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Derived reactive values</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> Derived values require a later explicit design and must not become implicit expression dependency tracking.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Reactive IO sinks</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Direct subscription-bearing external-call sinks are rejected with unsupported backend feature diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> Live IO/side-effect sinks are deferred until the side-effect model is designed. V1 permits live updates only for top-level HTML-JS runtime fragments.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Fine-grained reactive DOM updates</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend optimization, not current surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Text, attribute, and style update strategies are deferred after whole-fragment HTML-JS rerendering.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Nested reactive regions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend optimization, not current surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 rerenders whole top-level runtime fragment mount slots. Nested live regions require a later backend/runtime design.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Keyed loop diffing and stable child identity</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend optimization, not current surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> V1 does not diff keyed children or preserve child identity across rerenders beyond whole-fragment replacement.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Template-owned event/action/effect syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> Future UI work. It must not imply general closures, anonymous function values, or general function-value semantics.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> `$bind(...)` and typed component messages</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax.</td>
+     <td style="padding: 0.2em 0.5em;  "> Form binding helpers and typed component events/messages belong to later UI design work.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> HTML-Wasm reactive runtime support</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Reachable subscription-bearing template runtime values are rejected with unsupported backend feature diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> HTML-Wasm rejects reachable reactive runtime features before Wasm lowering until a complete Wasm reactive runtime design exists.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait ecosystem extensions</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
      <td style="padding: 0.2em 0.5em;  "> Current trait diagnostics and implemented trait fixtures are listed in the core Traits row.</td>
@@ -1099,17 +1204,31 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> General closures</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside Scope</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected if syntax is introduced before an explicit language-philosophy change.</td>
+     <td style="padding: 0.2em 0.5em;  "> Not a current roadmap item. Reactivity is the constrained UI mechanism intended to cover many closure-heavy template cases without adding general function-value semantics.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Anonymous function values</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside Scope</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected if syntax is introduced before an explicit language-philosophy change.</td>
+     <td style="padding: 0.2em 0.5em;  "> Not a current roadmap item. Template-owned event/action/effect syntax, if added later, must not become hidden anonymous function values.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic function values</td>
-     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside Scope</td>
      <td style="padding: 0.2em 0.5em;  "> <code>generic_fn_value_use_grouped_rejected</code>, <code>generic_fn_value_use_namespace_rejected</code>, <code>generic_fn_value_use_collection_rejected</code>, <code>generic_fn_value_use_argument_rejected</code>, <code>generic_fn_value_use_return_rejected</code>, <code>generic_fn_value_use_facade_rejected</code></td>
-     <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values. This is not a current roadmap item.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Higher-order polymorphism</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside Scope</td>
      <td style="padding: 0.2em 0.5em;  "> None</td>
-     <td style="padding: 0.2em 0.5em;  "> Generic function values, polymorphic function parameters, and higher-order generic calls are outside the Alpha surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic function values, polymorphic function parameters, and higher-order generic calls are outside the current language design scope.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

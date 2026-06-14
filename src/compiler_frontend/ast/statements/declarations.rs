@@ -10,7 +10,9 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
+};
 use crate::compiler_frontend::ast::expressions::function_calls::{
     FunctionCallParseInput, parse_function_call,
 };
@@ -75,6 +77,27 @@ fn capacity_only_shorthand(type_ref: &ParsedTypeRef) -> Option<&ParsedCollection
             ..
         } if matches!(element.as_ref(), ParsedTypeRef::Inferred) => Some(capacity),
         _ => None,
+    }
+}
+
+/// Apply binding-level reactive identity after the initializer has been fully typed.
+///
+/// WHAT: `$Type`/`$=` declarations become stable reactive sources; ordinary declarations store a
+/// snapshot even when their initializer read a reactive source.
+/// WHY: reactive identity is declaration metadata, not part of `TypeId` or the initializer's
+/// natural expression type.
+fn apply_reactive_declaration_metadata(
+    value: &mut Expression,
+    is_reactive_binding: bool,
+    qualified_name: &InternedPath,
+) {
+    if is_reactive_binding {
+        value.reactive_source = Some(ReactiveSource {
+            path: qualified_name.clone(),
+            kind: ReactiveSourceKind::Declaration,
+        });
+    } else {
+        value.clear_reactive_source();
     }
 }
 
@@ -287,6 +310,7 @@ pub fn resolve_declaration_syntax(
     // ----------------------------
     //  Validate constant-context constraints
     // ----------------------------
+    let is_reactive_binding = declaration_syntax.binding_mode.is_reactive();
     let value_mode = declaration_syntax.value_mode();
     if declaration_syntax.binding_mode.is_mutable() && context.kind.is_constant_context() {
         return Err(CompilerDiagnostic::invalid_declaration(
@@ -365,6 +389,11 @@ pub fn resolve_declaration_syntax(
         }
 
         parsed_initializer.value_mode = value_mode.to_owned();
+        apply_reactive_declaration_metadata(
+            &mut parsed_initializer,
+            is_reactive_binding,
+            &qualified_name,
+        );
 
         return Ok(Declaration {
             id: qualified_name,
@@ -614,6 +643,11 @@ pub fn resolve_declaration_syntax(
     // from type defaults; preserving that ownership would incorrectly allow writes through
     // immutable bindings and mutable receiver calls.
     parsed_initializer.value_mode = value_mode.to_owned();
+    apply_reactive_declaration_metadata(
+        &mut parsed_initializer,
+        is_reactive_binding,
+        &qualified_name,
+    );
 
     ast_log!(
         "Created new ",

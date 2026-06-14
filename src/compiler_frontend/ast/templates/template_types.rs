@@ -6,14 +6,18 @@
 //! WHY: Separates the `Template` data type from the parsing/composition logic
 //! so other modules can depend on the struct without pulling in the full parser.
 
+use crate::compiler_frontend::ast::expressions::expression::ReactiveTemplateMetadata;
 use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateAggregateRenderPlan, TemplateControlFlow,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchSelector,
+    TemplateControlFlow, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
-use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotApplicationPlan;
+use crate::compiler_frontend::ast::templates::template_slots::{
+    RuntimeSlotApplicationPlan, RuntimeSlotSitePiece,
+};
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -174,6 +178,25 @@ impl Template {
     /// Returns true if this template is a compile-time string (not a wrapper).
     pub fn is_const_renderable_string(&self) -> bool {
         self.const_value_kind().is_renderable_string()
+    }
+
+    /// Build value metadata for a template-backed `String`.
+    ///
+    /// WHAT: collects direct `$(source)` subscriptions and template-value parameter placeholders
+    /// from this template's content, control-flow bodies, and runtime slot plans.
+    /// WHY: AST owns template semantics; later stages should receive one compact value fact instead
+    /// of rediscovering dependencies by parsing template directives again.
+    pub(crate) fn reactive_template_metadata(&self) -> Option<ReactiveTemplateMetadata> {
+        let mut metadata = ReactiveTemplateMetadata::template_backed();
+
+        self.content.merge_reactive_template_metadata(&mut metadata);
+        merge_control_flow_reactive_template_metadata(&self.control_flow, &mut metadata);
+
+        if let Some(plan) = &self.runtime_slot_application {
+            merge_runtime_slot_application_metadata(plan, &mut metadata);
+        }
+
+        Some(metadata)
     }
 
     /// Rebuilds full runtime metadata from current `content`.
@@ -362,6 +385,138 @@ impl Template {
         }
         if let Some(plan) = &mut self.runtime_slot_application {
             plan.remap_string_ids(remap);
+        }
+    }
+}
+
+fn merge_control_flow_reactive_template_metadata(
+    control_flow: &Option<TemplateControlFlow>,
+    metadata: &mut ReactiveTemplateMetadata,
+) {
+    let Some(control_flow) = control_flow else {
+        return;
+    };
+
+    match control_flow {
+        TemplateControlFlow::BranchChain(branch_chain) => {
+            for branch in &branch_chain.branches {
+                merge_branch_selector_metadata(&branch.selector, metadata);
+                branch.content.merge_reactive_template_metadata(metadata);
+                if let Some(render_plan) = &branch.render_plan {
+                    render_plan.merge_reactive_template_metadata(metadata);
+                }
+            }
+
+            if let Some(fallback) = &branch_chain.fallback {
+                fallback.content.merge_reactive_template_metadata(metadata);
+                if let Some(render_plan) = &fallback.render_plan {
+                    render_plan.merge_reactive_template_metadata(metadata);
+                }
+            }
+        }
+
+        TemplateControlFlow::Loop(template_loop) => {
+            merge_loop_header_metadata(&template_loop.header, metadata);
+            template_loop
+                .body_content
+                .merge_reactive_template_metadata(metadata);
+            if let Some(render_plan) = &template_loop.body_render_plan {
+                render_plan.merge_reactive_template_metadata(metadata);
+            }
+            if let Some(aggregate_plan) = &template_loop.aggregate_render_plan {
+                merge_aggregate_render_plan_metadata(aggregate_plan, metadata);
+            }
+        }
+
+        TemplateControlFlow::LoopControl(_) => {}
+    }
+}
+
+fn merge_branch_selector_metadata(
+    selector: &TemplateBranchSelector,
+    metadata: &mut ReactiveTemplateMetadata,
+) {
+    match selector {
+        TemplateBranchSelector::Bool(condition) => {
+            if let Some(condition_metadata) = &condition.reactive_template {
+                metadata.merge_from(condition_metadata);
+            }
+        }
+        TemplateBranchSelector::OptionPresentCapture { scrutinee, .. } => {
+            if let Some(scrutinee_metadata) = &scrutinee.reactive_template {
+                metadata.merge_from(scrutinee_metadata);
+            }
+        }
+    }
+}
+
+fn merge_loop_header_metadata(
+    header: &TemplateLoopHeader,
+    metadata: &mut ReactiveTemplateMetadata,
+) {
+    match header {
+        TemplateLoopHeader::Conditional { condition } => {
+            if let Some(condition_metadata) = &condition.reactive_template {
+                metadata.merge_from(condition_metadata);
+            }
+        }
+        TemplateLoopHeader::Range { range, .. } => {
+            if let Some(start_metadata) = &range.start.reactive_template {
+                metadata.merge_from(start_metadata);
+            }
+            if let Some(end_metadata) = &range.end.reactive_template {
+                metadata.merge_from(end_metadata);
+            }
+            if let Some(step) = &range.step
+                && let Some(step_metadata) = &step.reactive_template
+            {
+                metadata.merge_from(step_metadata);
+            }
+        }
+        TemplateLoopHeader::Collection { iterable, .. } => {
+            if let Some(iterable_metadata) = &iterable.reactive_template {
+                metadata.merge_from(iterable_metadata);
+            }
+        }
+    }
+}
+
+fn merge_aggregate_render_plan_metadata(
+    plan: &TemplateAggregateRenderPlan,
+    metadata: &mut ReactiveTemplateMetadata,
+) {
+    for piece in &plan.pieces {
+        match piece {
+            TemplateAggregatePiece::Render(render_piece) => {
+                render_piece.merge_reactive_template_metadata(metadata);
+            }
+
+            TemplateAggregatePiece::Aggregate => {}
+        }
+    }
+}
+
+fn merge_runtime_slot_application_metadata(
+    plan: &RuntimeSlotApplicationPlan,
+    metadata: &mut ReactiveTemplateMetadata,
+) {
+    plan.wrapper_plan.merge_reactive_template_metadata(metadata);
+
+    for source in &plan.contribution_sources {
+        source
+            .render_plan
+            .merge_reactive_template_metadata(metadata);
+    }
+
+    for site in &plan.slot_sites {
+        for piece in &site.render_plan.pieces {
+            match piece {
+                RuntimeSlotSitePiece::Render(render_piece) => {
+                    render_piece.merge_reactive_template_metadata(metadata);
+                }
+
+                RuntimeSlotSitePiece::ContributionSource(_) => {}
+            }
         }
     }
 }

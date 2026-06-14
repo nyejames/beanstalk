@@ -197,7 +197,15 @@ pub fn get_token_kind(
         // ------------------
 
         if current_char == '$' {
-            return tokenize_style_directive(stream, style_directives, string_table);
+            if stream.mode == TokenizeMode::TemplateHead {
+                if stream.peek() == Some(&'(') {
+                    return_token!(TokenKind::Reactive, stream);
+                }
+
+                return tokenize_style_directive(stream, style_directives, string_table);
+            }
+
+            return_token!(TokenKind::Reactive, stream);
         }
 
         if current_char == END_SCOPE_CHAR {

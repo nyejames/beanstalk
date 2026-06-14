@@ -1,0 +1,11 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["reactive_template_return_helper_insert_success returned=9"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_mount_template_fragment(",
+]

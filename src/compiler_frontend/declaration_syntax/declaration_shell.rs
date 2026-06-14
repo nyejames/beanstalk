@@ -131,6 +131,10 @@ pub fn parse_binding_target_syntax(
         require_binding_marker_adjacent(token_stream, BindingMode::CompileTimeConstant)?;
         token_stream.advance();
         BindingMode::CompileTimeConstant
+    } else if token_stream.current_token_kind() == &TokenKind::Reactive {
+        require_binding_marker_adjacent(token_stream, BindingMode::ReactiveRuntime)?;
+        token_stream.advance();
+        BindingMode::ReactiveRuntime
     } else {
         BindingMode::ImmutableRuntime
     };
@@ -158,7 +162,7 @@ pub fn parse_binding_target_syntax(
 //
 // Returns an error when the marker is not adjacent to the next token, using the marker token's
 // location as the diagnostic primary location.
-fn require_binding_marker_adjacent(
+pub(crate) fn require_binding_marker_adjacent(
     token_stream: &FileTokens,
     mode: BindingMode,
 ) -> Result<(), CompilerDiagnostic> {
@@ -180,6 +184,9 @@ fn require_binding_marker_adjacent(
             BindingMode::MutableRuntime => CommonSyntaxMistakeReason::InvalidMutableBindingSpacing,
             BindingMode::CompileTimeConstant => {
                 CommonSyntaxMistakeReason::InvalidCompileTimeBindingSpacing
+            }
+            BindingMode::ReactiveRuntime => {
+                CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing
             }
             BindingMode::ImmutableRuntime => return Ok(()),
         };

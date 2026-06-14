@@ -15,6 +15,8 @@ use crate::compiler_frontend::compiler_messages::{
     TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
+use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
+use crate::compiler_frontend::declaration_syntax::declaration_shell::require_binding_marker_adjacent;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
@@ -45,6 +47,7 @@ pub enum SignatureMemberContext {
 pub struct SignatureMemberSyntax {
     pub id: InternedPath,
     pub value_mode: ValueMode,
+    pub is_reactive: bool,
     pub type_annotation: ParsedTypeRef,
     pub default_tokens: Vec<Token>,
     pub location: SourceLocation,
@@ -451,9 +454,27 @@ fn parse_signature_member_syntax(
     token_stream.advance();
 
     let mut value_mode = ValueMode::ImmutableOwned;
-    if token_stream.current_token_kind() == &TokenKind::Mutable {
-        token_stream.advance();
-        value_mode = ValueMode::MutableOwned;
+    let mut is_reactive = false;
+    match token_stream.current_token_kind() {
+        TokenKind::Mutable => {
+            token_stream.advance();
+            value_mode = ValueMode::MutableOwned;
+        }
+
+        TokenKind::Reactive => {
+            if member_context != SignatureMemberContext::FunctionParameter {
+                return Err(CompilerDiagnostic::invalid_signature_member(
+                    InvalidSignatureMemberReason::ReactiveAccessNotAllowed,
+                    token_stream.current_location(),
+                ));
+            }
+
+            require_binding_marker_adjacent(token_stream, BindingMode::ReactiveRuntime)?;
+            token_stream.advance();
+            is_reactive = true;
+        }
+
+        _ => {}
     }
 
     if token_stream.current_token_kind() == &TokenKind::Hash {
@@ -484,6 +505,12 @@ fn parse_signature_member_syntax(
     let default_tokens = match token_stream.current_token_kind() {
         TokenKind::Assign => {
             token_stream.advance();
+            if is_reactive {
+                return Err(CompilerDiagnostic::invalid_signature_member(
+                    InvalidSignatureMemberReason::ReactiveParameterDefaultValue,
+                    token_stream.current_location(),
+                ));
+            }
             if member_context == SignatureMemberContext::TraitRequirement {
                 return Err(CompilerDiagnostic::invalid_signature_member(
                     InvalidSignatureMemberReason::TraitRequirementDefaultValue,
@@ -523,6 +550,7 @@ fn parse_signature_member_syntax(
     Ok(SignatureMemberSyntax {
         id: full_name,
         value_mode,
+        is_reactive,
         type_annotation,
         default_tokens,
         location: member_location,
@@ -565,6 +593,7 @@ fn parse_trait_this_member_syntax(
     Ok(SignatureMemberSyntax {
         id: full_name,
         value_mode,
+        is_reactive: false,
         type_annotation,
         default_tokens,
         location: member_location,

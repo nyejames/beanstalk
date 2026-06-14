@@ -486,6 +486,9 @@ pub enum TokenKind {
     // #
     Hash,
 
+    // Reactive declaration/parameter access marker in ordinary code.
+    Reactive,
+
     /// Function Signatures
     Arrow,
 

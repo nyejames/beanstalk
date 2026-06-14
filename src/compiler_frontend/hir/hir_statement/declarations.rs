@@ -477,6 +477,9 @@ impl<'a> HirBuilder<'a> {
                 param.value.value_mode.is_mutable(),
                 Some(param_location.clone()),
             )?;
+            if let Some(source) = &param.value.reactive_source {
+                self.bind_reactive_source_for_local(local_id, source, param_type, &param_location)?;
+            }
 
             let function = self.function_mut_by_id_or_error(function_id, &param_location)?;
             function.params.push(local_id);
@@ -510,8 +513,11 @@ impl<'a> HirBuilder<'a> {
             variable.id.to_owned(),
             local_type,
             variable.value.value_mode.is_mutable(),
-            Some(source_location),
+            Some(source_location.clone()),
         )?;
+        if let Some(source) = &variable.value.reactive_source {
+            self.bind_reactive_source_for_local(local_id, source, local_type, &source_location)?;
+        }
 
         let value = self.lower_expression_value_to_current_block(&variable.value)?;
 

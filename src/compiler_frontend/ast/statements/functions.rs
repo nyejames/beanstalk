@@ -6,7 +6,9 @@
 #![allow(clippy::result_large_err)]
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind, ReactiveTemplateMetadata,
+};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_with_trailing_newline_policy;
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources, ExpressionTrailingPolicy,
@@ -77,6 +79,13 @@ pub struct ReturnSlot {
     /// Canonical `TypeId` for this return slot, populated during type resolution.
     /// `None` before resolution; `Some` afterwards.
     pub type_id: Option<TypeId>,
+    /// Value-level template metadata for this return slot.
+    ///
+    /// WHAT: set after AST body parsing for functions that directly return template-backed
+    /// strings or strings carrying template-value parameter placeholders.
+    /// WHY: callers need this metadata to preserve direct template-string flow without changing
+    /// the slot's ordinary semantic `TypeId`.
+    pub reactive_template: Option<ReactiveTemplateMetadata>,
     pub channel: ReturnChannel,
 }
 
@@ -85,6 +94,7 @@ impl ReturnSlot {
         Self {
             value,
             type_id: None,
+            reactive_template: None,
             channel: ReturnChannel::Success,
         }
     }
@@ -93,6 +103,7 @@ impl ReturnSlot {
         Self {
             value,
             type_id: None,
+            reactive_template: None,
             channel: ReturnChannel::Error,
         }
     }
@@ -240,6 +251,9 @@ impl ReturnSlot {
     // Called by per-file frontend output remapping before module-wide dependency sorting.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.value.remap_string_ids(remap);
+        if let Some(metadata) = &mut self.reactive_template {
+            metadata.remap_string_ids(remap);
+        }
         // type_id is a canonical semantic ID and must not be remapped.
         // channel is an enum discriminator with no string data.
     }
@@ -259,13 +273,23 @@ pub(crate) fn function_signature_from_syntax_with_unresolved_types(
 ) -> Result<FunctionSignature, CompilerDiagnostic> {
     let mut parameters = Vec::with_capacity(syntax.parameters.len());
     for parameter in &syntax.parameters {
-        parameters.push(signature_member_to_declaration(
+        let mut declaration = signature_member_to_declaration(
             parameter,
             expression_context,
             type_interner,
             string_table,
             fallback_policy,
-        )?);
+        )?;
+
+        if declaration.value.type_id == builtin_type_ids::STRING {
+            declaration.value.reactive_template =
+                Some(ReactiveTemplateMetadata::from_template_value_parameter(
+                    declaration.id.clone(),
+                    parameter.location.clone(),
+                ));
+        }
+
+        parameters.push(declaration);
     }
 
     let mut returns = Vec::with_capacity(syntax.returns.len());
@@ -322,7 +346,7 @@ pub(crate) fn signature_member_to_declaration(
         Err(diagnostic) => return Err(*diagnostic),
     };
 
-    let value = if member.default_tokens.is_empty() {
+    let mut value = if member.default_tokens.is_empty() {
         Expression::new(
             ExpressionKind::NoValue,
             member.location.clone(),
@@ -340,6 +364,12 @@ pub(crate) fn signature_member_to_declaration(
         )?
     };
 
+    if member.is_reactive {
+        value.reactive_source = Some(ReactiveSource {
+            path: member.id.clone(),
+            kind: ReactiveSourceKind::Parameter,
+        });
+    }
     Ok(Declaration {
         id: member.id.clone(),
         value,
@@ -555,6 +585,7 @@ fn return_slot_from_syntax(
     Ok(ReturnSlot {
         value,
         type_id: None,
+        reactive_template: None,
         channel,
     })
 }
