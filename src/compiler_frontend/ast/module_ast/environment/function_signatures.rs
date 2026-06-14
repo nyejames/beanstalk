@@ -153,9 +153,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .with_visible_source_bindings(visibility.visible_source_names.clone())
                 .with_visible_type_aliases(visibility.visible_type_alias_names.clone())
                 .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
-                .with_resolved_type_alias_annotations(Rc::new(
-                    self.resolved_type_alias_annotations_by_path.clone(),
-                ))
                 .with_explicit_compile_time_constants(&self.module_constants)
                 .with_generic_declarations(Rc::new(
                     self.module_symbols.generic_declarations_by_path.clone(),

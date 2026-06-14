@@ -16,6 +16,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
@@ -23,6 +24,7 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tests::ast_fixture_support::start_function_body;
 use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
@@ -367,4 +369,134 @@ fn fully_constant_boolean_and_comparison_expressions_fold() {
         declaration.value.kind
     );
     assert_eq!(declaration.value.diagnostic_type, DataType::Bool);
+}
+
+#[test]
+fn string_slice_concatenation_with_variable_resolves_to_string() {
+    let value = first_start_declaration_expression("str1 = \"Hello\"\nvalue = str1 + \" World\"\n");
+
+    assert_eq!(value.diagnostic_type, DataType::StringSlice);
+    assert_eq!(value.value_shape, ExpressionValueShape::PlainStringSlice);
+    assert!(
+        matches!(value.kind, ExpressionKind::StringSlice(_)),
+        "expected folded string concatenation to collapse to a string slice, got {:?}",
+        value.kind
+    );
+}
+
+#[test]
+fn folded_template_preserves_template_shape() {
+    let value = first_start_declaration_expression("value = [:template body]\n");
+
+    assert_eq!(value.type_id, builtin_type_ids::STRING);
+    assert_eq!(value.value_shape, ExpressionValueShape::TemplateString);
+    assert!(
+        matches!(value.kind, ExpressionKind::StringSlice(_)),
+        "expected folded template to collapse to a string slice kind, got {:?}",
+        value.kind
+    );
+}
+
+#[test]
+fn copied_template_string_preserves_template_shape() {
+    let value = nth_start_declaration_expression(
+        "source String = [:template body]\nvalue = copy source\n",
+        1,
+    );
+
+    assert_eq!(value.type_id, builtin_type_ids::STRING);
+    assert_eq!(value.value_shape, ExpressionValueShape::TemplateString);
+    assert!(
+        matches!(value.kind, ExpressionKind::Copy(_)),
+        "expected explicit copy to remain a copy expression, got {:?}",
+        value.kind
+    );
+}
+
+#[test]
+fn template_shaped_string_operand_is_rejected() {
+    let mut string_table = StringTable::new();
+    let source_scope = InternedPath::from_single_str("#page.bst", &mut string_table);
+
+    let mut template_like_string = Expression::string_slice(
+        string_table.get_or_intern(String::from("template text")),
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+    template_like_string.value_shape = ExpressionValueShape::TemplateString;
+
+    let nodes = vec![
+        AstNode {
+            kind: NodeKind::Rvalue(Expression::string_slice(
+                string_table.get_or_intern(String::from("plain ")),
+                SourceLocation::default(),
+                ValueMode::ImmutableOwned,
+            )),
+            location: SourceLocation::default(),
+            scope: source_scope.clone(),
+        },
+        AstNode {
+            kind: NodeKind::Rvalue(template_like_string),
+            location: SourceLocation::default(),
+            scope: source_scope.clone(),
+        },
+        AstNode {
+            kind: NodeKind::Operator(Operator::Add),
+            location: SourceLocation::default(),
+            scope: source_scope,
+        },
+    ];
+
+    let context = ScopeContext::new(
+        ContextKind::Template,
+        InternedPath::from_single_str("#page.bst", &mut string_table),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
+        ExternalPackageRegistry::new(),
+        vec![],
+    );
+
+    let mut current_type = ExpectedType::Infer;
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+    let error = evaluate_expression(
+        &context,
+        nodes,
+        &mut type_interner,
+        &mut current_type,
+        &ValueMode::ImmutableOwned,
+        &mut string_table,
+    )
+    .expect_err("template-shaped string values should not become plain string operands");
+
+    let crate::compiler_frontend::ast::expressions::eval_expression::ExpressionTypingError::Diagnostic(diagnostic) = error else {
+        panic!("expected an expression type diagnostic");
+    };
+    assert_eq!(diagnostic.kind.code(), "BST-TYPE-0003");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnsupportedOperatorTypes {
+            category: UnsupportedOperatorCategory::Arithmetic,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn function_result_string_concatenation_is_allowed() {
+    let (ast, string_table) =
+        parse_single_file_ast("f || -> String:\n    return \"a\"\n;\nvalue = f() + \"b\"\n");
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::VariableDeclaration(declaration) = &body[0].kind else {
+        panic!("expected start statement to be a variable declaration");
+    };
+    let value = &declaration.value;
+
+    assert_eq!(value.diagnostic_type, DataType::StringSlice);
+    assert_eq!(value.value_shape, ExpressionValueShape::PlainStringSlice);
+    assert!(
+        matches!(value.kind, ExpressionKind::Runtime(_)),
+        "expected function-result concatenation to stay a runtime expression, got {:?}",
+        value.kind
+    );
 }

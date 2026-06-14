@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 
 use crate::compiler_frontend::ast::type_resolution::{
-    TypeResolutionContext, resolve_diagnostic_type_to_type_id,
+    ResolvedTypeAnnotation, TypeResolutionContext, resolve_diagnostic_type_to_type_id,
     resolve_diagnostic_type_to_type_id_checked, resolve_diagnostic_type_to_type_id_opt,
     resolve_parsed_type_annotation, resolve_type,
 };
@@ -554,7 +554,11 @@ fn alias_expanded_nested_optional_type_is_rejected() {
     let mut resolved_type_aliases = FxHashMap::default();
     resolved_type_aliases.insert(
         maybe_path,
-        DataType::Option(Box::new(DataType::StringSlice)),
+        ResolvedTypeAnnotation {
+            source_ref: ParsedTypeRef::Inferred,
+            diagnostic_type: DataType::Option(Box::new(DataType::StringSlice)),
+            type_id: None,
+        },
     );
 
     let mut resolution_context = TypeResolutionContext {
@@ -564,7 +568,6 @@ fn alias_expanded_nested_optional_type_is_rejected() {
         visible_source_bindings: None,
         visible_type_aliases: Some(&visible_type_aliases),
         resolved_type_aliases: Some(&resolved_type_aliases),
-        resolved_type_alias_annotations: None,
         generic_declarations_by_path: None,
         generic_parameters: None,
         generic_substitutions: None,
@@ -668,7 +671,6 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
-        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,
@@ -729,7 +731,6 @@ fn generic_instance_resolution_rejects_wrong_arity() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
-        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,
@@ -796,7 +797,6 @@ fn bare_generic_type_name_requires_type_arguments() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
-        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,

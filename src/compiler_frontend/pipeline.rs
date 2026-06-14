@@ -105,30 +105,6 @@ impl CompilerFrontend {
     // -----------------------------
     //  TOKENIZER
     // -----------------------------
-    // Test-only stage entrypoint for suites that intentionally exercise tokenization before
-    // header preparation. Production module compilation uses parallel local-table preparation.
-    #[cfg(test)]
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn source_to_tokens(
-        &mut self,
-        source_code: &str,
-        module_path: &PathBuf,
-        tokenizer_entry_mode: TokenizerEntryMode,
-    ) -> Result<FileTokens, CompilerDiagnostic> {
-        let source_files = &self.source_files;
-        let style_directives = &self.style_directives;
-        let string_table = &mut self.string_table;
-
-        Self::tokenize_source(
-            source_files,
-            style_directives,
-            source_code,
-            module_path,
-            tokenizer_entry_mode,
-            string_table,
-        )
-    }
-
     /// Tokenize source text against an explicitly supplied string table.
     ///
     /// WHAT: resolves source file identity and runs tokenization without assuming ownership of the

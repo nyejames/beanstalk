@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::expressions::expression::ReactiveTemplateMetadata;
+use crate::compiler_frontend::ast::expressions::expression::ExpressionValueShape;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
@@ -82,12 +82,6 @@ impl TemplateRenderPlan {
             piece.remap_string_ids(remap);
         }
     }
-
-    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        for piece in &self.pieces {
-            piece.merge_reactive_template_metadata(metadata);
-        }
-    }
 }
 
 impl RenderPiece {
@@ -118,26 +112,6 @@ impl RenderPiece {
             RenderPiece::RuntimeSlotSite(_) => {}
         }
     }
-
-    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        match self {
-            RenderPiece::DynamicExpression(dynamic) => {
-                dynamic.merge_reactive_template_metadata(metadata);
-            }
-
-            RenderPiece::ChildTemplate(child) => {
-                if let Some(child_metadata) = &child.expression.reactive_template {
-                    metadata.merge_from(child_metadata);
-                }
-            }
-
-            RenderPiece::Text(_)
-            | RenderPiece::HeadContent(_)
-            | RenderPiece::LoopControl(_)
-            | RenderPiece::Slot(_)
-            | RenderPiece::RuntimeSlotSite(_) => {}
-        }
-    }
 }
 
 impl RenderTextPiece {
@@ -164,16 +138,6 @@ impl RenderExpressionPiece {
         self.expression.remap_string_ids(remap);
         if let Some(subscription) = &mut self.reactive_subscription {
             subscription.remap_string_ids(remap);
-        }
-    }
-
-    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        if let Some(subscription) = &self.reactive_subscription {
-            metadata.push_subscription(subscription.clone());
-        }
-
-        if let Some(expression_metadata) = &self.expression.reactive_template {
-            metadata.merge_from(expression_metadata);
         }
     }
 }
@@ -387,6 +351,7 @@ impl TemplateRenderPlan {
                             contains_regular_division: child_piece
                                 .expression
                                 .contains_regular_division,
+                            value_shape: ExpressionValueShape::TemplateString,
                         },
                         origin: TemplateSegmentOrigin::Body,
                         is_child_template_output: true,

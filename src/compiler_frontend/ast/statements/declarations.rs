@@ -419,7 +419,6 @@ pub fn resolve_declaration_syntax(
                     .as_ref()
                     .map(|fv| &fv.visible_type_alias_names),
                 resolved_type_aliases: context.resolved_type_aliases.as_deref(),
-                resolved_type_alias_annotations: context.resolved_type_alias_annotations.as_deref(),
                 generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
                 resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
                 type_environment: type_interner.environment_mut_for_derived_types(),

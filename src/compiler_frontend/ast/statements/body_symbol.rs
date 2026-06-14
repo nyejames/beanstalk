@@ -435,3 +435,7 @@ pub(crate) fn parse_symbol_statement(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/struct_parsing_tests.rs"]
+mod struct_parsing_tests;

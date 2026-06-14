@@ -4,10 +4,10 @@
 //! WHY: struct parsing feeds both type resolution and HIR place lowering.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidFieldAccessReason,
+use crate::compiler_frontend::ast::expressions::expression::{
+    ExpressionKind, ExpressionValueShape,
 };
+use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidFieldAccessReason};
 use crate::compiler_frontend::tests::ast_fixture_support::start_function_body;
 use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
@@ -37,6 +37,33 @@ fn parses_struct_definitions_with_field_defaults() {
     assert_eq!(fields.len(), 2);
     assert!(matches!(fields[0].value.kind, ExpressionKind::NoValue));
     assert!(matches!(fields[1].value.kind, ExpressionKind::Int(2)));
+}
+
+#[test]
+fn struct_optional_string_default_preserves_source_value_shape() {
+    let (ast, string_table) =
+        parse_single_file_ast("Label = |\n    text String? = \"fallback\",\n|\n");
+
+    let struct_node = ast
+        .nodes
+        .iter()
+        .find(|node| {
+            matches!(
+                &node.kind,
+                NodeKind::StructDefinition(path, ..)
+                    if path.name_str(&string_table) == Some("Label")
+            )
+        })
+        .expect("expected Label struct definition");
+
+    let NodeKind::StructDefinition(_, fields) = &struct_node.kind else {
+        panic!("expected struct definition node");
+    };
+
+    assert_eq!(
+        fields[0].value.value_shape,
+        ExpressionValueShape::PlainStringSlice
+    );
 }
 
 #[test]

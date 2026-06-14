@@ -197,30 +197,6 @@ fn parse_function_call_typed(
     })
 }
 
-/// Parses the raw `(...)` argument list shared by all call-shaped syntax.
-///
-/// WHAT: test-only entry point for syntax-level argument parsing without
-///      parameter expectations. Production callers use
-///      `parse_call_arguments_typed_with_expectations` so `cast` receives a
-///      concrete target at each argument boundary.
-#[cfg(test)]
-pub fn parse_call_arguments(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    string_table: &mut StringTable,
-) -> Result<Vec<CallArgument>, ExpressionParseError> {
-    parse_call_arguments_inner(
-        token_stream,
-        context,
-        type_interner,
-        string_table,
-        CallArgumentSyntaxContext::Ordinary,
-        NamedArgumentSyntax::Supported { callee_name: None },
-        None,
-    )
-}
-
 /// Whether the call surface accepts named arguments.
 ///
 /// WHAT: source calls and constructors support named arguments, while builtin

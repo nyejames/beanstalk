@@ -134,20 +134,24 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 }
 
                 HeaderKind::TypeAlias { .. } => {
-                    let Some(resolved_target) = self
+                    let Some(annotation) = self
                         .resolved_type_aliases_by_path
                         .get(&header.tokens.src_path)
-                        .cloned()
                     else {
                         continue;
                     };
 
-                    let type_id = resolve_diagnostic_type_to_type_id_checked(
-                        &resolved_target,
-                        &mut self.type_environment,
-                        &header.name_location,
-                    )
-                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
+                    let type_id = match annotation.type_id {
+                        Some(type_id) => type_id,
+                        None => resolve_diagnostic_type_to_type_id_checked(
+                            &annotation.diagnostic_type,
+                            &mut self.type_environment,
+                            &header.name_location,
+                        )
+                        .map_err(|diagnostic| {
+                            self.diagnostic_messages(*diagnostic, string_table)
+                        })?,
+                    };
 
                     self.validate_public_type_id(
                         exported_name,

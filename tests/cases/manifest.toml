@@ -7339,6 +7339,11 @@ path = "cast_string_to_float_demand_helpers"
 tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
 
 [[case]]
+id = "cast_wasm_unreachable_cast_ignored"
+path = "cast_wasm_unreachable_cast_ignored"
+tags = ["integration", "language", "cast", "runtime", "html-wasm"]
+
+[[case]]
 id = "reactive_declaration_scalar_success"
 path = "reactive_declaration_scalar_success"
 tags = ["integration", "language", "reactivity"]

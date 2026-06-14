@@ -15,7 +15,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic,
 };
-use crate::compiler_frontend::datatypes::DataType;
+
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
@@ -42,8 +42,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationTable>,
     pub module_constants: &'a [Declaration],
     pub file_visibility: &'a FileVisibility,
-    pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
-    pub resolved_type_alias_annotations: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
+    pub resolved_type_aliases: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     pub generic_declarations_by_path: Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub resolved_struct_fields_by_path: Rc<FxHashMap<InternedPath, Vec<Declaration>>>,
     pub choice_variant_shells_by_path: Rc<FxHashMap<InternedPath, Vec<ChoiceVariant>>>,
@@ -72,7 +71,6 @@ pub(crate) fn parse_constant_header_declaration(
         module_constants,
         file_visibility,
         resolved_type_aliases,
-        resolved_type_alias_annotations,
         generic_declarations_by_path,
         resolved_struct_fields_by_path,
         choice_variant_shells_by_path,
@@ -129,7 +127,6 @@ pub(crate) fn parse_constant_header_declaration(
     .with_file_visibility(Rc::new(file_visibility.clone()))
     // Type resolution support
     .with_resolved_type_aliases(Rc::clone(&resolved_type_aliases))
-    .with_resolved_type_alias_annotations(Rc::clone(&resolved_type_alias_annotations))
     .with_explicit_compile_time_constants(module_constants)
     .with_generic_declarations(Rc::clone(&generic_declarations_by_path))
     .with_resolved_struct_fields_by_path(Rc::clone(&resolved_struct_fields_by_path))

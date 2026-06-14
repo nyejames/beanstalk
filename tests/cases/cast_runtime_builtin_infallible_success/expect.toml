@@ -9,4 +9,4 @@ rendered_output_contains = ["runtime infallible casts: 5.5|2|3.25|false|Z|90|boo
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["html_wasm", "runtime casts"]
+message_contains = ["Wasm", "runtime casts"]

@@ -79,7 +79,7 @@ pub(super) fn parse_struct_constructor_expression(
     let struct_name_display = string_table.resolve(struct_name).to_owned();
 
     // The stream is positioned on the struct symbol when called.
-    // Advance past it to '(' so parse_call_arguments can take over.
+    // Advance past it to '(' so the shared call-argument parser can take over.
     token_stream.advance();
 
     if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {

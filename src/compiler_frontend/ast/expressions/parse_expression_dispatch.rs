@@ -447,17 +447,21 @@ pub(super) fn dispatch_expression_token(
                 parse_copy_place_expression(token_stream, context, type_interner, string_table)?;
             let copied_expression =
                 copied_place.get_expr_with_type_environment(type_interner.environment())?;
-            let copied_type = copied_expression.diagnostic_type;
+            let copied_type = copied_expression.diagnostic_type.to_owned();
             let copied_type_id = copied_expression.type_id;
+            let copied_value_shape = copied_expression.value_shape;
+
+            let mut copy_expression = Expression::copy_with_type_id(
+                copied_place,
+                copied_type,
+                copied_type_id,
+                copy_location.clone(),
+                state.value_mode.to_owned(),
+            );
+            copy_expression.value_shape = copied_value_shape;
 
             state.expression.push(AstNode {
-                kind: NodeKind::Rvalue(Expression::copy_with_type_id(
-                    copied_place,
-                    copied_type,
-                    copied_type_id,
-                    copy_location.clone(),
-                    state.value_mode.to_owned(),
-                )),
+                kind: NodeKind::Rvalue(copy_expression),
                 location: copy_location,
                 scope: context.scope.clone(),
             });

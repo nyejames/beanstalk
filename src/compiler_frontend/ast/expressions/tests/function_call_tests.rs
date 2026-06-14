@@ -5,8 +5,8 @@
 //! WHY: call parsing spans syntax, dispatch, and access-mode intent; focused tests prevent
 //!      subtle regressions in how arguments are bound and passed.
 
-use crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::{
@@ -21,7 +21,7 @@ use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizerEntryMode};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, TokenizerEntryMode};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use std::rc::Rc;
 
@@ -55,8 +55,31 @@ fn parse_args(
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
-    parse_call_arguments(&mut tokens, &context, &mut type_interner, &mut string_table)
+    parse_raw_call_args_for_test(&mut tokens, &context, &mut type_interner, &mut string_table)
         .expect("call arguments should parse")
+}
+
+/// Parses raw call arguments without parameter expectations for syntax-level tests.
+///
+/// WHAT: calls the production argument parser with no expectations so syntax-only tests are not
+///       coupled to parameter counts or types.
+/// WHY: keeping this local to the test module avoids a test-only production API while preserving
+///      the exact behavior these syntax tests need.
+fn parse_raw_call_args_for_test(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<Vec<CallArgument>, ExpressionParseError> {
+    super::parse_call_arguments_inner(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        super::CallArgumentSyntaxContext::Ordinary,
+        super::NamedArgumentSyntax::Supported { callee_name: None },
+        None,
+    )
 }
 
 fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
@@ -87,8 +110,9 @@ fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
-    let error = parse_call_arguments(&mut tokens, &context, &mut type_interner, &mut string_table)
-        .expect_err("call arguments should fail");
+    let error =
+        parse_raw_call_args_for_test(&mut tokens, &context, &mut type_interner, &mut string_table)
+            .expect_err("call arguments should fail");
 
     CompilerDiagnostic::from(error)
 }
@@ -109,7 +133,7 @@ fn assert_invalid_call_shape(
     assert!(reason_matches(reason));
 }
 
-// ── Parser-level tests (syntax / parse_call_arguments) ───────────────────────
+// ── Parser-level tests (syntax-only call arguments) ──────────────────────────
 
 #[test]
 fn parses_positional_and_named_call_arguments_with_equals_syntax() {

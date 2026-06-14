@@ -9,4 +9,4 @@ rendered_output_contains = ["optional cast catch: 42"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["html_wasm", "runtime casts"]
+message_contains = ["Wasm", "runtime casts"]

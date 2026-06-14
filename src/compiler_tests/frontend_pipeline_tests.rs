@@ -18,6 +18,7 @@ use crate::compiler_frontend::style_directives::{
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tests::parse_support::tokenize_source_for_test;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TokenizerEntryMode,
 };
@@ -119,9 +120,13 @@ impl FrontendProject {
         for file in &self.files {
             let source = fs::read_to_string(file).expect("should read source file");
             tokenized_files.push(
-                self.frontend
-                    .source_to_tokens(&source, file, TokenizerEntryMode::SourceFile)
-                    .expect("tokenization should succeed"),
+                tokenize_source_for_test(
+                    &mut self.frontend,
+                    &source,
+                    file,
+                    TokenizerEntryMode::SourceFile,
+                )
+                .expect("tokenization should succeed"),
             );
         }
 

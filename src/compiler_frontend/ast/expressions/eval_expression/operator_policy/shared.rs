@@ -7,12 +7,11 @@
 
 use super::super::result_type::ExpressionResultType;
 use crate::compiler_frontend::ast::expressions::eval_expression::typing_error::ExpressionTypingError;
-use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression::{ExpressionValueShape, Operator};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidResultOperandReason, UnsupportedOperatorCategory,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 
 /// Rejects binary operators applied to unwrapped `Result` or `Option` carriers.
@@ -92,10 +91,11 @@ pub(super) fn is_mixed_int_float(
 
 /// Returns `true` when both operands are plain `StringSlice` values.
 ///
-/// WHAT: distinguishes ordinary string slices from compile-time path strings.
-/// WHY: compile-time paths use the runtime `String` TypeId but intentionally do
-///      not participate in ordinary string operators. Keep that value-shape rule
-///      explicit while scalar type identity stays canonical.
+/// WHAT: distinguishes ordinary string slices from compile-time paths and template-backed
+///      strings.
+/// WHY: compile-time paths and template values use the runtime `String` TypeId but
+///      intentionally do not participate in ordinary string operators. Keep that value-shape
+///      rule explicit while scalar type identity stays canonical.
 pub(super) fn both_plain_string_slices(
     lhs: &ExpressionResultType,
     rhs: &ExpressionResultType,
@@ -103,6 +103,6 @@ pub(super) fn both_plain_string_slices(
 ) -> bool {
     lhs.type_id == type_environment.builtins().string
         && rhs.type_id == type_environment.builtins().string
-        && matches!(lhs.diagnostic_type, DataType::StringSlice)
-        && matches!(rhs.diagnostic_type, DataType::StringSlice)
+        && lhs.value_shape == ExpressionValueShape::PlainStringSlice
+        && rhs.value_shape == ExpressionValueShape::PlainStringSlice
 }

@@ -20,7 +20,8 @@
 //!
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleCarrierVariant, Operator, type_id_hint_for_diagnostic_type,
+    Expression, ExpressionKind, ExpressionValueShape, FallibleCarrierVariant, Operator,
+    type_id_hint_for_diagnostic_type,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 use crate::compiler_frontend::ast::expressions::expression_types::{
@@ -873,16 +874,36 @@ impl Expression {
             _ => self.diagnostic_type.to_owned(),
         };
 
-        Ok(Some(
-            Expression::new(
-                kind,
-                self.location.to_owned(),
-                type_id_hint_for_diagnostic_type(&result_type),
-                result_type,
-                value_mode,
-            )
-            .with_regular_division_provenance(contains_regular_division),
-        ))
+        // Preserve value-shape metadata for string results so folded concatenations do not
+        // accidentally promote template/path-shaped values into plain string operands.
+        let result_value_shape = match &kind {
+            ExpressionKind::StringSlice(_) => {
+                if self.value_shape == ExpressionValueShape::TemplateString
+                    || rhs.value_shape == ExpressionValueShape::TemplateString
+                {
+                    ExpressionValueShape::TemplateString
+                } else if self.value_shape == ExpressionValueShape::PlainStringSlice
+                    && rhs.value_shape == ExpressionValueShape::PlainStringSlice
+                {
+                    ExpressionValueShape::PlainStringSlice
+                } else {
+                    ExpressionValueShape::Ordinary
+                }
+            }
+            _ => ExpressionValueShape::Ordinary,
+        };
+
+        let mut result_expression = Expression::new(
+            kind,
+            self.location.to_owned(),
+            type_id_hint_for_diagnostic_type(&result_type),
+            result_type,
+            value_mode,
+        )
+        .with_regular_division_provenance(contains_regular_division);
+        result_expression.value_shape = result_value_shape;
+
+        Ok(Some(result_expression))
     }
 }
 

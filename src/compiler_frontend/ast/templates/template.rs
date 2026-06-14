@@ -6,7 +6,7 @@
 //!      vocabulary used by parsing, folding, slot routing, and render-plan preparation.
 
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ReactiveSource, ReactiveTemplateMetadata,
+    Expression, ExpressionKind, ReactiveSource,
 };
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
@@ -291,12 +291,6 @@ impl TemplateContent {
             .collect()
     }
 
-    pub(crate) fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        for atom in &self.atoms {
-            atom.merge_reactive_template_metadata(metadata);
-        }
-    }
-
     pub fn extend(&mut self, other: TemplateContent) {
         self.atoms.extend(other.atoms);
     }
@@ -401,16 +395,6 @@ impl TemplateAtom {
             }
         }
     }
-
-    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        match self {
-            TemplateAtom::Content(segment) => {
-                segment.merge_reactive_template_metadata(metadata);
-            }
-
-            TemplateAtom::Slot(_) => {}
-        }
-    }
 }
 
 // -------------------------
@@ -510,23 +494,6 @@ impl TemplateSegment {
         }
         if let Some(source_child) = &mut self.source_child_template {
             Arc::make_mut(source_child).remap_string_ids(remap);
-        }
-    }
-
-    fn merge_reactive_template_metadata(&self, metadata: &mut ReactiveTemplateMetadata) {
-        if let Some(subscription) = &self.reactive_subscription {
-            metadata.push_subscription(subscription.clone());
-        }
-
-        if let Some(expression_metadata) = &self.expression.reactive_template {
-            metadata.merge_from(expression_metadata);
-            return;
-        }
-
-        if let ExpressionKind::Template(template) = &self.expression.kind
-            && let Some(template_metadata) = template.reactive_template_metadata()
-        {
-            metadata.merge_from(&template_metadata);
         }
     }
 }

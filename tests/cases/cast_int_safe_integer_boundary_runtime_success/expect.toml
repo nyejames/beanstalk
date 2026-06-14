@@ -9,4 +9,4 @@ rendered_output_contains = ["runtime safe int boundaries: 9007199254740991/-9007
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["html_wasm", "runtime casts"]
+message_contains = ["Wasm", "runtime casts"]

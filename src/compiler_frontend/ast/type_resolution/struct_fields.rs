@@ -309,12 +309,9 @@ fn inline_visible_constant_references_impl(
                 )?);
             }
 
-            Ok(Expression::new(
+            Ok(expression_with_inlined_kind(
+                expression,
                 ExpressionKind::Collection(resolved_elements),
-                expression.location.clone(),
-                expression.type_id,
-                expression.diagnostic_type.to_owned(),
-                expression.value_mode.to_owned(),
             ))
         }
 
@@ -335,17 +332,15 @@ fn inline_visible_constant_references_impl(
                 });
             }
 
-            Ok(Expression::new(
+            Ok(expression_with_inlined_kind(
+                expression,
                 ExpressionKind::StructInstance(resolved_fields),
-                expression.location.clone(),
-                expression.type_id,
-                expression.diagnostic_type.to_owned(),
-                expression.value_mode.to_owned(),
             ))
         }
 
         // Range — inline start and end.
-        ExpressionKind::Range(start, end) => Ok(Expression::new(
+        ExpressionKind::Range(start, end) => Ok(expression_with_inlined_kind(
+            expression,
             ExpressionKind::Range(
                 Box::new(inline_visible_constant_references(
                     start,
@@ -362,32 +357,28 @@ fn inline_visible_constant_references_impl(
                     string_table,
                 )?),
             ),
-            expression.location.clone(),
-            expression.type_id,
-            expression.diagnostic_type.to_owned(),
-            expression.value_mode.to_owned(),
         )),
 
         // Result construct — inline the wrapped value.
-        ExpressionKind::FallibleCarrierConstruct { variant, value } => Ok(Expression::new(
-            ExpressionKind::FallibleCarrierConstruct {
-                variant: *variant,
-                value: Box::new(inline_visible_constant_references(
-                    value,
-                    declaration_table,
-                    visible_declaration_ids,
-                    type_environment,
-                    string_table,
-                )?),
-            },
-            expression.location.clone(),
-            expression.type_id,
-            expression.diagnostic_type.to_owned(),
-            expression.value_mode.to_owned(),
-        )),
+        ExpressionKind::FallibleCarrierConstruct { variant, value } => {
+            Ok(expression_with_inlined_kind(
+                expression,
+                ExpressionKind::FallibleCarrierConstruct {
+                    variant: *variant,
+                    value: Box::new(inline_visible_constant_references(
+                        value,
+                        declaration_table,
+                        visible_declaration_ids,
+                        type_environment,
+                        string_table,
+                    )?),
+                },
+            ))
+        }
 
         // Coercion — inline the inner value.
-        ExpressionKind::Coerced { value, to_type } => Ok(Expression::new(
+        ExpressionKind::Coerced { value, to_type } => Ok(expression_with_inlined_kind(
+            expression,
             ExpressionKind::Coerced {
                 value: Box::new(inline_visible_constant_references(
                     value,
@@ -398,15 +389,31 @@ fn inline_visible_constant_references_impl(
                 )?),
                 to_type: *to_type,
             },
-            expression.location.clone(),
-            expression.type_id,
-            expression.diagnostic_type.to_owned(),
-            expression.value_mode.to_owned(),
         )),
 
         // Everything else — no inlining needed.
         _ => Ok(expression.to_owned()),
     }
+}
+
+fn expression_with_inlined_kind(expression: &Expression, kind: ExpressionKind) -> Expression {
+    let mut rewritten = Expression::new(
+        kind,
+        expression.location.clone(),
+        expression.type_id,
+        expression.diagnostic_type.to_owned(),
+        expression.value_mode.to_owned(),
+    );
+
+    // Constant-reference inlining replaces only the structural children. The surrounding value
+    // keeps its previously resolved metadata so later expression policy still sees the same
+    // const-record, reactive, division-provenance, and string/template/path shape facts.
+    rewritten.const_record_state = expression.const_record_state;
+    rewritten.reactive_source = expression.reactive_source.clone();
+    rewritten.reactive_template = expression.reactive_template.clone();
+    rewritten.contains_regular_division = expression.contains_regular_division;
+    rewritten.value_shape = expression.value_shape;
+    rewritten
 }
 
 fn inline_visible_constant_references_in_node(

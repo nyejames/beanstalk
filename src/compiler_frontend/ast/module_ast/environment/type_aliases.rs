@@ -11,7 +11,9 @@
 //! fields and constant type annotations. Self-reference (`A as A`) also creates a self-loop edge.
 
 use crate::compiler_frontend::ast::module_ast::environment::builder::AstModuleEnvironmentBuilder;
-use crate::compiler_frontend::ast::type_resolution::{ResolvedTypeAnnotation, resolve_type};
+use crate::compiler_frontend::ast::type_resolution::{
+    ResolvedTypeAnnotation, resolve_diagnostic_type_to_type_id_opt, resolve_type,
+};
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::DataType;
@@ -47,8 +49,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     self.type_resolution_context_for(&visibility, None);
 
                 // Alias declarations are resolved before nominal members and constants.
-                // Store the parsed target for later use-site re-resolution, but keep
-                // early declaration validation on the existing diagnostic spelling path.
+                // Store the parsed target together with its resolved diagnostic spelling and
+                // canonical TypeId so alias metadata has a single owner.
                 let data_type_target = parsed_ref_to_data_type(target);
 
                 resolve_type(
@@ -84,16 +86,19 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 ));
             }
 
-            self.resolved_type_alias_annotations_by_path.insert(
+            let type_id = resolve_diagnostic_type_to_type_id_opt(
+                &resolved_target,
+                &mut self.type_environment,
+            );
+
+            self.resolved_type_aliases_by_path.insert(
                 header.tokens.src_path.to_owned(),
                 ResolvedTypeAnnotation {
                     source_ref: target.clone(),
-                    diagnostic_type: resolved_target.clone(),
-                    type_id: None,
+                    diagnostic_type: resolved_target,
+                    type_id,
                 },
             );
-            self.resolved_type_aliases_by_path
-                .insert(header.tokens.src_path.to_owned(), resolved_target);
         }
 
         Ok(())

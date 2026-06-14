@@ -36,6 +36,7 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_map_uses: Vec<ReachableMapUse>,
     pub(crate) reachable_reactive_templates: Vec<ReachableReactiveTemplateUse>,
     pub(crate) reachable_reactive_sinks: Vec<ReachableReactiveSinkUse>,
+    pub(crate) reachable_runtime_casts: Vec<ReachableRuntimeCastUse>,
 }
 
 /// A reachable map construction or use at the HIR statement or expression that produces it.
@@ -90,6 +91,16 @@ pub(crate) enum ReachableReactiveSinkKind {
         function_id: ExternalFunctionId,
         argument_index: usize,
     },
+}
+
+/// A reachable compiler-owned builtin runtime cast expression or statement.
+///
+/// WHY: some backends (currently HTML-Wasm) cannot lower runtime casts yet. Recording the cast
+///      site in reachability lets backend feature validation report the first reachable unsupported
+///      cast without re-scanning HIR expressions locally.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableRuntimeCastUse {
+    pub(crate) location: SourceLocation,
 }
 
 pub(crate) struct HirReachabilityInput<'a> {
@@ -265,6 +276,11 @@ impl<'a> HirReachabilityContext<'a> {
             HirStatementKind::Drop(_) => {}
 
             HirStatementKind::CastOp { source, .. } => {
+                self.reachability
+                    .reachable_runtime_casts
+                    .push(ReachableRuntimeCastUse {
+                        location: statement.location.clone(),
+                    });
                 self.collect_runtime_feature_uses_from_expression(source, &statement.location);
             }
         }
@@ -363,12 +379,20 @@ impl<'a> HirReachabilityContext<'a> {
                 self.collect_runtime_feature_uses_from_expression(right, &expression_location);
             }
 
+            HirExpressionKind::Cast {
+                source: operand, ..
+            } => {
+                self.reachability
+                    .reachable_runtime_casts
+                    .push(ReachableRuntimeCastUse {
+                        location: expression_location.clone(),
+                    });
+                self.collect_runtime_feature_uses_from_expression(operand, &expression_location);
+            }
+
             HirExpressionKind::UnaryOp { operand, .. }
             | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
             | HirExpressionKind::FallibleUnwrapError { result: operand }
-            | HirExpressionKind::Cast {
-                source: operand, ..
-            }
             | HirExpressionKind::VariantPayloadGet {
                 source: operand, ..
             } => {

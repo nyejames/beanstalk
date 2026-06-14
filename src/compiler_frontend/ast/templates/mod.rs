@@ -76,6 +76,15 @@ pub(crate) mod template_types;
 pub(crate) mod top_level_templates;
 
 // -------------------------
+//  Reactive metadata traversal
+// -------------------------
+//
+// Owned by the template subsystem because it only depends on template shape.
+// AST finalization supplies its own expression resolver for flow-aware lookup.
+
+pub(crate) mod reactive_template_metadata;
+
+// -------------------------
 //  Private Modules
 // -------------------------
 

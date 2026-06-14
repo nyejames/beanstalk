@@ -4,7 +4,7 @@
 //! WHY: template expressions have distinct constant/runtime behavior and should not be buried in general token dispatch.
 
 use super::error::ExpressionParseError;
-use super::expression::Expression;
+use super::expression::{Expression, ExpressionValueShape};
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
@@ -70,11 +70,13 @@ pub(super) fn parse_template_expression(
                 .new_template_fold_context(string_table, "expression parsing template fold")?;
             let folded_string = template.fold_into_stringid(&mut fold_context)?;
 
-            Ok(Some(Expression::string_slice(
+            let mut folded_expression = Expression::string_slice(
                 folded_string,
                 token_stream.current_location(),
                 value_mode.as_owned(),
-            )))
+            );
+            folded_expression.value_shape = ExpressionValueShape::TemplateString;
+            Ok(Some(folded_expression))
         }
 
         // Comment templates do not produce an expression.

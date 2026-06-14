@@ -3,7 +3,8 @@
 //! WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 //! WHY: project builders own artifact assembly policy while compiler backends stay generic.
 use crate::backends::backend_feature_validation::{
-    BackendFeatureValidationError, validate_hir_backend_feature_support,
+    BackendFeatureValidationError, BackendFeatureValidationInput, BackendFeatureValidationRoot,
+    validate_hir_backend_feature_support,
 };
 use crate::backends::external_package_validation::{
     BackendTarget, ExternalPackageValidationError, validate_hir_external_package_support,
@@ -34,6 +35,7 @@ use crate::projects::html_project::tracked_assets::{
 use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
+use crate::projects::html_project::wasm::export_plan::build_html_wasm_export_plan;
 use crate::projects::routing::parse_html_site_config;
 use crate::projects::settings::{Config, ProjectConfigError};
 use std::collections::{HashMap, HashSet};
@@ -327,16 +329,40 @@ impl HtmlProjectBuilder {
             }
         })?;
 
-        validate_hir_backend_feature_support(&module.hir, backend_target, string_table).map_err(
-            |error| match error {
-                BackendFeatureValidationError::Diagnostic(diagnostic) => {
-                    CompilerMessages::from_diagnostic_ref(*diagnostic, string_table)
-                }
-                BackendFeatureValidationError::Infrastructure(error) => {
-                    CompilerMessages::from_error_ref(*error, string_table)
-                }
+        let backend_validation_root = if wasm_enabled {
+            // HTML-Wasm validates from the functions exported by the builder so dead helper bodies
+            // do not surface backend diagnostics for code the page never executes.
+            let export_plan = build_html_wasm_export_plan(&module.hir)
+                .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+            BackendFeatureValidationRoot::ExplicitRoots(
+                export_plan
+                    .function_exports
+                    .iter()
+                    .map(|function_export| function_export.function_id)
+                    .collect(),
+            )
+        } else {
+            BackendFeatureValidationRoot::StartFunction
+        };
+
+        validate_hir_backend_feature_support(
+            BackendFeatureValidationInput {
+                hir: &module.hir,
+                target: backend_target,
+                root: backend_validation_root,
+                type_environment: Some(&module.type_environment),
             },
-        )?;
+            string_table,
+        )
+        .map_err(|error| match error {
+            BackendFeatureValidationError::Diagnostic(diagnostic) => {
+                CompilerMessages::from_diagnostic_ref(*diagnostic, string_table)
+                    .with_type_context_for_all_diagnostics(module.type_environment.clone())
+            }
+            BackendFeatureValidationError::Infrastructure(error) => {
+                CompilerMessages::from_error_ref(*error, string_table)
+            }
+        })?;
 
         let compile_input = HtmlModuleCompileInput {
             hir_module: &module.hir,

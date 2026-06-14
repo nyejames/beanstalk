@@ -14,7 +14,8 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
     CallArgument, normalize_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    ConstRecordState, Expression, ExpressionKind, FallibleHandling, Operator,
+    ConstRecordState, Expression, ExpressionKind, ExpressionValueShape, FallibleHandling, Operator,
+    expression_value_shape_for_diagnostic_type,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
@@ -396,40 +397,32 @@ impl AstNode {
                 args: arguments,
                 result_type_ids,
                 location,
-            } => {
-                let type_id = expression_type_id_for_call_result(result_type_ids)?;
-                Ok(Expression::new(
-                    ExpressionKind::FunctionCall {
-                        name: name.to_owned(),
-                        args: normalize_call_arguments(arguments),
-                        result_type_ids: result_type_ids.to_owned(),
-                    },
-                    location.to_owned(),
-                    type_id,
-                    call_result_diagnostic_type(result_type_ids, type_environment),
-                    ValueMode::MutableOwned,
-                ))
-            }
+            } => expression_from_single_result_call_node(
+                ExpressionKind::FunctionCall {
+                    name: name.to_owned(),
+                    args: normalize_call_arguments(arguments),
+                    result_type_ids: result_type_ids.to_owned(),
+                },
+                location,
+                result_type_ids,
+                type_environment,
+            ),
 
             NodeKind::HostFunctionCall {
                 name,
                 args: arguments,
                 result_type_ids,
                 location,
-            } => {
-                let type_id = expression_type_id_for_call_result(result_type_ids)?;
-                Ok(Expression::new(
-                    ExpressionKind::HostFunctionCall {
-                        id: *name,
-                        args: normalize_call_arguments(arguments),
-                        result_type_ids: result_type_ids.to_owned(),
-                    },
-                    location.to_owned(),
-                    type_id,
-                    call_result_diagnostic_type(result_type_ids, type_environment),
-                    ValueMode::MutableOwned,
-                ))
-            }
+            } => expression_from_single_result_call_node(
+                ExpressionKind::HostFunctionCall {
+                    id: *name,
+                    args: normalize_call_arguments(arguments),
+                    result_type_ids: result_type_ids.to_owned(),
+                },
+                location,
+                result_type_ids,
+                type_environment,
+            ),
 
             NodeKind::HandledFallibleFunctionCall {
                 name,
@@ -437,21 +430,17 @@ impl AstNode {
                 result_type_ids,
                 handling,
                 location,
-            } => {
-                let type_id = expression_type_id_for_call_result(result_type_ids)?;
-                Ok(Expression::new(
-                    ExpressionKind::HandledFallibleFunctionCall {
-                        name: name.to_owned(),
-                        args: normalize_call_arguments(arguments),
-                        result_type_ids: result_type_ids.to_owned(),
-                        handling: handling.to_owned(),
-                    },
-                    location.to_owned(),
-                    type_id,
-                    call_result_diagnostic_type(result_type_ids, type_environment),
-                    ValueMode::MutableOwned,
-                ))
-            }
+            } => expression_from_single_result_call_node(
+                ExpressionKind::HandledFallibleFunctionCall {
+                    name: name.to_owned(),
+                    args: normalize_call_arguments(arguments),
+                    result_type_ids: result_type_ids.to_owned(),
+                    handling: handling.to_owned(),
+                },
+                location,
+                result_type_ids,
+                type_environment,
+            ),
 
             NodeKind::HandledFallibleHostFunctionCall {
                 name,
@@ -460,22 +449,18 @@ impl AstNode {
                 error_type_id,
                 handling,
                 location,
-            } => {
-                let type_id = expression_type_id_for_call_result(result_type_ids)?;
-                Ok(Expression::new(
-                    ExpressionKind::HandledFallibleHostFunctionCall {
-                        id: *name,
-                        args: normalize_call_arguments(arguments),
-                        result_type_ids: result_type_ids.to_owned(),
-                        error_type_id: *error_type_id,
-                        handling: handling.to_owned(),
-                    },
-                    location.to_owned(),
-                    type_id,
-                    call_result_diagnostic_type(result_type_ids, type_environment),
-                    ValueMode::MutableOwned,
-                ))
-            }
+            } => expression_from_single_result_call_node(
+                ExpressionKind::HandledFallibleHostFunctionCall {
+                    id: *name,
+                    args: normalize_call_arguments(arguments),
+                    result_type_ids: result_type_ids.to_owned(),
+                    error_type_id: *error_type_id,
+                    handling: handling.to_owned(),
+                },
+                location,
+                result_type_ids,
+                type_environment,
+            ),
 
             // Field and method access
             NodeKind::FieldAccess {
@@ -872,6 +857,39 @@ fn expression_type_id_for_call_result(result_type_ids: &[TypeId]) -> Result<Type
             multiple.len()
         ))),
     }
+}
+
+fn expression_from_single_result_call_node(
+    kind: ExpressionKind,
+    location: &SourceLocation,
+    result_type_ids: &[TypeId],
+    type_environment: Option<&TypeEnvironment>,
+) -> Result<Expression, CompilerError> {
+    let type_id = expression_type_id_for_call_result(result_type_ids)?;
+    let diagnostic_type = call_result_diagnostic_type(result_type_ids, type_environment);
+    let mut expression = Expression::new(
+        kind,
+        location.to_owned(),
+        type_id,
+        diagnostic_type.to_owned(),
+        ValueMode::MutableOwned,
+    );
+    expression.value_shape = call_result_value_shape(type_id, &diagnostic_type);
+
+    Ok(expression)
+}
+
+fn call_result_value_shape(type_id: TypeId, diagnostic_type: &DataType) -> ExpressionValueShape {
+    let value_shape = expression_value_shape_for_diagnostic_type(diagnostic_type);
+
+    if value_shape == ExpressionValueShape::Ordinary && type_id == builtin_type_ids::STRING {
+        // Some AST-node conversions happen with only canonical `TypeId` metadata available.
+        // A source call returning `String` has no template/path source shape at that boundary,
+        // so preserve the existing plain-string operator behavior.
+        return ExpressionValueShape::PlainStringSlice;
+    }
+
+    value_shape
 }
 
 fn call_result_diagnostic_fallback() -> DataType {

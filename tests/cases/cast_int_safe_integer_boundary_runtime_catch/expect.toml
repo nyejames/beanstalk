@@ -9,4 +9,4 @@ rendered_output_contains = ["runtime int boundary catch codes: 201/201/241/241"]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["html_wasm", "runtime casts"]
+message_contains = ["Wasm", "runtime casts"]

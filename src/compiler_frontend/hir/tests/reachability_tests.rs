@@ -4,6 +4,7 @@
 //! WHY: runtime metadata consumers need deterministic function/block/external-call facts without
 //! coupling these tests to AST lowering or backend emission.
 
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
@@ -436,6 +437,75 @@ fn int_expression(id: u32) -> HirExpression {
         value_kind: ValueKind::Const,
         region: RegionId(0),
     }
+}
+
+fn cast_expression(id: u32) -> HirExpression {
+    HirExpression {
+        id: HirValueId(id),
+        kind: HirExpressionKind::Cast {
+            source: Box::new(int_expression(id + 1)),
+            policy: BuiltinCastPolicyId::IntToString,
+        },
+        ty: builtin_type_ids::STRING,
+        value_kind: ValueKind::RValue,
+        region: RegionId(0),
+    }
+}
+
+#[test]
+fn reachability_records_reachable_runtime_casts_only() {
+    let reachable_location = location_at(30, 2);
+    let unreachable_location = location_at(50, 4);
+    let module = hir_module(
+        FunctionId(0),
+        vec![
+            function(FunctionId(0), BlockId(0)),
+            function(FunctionId(1), BlockId(1)),
+        ],
+        vec![
+            block(
+                BlockId(0),
+                vec![HirStatement {
+                    id: HirNodeId(10),
+                    kind: HirStatementKind::Expr(cast_expression(10)),
+                    location: reachable_location.clone(),
+                }],
+                HirTerminator::Return(unit_expression(0)),
+            ),
+            block(
+                BlockId(1),
+                vec![HirStatement {
+                    id: HirNodeId(11),
+                    kind: HirStatementKind::Expr(cast_expression(11)),
+                    location: unreachable_location.clone(),
+                }],
+                HirTerminator::Return(unit_expression(1)),
+            ),
+        ],
+    );
+
+    let reachability =
+        collect_reachability_from_start(&module).expect("reachability should collect casts");
+
+    assert_eq!(
+        reachability.reachable_runtime_casts.len(),
+        1,
+        "only casts in reachable blocks should be reported"
+    );
+    assert_eq!(
+        reachability.reachable_runtime_casts[0]
+            .location
+            .start_pos
+            .line_number,
+        30
+    );
+    assert_eq!(
+        reachability.reachable_runtime_casts[0]
+            .location
+            .start_pos
+            .char_column,
+        2
+    );
 }
 
 fn map_literal_expression(id: u32) -> HirExpression {

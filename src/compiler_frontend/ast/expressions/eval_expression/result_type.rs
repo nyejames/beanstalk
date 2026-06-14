@@ -7,7 +7,9 @@
 use super::operator_policy::{resolve_binary_operator_type, resolve_unary_operator_type};
 use super::typing_error::ExpressionTypingError;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression::{
+    ExpressionValueShape, Operator, expression_value_shape_for_diagnostic_type,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, OperatorOperandPosition};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -17,21 +19,36 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Resolved type facts carried by the operator typing stack.
 ///
-/// WHAT: keeps canonical `TypeId` next to the diagnostic/value spelling needed for
-///      readable errors and a few value-shape restrictions such as compile-time paths.
-/// WHY: operator compatibility should be decided on semantic IDs without throwing away
-///      the `DataType` payloads that final AST nodes still carry for diagnostics.
+/// WHAT: keeps canonical `TypeId` next to the value shape needed for operator policy
+///      and the diagnostic spelling needed for readable errors.
+/// WHY: operator compatibility should be decided on semantic IDs and explicit value
+///      shape metadata; `DataType` is retained only for diagnostics.
 #[derive(Clone)]
 pub(super) struct ExpressionResultType {
     pub(super) diagnostic_type: DataType,
     pub(super) type_id: TypeId,
+    pub(super) value_shape: ExpressionValueShape,
 }
 
 impl ExpressionResultType {
     pub(super) fn from_type_id(type_id: TypeId, type_environment: &TypeEnvironment) -> Self {
+        let diagnostic_type = diagnostic_type_spelling(type_id, type_environment);
+        Self {
+            diagnostic_type: diagnostic_type.to_owned(),
+            type_id,
+            value_shape: expression_value_shape_for_diagnostic_type(&diagnostic_type),
+        }
+    }
+
+    pub(super) fn from_type_id_with_shape(
+        type_id: TypeId,
+        type_environment: &TypeEnvironment,
+        value_shape: ExpressionValueShape,
+    ) -> Self {
         Self {
             diagnostic_type: diagnostic_type_spelling(type_id, type_environment),
             type_id,
+            value_shape,
         }
     }
 }
@@ -56,6 +73,7 @@ pub(super) fn resolve_expression_result_type(
             NodeKind::Rvalue(expr) => stack.push(ExpressionResultType {
                 diagnostic_type: expr.diagnostic_type.to_owned(),
                 type_id: expr.type_id,
+                value_shape: expr.value_shape,
             }),
 
             NodeKind::FieldAccess {
@@ -65,6 +83,7 @@ pub(super) fn resolve_expression_result_type(
             } => stack.push(ExpressionResultType {
                 diagnostic_type: diagnostic_type.to_owned(),
                 type_id: *type_id,
+                value_shape: expression_value_shape_for_diagnostic_type(diagnostic_type),
             }),
 
             // Calls may produce single or multiple results; the helper normalises them.
@@ -193,6 +212,9 @@ fn call_result_expression_type(
         _ => type_environment.builtins().none,
     };
 
+    // Call/field results carry no explicit caller-provided shape, so derive the shape from the
+    // canonical TypeId's diagnostic spelling. This preserves current behavior: String-typed
+    // results behave as plain string slices unless the source expression was a template/path.
     ExpressionResultType::from_type_id(type_id, type_environment)
 }
 

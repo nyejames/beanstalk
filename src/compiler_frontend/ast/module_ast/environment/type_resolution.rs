@@ -674,19 +674,23 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
             match &header.kind {
                 HeaderKind::TypeAlias { .. } => {
-                    let Some(resolved_target) = self
+                    let Some(annotation) = self
                         .resolved_type_aliases_by_path
                         .get(&header.tokens.src_path)
-                        .cloned()
                     else {
                         continue;
                     };
-                    let type_id = resolve_diagnostic_type_to_type_id_checked(
-                        &resolved_target,
-                        &mut self.type_environment,
-                        &header.name_location,
-                    )
-                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
+                    let type_id = match annotation.type_id {
+                        Some(type_id) => type_id,
+                        None => resolve_diagnostic_type_to_type_id_checked(
+                            &annotation.diagnostic_type,
+                            &mut self.type_environment,
+                            &header.name_location,
+                        )
+                        .map_err(|diagnostic| {
+                            self.diagnostic_messages(*diagnostic, string_table)
+                        })?,
+                    };
 
                     self.validate_nominal_generic_bound_type_id(
                         type_id,
@@ -994,9 +998,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     module_constants: &self.module_constants,
                     file_visibility: visibility,
                     resolved_type_aliases: Rc::clone(&resolved_type_aliases),
-                    resolved_type_alias_annotations: Rc::new(
-                        self.resolved_type_alias_annotations_by_path.clone(),
-                    ),
                     generic_declarations_by_path: Rc::clone(&generic_declarations),
                     resolved_struct_fields_by_path: Rc::clone(&resolved_struct_fields_by_path),
                     choice_variant_shells_by_path: Rc::clone(&choice_variant_shells_by_path),
@@ -1165,9 +1166,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         .with_file_visibility(Rc::new(visibility.clone()))
         .with_explicit_compile_time_constants(&self.module_constants)
         .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
-        .with_resolved_type_alias_annotations(Rc::new(
-            self.resolved_type_alias_annotations_by_path.clone(),
-        ))
         .with_generic_declarations(Rc::new(
             self.module_symbols.generic_declarations_by_path.clone(),
         ))

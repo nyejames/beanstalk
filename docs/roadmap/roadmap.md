@@ -11,26 +11,11 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Float-to-string cast parity: define one formatting contract shared by AST folding and JS/Wasm/runtime lowering for `Float -> String`, including exponent thresholds, signed zero, non-finite rejection/formatting policy, and backend-stable output tests.
-- Full-width `Int` runtime semantics beyond the Alpha JS-safe integer cast policy: decide whether JS uses BigInt/boxed integers or whether `Int` remains a portable safe-integer type for the JS target.
+- runtime arithmetic operations and casting design hardening: ``
 - Build out core IO library
-- Compile time arbitary precision aritmetic + Decimals Type support
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
-- Freeze Wasm v1 as core Wasm, linear-memory handles, single-result ABI, dispatcher-loop CFG, JS/host bootstrap, no Wasm GC, no reference types, no Component Model.
-- Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.
-- Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
-- Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected, or lowered through runtime helpers.
-- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, and errors.
-- Complete the runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction, release hooks, and replacement of bridge-only helpers.
-- Design and implement Wasm layout for structs, including field offsets, alignment, construction, field access, mutation, and ownership hooks.
-- Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching, and generic choices.
-- Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?`, and error payload propagation.
-- Decide the v1 generic runtime policy: monomorphized concrete layouts, explicit rejection boundaries, or a handle-erased fallback for specific cases.
-- Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
-- Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
-- Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
-- Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
+
 - Decide when dispatcher-loop CFG is acceptable permanently and when to add structured CFG lowering as an optimization pass.
 - Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
 - incremental builds at the module boundary. `dev` when first launched performs a full dev build of the project, then any rebuilds only incrementally build from there based on which modules are actually changed.
@@ -119,8 +104,18 @@ changed first:
   question and should not become part of the default validation path.
 
 ## Wasm
-
-Broader Wasm maturity beyond the current experimental path.
+- Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
+- Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
+- Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
+- Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.
+- Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
+- Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected, or lowered through runtime helpers.
+- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, and errors.
+- Complete the runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction, release hooks, and replacement of bridge-only helpers.
+- Design and implement Wasm layout for structs, including field offsets, alignment, construction, field access, mutation, and ownership hooks.
+- Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching, and generic choices.
+- Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?`, and error payload propagation.
+- Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
 
 ## Package manager ideas
 - Should try to prevent dependency explosion as much as possible, make adding dependencies with lots of dependencies harder / discouraged

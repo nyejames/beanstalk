@@ -4,6 +4,7 @@
 //! WHY: parser and AST diagnostics tests need a stable frontend setup without depending on HIR
 //!      lowering or borrow-checker helpers.
 
+use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
@@ -19,7 +20,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
@@ -141,4 +142,25 @@ pub(crate) fn parse_single_file_ast_diagnostic(source: &str) -> CompilerDiagnost
         Ok(_) => panic!("source should fail during frontend parsing"),
         Err(diagnostic) => *diagnostic,
     }
+}
+
+/// Tokenizes one source file through a [`CompilerFrontend`] instance for test suites.
+///
+/// WHAT: provides a test-support helper that calls the real `tokenize_source` implementation.
+/// WHY: tokenization-only tests need access to the tokenizer without taking ownership of the
+///      frontend's string table, and this keeps test-only entry points out of production code.
+pub(crate) fn tokenize_source_for_test(
+    frontend: &mut CompilerFrontend,
+    source_code: &str,
+    module_path: &std::path::PathBuf,
+    tokenizer_entry_mode: TokenizerEntryMode,
+) -> Result<FileTokens, CompilerDiagnostic> {
+    CompilerFrontend::tokenize_source(
+        &frontend.source_files,
+        &frontend.style_directives,
+        source_code,
+        module_path,
+        tokenizer_entry_mode,
+        &mut frontend.string_table,
+    )
 }

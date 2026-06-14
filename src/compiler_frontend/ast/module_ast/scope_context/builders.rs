@@ -116,29 +116,17 @@ impl ScopeContext {
     //  Type resolution metadata
     // --------------------------
 
-    /// Register resolved type alias targets.
+    /// Register resolved type alias metadata.
     ///
-    /// WHAT: maps type alias declaration paths to their fully resolved
-    /// `DataType`. Used during type checking to expand aliases before
-    /// canonical `TypeId` resolution.
-    pub fn with_resolved_type_aliases(
+    /// WHAT: maps type alias declaration paths to their `ResolvedTypeAnnotation`,
+    /// which carries the parsed source ref, diagnostic spelling, and canonical `TypeId`
+    /// when available. Used during type checking to expand aliases transparently while
+    /// preserving fixed-collection capacity syntax.
+    pub(crate) fn with_resolved_type_aliases(
         mut self,
-        aliases: Rc<FxHashMap<InternedPath, DataType>>,
+        aliases: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     ) -> ScopeContext {
         Rc::make_mut(&mut self.shared).resolved_type_aliases = Some(aliases);
-        self
-    }
-
-    /// Register resolved type alias annotations.
-    ///
-    /// WHAT: maps type alias declaration paths to their fully resolved
-    /// `ResolvedTypeAnnotation`. Used during type checking to expand aliases with
-    /// preserved fixed-collection capacity syntax before canonical `TypeId` resolution.
-    pub(crate) fn with_resolved_type_alias_annotations(
-        mut self,
-        annotations: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
-    ) -> ScopeContext {
-        Rc::make_mut(&mut self.shared).resolved_type_alias_annotations = Some(annotations);
         self
     }
 
@@ -321,8 +309,7 @@ impl ScopeContext {
         shared.nominal_type_ids_by_path = Rc::clone(&lookups.nominal_type_ids_by_path);
         shared.choice_variant_shells_by_path =
             Some(Rc::clone(&lookups.choice_variant_shells_by_path));
-        shared.resolved_type_alias_annotations =
-            Some(Rc::clone(&lookups.resolved_type_alias_annotations_by_path));
+        shared.resolved_type_aliases = Some(Rc::clone(&lookups.resolved_type_aliases_by_path));
         shared.lookups = lookups;
         self
     }
