@@ -11,9 +11,11 @@ Open a discussion on GitHub if you're curious.
 
 To see the progress and current priority goals of the compiler and language, see `docs/roadmap/roadmap.md`.
 
-See <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">the language overview</a> and <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">the compiler overview</a> for more details about the language itself.
+See [the language overview](docs/language-overview.md) and
+[the compiler overview](docs/compiler-design-overview.md) for more details about the language
+itself.
 
-New code contributions must follow the style guide: <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
+New code contributions must follow the [codebase style guide](docs/codebase-style-guide.md).
 
 ## Testing
 

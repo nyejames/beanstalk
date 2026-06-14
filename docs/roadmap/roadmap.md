@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- runtime arithmetic operations and casting design hardening: ``
+- runtime arithmetic operations and casting design hardening: `docs/roadmap/plans/expression_refactor_checked_numeric_plan.md`
 - Build out core IO library
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.

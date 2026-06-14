@@ -13,6 +13,15 @@ Use:
 - `docs/compiler-design-overview.md` for compiler stage ownership and where borrow validation fits in the pipeline
 - `docs/src/docs/progress/#page.bst` for current implementation status
 
+Implementation map:
+- [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/) defines the semantic IR that
+  borrow validation reads without mutating.
+- [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/)
+  owns exclusivity validation and side-table borrow facts.
+- [`src/backends/js/`](../src/backends/js/) is the current GC-baseline lowering path.
+- [`src/backends/wasm/hir_to_lir/ownership.rs`](../src/backends/wasm/hir_to_lir/ownership.rs)
+  is the experimental ownership-lowering hook point for Wasm.
+
 ## Core Design Philosophy
 - No explicit lifetime annotations
 - No explicit move syntax

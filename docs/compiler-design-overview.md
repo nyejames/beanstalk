@@ -16,38 +16,136 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 
 ## Frontend structure at a glance
 
+### Code navigation map
+
+This document is the stage-boundary contract. For a compact agent-oriented locator, use the hidden
+root `.index` only when needed.
+
+- Project/build entry:
+  [`src/main.rs`](../src/main.rs),
+  [`src/projects/`](../src/projects/),
+  [`src/build_system/`](../src/build_system/),
+  and [`src/libraries/`](../src/libraries/).
+- Frontend driver and early stages:
+  [`src/compiler_frontend/mod.rs`](../src/compiler_frontend/mod.rs),
+  [`pipeline.rs`](../src/compiler_frontend/pipeline.rs),
+  [`tokenizer/`](../src/compiler_frontend/tokenizer/),
+  [`headers/`](../src/compiler_frontend/headers/),
+  [`declaration_syntax/`](../src/compiler_frontend/declaration_syntax/),
+  and [`module_dependencies.rs`](../src/compiler_frontend/module_dependencies.rs).
+- Frontend shared surfaces:
+  [`compiler_messages/`](../src/compiler_frontend/compiler_messages/),
+  [`symbols/`](../src/compiler_frontend/symbols/),
+  [`paths/`](../src/compiler_frontend/paths/),
+  [`datatypes/`](../src/compiler_frontend/datatypes/),
+  [`type_coercion/`](../src/compiler_frontend/type_coercion/),
+  [`traits/`](../src/compiler_frontend/traits/),
+  [`builtins/`](../src/compiler_frontend/builtins/),
+  [`external_packages/`](../src/compiler_frontend/external_packages/),
+  and [`style_directives/`](../src/compiler_frontend/style_directives/).
+- AST owners:
+  [`ast/mod.rs`](../src/compiler_frontend/ast/mod.rs),
+  [`module_ast/environment/`](../src/compiler_frontend/ast/module_ast/environment/),
+  [`module_ast/emission/`](../src/compiler_frontend/ast/module_ast/emission/),
+  [`module_ast/finalization/`](../src/compiler_frontend/ast/module_ast/finalization/),
+  [`type_resolution/`](../src/compiler_frontend/ast/type_resolution/),
+  [`expressions/`](../src/compiler_frontend/ast/expressions/),
+  [`statements/`](../src/compiler_frontend/ast/statements/),
+  [`templates/`](../src/compiler_frontend/ast/templates/),
+  and [`generic_functions/`](../src/compiler_frontend/ast/generic_functions/).
+- HIR, analysis, and backend feature validation:
+  [`hir/`](../src/compiler_frontend/hir/),
+  [`hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs),
+  [`analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/),
+  [`src/backends/backend_feature_validation.rs`](../src/backends/backend_feature_validation.rs),
+  and [`src/backends/external_package_validation.rs`](../src/backends/external_package_validation.rs).
+- Backend/project lowerings:
+  [`src/backends/js/`](../src/backends/js/),
+  [`src/backends/wasm/`](../src/backends/wasm/),
+  [`src/projects/html_project/`](../src/projects/html_project/),
+  and [`src/projects/html_project/wasm/`](../src/projects/html_project/wasm/).
+- Tests and tooling:
+  [`src/compiler_tests/`](../src/compiler_tests/),
+  [`tests/cases/`](../tests/cases/),
+  [`xtask/`](../xtask/),
+  and [`benchmarks/`](../benchmarks/).
+
 ### Stage orchestration
 
-- `src/compiler_frontend/mod.rs` is the frontend module map
-- `src/compiler_frontend/pipeline.rs` owns the `CompilerFrontend` stage flow: source file preparation → sorted headers → AST → HIR → borrow report. Source file preparation tokenizes and header-parses each file against a worker-local string table before module-wide aggregation.
+- [`src/compiler_frontend/mod.rs`](../src/compiler_frontend/mod.rs) is the frontend module map
+- [`src/compiler_frontend/pipeline.rs`](../src/compiler_frontend/pipeline.rs) owns the
+  `CompilerFrontend` stage flow: source file preparation → sorted headers → AST → HIR → borrow
+  report. Source file preparation tokenizes and header-parses each file against a worker-local
+  string table before module-wide aggregation.
 
 ### Input, paths, diagnostics, and symbols
 
-- `src/compiler_frontend/tokenizer/` converts source text into located tokens and handles string/template delimiter context
-- `src/compiler_frontend/compiler_messages/` owns typed diagnostics, labels, source locations, stable diagnostic descriptors, render-boundary message aggregation, and terminal/terse/dev-server renderers. `CompilerDiagnostic` is the user-facing source/config/import/type/rule/borrow diagnostic path. `CompilerError` is reserved for internal compiler, filesystem, backend, and dev-server infrastructure failures. Type diagnostics carry semantic `TypeId`s and render source-level names through `DiagnosticRenderContext` when the relevant module `TypeEnvironment` is available.
-- `src/compiler_frontend/symbols/`, `interned_path`, and `paths/` own interned source identities, path formatting/resolution, and canonical symbol identity shared across diagnostics, imports, and lowering
+- [`src/compiler_frontend/tokenizer/`](../src/compiler_frontend/tokenizer/) converts source text
+  into located tokens and handles string/template delimiter context
+- [`src/compiler_frontend/compiler_messages/`](../src/compiler_frontend/compiler_messages/) owns
+  typed diagnostics, labels, source locations, stable diagnostic descriptors, render-boundary
+  message aggregation, and terminal/terse/dev-server renderers. `CompilerDiagnostic` is the
+  user-facing source/config/import/type/rule/borrow diagnostic path. `CompilerError` is reserved
+  for internal compiler, filesystem, backend, and dev-server infrastructure failures. Type
+  diagnostics carry semantic `TypeId`s and render source-level names through
+  `DiagnosticRenderContext` when the relevant module `TypeEnvironment` is available.
+- [`src/compiler_frontend/symbols/`](../src/compiler_frontend/symbols/),
+  [`symbols/interned_path.rs`](../src/compiler_frontend/symbols/interned_path.rs), and
+  [`src/compiler_frontend/paths/`](../src/compiler_frontend/paths/) own interned source
+  identities, path formatting/resolution, and canonical symbol identity shared across
+  diagnostics, imports, and lowering
 
 ### Declarations, imports, and type surface
 
-- `src/compiler_frontend/headers/` discovers top-level declarations, imports, normalized path/reference shells, declaration shells, constant initializer dependency hints, and start-body separation
-- `src/compiler_frontend/module_dependencies.rs` orders top-level declaration headers by header-provided dependency edges, including constant initializer dependencies
-- `src/compiler_frontend/declaration_syntax/` owns shared declaration-shell parsing used by headers and body-local AST parsing. It keeps syntactically equivalent declaration shapes on one parser path, but it does not own semantic type resolution.
-- `src/compiler_frontend/datatypes/` owns `TypeEnvironment` (canonical semantic type identity) and `DataType` (parse-only / diagnostic-only type syntax). Semantic identity is `TypeId` equality in the relevant `TypeEnvironment`; `DataType` must not be used for semantic decisions in executable AST or HIR.
-- `src/compiler_frontend/type_coercion/` owns implicit contextual compatibility and promotion rules layered on top of type identity. Explicit `cast` resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the coercion path.
-- `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern
-- `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path
-- `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs
-- `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs
-- `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages, including builtin cast target classification, policy metadata, runtime error codes, and core cast trait definitions/evidence.
-- `src/compiler_frontend/style_directives/` owns the merged frontend + builder directive registry used by tokenizer and template parsing
+- [`src/compiler_frontend/headers/`](../src/compiler_frontend/headers/) discovers top-level
+  declarations, imports, normalized path/reference shells, declaration shells, constant
+  initializer dependency hints, and start-body separation
+- [`src/compiler_frontend/module_dependencies.rs`](../src/compiler_frontend/module_dependencies.rs)
+  orders top-level declaration headers by header-provided dependency edges, including constant
+  initializer dependencies
+- [`src/compiler_frontend/declaration_syntax/`](../src/compiler_frontend/declaration_syntax/) owns
+  shared declaration-shell parsing used by headers and body-local AST parsing. It keeps
+  syntactically equivalent declaration shapes on one parser path, but it does not own semantic type
+  resolution.
+- [`src/compiler_frontend/datatypes/`](../src/compiler_frontend/datatypes/) owns
+  `TypeEnvironment` (canonical semantic type identity) and `DataType` (parse-only /
+  diagnostic-only type syntax). Semantic identity is `TypeId` equality in the relevant
+  `TypeEnvironment`; `DataType` must not be used for semantic decisions in executable AST or HIR.
+- [`src/compiler_frontend/type_coercion/`](../src/compiler_frontend/type_coercion/) owns implicit
+  contextual compatibility and promotion rules layered on top of type identity. Explicit `cast`
+  resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the
+  coercion path.
+- [`src/compiler_frontend/value_mode.rs`](../src/compiler_frontend/value_mode.rs) tracks frontend
+  access classification for bindings, expressions, call arguments, and receiver use. It keeps
+  mutability/reference state separate from `DataType`; runtime ownership is a later
+  borrow/lowering concern
+- [`src/compiler_frontend/traits/`](../src/compiler_frontend/traits/) owns parsed trait shells,
+  resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence
+  visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is
+  compile-time frontend state, not a value type or backend-side source rediscovery path
+- [`src/compiler_frontend/source_libraries/`](../src/compiler_frontend/source_libraries/) resolves
+  builder/project source library roots into normal module inputs
+- [`src/compiler_frontend/external_packages/`](../src/compiler_frontend/external_packages/) stores
+  backend-provided virtual package metadata and stable external symbol IDs
+- [`src/compiler_frontend/builtins/`](../src/compiler_frontend/builtins/) owns compiler-defined
+  language symbols and operations that are neither user source declarations nor backend-provided
+  external packages, including builtin cast target classification, policy metadata, runtime error
+  codes, and core cast trait definitions/evidence.
+- [`src/compiler_frontend/style_directives/`](../src/compiler_frontend/style_directives/) owns the
+  merged frontend + builder directive registry used by tokenizer and template parsing
 - Design-scope and deferred-feature diagnostics should be centralized through typed `CompilerDiagnostic` constructors. Deferred features and outside-design-scope rejections must remain distinct diagnostic reasons.
 
 ### Semantic lowering and analysis
 
-- `src/compiler_frontend/ast/` builds the typed AST from sorted headers, resolves semantic information, parses executable bodies, folds constants/templates, and prepares HIR input
-- `src/compiler_frontend/optimizers/constant_folding.rs` supports AST compile-time evaluation for constants and foldable template expressions
-- `src/compiler_frontend/hir/` lowers the typed AST into the first backend-facing semantic IR
-- `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules and produces side-table facts for later lowering
+- [`src/compiler_frontend/ast/`](../src/compiler_frontend/ast/) builds the typed AST from sorted
+  headers, resolves semantic information, parses executable bodies, folds constants/templates, and
+  prepares HIR input
+- [`src/compiler_frontend/optimizers/constant_folding.rs`](../src/compiler_frontend/optimizers/constant_folding.rs)
+  supports AST compile-time evaluation for constants and foldable template expressions
+- [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/) lowers the typed AST into the first
+  backend-facing semantic IR
+- [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/)
+  validates borrow/exclusivity rules and produces side-table facts for later lowering
 
 ## Build-system and frontend boundary
 
@@ -227,10 +325,20 @@ The compiler frontend and build system process modules through these stages:
 
 ## Stage 0: Project Structure
 
-Path: `src/build_system/create_project_modules/`
+Path: [`src/build_system/create_project_modules/`](../src/build_system/create_project_modules/)
 
 Stage 0 builds the module inputs consumed by the frontend. It:
 
+- uses [`project_config.rs`](../src/build_system/project_config.rs) and
+  [`project_config/`](../src/build_system/project_config/) for `#config.bst` parsing and
+  validation;
+- uses [`entry_discovery.rs`](../src/build_system/create_project_modules/entry_discovery.rs),
+  [`module_inventory.rs`](../src/build_system/create_project_modules/module_inventory.rs),
+  [`reachable_file_discovery.rs`](../src/build_system/create_project_modules/reachable_file_discovery.rs),
+  and [`source_library_discovery.rs`](../src/build_system/create_project_modules/source_library_discovery.rs)
+  for directory/module graph discovery;
+- uses [`frontend_orchestration.rs`](../src/build_system/create_project_modules/frontend_orchestration.rs)
+  to drive each discovered module through the frontend pipeline;
 - compiles `#config.bst` and reachable core/builder source-library support files through the frontend up to AST, then extracts folded immutable known-key declarations authored in `#config.bst` into `Config` from shared AST const facts after enforcing each key's registered value shape
 - allows config imports only from core/builder libraries and keeps project-local config imports rejected by design
 - stops config compilation at AST; config does not need HIR
@@ -252,7 +360,7 @@ Detailed `#config.bst`, module-root, `#page.bst`, and `#mod.bst` user rules belo
 
 ## Stage 1: Tokenization
 
-Path: `src/compiler_frontend/tokenizer/lexer.rs`
+Path: [`src/compiler_frontend/tokenizer/lexer.rs`](../src/compiler_frontend/tokenizer/lexer.rs)
 
 Tokenization converts source text into structured tokens with source locations. It owns:
 
@@ -266,7 +374,7 @@ Tokenization converts source text into structured tokens with source locations. 
 
 ## Stage 2: Header Parsing
 
-Path: `src/compiler_frontend/headers/parse_file_headers.rs`
+Path: [`src/compiler_frontend/headers/parse_file_headers.rs`](../src/compiler_frontend/headers/parse_file_headers.rs)
 
 Header parsing is the only stage that discovers module-wide top-level declarations.
 It parses top-level declaration shells so later stages do not reconstruct them from raw tokens. It owns:
@@ -329,7 +437,7 @@ AST consumes that package directly.
 
 ## Stage 3: Dependency Sorting
 
-Path: `src/compiler_frontend/module_dependencies.rs`
+Path: [`src/compiler_frontend/module_dependencies.rs`](../src/compiler_frontend/module_dependencies.rs)
 
 Dependency sorting operates only on top-level declaration headers and header-provided dependency edges. It owns:
 
@@ -367,15 +475,38 @@ After dependency sorting:
 
 ## Stage 4: AST Construction
 
-Path: `src/compiler_frontend/ast/mod.rs`
+Path: [`src/compiler_frontend/ast/mod.rs`](../src/compiler_frontend/ast/mod.rs)
 
 AST consumes already-sorted declaration headers and the header-built module environment. It resolves declarations in order, folds constants/templates, parses executable bodies, type-checks expressions, and emits typed AST nodes.
 
 Internally, AST construction is organized around three phase owners:
 
-* `build_ast_environment`: consumes header-built file visibility, then resolves declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels
-* `emit_ast_nodes`: parses function/start/template bodies against the completed environment and emits AST nodes plus const-template output
-* `finalize_ast`: performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, module constant normalization, template normalization, type-boundary validation, builtin AST merging, and final `Ast` construction
+* [`build_ast_environment`](../src/compiler_frontend/ast/module_ast/environment/): consumes
+  header-built file visibility, then resolves declaration metadata, constants, nominal types,
+  function signatures, receiver catalog data, and shared environment side channels
+* [`emit_ast_nodes`](../src/compiler_frontend/ast/module_ast/emission/): parses
+  function/start/template bodies against the completed environment and emits AST nodes plus
+  const-template output
+* [`finalize_ast`](../src/compiler_frontend/ast/module_ast/finalization/): performs HIR-boundary
+  cleanup, including doc fragment extraction, const top-level fragment assembly, module constant
+  normalization, template normalization, type-boundary validation, builtin AST merging, and final
+  `Ast` construction
+
+Important AST subowners:
+- [`type_resolution/`](../src/compiler_frontend/ast/type_resolution/) owns parsed
+  type-reference resolution to canonical `TypeId`, including source-visible lookup
+  ([`lookup.rs`](../src/compiler_frontend/ast/type_resolution/lookup.rs)), aliases
+  ([`aliases.rs`](../src/compiler_frontend/ast/type_resolution/aliases.rs)), fixed collection
+  capacity ([`collections.rs`](../src/compiler_frontend/ast/type_resolution/collections.rs)),
+  maps ([`maps.rs`](../src/compiler_frontend/ast/type_resolution/maps.rs)), and generic nominal
+  instantiation ([`generics.rs`](../src/compiler_frontend/ast/type_resolution/generics.rs)).
+- [`templates/`](../src/compiler_frontend/ast/templates/) owns template parsing, composition,
+  folding, slot routing, render plans, control-flow validation, and template structural metadata
+  traversal.
+- [`generic_functions/`](../src/compiler_frontend/ast/generic_functions/) owns generic free-function
+  templates, call inference, and concrete instance emission before HIR.
+- [`field_access/`](../src/compiler_frontend/ast/field_access/) owns source fields, receiver calls,
+  and compiler-owned collection/map builtin member access.
 
 AST owns:
 
@@ -508,7 +639,7 @@ Stage ownership:
 
 ## Stage 5: HIR Generation
 
-Path: `src/compiler_frontend/hir/`
+Path: [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/)
 
 HIR generation lowers the fully typed AST into the first backend-facing semantic IR.
 HIR is structured enough for borrow/exclusivity analysis: control flow, locals, calls, regions, and terminators are explicit, while ordinary value construction and operators may remain as nested expression trees.
@@ -545,11 +676,15 @@ HIR does not:
 
 ### Reachable backend features
 
-HIR reachability records reachable functions, external calls, and scalar-keyed hashmap
+[`src/compiler_frontend/hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs)
+records reachable functions, blocks, external calls, runtime casts, and scalar-keyed hashmap
 construction/use. JS lowering uses those facts for artifact planning. HTML-Wasm uses the same
-reachable facts to reject reachable unsupported JS-backed external calls or hashmap use with
-structured unsupported-backend diagnostics before Wasm lowering. Unreachable helper functions
-remain valid typed HIR and do not block backend builds.
+reachable facts through
+[`src/backends/backend_feature_validation.rs`](../src/backends/backend_feature_validation.rs) and
+[`src/backends/external_package_validation.rs`](../src/backends/external_package_validation.rs) to
+reject reachable unsupported JS-backed external calls, hashmap use, runtime casts, reactive sinks,
+and other target-gated features before Wasm lowering. Unreachable helper functions remain valid
+typed HIR and do not block backend builds.
 
 ### External calls
 
@@ -567,7 +702,7 @@ Borrow validation then sees ordinary local access, not a special temporary node 
 
 ## Stage 6: Borrow Validation
 
-Path: `src/compiler_frontend/analysis/borrow_checker/`
+Path: [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/)
 
 Borrow validation enforces borrow/exclusivity rules and produces side-table facts used by later ownership-aware lowering.
 It does not mutate HIR, compute exact lifetimes, or decide final runtime ownership.
@@ -591,6 +726,19 @@ The language-level no-shadowing rule supports simpler name and borrow analysis, 
 ## Stage 7: Backend lowering
 
 Backend lowering belongs to project builders after frontend compilation.
+
+Navigation:
+- [`src/backends/js/`](../src/backends/js/) owns direct HIR-to-JavaScript lowering and runtime
+  helper emission.
+- [`src/backends/wasm/`](../src/backends/wasm/) owns experimental HIR-to-Wasm-LIR lowering,
+  Wasm runtime contracts, and binary emission.
+- [`src/projects/html_project/html_project_builder.rs`](../src/projects/html_project/html_project_builder.rs)
+  owns the HTML `BackendBuilder` implementation.
+- [`src/projects/html_project/wasm/`](../src/projects/html_project/wasm/) owns HTML-Wasm export
+  planning, bootstrap JS, and artifact assembly around the core Wasm backend.
+- [`src/projects/html_project/external_js/`](../src/projects/html_project/external_js/) owns
+  provider-backed JavaScript imports, runtime module registration, and HTML-only glue/runtime
+  asset emission.
 
 Backends consume compiled modules containing:
 
