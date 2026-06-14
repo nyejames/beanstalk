@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- runtime arithmetic operations and casting design hardening: `docs/roadmap/plans/expression_refactor_checked_numeric_plan.md`
+- field-access-only records and nested path traversal through namespace fields
 - Build out core IO library
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
@@ -55,7 +55,14 @@ changed first:
 
 - Initial explicit `cast` operator implementation is complete: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and the initial docs/progress matrix/final audit validation passed. Follow-up cleanup and policy parity are tracked in `docs/roadmap/plans/cast_followup_cleanup_plan.md`.
 
-- Cast operator cleanup is complete in `docs/roadmap/plans/cast_followup_cleanup_plan.md`: `String -> Int` and `Float -> Int` now share the Alpha JS-safe integer cast policy across folding and JS runtime lowering, optional target recovery wraps only after inner-value recovery, expression parsing uses named input structs instead of cast-target wrapper entrypoints, core cast trait metadata has one authoritative row table, JS cast helpers emit on demand, redundant scalar-constructor fixtures were pruned, docs/progress/generated docs were updated, and final audit plus validation passed.
+- Cast operator cleanup is complete in `docs/roadmap/plans/cast_followup_cleanup_plan.md`: `String -> Int` and `Float -> Int` now share the Alpha i32 cast policy across folding and JS runtime lowering, optional target recovery wraps only after inner-value recovery, expression parsing uses named input structs instead of cast-target wrapper entrypoints, core cast trait metadata has one authoritative row table, JS cast helpers emit on demand, redundant scalar-constructor fixtures were pruned, docs/progress/generated docs were updated, and final audit plus validation passed.
+
+- Checked numeric follow-ups after `docs/roadmap/plans/expression_refactor_checked_numeric_plan.md`:
+  explicit Decimal / BigInt / high-precision numeric type design, numeric check elision and range
+  analysis, more aggressive trap-mode lowering where builtin `Error` construction is unnecessary,
+  explicit unchecked or narrower numeric types as opt-in safety/performance tradeoffs, and full
+  Wasm parity for checked numeric helpers, Float formatting, and external Float boundary
+  validation.
 
 - Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
 

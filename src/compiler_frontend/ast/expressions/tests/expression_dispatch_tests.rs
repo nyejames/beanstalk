@@ -5,15 +5,18 @@
 //! WHY: the dispatcher is the single expression-entry gate; targeted tests prevent regressions
 //!      in how edge-case tokens are rejected or advanced.
 
+use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
-    ExpressionDispatchState, dispatch_expression_token,
+    ExpressionDispatchState, ExpressionTokenStep, dispatch_expression_token,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
@@ -38,6 +41,17 @@ fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
     (scope, context)
 }
 
+fn numeric_token_kind(value: &str, string_table: &mut StringTable) -> TokenKind {
+    TokenKind::NumericLiteral(NumericLiteralToken::test_new(value, string_table))
+}
+
+fn numeric_token(value: &str, scope: &InternedPath, string_table: &mut StringTable) -> Token {
+    Token::new(
+        TokenKind::NumericLiteral(NumericLiteralToken::test_new(value, string_table)),
+        SourceLocation::new(scope.clone(), Default::default(), Default::default()),
+    )
+}
+
 fn token(kind: TokenKind, scope: &InternedPath) -> Token {
     Token::new(
         kind,
@@ -50,9 +64,9 @@ fn hash_in_expression_position_rejected() {
     let mut string_table = StringTable::default();
     let (scope, context) = test_scope(&mut string_table);
     let tokens = vec![
-        token(TokenKind::IntLiteral(1), &scope),
+        numeric_token("1", &scope, &mut string_table),
         token(TokenKind::Hash, &scope),
-        token(TokenKind::IntLiteral(2), &scope),
+        numeric_token("2", &scope, &mut string_table),
         token(TokenKind::Eof, &scope),
     ];
     let mut stream = FileTokens::new(scope.clone(), tokens);
@@ -73,9 +87,9 @@ fn hash_in_expression_position_rejected() {
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
 
-    // First token: IntLiteral(1)
+    // First token: NumericLiteral(1)
     let result = dispatch_expression_token(
-        TokenKind::IntLiteral(1),
+        numeric_token_kind("1", &mut string_table),
         &mut stream,
         &context,
         &mut type_interner,
@@ -85,7 +99,7 @@ fn hash_in_expression_position_rejected() {
     assert!(result.is_ok());
     stream.advance();
 
-    // Second token: Hash — should error because next token is IntLiteral, not TemplateHead
+    // Second token: Hash — should error because next token is NumericLiteral, not TemplateHead
     let result = dispatch_expression_token(
         TokenKind::Hash,
         &mut stream,
@@ -139,6 +153,54 @@ fn hash_before_template_head_allowed() {
         result.is_ok(),
         "Expected Hash before TemplateHead to advance"
     );
+}
+
+#[test]
+fn negative_token_before_identifier_pushes_unary_negation_operator() {
+    let mut string_table = StringTable::default();
+    let (scope, context) = test_scope(&mut string_table);
+    let name = string_table.intern("count");
+    let tokens = vec![
+        token(TokenKind::Negative, &scope),
+        token(TokenKind::Symbol(name), &scope),
+        token(TokenKind::Eof, &scope),
+    ];
+    let mut stream = FileTokens::new(scope.clone(), tokens);
+    let mut expression = vec![];
+    let mut expected_type = ExpectedType::Infer;
+    let mut next_number_negative = false;
+    let mut state = ExpressionDispatchState {
+        expected_type: &mut expected_type,
+        cast_target_context: &mut CastTargetContext::None,
+        value_mode: &ValueMode::ImmutableOwned,
+        consume_closing_parenthesis: false,
+        allow_boundary_catch: true,
+        allow_expected_result_evidence: true,
+        expression: &mut expression,
+        next_number_negative: &mut next_number_negative,
+    };
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+
+    let result = dispatch_expression_token(
+        TokenKind::Negative,
+        &mut stream,
+        &context,
+        &mut type_interner,
+        &mut state,
+        &mut string_table,
+    );
+
+    assert!(matches!(result, Ok(ExpressionTokenStep::Advance)));
+    assert!(!*state.next_number_negative);
+    assert!(matches!(
+        state.expression.first(),
+        Some(ExpressionRpnItem::Operator {
+            operator: Operator::Negate,
+            ..
+        })
+    ));
 }
 
 #[test]

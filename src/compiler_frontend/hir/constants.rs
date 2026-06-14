@@ -36,7 +36,7 @@ pub enum HirConstValue {
     /// current validation matches them with `_`. Tests and future backends may
     /// read these values.
     #[allow(dead_code)]
-    Int(i64),
+    Int(i32),
     #[allow(dead_code)]
     Float(f64),
     #[allow(dead_code)]

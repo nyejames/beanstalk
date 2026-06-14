@@ -23,13 +23,23 @@ pub(crate) enum BuiltinErrorCode {
     FloatCastToIntInvalidValue = 240,
     FloatCastToIntOutOfRange = 241,
     IntCastToCharInvalidCodepoint = 250,
-    /// Reserved for future checked/fallible math operators. This refactor does not emit it.
-    DivisionByZero = 300,
+    /// Checked numeric operations use this when division or modulo receives a zero divisor.
+    DivideByZero = 300,
+    /// Checked integer operations use this when an operation leaves the signed i32 range.
+    IntOverflow = 301,
+    /// Checked exponent operations use this when an exponent is unsupported by the operation.
+    InvalidExponent = 302,
+    /// Checked Float operations use this when arithmetic produces a non-finite value.
+    FloatNonFinite = 303,
+    /// External/backend Float boundary validation uses this for non-finite incoming values.
+    FloatBoundaryNonFinite = 304,
+    /// Defensive Float formatting checks use this when an internal finite-Float invariant fails.
+    FloatFormatInvariant = 305,
 }
 
 impl BuiltinErrorCode {
-    pub(crate) fn as_i64(self) -> i64 {
-        self as i64
+    pub(crate) fn as_i32(self) -> i32 {
+        self as i32
     }
 
     pub(crate) fn default_message(self) -> &'static str {
@@ -56,7 +66,14 @@ impl BuiltinErrorCode {
             BuiltinErrorCode::IntCastToCharInvalidCodepoint => {
                 "Int value is not a valid Unicode scalar"
             }
-            BuiltinErrorCode::DivisionByZero => "Division by zero",
+            BuiltinErrorCode::IntOverflow => "Int operation overflowed",
+            BuiltinErrorCode::DivideByZero => "Division by zero",
+            BuiltinErrorCode::InvalidExponent => "Invalid exponent",
+            BuiltinErrorCode::FloatNonFinite => "Float operation produced a non-finite value",
+            BuiltinErrorCode::FloatBoundaryNonFinite => {
+                "External Float boundary produced a non-finite value"
+            }
+            BuiltinErrorCode::FloatFormatInvariant => "Float formatting invariant failed",
         }
     }
 }

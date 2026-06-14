@@ -199,6 +199,9 @@ The compiler enforces memory safety through the following steps:
    * control flow is linearized,
    * ownership boundaries are identified,
    * fresh mutable call arguments are materialized into compiler-owned locals before borrow validation.
+   * recoverable checked-numeric failures are lowered into ordinary HIR branches and locals before
+     borrow validation, so later borrow/drop analysis treats them like normal control flow rather
+     than a separate memory rule.
 3. **Borrow validation**, which:
    * enforces exclusivity rules,
    * prevents illegal overlapping access,

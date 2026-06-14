@@ -329,6 +329,12 @@ pub enum NumberLiteralErrorReason {
     DecimalPointNotAfterDigit,
     EndsWithSeparator,
     MissingFractionalDigits,
+    UppercaseExponentMarker,
+    MissingExponentDigits,
+    InvalidExponentSignPlacement,
+    InvalidSeparatorPlacement,
+    OutsideIntRange,
+    NonFiniteFloat,
     ParseOverflow,
 }
 
@@ -1139,6 +1145,7 @@ pub enum CompileTimeEvaluationErrorReason {
     IntegerOverflow,
     FloatOverflow,
     DivideByZero,
+    InvalidExponent,
     InvalidOperatorForType,
     IntegerDivisionOnlyIntInt,
     ConstantSelfReference,
@@ -1380,6 +1387,9 @@ pub enum CommonSyntaxMistakeReason {
     InvalidCompileTimeBindingSpacing,
     InvalidMutableBindingSpacing,
     InvalidReactiveBindingSpacing,
+    InvalidSymbolicBinaryOperatorSpacing,
+    InvalidUnaryNegationSpacing,
+    UnsupportedUnaryPlus,
 }
 
 impl CommonSyntaxMistakeReason {
@@ -1406,7 +1416,10 @@ impl CommonSyntaxMistakeReason {
             | CommonSyntaxMistakeReason::SignatureAsKeyword
             | CommonSyntaxMistakeReason::InvalidCompileTimeBindingSpacing
             | CommonSyntaxMistakeReason::InvalidMutableBindingSpacing
-            | CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {}
+            | CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing
+            | CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing
+            | CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing
+            | CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {}
         }
     }
 }

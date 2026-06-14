@@ -74,6 +74,15 @@ pub(crate) fn lower_statement(
         HirStatementKind::CastOp { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support cast operations",
         )),
+        HirStatementKind::NumericOp { op, .. } => Err(lir_transformation_error(format!(
+            "Wasm lowering does not yet support checked numeric operations: {op:?}"
+        ))),
+        HirStatementKind::FormatFloat { .. } => Err(lir_transformation_error(
+            "Wasm lowering does not yet support Float formatting",
+        )),
+        HirStatementKind::ValidateFloat { .. } => Err(lir_transformation_error(
+            "Wasm lowering does not yet support Float boundary validation",
+        )),
         HirStatementKind::Expr(expression) => {
             let _ = lower_expression(context, expression, statements)?;
             Ok(())

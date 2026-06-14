@@ -230,6 +230,21 @@ pub fn parse_signature_members_syntax(
     let mut expecting_member = true;
     let mut member_index = 0;
 
+    fn ensure_member_slot(
+        expecting_member: bool,
+        token_stream: &FileTokens,
+    ) -> Result<(), CompilerDiagnostic> {
+        if !expecting_member {
+            return Err(CompilerDiagnostic::expected_token(
+                TokenKind::Comma,
+                Some(token_stream.current_token_kind().to_owned()),
+                token_stream.current_location(),
+            ));
+        }
+
+        Ok(())
+    }
+
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
             TokenKind::TypeParameterBracket => {
@@ -251,13 +266,7 @@ pub fn parse_signature_members_syntax(
             }
 
             TokenKind::Symbol(member_name) => {
-                if !expecting_member {
-                    return Err(CompilerDiagnostic::expected_token(
-                        TokenKind::Comma,
-                        Some(token_stream.current_token_kind().to_owned()),
-                        token_stream.current_location(),
-                    ));
-                }
+                ensure_member_slot(expecting_member, token_stream)?;
 
                 let member = parse_signature_member_syntax(
                     token_stream,
@@ -274,13 +283,7 @@ pub fn parse_signature_members_syntax(
             }
 
             TokenKind::This if member_context == SignatureMemberContext::FunctionParameter => {
-                if !expecting_member {
-                    return Err(CompilerDiagnostic::expected_token(
-                        TokenKind::Comma,
-                        Some(token_stream.current_token_kind().to_owned()),
-                        token_stream.current_location(),
-                    ));
-                }
+                ensure_member_slot(expecting_member, token_stream)?;
 
                 let this_id = string_table.intern("this");
                 let member = parse_signature_member_syntax(
@@ -305,13 +308,7 @@ pub fn parse_signature_members_syntax(
             }
 
             TokenKind::TraitThis if member_context == SignatureMemberContext::TraitRequirement => {
-                if !expecting_member {
-                    return Err(CompilerDiagnostic::expected_token(
-                        TokenKind::Comma,
-                        Some(token_stream.current_token_kind().to_owned()),
-                        token_stream.current_location(),
-                    ));
-                }
+                ensure_member_slot(expecting_member, token_stream)?;
 
                 if member_index > 0 {
                     return Err(CompilerDiagnostic::invalid_signature_member(
@@ -333,13 +330,7 @@ pub fn parse_signature_members_syntax(
             }
 
             TokenKind::Mutable if member_context == SignatureMemberContext::TraitRequirement => {
-                if !expecting_member {
-                    return Err(CompilerDiagnostic::expected_token(
-                        TokenKind::Comma,
-                        Some(token_stream.current_token_kind().to_owned()),
-                        token_stream.current_location(),
-                    ));
-                }
+                ensure_member_slot(expecting_member, token_stream)?;
 
                 token_stream.advance();
 

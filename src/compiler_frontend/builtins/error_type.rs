@@ -166,7 +166,7 @@ fn required_field(id: InternedPath, data_type: DataType, location: SourceLocatio
     }
 }
 
-fn defaulted_int_field(id: InternedPath, value: i64, location: SourceLocation) -> Declaration {
+fn defaulted_int_field(id: InternedPath, value: i32, location: SourceLocation) -> Declaration {
     Declaration {
         id,
         value: Expression::int(value, location, ValueMode::ImmutableOwned),

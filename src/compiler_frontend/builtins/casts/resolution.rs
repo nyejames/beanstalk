@@ -126,7 +126,7 @@ pub(crate) fn resolve_cast_expression(
             }
         },
 
-        CastHandling::Propagate | CastHandling::Recover(_) => match selection.fallible {
+        CastHandling::Propagate | CastHandling::Recover => match selection.fallible {
             Some(evidence) => evidence,
             None => {
                 let reason = if selection.infallible.is_some() {

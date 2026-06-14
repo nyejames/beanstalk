@@ -16,6 +16,7 @@ use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::reactivity::ReactiveTemplateId;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -37,6 +38,8 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_reactive_templates: Vec<ReachableReactiveTemplateUse>,
     pub(crate) reachable_reactive_sinks: Vec<ReachableReactiveSinkUse>,
     pub(crate) reachable_runtime_casts: Vec<ReachableRuntimeCastUse>,
+    pub(crate) reachable_numeric_ops: Vec<ReachableNumericOpUse>,
+    pub(crate) reachable_float_statements: Vec<ReachableFloatStatementUse>,
 }
 
 /// A reachable map construction or use at the HIR statement or expression that produces it.
@@ -101,6 +104,32 @@ pub(crate) enum ReachableReactiveSinkKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReachableRuntimeCastUse {
     pub(crate) location: SourceLocation,
+}
+
+/// A reachable compiler-owned checked numeric operation.
+///
+/// WHY: backends that do not yet implement checked numeric semantics must reject the reachable HIR
+///      operation before lowering instead of failing with a backend-internal error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableNumericOpUse {
+    pub(crate) location: SourceLocation,
+}
+
+/// A reachable compiler-owned Float formatting or validation statement.
+///
+/// WHY: backends that do not yet implement Beanstalk Float formatting or external-Float boundary
+///      validation must reject the reachable HIR operation before lowering instead of failing with a
+///      backend-internal error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableFloatStatementUse {
+    pub(crate) kind: ReachableFloatStatementKind,
+    pub(crate) location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ReachableFloatStatementKind {
+    FormatFloat,
+    ValidateFloat,
 }
 
 pub(crate) struct HirReachabilityInput<'a> {
@@ -275,10 +304,57 @@ impl<'a> HirReachabilityContext<'a> {
 
             HirStatementKind::Drop(_) => {}
 
+            HirStatementKind::NumericOp { operands, .. } => {
+                self.reachability
+                    .reachable_numeric_ops
+                    .push(ReachableNumericOpUse {
+                        location: statement.location.clone(),
+                    });
+
+                match operands {
+                    HirNumericOperands::Unary { operand } => {
+                        self.collect_runtime_feature_uses_from_expression(
+                            operand,
+                            &statement.location,
+                        );
+                    }
+                    HirNumericOperands::Binary { left, right } => {
+                        self.collect_runtime_feature_uses_from_expression(
+                            left,
+                            &statement.location,
+                        );
+                        self.collect_runtime_feature_uses_from_expression(
+                            right,
+                            &statement.location,
+                        );
+                    }
+                }
+            }
+
             HirStatementKind::CastOp { source, .. } => {
                 self.reachability
                     .reachable_runtime_casts
                     .push(ReachableRuntimeCastUse {
+                        location: statement.location.clone(),
+                    });
+                self.collect_runtime_feature_uses_from_expression(source, &statement.location);
+            }
+
+            HirStatementKind::FormatFloat { source, .. } => {
+                self.reachability
+                    .reachable_float_statements
+                    .push(ReachableFloatStatementUse {
+                        kind: ReachableFloatStatementKind::FormatFloat,
+                        location: statement.location.clone(),
+                    });
+                self.collect_runtime_feature_uses_from_expression(source, &statement.location);
+            }
+
+            HirStatementKind::ValidateFloat { source, .. } => {
+                self.reachability
+                    .reachable_float_statements
+                    .push(ReachableFloatStatementUse {
+                        kind: ReachableFloatStatementKind::ValidateFloat,
                         location: statement.location.clone(),
                     });
                 self.collect_runtime_feature_uses_from_expression(source, &statement.location);

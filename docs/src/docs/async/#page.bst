@@ -278,14 +278,14 @@ page_head #= theme_head
     # Full example
 
     [codeblock, $code("bst"):
-        producer |writer ~Channel[Int]|:
+        producer |writer ~Channel(Int)|:
             loop 0 to 10 |i|:
                 i >> writer
                 yield
             ;
         ;
 
-        consumer |reader ~Channel[Int]|:
+        consumer |reader ~Channel(Int)|:
             loop:
                 value << reader
                 io(value)

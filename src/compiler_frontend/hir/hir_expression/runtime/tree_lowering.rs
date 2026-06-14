@@ -5,46 +5,73 @@
 //! WHY: this is the bridge from AST-owned runtime expression shape to HIR-owned
 //!      value kind and effect representation.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{FallibleHandling, Operator};
+use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
-use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::operators::HirUnaryOp;
 use crate::compiler_frontend::hir::statements::HirStatement;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::return_hir_transformation_error;
 
-use super::super::{ExternalFallibleCallLoweringInput, LoweredExpression};
+use super::super::LoweredExpression;
 use super::RuntimeRpnTree;
 
 impl<'a> HirBuilder<'a> {
-    // WHAT: evaluates AST runtime expressions stored in RPN order into HIR values.
+    // WHAT: evaluates AST runtime expressions stored in expression-owned RPN order into HIR values.
     // WHY: this keeps parser precedence decisions intact while enabling dedicated CFG lowering for
     //      short-circuit `and`/`or` so RHS side effects stay branch-gated.
     pub(crate) fn lower_runtime_rpn_expression(
         &mut self,
-        nodes: &[AstNode],
+        rpn: &ExpressionRpn,
         location: &SourceLocation,
         expr_type_id: FrontendTypeId,
     ) -> Result<LoweredExpression, CompilerError> {
-        let tree = self.build_runtime_rpn_tree(nodes, location)?;
+        let tree = self.build_runtime_rpn_tree(rpn, location)?;
         let mut lowered = self.lower_runtime_tree_node(&tree, location)?;
         let expected_ty = self.lower_type_id(expr_type_id, location)?;
         lowered.value.ty = expected_ty;
         Ok(lowered)
     }
 
-    pub(super) fn lower_runtime_tree_node(
+    // WHAT: lowers a runtime RPN tree and emits its prelude into the active block,
+    //       returning only the resulting HIR value.
+    // WHY: short-circuit CFG construction needs a value for conditions and jump arguments,
+    //      but cannot return pending prelude to a parent expression because the work must
+    //      be sequenced inside the branch block that owns it.
+    pub(super) fn lower_runtime_tree_value_to_current_block(
         &mut self,
         node: &RuntimeRpnTree,
         location: &SourceLocation,
+    ) -> Result<HirExpression, CompilerError> {
+        let lowered = self.lower_runtime_tree_node(node, location)?;
+        for prelude in lowered.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
+        }
+        Ok(lowered.value)
+    }
+
+    pub(super) fn lower_runtime_tree_node(
+        &mut self,
+        node: &RuntimeRpnTree,
+        _location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         match node {
-            RuntimeRpnTree::Leaf(node) => self.lower_runtime_leaf_node(node.as_ref(), location),
+            RuntimeRpnTree::Leaf(expression) => {
+                if self.expression_needs_current_block_lowering(expression) {
+                    let value = self.lower_expression_value_to_current_block(expression)?;
+                    Ok(LoweredExpression {
+                        prelude: vec![],
+                        value,
+                    })
+                } else {
+                    self.lower_expression(expression)
+                }
+            }
+
             RuntimeRpnTree::Unary {
                 op,
                 operand,
@@ -59,6 +86,28 @@ impl<'a> HirBuilder<'a> {
                     HirUnaryOp::Not => builtin_type_ids::BOOL,
                     HirUnaryOp::Neg => lowered_operand.ty,
                 };
+
+                // Numeric negation is a checked effect and must go through NumericOp.
+                if *op == Operator::Negate
+                    && let Some((numeric_op, numeric_result_ty)) =
+                        self.classify_checked_numeric_negation(&lowered_operand)
+                {
+                    for prelude_statement in prelude.drain(..) {
+                        self.emit_statement_to_current_block(prelude_statement, location)?;
+                    }
+                    let value = self.emit_checked_numeric_value(
+                        numeric_op,
+                        HirNumericOperands::Unary {
+                            operand: lowered_operand,
+                        },
+                        numeric_result_ty,
+                        location,
+                    )?;
+                    return Ok(LoweredExpression {
+                        prelude: vec![],
+                        value,
+                    });
+                }
 
                 Ok(LoweredExpression {
                     prelude,
@@ -108,6 +157,33 @@ impl<'a> HirBuilder<'a> {
                     });
                 }
 
+                // Numeric arithmetic is lowered as a checked NumericOp statement; other
+                // binary operators (comparisons, booleans, string concatenation, ranges)
+                // keep the plain BinOp form.
+                if let Some((numeric_op, numeric_result_ty)) =
+                    self.classify_checked_numeric_binop(op, &lowered_left, &lowered_right)
+                {
+                    for prelude_statement in prelude.drain(..) {
+                        self.emit_statement_to_current_block(prelude_statement, location)?;
+                    }
+                    let (left, right) = self.lower_checked_numeric_binary_operands(
+                        numeric_op,
+                        lowered_left,
+                        lowered_right,
+                        location,
+                    )?;
+                    let value = self.emit_checked_numeric_value(
+                        numeric_op,
+                        HirNumericOperands::Binary { left, right },
+                        numeric_result_ty,
+                        location,
+                    )?;
+                    return Ok(LoweredExpression {
+                        prelude: vec![],
+                        value,
+                    });
+                }
+
                 let hir_op = self.lower_bin_op(op, location)?;
                 let result_ty =
                     self.infer_binop_result_type(lowered_left.ty, lowered_right.ty, hir_op);
@@ -117,8 +193,8 @@ impl<'a> HirBuilder<'a> {
                     value: self.make_expression(
                         location,
                         HirExpressionKind::BinOp {
-                            left: Box::new(lowered_left),
                             op: hir_op,
+                            left: Box::new(lowered_left),
                             right: Box::new(lowered_right),
                         },
                         result_ty,
@@ -130,217 +206,64 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    pub(super) fn lower_runtime_tree_value_to_current_block(
-        &mut self,
-        node: &RuntimeRpnTree,
-        location: &SourceLocation,
-    ) -> Result<HirExpression, CompilerError> {
-        let lowered = self.lower_runtime_tree_node(node, location)?;
-        for prelude in lowered.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-
-        Ok(lowered.value)
-    }
-
     fn lower_runtime_tree_child_for_parent(
         &mut self,
         pending_prelude: &mut Vec<HirStatement>,
-        node: &RuntimeRpnTree,
+        child: &RuntimeRpnTree,
         location: &SourceLocation,
     ) -> Result<HirExpression, CompilerError> {
-        if self.runtime_tree_needs_current_block_lowering(node) {
+        if self.runtime_tree_needs_current_block_lowering(child) {
             for prelude in pending_prelude.drain(..) {
                 self.emit_statement_to_current_block(prelude, location)?;
             }
 
-            return self.lower_runtime_tree_value_to_current_block(node, location);
+            return self.lower_runtime_tree_value_to_current_block(child, location);
         }
 
-        let lowered = self.lower_runtime_tree_node(node, location)?;
+        let lowered = self.lower_runtime_tree_node(child, location)?;
         pending_prelude.extend(lowered.prelude);
         Ok(lowered.value)
     }
 
     fn runtime_tree_needs_current_block_lowering(&self, node: &RuntimeRpnTree) -> bool {
         match node {
-            RuntimeRpnTree::Leaf(node) => self.ast_node_needs_current_block_lowering(node),
+            RuntimeRpnTree::Leaf(expression) => {
+                self.expression_needs_current_block_lowering(expression)
+            }
 
-            RuntimeRpnTree::Unary { operand, .. } => {
-                self.runtime_tree_needs_current_block_lowering(operand)
+            RuntimeRpnTree::Unary { op, operand, .. } => {
+                matches!(op, Operator::Negate)
+                    || self.runtime_tree_needs_current_block_lowering(operand)
             }
 
             RuntimeRpnTree::Binary {
                 left, op, right, ..
             } => {
                 matches!(op, Operator::And | Operator::Or)
+                    || Self::operator_emits_checked_numeric_statement(op)
                     || self.runtime_tree_needs_current_block_lowering(left)
                     || self.runtime_tree_needs_current_block_lowering(right)
             }
         }
     }
 
-    fn lower_runtime_leaf_node(
-        &mut self,
-        node: &AstNode,
-        fallback_location: &SourceLocation,
-    ) -> Result<LoweredExpression, CompilerError> {
-        match &node.kind {
-            NodeKind::Rvalue(sub_expr)
-                if self.expression_needs_current_block_lowering(sub_expr) =>
-            {
-                let value = self.lower_expression_value_to_current_block(sub_expr)?;
-                Ok(LoweredExpression {
-                    prelude: vec![],
-                    value,
-                })
-            }
-            NodeKind::Rvalue(sub_expr) => self.lower_expression(sub_expr),
-            NodeKind::FunctionCall {
-                name,
-                args,
-                result_type_ids,
-                location,
-            } => {
-                let function_id = self.resolve_function_id_or_error(name, location)?;
-                self.lower_call_expression(
-                    CallTarget::UserFunction(function_id),
-                    args,
-                    result_type_ids,
-                    location,
-                )
-            }
-            NodeKind::HandledFallibleFunctionCall {
-                name,
-                args,
-                result_type_ids,
-                handling,
-                location,
-            } => {
-                if matches!(handling, FallibleHandling::Propagate) {
-                    let function_id = self.resolve_function_id_or_error(name, location)?;
-                    let value = self.lower_fallible_call_to_success_value(
-                        CallTarget::UserFunction(function_id),
-                        args,
-                        result_type_ids,
-                        location,
-                    )?;
-                    return Ok(LoweredExpression {
-                        prelude: vec![],
-                        value,
-                    });
-                }
-
-                let function_id = self.resolve_function_id_or_error(name, location)?;
-                self.lower_handled_fallible_call_expression(
-                    CallTarget::UserFunction(function_id),
-                    args,
-                    result_type_ids,
-                    handling,
-                    true,
-                    location,
-                )
-            }
-            NodeKind::HandledFallibleHostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids,
-                error_type_id,
-                handling,
-                location,
-            } => {
-                if matches!(handling, FallibleHandling::Propagate) {
-                    let value = self.lower_external_fallible_call_to_success_value(
-                        *host_function_id,
-                        args,
-                        result_type_ids,
-                        *error_type_id,
-                        location,
-                    )?;
-                    return Ok(LoweredExpression {
-                        prelude: vec![],
-                        value,
-                    });
-                }
-
-                self.lower_handled_external_fallible_call_expression(
-                    ExternalFallibleCallLoweringInput {
-                        id: *host_function_id,
-                        args,
-                        result_type_ids,
-                        error_type_id: *error_type_id,
-                        handling,
-                        value_required: true,
-                        location,
-                    },
-                )
-            }
-            NodeKind::HostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids,
-                location,
-            } => self.lower_call_expression(
-                CallTarget::ExternalFunction(*host_function_id),
-                args,
-                result_type_ids,
-                location,
-            ),
-            NodeKind::FieldAccess { .. } => self.lower_ast_node_as_expression(node),
-            NodeKind::MethodCall {
-                receiver,
-                method_path,
-                args,
-                result_type_ids,
-                location,
-                ..
-            } => self.lower_receiver_method_call_expression(
-                method_path,
-                receiver,
-                args,
-                result_type_ids,
-                location,
-            ),
-            NodeKind::CollectionBuiltinCall {
-                receiver,
-                op,
-                receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-            } => self.lower_collection_builtin_call_expression(
-                *op,
-                receiver,
-                *receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-            ),
-            NodeKind::MapBuiltinCall {
-                receiver,
-                op,
-                receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-                ..
-            } => self.lower_map_builtin_call_expression(
-                *op,
-                receiver,
-                *receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-            ),
-            _ => {
-                return_hir_transformation_error!(
-                    format!(
-                        "Unsupported AST node in runtime RPN expression: {:?}",
-                        node.kind
-                    ),
-                    self.hir_error_location(fallback_location)
-                )
-            }
-        }
+    /// Whether lowering this operator can emit a checked numeric statement.
+    ///
+    /// WHAT: conservatively treats arithmetic-shaped operators as current-block effects.
+    /// WHY: `NumericOp` emission may append statements and, in recoverable contexts, split CFG.
+    ///      Parent lowering must flush pending left-side preludes before visiting such a child so
+    ///      source evaluation order remains left-to-right. String `+` is harmlessly conservative:
+    ///      it goes through current-block lowering but still falls back to plain `BinOp`.
+    fn operator_emits_checked_numeric_statement(op: &Operator) -> bool {
+        matches!(
+            op,
+            Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::IntDivide
+                | Operator::Modulus
+                | Operator::Exponent
+        )
     }
 }

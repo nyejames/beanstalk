@@ -98,6 +98,78 @@ impl<'a> HirBuilder<'a> {
         self.set_current_block_for_tests(block_id);
     }
 
+    pub(crate) fn test_current_block_statements(
+        &self,
+    ) -> &[crate::compiler_frontend::hir::statements::HirStatement] {
+        let block_id = self.current_block_id().unwrap_or(BlockId(0));
+        self.module
+            .blocks
+            .get(block_id.0 as usize)
+            .map(|block| block.statements.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Resolves the builtin `Error` type id if it was registered in the test type environment.
+    pub(crate) fn test_builtin_error_type_id(
+        &mut self,
+    ) -> Option<crate::compiler_frontend::datatypes::ids::TypeId> {
+        let error_path = crate::compiler_frontend::builtins::error_type::builtin_error_type_path(
+            self.string_table,
+        );
+        let nominal_id = self.type_environment.nominal_id_for_path(&error_path)?;
+        self.type_environment.type_id_for_nominal_id(nominal_id)
+    }
+
+    /// Registers the builtin `Error` nominal struct in the test type environment.
+    ///
+    /// WHAT: adds the canonical `Error { message: String, code: Int }` struct so tests can
+    ///       construct fallible return types whose error slot is builtin `Error`.
+    pub(crate) fn test_register_builtin_error_type(
+        &mut self,
+    ) -> crate::compiler_frontend::datatypes::ids::TypeId {
+        use crate::compiler_frontend::builtins::error_type::{
+            ERROR_FIELD_CODE, ERROR_FIELD_MESSAGE,
+        };
+        use crate::compiler_frontend::datatypes::definitions::{
+            FieldDefinition, StructTypeDefinition,
+        };
+        use crate::compiler_frontend::datatypes::ids::NominalTypeId;
+        use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+
+        if let Some(existing) = self.test_builtin_error_type_id() {
+            return existing;
+        }
+
+        let error_path = crate::compiler_frontend::builtins::error_type::builtin_error_type_path(
+            self.string_table,
+        );
+        let message_path = error_path.join_str(ERROR_FIELD_MESSAGE, self.string_table);
+        let code_path = error_path.join_str(ERROR_FIELD_CODE, self.string_table);
+
+        let definition = StructTypeDefinition {
+            id: NominalTypeId(0),
+            path: error_path,
+            fields: vec![
+                FieldDefinition {
+                    name: message_path,
+                    type_id: crate::compiler_frontend::datatypes::ids::builtin_type_ids::STRING,
+                    location: SourceLocation::default(),
+                },
+                FieldDefinition {
+                    name: code_path,
+                    type_id: crate::compiler_frontend::datatypes::ids::builtin_type_ids::INT,
+                    location: SourceLocation::default(),
+                },
+            ]
+            .into_boxed_slice(),
+            generic_parameters: None,
+            const_record: false,
+        };
+
+        let (_, error_type_id) = self.type_environment.register_nominal_struct(definition);
+        error_type_id
+    }
+
     pub(crate) fn test_set_current_function(&mut self, function_id: FunctionId) {
         self.set_current_function_for_tests(function_id);
     }

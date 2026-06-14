@@ -13,10 +13,12 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::reachability::{
-    HirReachability, HirReachabilityInput, ReachableMapUse, ReachableMapUseKind,
-    ReachableReactiveSinkKind, ReachableReactiveSinkUse, ReachableReactiveTemplateUse,
-    ReachableRuntimeCastUse, collect_hir_reachability, collect_reachability_from_start,
+    HirReachability, HirReachabilityInput, ReachableFloatStatementKind, ReachableFloatStatementUse,
+    ReachableMapUse, ReachableMapUseKind, ReachableNumericOpUse, ReachableReactiveSinkKind,
+    ReachableReactiveSinkUse, ReachableReactiveTemplateUse, ReachableRuntimeCastUse,
+    collect_hir_reachability, collect_reachability_from_start,
 };
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -61,10 +63,10 @@ pub struct BackendFeatureValidationInput<'a> {
 
 /// Validates HIR runtime features that are target-specific after frontend semantics are complete.
 ///
-/// WHAT: hashmap construction/use, reactive runtime features, runtime casts, and generic runtime
-///       values are legal HIR, but only the JS backend lowers them for Alpha. HTML-Wasm must
-///       reject reachable unsupported operations; unused functions stay type checked but do not
-///       block the experimental Wasm build path.
+/// WHAT: hashmap construction/use, reactive runtime features, runtime casts, checked numeric
+///       operations, and generic runtime values are legal HIR, but only the JS backend lowers them
+///       for Alpha. HTML-Wasm must reject reachable unsupported operations; unused functions stay
+///       type checked but do not block the experimental Wasm build path.
 /// WHY: fail early with a structured Rule error at the source location instead of a vague
 ///      backend-internal lowering failure.
 pub fn validate_hir_backend_feature_support(
@@ -76,8 +78,8 @@ pub fn validate_hir_backend_feature_support(
 
     match input.target {
         BackendTarget::Wasm => {
-            // Wasm does not yet lower hashmaps, reactive runtime features, runtime casts, or
-            // generic runtime values.
+            // Wasm does not yet lower hashmaps, reactive runtime features, runtime casts, checked
+            // numeric operations, or generic runtime values.
             validate_wasm_maps(&reachability.reachable_map_uses, input.target, string_table)?;
             validate_wasm_reactive_features(
                 &reachability.reachable_reactive_templates,
@@ -86,6 +88,16 @@ pub fn validate_hir_backend_feature_support(
             )?;
             validate_wasm_runtime_casts(
                 &reachability.reachable_runtime_casts,
+                input.target,
+                string_table,
+            )?;
+            validate_wasm_checked_numeric_ops(
+                &reachability.reachable_numeric_ops,
+                input.target,
+                string_table,
+            )?;
+            validate_wasm_float_statements(
+                &reachability.reachable_float_statements,
                 input.target,
                 string_table,
             )?;
@@ -216,6 +228,64 @@ fn validate_wasm_runtime_casts(
     )))
 }
 
+/// Reports the first reachable checked numeric operation for the Wasm target.
+///
+/// WHAT: checked arithmetic is valid HIR, but HTML-Wasm does not yet implement the helper and
+///       trap/recoverability contract for `HirStatementKind::NumericOp`.
+/// WHY: reject early with a structured unsupported-backend diagnostic instead of letting Wasm LIR
+///      lowering report an infrastructure failure.
+fn validate_wasm_checked_numeric_ops(
+    numeric_ops: &[ReachableNumericOpUse],
+    target: BackendTarget,
+    string_table: &mut StringTable,
+) -> Result<(), BackendFeatureValidationError> {
+    let Some(numeric_op) = numeric_ops.first() else {
+        return Ok(());
+    };
+
+    let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
+        string_table.intern(target.as_str()),
+        string_table.intern("checked numeric operations"),
+        numeric_op.location.clone(),
+    );
+
+    Err(BackendFeatureValidationError::Diagnostic(Box::new(
+        diagnostic,
+    )))
+}
+
+/// Reports the first reachable Float formatting or validation statement for the Wasm target.
+///
+/// WHAT: Beanstalk Float formatting and external-Float boundary validation are valid HIR, but
+///       HTML-Wasm does not yet implement the helper and trap/recoverability contract for
+///       `HirStatementKind::FormatFloat` or `HirStatementKind::ValidateFloat`.
+/// WHY: reject early with a structured unsupported-backend diagnostic instead of letting Wasm LIR
+///      lowering report an infrastructure failure.
+fn validate_wasm_float_statements(
+    float_statements: &[ReachableFloatStatementUse],
+    target: BackendTarget,
+    string_table: &mut StringTable,
+) -> Result<(), BackendFeatureValidationError> {
+    let Some(float_statement) = float_statements.first() else {
+        return Ok(());
+    };
+
+    let feature = match float_statement.kind {
+        ReachableFloatStatementKind::FormatFloat => "Float formatting",
+        ReachableFloatStatementKind::ValidateFloat => "Float boundary validation",
+    };
+
+    let diagnostic = CompilerDiagnostic::unsupported_backend_feature(
+        string_table.intern(target.as_str()),
+        string_table.intern(feature),
+        float_statement.location.clone(),
+    );
+
+    Err(BackendFeatureValidationError::Diagnostic(Box::new(
+        diagnostic,
+    )))
+}
+
 /// Reports the first reachable generic runtime value for the Wasm target.
 ///
 /// WHAT: generic nominal instances such as `Box of String` are valid HIR, but HTML-Wasm does not
@@ -307,6 +377,10 @@ fn first_generic_runtime_statement_location(
         HirStatementKind::CastOp { source, .. } => {
             first_generic_runtime_expression_location(source, module, type_environment)
         }
+        HirStatementKind::FormatFloat { source, .. }
+        | HirStatementKind::ValidateFloat { source, .. } => {
+            first_generic_runtime_expression_location(source, module, type_environment)
+        }
         HirStatementKind::MapOp { receiver, args, .. } => {
             first_generic_runtime_expression_location(receiver, module, type_environment).or_else(
                 || {
@@ -316,6 +390,16 @@ fn first_generic_runtime_statement_location(
                 },
             )
         }
+        HirStatementKind::NumericOp { operands, .. } => match operands {
+            HirNumericOperands::Unary { operand } => {
+                first_generic_runtime_expression_location(operand, module, type_environment)
+            }
+            HirNumericOperands::Binary { left, right } => {
+                first_generic_runtime_expression_location(left, module, type_environment).or_else(
+                    || first_generic_runtime_expression_location(right, module, type_environment),
+                )
+            }
+        },
         HirStatementKind::Drop(_) => None,
     }
 }

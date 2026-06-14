@@ -13,18 +13,13 @@ use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, LoopBindings, MultiBindTarget, MultiBindTargetKind, NodeKind, RangeLoopSpec,
     SourceLocation,
 };
-use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleHandling,
-};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReturnShapeReason};
-use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, HirLoweringError};
-use crate::compiler_frontend::hir::hir_expression::ExternalFallibleCallLoweringInput;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -207,60 +202,9 @@ impl<'a> HirBuilder<'a> {
                 self.lower_multi_bind_statement(targets, value, &node.location)
             }
 
-            NodeKind::FunctionCall {
-                name,
-                args,
-                result_type_ids: _,
-                location,
-            } => {
-                let function_id = self.resolve_function_id_or_error(name, location)?;
-                self.lower_call_statement(CallTarget::UserFunction(function_id), args, location)
+            NodeKind::ExpressionStatement(expr) => {
+                self.lower_expression_statement(expr, &node.location)
             }
-
-            NodeKind::HandledFallibleFunctionCall {
-                name,
-                args,
-                result_type_ids,
-                handling,
-                location,
-            } => self.lower_handled_fallible_call_statement(
-                name,
-                args,
-                result_type_ids,
-                handling,
-                location,
-            ),
-
-            NodeKind::HandledFallibleHostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids,
-                error_type_id,
-                handling,
-                location,
-            } => self.lower_handled_external_fallible_call_statement(
-                *host_function_id,
-                args,
-                result_type_ids,
-                *error_type_id,
-                handling,
-                location,
-            ),
-
-            NodeKind::HostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids: _,
-                location,
-            } => self.lower_call_statement(
-                CallTarget::ExternalFunction(*host_function_id),
-                args,
-                location,
-            ),
-
-            NodeKind::Rvalue(expr) => self.lower_expression_statement(expr, &node.location),
-
-            NodeKind::FieldAccess { .. } => self.lower_field_access_statement(node, &node.location),
 
             NodeKind::Return(values) => self.lower_return_statement(values, &node.location),
 
@@ -313,8 +257,6 @@ impl<'a> HirBuilder<'a> {
                 self.lower_then_value_statement(produced_values, &node.location)
             }
 
-            NodeKind::Operator(_) => Ok(()),
-
             NodeKind::Assert { condition, message } => {
                 self.lower_assert_statement(condition, message.as_ref(), &node.location)
             }
@@ -359,11 +301,11 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_assignment_statement(
         &mut self,
-        target: &AstNode,
+        target: &PlaceExpression,
         value: &Expression,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let (target_prelude, target_place) = self.lower_ast_node_to_place(target)?;
+        let (target_prelude, target_place) = self.lower_place_expression_to_hir_place(target)?;
 
         for prelude in target_prelude {
             self.emit_statement_to_current_block(prelude, location)?;
@@ -522,116 +464,6 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
-    // -------------------------
-    //  Call Statements
-    // -------------------------
-
-    fn lower_call_statement(
-        &mut self,
-        target: CallTarget,
-        args: &[CallArgument],
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let lowered = self.lower_call_expression(target, args, &[], location)?;
-        for prelude in lowered.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-        Ok(())
-    }
-
-    fn lower_handled_fallible_call_statement(
-        &mut self,
-        name: &InternedPath,
-        args: &[CallArgument],
-        result_type_ids: &[TypeId],
-        handling: &FallibleHandling,
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let function_id = self.resolve_function_id_or_error(name, location)?;
-        if matches!(handling, FallibleHandling::Propagate) {
-            return self.lower_fallible_propagating_call_statement(
-                CallTarget::UserFunction(function_id),
-                args,
-                result_type_ids,
-                location,
-            );
-        }
-
-        let lowered = self.lower_handled_fallible_call_expression(
-            CallTarget::UserFunction(function_id),
-            args,
-            result_type_ids,
-            handling,
-            false,
-            location,
-        )?;
-
-        for prelude in lowered.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-
-        if self.is_unit_type(lowered.value.ty) {
-            if matches!(handling, FallibleHandling::Propagate) {
-                self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)?;
-            }
-            return Ok(());
-        }
-
-        self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)
-    }
-
-    fn lower_handled_external_fallible_call_statement(
-        &mut self,
-        id: crate::compiler_frontend::external_packages::ExternalFunctionId,
-        args: &[CallArgument],
-        result_type_ids: &[TypeId],
-        error_type_id: TypeId,
-        handling: &FallibleHandling,
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        if matches!(handling, FallibleHandling::Propagate) {
-            let lowered = self.lower_handled_external_fallible_call_expression(
-                ExternalFallibleCallLoweringInput {
-                    id,
-                    args,
-                    result_type_ids,
-                    error_type_id,
-                    handling,
-                    value_required: false,
-                    location,
-                },
-            )?;
-
-            for prelude in lowered.prelude {
-                self.emit_statement_to_current_block(prelude, location)?;
-            }
-
-            return Ok(());
-        }
-
-        let lowered = self.lower_handled_external_fallible_call_expression(
-            ExternalFallibleCallLoweringInput {
-                id,
-                args,
-                result_type_ids,
-                error_type_id,
-                handling,
-                value_required: false,
-                location,
-            },
-        )?;
-
-        for prelude in lowered.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-
-        if !self.is_unit_type(lowered.value.ty) {
-            self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)?;
-        }
-
-        Ok(())
-    }
-
     fn lower_expression_statement(
         &mut self,
         expression: &Expression,
@@ -651,24 +483,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.emit_statement_kind(HirStatementKind::Expr(value), location)
-    }
-
-    fn lower_field_access_statement(
-        &mut self,
-        field_access_node: &AstNode,
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let lowered = self.lower_ast_node_as_expression(field_access_node)?;
-
-        for prelude in lowered.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-
-        if self.is_unit_type(lowered.value.ty) {
-            return Ok(());
-        }
-
-        self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)
     }
 
     // -------------------------

@@ -160,8 +160,7 @@ fn token_is_literal_pattern(token: &TokenKind) -> bool {
         token,
         TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_)
-            | TokenKind::IntLiteral(_)
-            | TokenKind::FloatLiteral(_)
+            | TokenKind::NumericLiteral(_)
             | TokenKind::CharLiteral(_)
             | TokenKind::BoolLiteral(_)
     )

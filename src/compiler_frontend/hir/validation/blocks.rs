@@ -10,7 +10,8 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::HirExpression;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
-use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::hir::numeric::{HirNumericOperands, NumericFailureMode};
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 
@@ -199,6 +200,144 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(source, anchor)?;
                 if let Some(local_id) = result {
                     self.require_local_id(*local_id, anchor)?;
+                }
+            }
+
+            HirStatementKind::NumericOp {
+                op,
+                failure_mode,
+                operands,
+                result,
+            } => {
+                if op.is_unary() != matches!(operands, HirNumericOperands::Unary { .. }) {
+                    return Err(self.error_with_hir(
+                        format!(
+                            "NumericOp::{op:?} operand shape does not match the operation arity"
+                        ),
+                        anchor,
+                    ));
+                }
+
+                match operands {
+                    HirNumericOperands::Unary { operand } => {
+                        self.validate_expression(operand, anchor)?;
+                    }
+                    HirNumericOperands::Binary { left, right } => {
+                        self.validate_expression(left, anchor)?;
+                        self.validate_expression(right, anchor)?;
+                    }
+                }
+
+                self.require_local_id(*result, anchor)?;
+
+                if *failure_mode == NumericFailureMode::ReturnError {
+                    let Some(result_type) = self.local_types.get(result).copied() else {
+                        return Err(self.error_with_hir(
+                            "NumericOp result local has no registered type",
+                            anchor,
+                        ));
+                    };
+
+                    if self
+                        .type_environment
+                        .fallible_carrier_slots(result_type)
+                        .is_none()
+                    {
+                        return Err(self.error_with_hir(
+                            "NumericOp ReturnError result local must have an internal fallible carrier type",
+                            anchor,
+                        ));
+                    }
+                }
+            }
+
+            HirStatementKind::FormatFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                self.validate_float_effect_statement(
+                    "FormatFloat",
+                    source,
+                    *failure_mode,
+                    *result,
+                    self.type_environment.builtins().string,
+                    anchor,
+                )?;
+            }
+
+            HirStatementKind::ValidateFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                self.validate_float_effect_statement(
+                    "ValidateFloat",
+                    source,
+                    *failure_mode,
+                    *result,
+                    self.type_environment.builtins().float,
+                    anchor,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_float_effect_statement(
+        &self,
+        statement_name: &'static str,
+        source: &HirExpression,
+        failure_mode: NumericFailureMode,
+        result: LocalId,
+        success_type: TypeId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        self.validate_expression(source, anchor)?;
+
+        if source.ty != self.type_environment.builtins().float {
+            return Err(self.error_with_hir(
+                format!("{statement_name} source must have Float type"),
+                anchor,
+            ));
+        }
+
+        self.require_local_id(result, anchor)?;
+        let Some(result_type) = self.local_types.get(&result).copied() else {
+            return Err(self.error_with_hir(
+                format!("{statement_name} result local has no registered type"),
+                anchor,
+            ));
+        };
+
+        match failure_mode {
+            NumericFailureMode::Trap => {
+                if result_type != success_type {
+                    return Err(self.error_with_hir(
+                        format!("{statement_name} Trap result local has the wrong success type"),
+                        anchor,
+                    ));
+                }
+            }
+
+            NumericFailureMode::ReturnError => {
+                let Some((carrier_success_type, _)) =
+                    self.type_environment.fallible_carrier_slots(result_type)
+                else {
+                    return Err(self.error_with_hir(
+                        format!(
+                            "{statement_name} ReturnError result local must have an internal fallible carrier type"
+                        ),
+                        anchor,
+                    ));
+                };
+
+                if carrier_success_type != success_type {
+                    return Err(self.error_with_hir(
+                        format!("{statement_name} ReturnError carrier has the wrong success type"),
+                        anchor,
+                    ));
                 }
             }
         }

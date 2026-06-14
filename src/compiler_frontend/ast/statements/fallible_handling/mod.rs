@@ -19,8 +19,9 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 pub(crate) use parser::{
     CastCatchSite, FallibleCallSite, FallibleHostCallSite, HandledFallibleCall,
     HandledFallibleHostCall, fallible_catch_allowed_in_context, parse_cast_catch_handling_suffix,
-    parse_fallible_handling_suffix_for_call, parse_fallible_handling_suffix_for_expression,
-    parse_fallible_handling_suffix_for_host_call,
+    parse_fallible_handling_suffix_for_call_expression,
+    parse_fallible_handling_suffix_for_expression,
+    parse_fallible_handling_suffix_for_host_call_expression, wrap_catch_expression,
 };
 
 const FUNCTION_CALL_STAGE: &str = "Function Call Parsing";

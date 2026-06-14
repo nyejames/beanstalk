@@ -11,7 +11,6 @@
 //! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
 //! HIR transformation or lowering invariant failure only.
 
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
 };
@@ -34,17 +33,67 @@ use crate::return_hir_transformation_error;
 use super::LoweredExpression;
 
 impl<'a> HirBuilder<'a> {
+    /// Lowers an external function call whose success return is exactly one `Float`, emitting the
+    /// raw call and a `ValidateFloat` boundary check directly into the current block.
+    ///
+    /// WHAT: evaluates arguments, emits the external `Call` to the current block, then emits
+    ///       `ValidateFloat` on the raw result and returns the validated finite `Float`.
+    /// WHY: `ValidateFloat` can branch, so it must not be hidden inside a passive expression prelude.
+    ///      This helper is used only when `expression_needs_current_block_lowering` has already opted
+    ///      the call into current-block lowering.
+    pub(crate) fn lower_validated_external_call_expression(
+        &mut self,
+        id: ExternalFunctionId,
+        args: &[CallArgument],
+        _result_type_ids: &[FrontendTypeId],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let mut lowered_args = Vec::with_capacity(args.len());
+
+        for (arg_index, argument) in args.iter().enumerate() {
+            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
+            for prelude_statement in lowered.prelude {
+                self.emit_statement_to_current_block(prelude_statement, location)?;
+            }
+            lowered_args.push(lowered.value);
+        }
+
+        let float_type = self.lower_type_id(self.type_environment.builtins().float, location)?;
+        let result_local = self.allocate_temp_local(float_type, Some(location.to_owned()))?;
+
+        let call_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(id),
+                args: lowered_args,
+                result: Some(result_local),
+            },
+            location: location.to_owned(),
+        };
+        self.side_table.map_statement(location, &call_statement);
+        self.emit_statement_to_current_block(call_statement, location)?;
+
+        let region = self.current_region_or_error(location)?;
+        let raw_value = self.make_local_load_expression(result_local, float_type, location, region);
+        let validated_value = self.emit_validated_float_value(raw_value, location)?;
+
+        Ok(LoweredExpression {
+            prelude: vec![],
+            value: validated_value,
+        })
+    }
+
     pub(crate) fn lower_receiver_method_call_expression(
         &mut self,
         method_path: &InternedPath,
-        receiver: &AstNode,
+        receiver: &Expression,
         args: &[CallArgument],
         result_type_ids: &[FrontendTypeId],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let function_id = self.resolve_function_id_or_error(method_path, location)?;
         let mut full_args = Vec::with_capacity(args.len() + 1);
-        full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
+        full_args.push(Self::shared_call_argument(receiver.clone(), location));
         full_args.extend(args.iter().cloned());
 
         self.lower_call_expression(
@@ -58,7 +107,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_collection_builtin_call_expression(
         &mut self,
         op: CollectionBuiltinOp,
-        receiver: &AstNode,
+        receiver: &Expression,
         receiver_requires_mutable: bool,
         args: &[CallArgument],
         result_type_ids: &[FrontendTypeId],
@@ -66,9 +115,9 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<LoweredExpression, CompilerError> {
         let mut full_args = Vec::with_capacity(args.len() + 1);
         if receiver_requires_mutable {
-            full_args.push(Self::mutable_call_argument(receiver.get_expr()?, location));
+            full_args.push(Self::mutable_call_argument(receiver.clone(), location));
         } else {
-            full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
+            full_args.push(Self::shared_call_argument(receiver.clone(), location));
         }
         full_args.extend(args.iter().cloned());
 
@@ -97,7 +146,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_map_builtin_call_expression(
         &mut self,
         op: MapBuiltinOp,
-        receiver: &AstNode,
+        receiver: &Expression,
         receiver_requires_mutable: bool,
         args: &[CallArgument],
         result_type_ids: &[FrontendTypeId],
@@ -115,9 +164,7 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        let receiver_expression = receiver.get_expr()?;
-        let lowered_receiver =
-            self.lower_child_expression_for_parent(&mut prelude, &receiver_expression)?;
+        let lowered_receiver = self.lower_child_expression_for_parent(&mut prelude, receiver)?;
 
         let mut lowered_args = Vec::with_capacity(args.len());
         for (arg_index, argument) in args.iter().enumerate() {

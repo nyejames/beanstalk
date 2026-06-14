@@ -17,6 +17,8 @@ path = "index.html"
 kind = "html"
 must_contain = [
     "function __bs_cast_float(",
+]
+must_not_contain = [
     "function __bs_normalize_numeric_text(",
 ]
 

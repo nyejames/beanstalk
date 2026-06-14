@@ -142,7 +142,7 @@ impl ScopeContext {
         }
 
         match &declaration.value.kind {
-            ExpressionKind::Function(signature, _) => Some(signature),
+            ExpressionKind::Function(signature) => Some(signature),
             _ => None,
         }
     }

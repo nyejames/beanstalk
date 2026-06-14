@@ -5,13 +5,12 @@
 //! WHY: short-circuit lowering is one of the highest-risk semantic paths and benefits from
 //! isolated, auditable helpers.
 
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 #[derive(Debug, Clone)]
 pub(super) enum RuntimeRpnTree {
-    Leaf(Box<AstNode>),
+    Leaf(Box<Expression>),
     Unary {
         op: Operator,
         operand: Box<RuntimeRpnTree>,

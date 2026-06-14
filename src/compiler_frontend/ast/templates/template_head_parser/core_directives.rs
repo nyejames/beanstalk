@@ -32,12 +32,13 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     directive_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
     template: &mut Template,
+    string_table: &StringTable,
 ) -> Result<bool, CompilerDiagnostic> {
     if matches!(
         directive_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Slot)
     ) {
-        let slot_key = parse_optional_slot_target_argument(token_stream)?;
+        let slot_key = parse_optional_slot_target_argument(token_stream, string_table)?;
         template.kind = TemplateType::SlotDefinition(slot_key);
         return Ok(true);
     }

@@ -7,8 +7,11 @@
 //! that runtime lowering consumes, without entangling parser or HIR code.
 
 use crate::ast_log;
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::const_eval::constant_fold;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
@@ -31,7 +34,6 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticSeverity, InvalidTemplateStructureReason,
 };
-use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -671,8 +673,8 @@ fn resolve_fold_bindings_in_expression(
             })
         }
 
-        ExpressionKind::Runtime(nodes) => {
-            fold_runtime_expression_with_bindings(&expression, nodes, fold_context)
+        ExpressionKind::Runtime(rpn) => {
+            fold_runtime_expression_with_bindings(&expression, rpn, fold_context)
         }
 
         _ => Ok(expression),
@@ -681,33 +683,30 @@ fn resolve_fold_bindings_in_expression(
 
 fn fold_runtime_expression_with_bindings(
     expression: &Expression,
-    nodes: &[AstNode],
+    rpn: &ExpressionRpn,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<Expression, TemplateError> {
-    let mut substituted = Vec::with_capacity(nodes.len());
+    let mut substituted = Vec::with_capacity(rpn.items.len());
 
-    for node in nodes {
-        let mut node = node.to_owned();
-        if let crate::compiler_frontend::ast::ast_nodes::NodeKind::Rvalue(value) = &node.kind {
-            node.kind = crate::compiler_frontend::ast::ast_nodes::NodeKind::Rvalue(
+    for item in &rpn.items {
+        let new_item = match item {
+            ExpressionRpnItem::Operand(value) => ExpressionRpnItem::Operand(
                 resolve_fold_bindings_in_expression(value.to_owned(), fold_context)?,
-            );
-        }
-        substituted.push(node);
+            ),
+            operator @ ExpressionRpnItem::Operator { .. } => operator.clone(),
+        };
+        substituted.push(new_item);
     }
 
     match constant_fold(&substituted, fold_context.string_table) {
-        Ok(ConstantFoldResult::Folded(stack)) => {
+        Ok(stack) => {
             if stack.len() == 1
-                && let crate::compiler_frontend::ast::ast_nodes::NodeKind::Rvalue(folded) =
-                    &stack[0].kind
+                && let ExpressionRpnItem::Operand(folded) = &stack[0]
             {
                 return Ok(folded.to_owned());
             }
             Ok(expression.to_owned())
         }
-
-        Ok(ConstantFoldResult::Unchanged) => Ok(expression.to_owned()),
 
         Err(_) => Ok(expression.to_owned()),
     }

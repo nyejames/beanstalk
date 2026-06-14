@@ -6,6 +6,7 @@
 //! module-wide header parsing and dependency sorting consume them.
 
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, PathTokenItem, Token, TokenKind};
@@ -51,6 +52,8 @@ fn flat_token_kinds_remap_correctly() {
     global_table.intern("alpha");
     let _gamma_global = global_table.intern("gamma");
 
+    let numeric_token = NumericLiteralToken::test_new("42", &mut local_table);
+
     let remap = global_table.merge_from(&local_table);
 
     let mut symbol = TokenKind::Symbol(alpha_local);
@@ -81,11 +84,11 @@ fn flat_token_kinds_remap_correctly() {
         "raw string literal should resolve to 'beta' in global table"
     );
 
-    let mut non_string_kind = TokenKind::IntLiteral(42);
+    let mut non_string_kind = TokenKind::NumericLiteral(numeric_token);
     non_string_kind.remap_string_ids(&remap);
     assert!(
-        matches!(non_string_kind, TokenKind::IntLiteral(42)),
-        "non-string-bearing token kind should be unchanged"
+        matches!(non_string_kind, TokenKind::NumericLiteral(_)),
+        "non-string-bearing numeric token kind should remain numeric after remap"
     );
 }
 
@@ -150,7 +153,10 @@ fn file_tokens_remaps_src_path_and_tokens_preserves_canonical_os_path() {
 
     let tokens = vec![
         make_token(TokenKind::Symbol(symbol_local), token_scope_local.clone()),
-        make_token(TokenKind::IntLiteral(7), token_scope_local.clone()),
+        make_token(
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("7", &mut local_table)),
+            token_scope_local.clone(),
+        ),
     ];
 
     let canonical_path = std::path::PathBuf::from("/absolute/local.bst");
@@ -204,8 +210,8 @@ fn file_tokens_remaps_src_path_and_tokens_preserves_canonical_os_path() {
         .get(1)
         .expect("second token should exist");
     assert!(
-        matches!(second_token.kind, TokenKind::IntLiteral(7)),
-        "non-string token should be unchanged"
+        matches!(second_token.kind, TokenKind::NumericLiteral(_)),
+        "numeric token should remain numeric after remap"
     );
 }
 

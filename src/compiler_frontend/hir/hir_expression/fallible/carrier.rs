@@ -29,6 +29,9 @@ pub(crate) struct EmittedFallibleCarrier {
     pub(crate) carrier_type: TypeId,
     pub(crate) ok_type: TypeId,
     pub(crate) err_type: TypeId,
+    /// True when the success payload is a `Float` entering from an external/backend boundary
+    /// and must be validated before ordinary Beanstalk code observes it.
+    pub(crate) validate_float_success: bool,
 }
 
 /// Success/error blocks created from one fallible carrier branch.
@@ -41,6 +44,14 @@ pub(super) struct FallibleCarrierBranch {
 }
 
 impl<'a> HirBuilder<'a> {
+    /// Returns true when the given type is the builtin `Float` type.
+    ///
+    /// WHAT: compares the type id against the registered builtin `Float` id.
+    /// WHY: external/backend boundary Float success values need explicit validation before use.
+    pub(crate) fn type_id_is_float(&self, type_id: TypeId) -> bool {
+        type_id == self.type_environment.builtins().float
+    }
+
     /// Emits a plain call to the current block and stores its result in a temporary local.
     ///
     /// WHAT: lowers call arguments, allocates a temp local, and emits the call statement.
@@ -141,8 +152,7 @@ impl<'a> HirBuilder<'a> {
             location,
             success_region,
         );
-
-        Ok(self.make_expression(
+        let mut success_payload = self.make_expression(
             location,
             HirExpressionKind::FallibleUnwrapSuccess {
                 result: Box::new(success_result),
@@ -150,7 +160,13 @@ impl<'a> HirBuilder<'a> {
             result_carrier.ok_type,
             ValueKind::RValue,
             success_region,
-        ))
+        );
+
+        if result_carrier.validate_float_success {
+            success_payload = self.emit_validated_float_value(success_payload, location)?;
+        }
+
+        Ok(success_payload)
     }
 
     /// Creates a success/error branch from a carrier local.

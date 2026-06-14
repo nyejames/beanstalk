@@ -13,7 +13,9 @@ use crate::compiler_frontend::ast::expressions::constructor_views::{
     ConstructorField, ConstructorFieldAccessMode,
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCallShapeReason, TypeMismatchContext,
@@ -662,8 +664,19 @@ fn is_call_argument_type_compatible(
 fn expression_is_place(expression: &Expression) -> bool {
     match &expression.kind {
         ExpressionKind::Reference(_) => true,
-        ExpressionKind::Runtime(nodes) if nodes.len() == 1 => ast_node_is_place(&nodes[0]),
+        ExpressionKind::Copy(place) => place_is_place(place),
+        ExpressionKind::FieldAccess { base, .. } => expression_is_place(base),
+        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => {
+            matches!(rpn.items.first(), Some(ExpressionRpnItem::Operand(expression)) if expression_is_place(expression))
+        }
         _ => false,
+    }
+}
+
+fn place_is_place(place: &PlaceExpression) -> bool {
+    match &place.kind {
+        PlaceExpressionKind::Local(_) => true,
+        PlaceExpressionKind::Field { base, .. } => place_is_place(base),
     }
 }
 
@@ -675,7 +688,15 @@ fn expression_is_place(expression: &Expression) -> bool {
 fn expression_is_mutable_place(expression: &Expression) -> bool {
     match &expression.kind {
         ExpressionKind::Reference(_) => expression.value_mode.is_mutable(),
-        ExpressionKind::Runtime(nodes) if nodes.len() == 1 => ast_node_is_mutable_place(&nodes[0]),
+        ExpressionKind::Copy(place) => place.is_mutable(),
+        ExpressionKind::FieldAccess { base, .. } => {
+            // A field access is a mutable place when the base place is mutable, matching the
+            // previous AstNode-based contract where mutability was inherited from the receiver.
+            expression_is_mutable_place(base)
+        }
+        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => {
+            matches!(rpn.items.first(), Some(ExpressionRpnItem::Operand(expression)) if expression_is_mutable_place(expression))
+        }
         _ => false,
     }
 }

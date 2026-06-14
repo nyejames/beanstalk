@@ -160,7 +160,7 @@ pub struct ExternalTypeDef {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExternalConstantValue {
     Float(f64),
-    Int(i64),
+    Int(i32),
     StringSlice(&'static str),
     Bool(bool),
 }

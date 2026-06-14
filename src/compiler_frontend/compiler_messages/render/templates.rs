@@ -63,6 +63,9 @@ pub(crate) fn compile_time_evaluation_error_message(
             )
         }
         CompileTimeEvaluationErrorReason::DivideByZero => "Cannot divide by zero.".to_string(),
+        CompileTimeEvaluationErrorReason::InvalidExponent => {
+            format!("Invalid exponent while evaluating {operation_text}.")
+        }
         CompileTimeEvaluationErrorReason::InvalidOperatorForType => {
             format!("Cannot perform operation {operation_text} on this type.")
         }
@@ -127,6 +130,9 @@ pub(crate) fn compile_time_evaluation_error_suggestion(
         }
         CompileTimeEvaluationErrorReason::DivideByZero => {
             "Avoid division by zero in compile-time expressions"
+        }
+        CompileTimeEvaluationErrorReason::InvalidExponent => {
+            "Use an exponent that is valid for the numeric operation"
         }
         CompileTimeEvaluationErrorReason::InvalidOperatorForType => {
             "Use an operator that is valid for the operand types"

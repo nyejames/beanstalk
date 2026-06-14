@@ -1,31 +1,23 @@
-//! Core AST node declarations and shared expression-ordering helpers.
+//! Core AST node declarations and AST string-remapping helpers.
 //!
-//! WHAT: defines statement/expression node shapes plus operator precedence metadata used by
-//! expression evaluation.
-//! WHY: parser output, type checking, and constant folding need one authoritative AST surface and
-//! one precedence table so behavior stays deterministic across frontend stages.
+//! WHAT: defines statement node shapes, temporary statement-side place nodes, and remapping for
+//! interned identifiers stored in AST payloads.
+//! WHY: parser output, HIR lowering, and frontend finalization need one authoritative AST surface
+//! while expression internals stay owned by `ast/expressions`.
 //!
 //! ## Diagnostic boundary
 //!
 //! `CompilerError` in this module means an internal compiler invariant or setup failure only.
 //! Source-authored syntax, type, and rule failures are rejected earlier with `CompilerDiagnostic`.
 
-use crate::compiler_frontend::ast::expressions::call_argument::{
-    CallArgument, normalize_call_arguments,
-};
 use crate::compiler_frontend::ast::expressions::expression::{
-    ConstRecordState, Expression, ExpressionKind, ExpressionValueShape, FallibleHandling, Operator,
-    expression_value_shape_for_diagnostic_type,
+    Expression, ExpressionKind, PlaceExpression,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
-use crate::compiler_frontend::builtins::CollectionBuiltinOp;
-use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
-use crate::compiler_frontend::datatypes::{DataType, diagnostic_type_spelling};
-use crate::compiler_frontend::external_packages::ExternalFunctionId;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 
@@ -181,78 +173,6 @@ pub enum NodeKind {
     /// The HIR builder lowers this into a `PushRuntimeFragment` statement inside entry start().
     PushStartRuntimeFragment(Expression),
 
-    // For simple field access: obj.field
-    FieldAccess {
-        base: Box<AstNode>,        // The expression being accessed
-        field: StringId,           // The field name
-        diagnostic_type: DataType, // Non-authoritative spelling for diagnostics
-        type_id: TypeId,
-        const_record_state: ConstRecordState,
-        value_mode: ValueMode, // ValueMode of the resolved field
-    },
-
-    // For method calls: obj.method(args)
-    MethodCall {
-        receiver: Box<AstNode>,
-        method_path: InternedPath,
-        method: StringId,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
-    // For compiler-owned collection builtins: collection.get/set/push/remove/length(...)
-    CollectionBuiltinCall {
-        receiver: Box<AstNode>,
-        op: CollectionBuiltinOp,
-        receiver_requires_mutable: bool,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
-    // For compiler-owned map builtins: map.get/contains/set/remove/clear/length
-    MapBuiltinCall {
-        receiver: Box<AstNode>,
-        op: MapBuiltinOp,
-        receiver_requires_mutable: bool,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
-    FunctionCall {
-        name: InternedPath,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
-    HandledFallibleFunctionCall {
-        name: InternedPath,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        handling: FallibleHandling,
-        location: SourceLocation,
-    },
-
-    HandledFallibleHostFunctionCall {
-        name: ExternalFunctionId,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        error_type_id: TypeId,
-        handling: FallibleHandling,
-        location: SourceLocation,
-    },
-
-    // Host function call (functions provided by the runtime)
-    HostFunctionCall {
-        name: ExternalFunctionId,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
     StructDefinition(
@@ -264,7 +184,7 @@ pub enum NodeKind {
 
     // Mutation of existing mutable variables
     Assignment {
-        target: Box<AstNode>, // Variable, FieldAccess, Deref, etc.
+        target: PlaceExpression, // Variable or field projection
         value: Expression,
     },
 
@@ -273,12 +193,13 @@ pub enum NodeKind {
         value: Expression,
     },
 
-    // An actual r-value
-    // Currently used for function calls and struct accesses
-    Rvalue(Expression),
-
-    // Operators
-    Operator(Operator),
+    /// Statement-level expression.
+    ///
+    /// WHAT: wraps an expression that appears as a standalone statement or as
+    ///       a temporary statement-side expression value during parsing.
+    /// WHY: expression internals own calls/operators/literals; this statement
+    ///      node carries the expression value when a body position needs it.
+    ExpressionStatement(Expression),
 }
 
 impl AstNode {
@@ -292,31 +213,7 @@ impl AstNode {
     pub fn expression_type_id(&self) -> Result<TypeId, CompilerError> {
         match &self.kind {
             NodeKind::VariableDeclaration(declaration) => Ok(declaration.value.type_id),
-            NodeKind::Rvalue(expression) => Ok(expression.type_id),
-
-            NodeKind::FunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HostFunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HandledFallibleHostFunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HandledFallibleFunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::MethodCall {
-                result_type_ids, ..
-            }
-            | NodeKind::CollectionBuiltinCall {
-                result_type_ids, ..
-            }
-            | NodeKind::MapBuiltinCall {
-                result_type_ids, ..
-            } => expression_type_id_for_call_result(result_type_ids),
-
-            NodeKind::FieldAccess { type_id, .. } => Ok(*type_id),
+            NodeKind::ExpressionStatement(expression) => Ok(expression.type_id),
 
             // Non-expression nodes — compiler invariant violation.
             // This path should never be reached from well-formed AST; it indicates a bug in
@@ -343,21 +240,7 @@ impl AstNode {
             NodeKind::VariableDeclaration(declaration) => {
                 Ok(declaration.value.is_const_record_value())
             }
-            NodeKind::Rvalue(expression) => Ok(expression.is_const_record_value()),
-
-            // Call results are never const-record values; const-record semantics apply
-            // only to struct literal expressions, not to function return values.
-            NodeKind::FunctionCall { .. }
-            | NodeKind::HostFunctionCall { .. }
-            | NodeKind::HandledFallibleHostFunctionCall { .. }
-            | NodeKind::HandledFallibleFunctionCall { .. }
-            | NodeKind::MethodCall { .. }
-            | NodeKind::CollectionBuiltinCall { .. }
-            | NodeKind::MapBuiltinCall { .. } => Ok(false),
-
-            NodeKind::FieldAccess {
-                const_record_state, ..
-            } => Ok(matches!(const_record_state, ConstRecordState::ConstRecord)),
+            NodeKind::ExpressionStatement(expression) => Ok(expression.is_const_record_value()),
 
             // Non-expression nodes — compiler invariant violation.
             // This path should never be reached from well-formed AST; it indicates a bug in
@@ -369,193 +252,6 @@ impl AstNode {
                 );
             }
         }
-    }
-
-    pub fn get_expr(&self) -> Result<Expression, CompilerError> {
-        self.get_expr_with_optional_type_environment(None)
-    }
-
-    pub fn get_expr_with_type_environment(
-        &self,
-        type_environment: &TypeEnvironment,
-    ) -> Result<Expression, CompilerError> {
-        self.get_expr_with_optional_type_environment(Some(type_environment))
-    }
-
-    fn get_expr_with_optional_type_environment(
-        &self,
-        type_environment: Option<&TypeEnvironment>,
-    ) -> Result<Expression, CompilerError> {
-        match &self.kind {
-            // Declarations and rvalues
-            NodeKind::VariableDeclaration(declaration) => Ok(declaration.value.to_owned()),
-            NodeKind::Rvalue(expression) => Ok(expression.to_owned()),
-
-            // Call variants
-            NodeKind::FunctionCall {
-                name,
-                args: arguments,
-                result_type_ids,
-                location,
-            } => expression_from_single_result_call_node(
-                ExpressionKind::FunctionCall {
-                    name: name.to_owned(),
-                    args: normalize_call_arguments(arguments),
-                    result_type_ids: result_type_ids.to_owned(),
-                },
-                location,
-                result_type_ids,
-                type_environment,
-            ),
-
-            NodeKind::HostFunctionCall {
-                name,
-                args: arguments,
-                result_type_ids,
-                location,
-            } => expression_from_single_result_call_node(
-                ExpressionKind::HostFunctionCall {
-                    id: *name,
-                    args: normalize_call_arguments(arguments),
-                    result_type_ids: result_type_ids.to_owned(),
-                },
-                location,
-                result_type_ids,
-                type_environment,
-            ),
-
-            NodeKind::HandledFallibleFunctionCall {
-                name,
-                args: arguments,
-                result_type_ids,
-                handling,
-                location,
-            } => expression_from_single_result_call_node(
-                ExpressionKind::HandledFallibleFunctionCall {
-                    name: name.to_owned(),
-                    args: normalize_call_arguments(arguments),
-                    result_type_ids: result_type_ids.to_owned(),
-                    handling: handling.to_owned(),
-                },
-                location,
-                result_type_ids,
-                type_environment,
-            ),
-
-            NodeKind::HandledFallibleHostFunctionCall {
-                name,
-                args: arguments,
-                result_type_ids,
-                error_type_id,
-                handling,
-                location,
-            } => expression_from_single_result_call_node(
-                ExpressionKind::HandledFallibleHostFunctionCall {
-                    id: *name,
-                    args: normalize_call_arguments(arguments),
-                    result_type_ids: result_type_ids.to_owned(),
-                    error_type_id: *error_type_id,
-                    handling: handling.to_owned(),
-                },
-                location,
-                result_type_ids,
-                type_environment,
-            ),
-
-            // Field and method access
-            NodeKind::FieldAccess {
-                diagnostic_type,
-                type_id,
-                const_record_state,
-                value_mode,
-                ..
-            } => {
-                let mut expression = Expression::runtime_with_type_id(
-                    vec![self.to_owned()],
-                    diagnostic_type.to_owned(),
-                    *type_id,
-                    self.location.to_owned(),
-                    value_mode.to_owned(),
-                );
-                expression.const_record_state = *const_record_state;
-                Ok(expression)
-            }
-            NodeKind::MethodCall {
-                result_type_ids,
-                location,
-                ..
-            }
-            | NodeKind::CollectionBuiltinCall {
-                result_type_ids,
-                location,
-                ..
-            }
-            | NodeKind::MapBuiltinCall {
-                result_type_ids,
-                location,
-                ..
-            } => {
-                let type_id = expression_type_id_for_call_result(result_type_ids)?;
-                Ok(Expression::runtime_with_type_id(
-                    vec![self.to_owned()],
-                    call_result_diagnostic_type(result_type_ids, type_environment),
-                    type_id,
-                    location.to_owned(),
-                    ValueMode::MutableOwned,
-                ))
-            }
-            // Non-expression nodes — compiler invariant violation.
-            // This path should never be reached from well-formed AST; it indicates a bug in
-            // an earlier stage that allowed a non-expression node into expression context.
-            _ => {
-                return_compiler_error!(
-                    "AST invariant: tried to get the expression of a non-expression AST node: {:?}",
-                    &self.kind
-                );
-            }
-        }
-    }
-
-    pub fn get_precedence(&self) -> u32 {
-        match &self.kind {
-            NodeKind::Operator(operator) => match operator {
-                // Special Operators with the highest precedence
-                Operator::Range => 6,
-                Operator::Not => 6,
-
-                // Highest precedence: exponentiation
-                Operator::Exponent => 5,
-
-                // High precedence: multiplication, division, modulus
-                Operator::Multiply => 4,
-                Operator::Divide => 4,
-                Operator::IntDivide => 4,
-                Operator::Modulus => 4,
-
-                // Medium precedence: addition, subtraction
-                Operator::Add => 3,
-                Operator::Subtract => 3,
-
-                // Comparisons
-                Operator::LessThan => 2,
-                Operator::LessThanOrEqual => 2,
-                Operator::GreaterThan => 2,
-                Operator::GreaterThanOrEqual => 2,
-                Operator::Equality => 2,
-                Operator::NotEqual => 2,
-
-                // Logical AND
-                Operator::And => 1,
-
-                // Logical OR
-                Operator::Or => 0,
-            },
-            _ => 0,
-        }
-    }
-
-    pub fn is_left_associative(&self) -> bool {
-        !matches!(self.kind, NodeKind::Operator(Operator::Exponent))
     }
 }
 
@@ -717,101 +413,6 @@ impl NodeKind {
                 expression.remap_string_ids(remap);
             }
 
-            NodeKind::FieldAccess {
-                base,
-                field,
-                diagnostic_type,
-                ..
-            } => {
-                base.remap_string_ids(remap);
-                *field = remap.get(*field);
-                diagnostic_type.remap_string_ids(remap);
-            }
-
-            NodeKind::MethodCall {
-                receiver,
-                method_path,
-                method,
-                args,
-                location,
-                ..
-            } => {
-                receiver.remap_string_ids(remap);
-                method_path.remap_string_ids(remap);
-                *method = remap.get(*method);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::CollectionBuiltinCall {
-                receiver,
-                args,
-                location,
-                ..
-            }
-            | NodeKind::MapBuiltinCall {
-                receiver,
-                args,
-                location,
-                ..
-            } => {
-                receiver.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::FunctionCall {
-                name,
-                args,
-                location,
-                ..
-            } => {
-                name.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::HandledFallibleFunctionCall {
-                name,
-                args,
-                handling,
-                location,
-                ..
-            } => {
-                name.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                handling.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::HandledFallibleHostFunctionCall {
-                args,
-                handling,
-                location,
-                ..
-            } => {
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                handling.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::HostFunctionCall { args, location, .. } => {
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
             NodeKind::StructDefinition(name, fields) => {
                 name.remap_string_ids(remap);
                 for field in fields {
@@ -839,82 +440,9 @@ impl NodeKind {
                 value.remap_string_ids(remap);
             }
 
-            NodeKind::Rvalue(expression) => {
+            NodeKind::ExpressionStatement(expression) => {
                 expression.remap_string_ids(remap);
             }
-
-            NodeKind::Operator(_) => {}
         }
-    }
-}
-
-fn expression_type_id_for_call_result(result_type_ids: &[TypeId]) -> Result<TypeId, CompilerError> {
-    match result_type_ids {
-        [] => Ok(builtin_type_ids::NONE),
-        [single] => Ok(*single),
-        multiple => Err(CompilerError::compiler_error(format!(
-            "AST invariant: tried to convert a {}-result call node into a single expression. Multi-result calls must be handled before expression conversion.",
-            multiple.len()
-        ))),
-    }
-}
-
-fn expression_from_single_result_call_node(
-    kind: ExpressionKind,
-    location: &SourceLocation,
-    result_type_ids: &[TypeId],
-    type_environment: Option<&TypeEnvironment>,
-) -> Result<Expression, CompilerError> {
-    let type_id = expression_type_id_for_call_result(result_type_ids)?;
-    let diagnostic_type = call_result_diagnostic_type(result_type_ids, type_environment);
-    let mut expression = Expression::new(
-        kind,
-        location.to_owned(),
-        type_id,
-        diagnostic_type.to_owned(),
-        ValueMode::MutableOwned,
-    );
-    expression.value_shape = call_result_value_shape(type_id, &diagnostic_type);
-
-    Ok(expression)
-}
-
-fn call_result_value_shape(type_id: TypeId, diagnostic_type: &DataType) -> ExpressionValueShape {
-    let value_shape = expression_value_shape_for_diagnostic_type(diagnostic_type);
-
-    if value_shape == ExpressionValueShape::Ordinary && type_id == builtin_type_ids::STRING {
-        // Some AST-node conversions happen with only canonical `TypeId` metadata available.
-        // A source call returning `String` has no template/path source shape at that boundary,
-        // so preserve the existing plain-string operator behavior.
-        return ExpressionValueShape::PlainStringSlice;
-    }
-
-    value_shape
-}
-
-fn call_result_diagnostic_fallback() -> DataType {
-    // Exact call-result spelling requires a TypeEnvironment, which is not available when a
-    // statement-shaped call node is reconstructed as an expression. This is display-only fallback;
-    // semantic decisions and user diagnostics must use the canonical TypeId path.
-    DataType::Inferred
-}
-
-fn call_result_diagnostic_type(
-    result_type_ids: &[TypeId],
-    type_environment: Option<&TypeEnvironment>,
-) -> DataType {
-    let Some(type_environment) = type_environment else {
-        return call_result_diagnostic_fallback();
-    };
-
-    match result_type_ids {
-        [] => DataType::None,
-        [single] => diagnostic_type_spelling(*single, type_environment),
-        multiple => DataType::Returns(
-            multiple
-                .iter()
-                .map(|type_id| diagnostic_type_spelling(*type_id, type_environment))
-                .collect(),
-        ),
     }
 }

@@ -8,9 +8,10 @@
 use crate::compiler_frontend::ast::ast_nodes::{MultiBindTargetKind, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, FallibleHandling, Operator,
+    Expression, FallibleExpressionHandling, FallibleHandling, Operator,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::CatchErrorBinding;
+use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -24,7 +25,8 @@ use crate::compiler_frontend::tests::ast_fixture_support::{
 
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     alias_candidates_return_slot, error_return_slot, fresh_success_returns, multi_bind_target,
-    param_with_type_id, reference_expr, runtime_expr, success_return_slot,
+    param_with_type_id, reference_expr, runtime_expr, runtime_handled_function_call_item,
+    runtime_operand_item, runtime_operator_item, success_return_slot,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -61,13 +63,13 @@ fn statement_result_propagation_with_unit_success_lowers_to_explicit_error_edge(
             returns: vec![error_return_slot(builtin_type_ids::STRING)],
         },
         vec![node(
-            NodeKind::HandledFallibleFunctionCall {
-                name: can_fail_name,
-                args: vec![],
-                result_type_ids: vec![],
-                handling: FallibleHandling::Propagate,
-                location: location.clone(),
-            },
+            NodeKind::ExpressionStatement(Expression::handled_fallible_function_call(
+                can_fail_name,
+                vec![],
+                vec![],
+                FallibleExpressionHandling::Propagate,
+                location.clone(),
+            )),
             location.clone(),
         )],
         location.clone(),
@@ -143,7 +145,7 @@ fn direct_return_result_propagation_lowers_to_explicit_success_and_error_edges()
         can_fail_name,
         vec![],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         location.clone(),
     );
@@ -291,7 +293,7 @@ fn direct_return_result_propagation_allows_alias_success_return() {
             location.clone(),
         )],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         location.clone(),
     );
@@ -412,7 +414,7 @@ fn declaration_result_propagation_assigns_unwrapped_success_on_success_edge() {
         can_fail_name,
         vec![],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         location.clone(),
     );
@@ -560,7 +562,7 @@ fn multi_bind_result_propagation_projects_tuple_slots_after_success_edge() {
         pair_name,
         vec![],
         vec![builtin_type_ids::STRING, builtin_type_ids::INT],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         location.clone(),
     );
@@ -758,7 +760,7 @@ fn call_argument_result_propagation_lowers_before_outer_call() {
         can_fail_name,
         vec![],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         location.clone(),
     );
@@ -865,25 +867,18 @@ fn runtime_binary_result_propagation_lowers_before_operator() {
 
     let runtime_value = runtime_expr(
         vec![
-            node(
-                NodeKind::HandledFallibleFunctionCall {
-                    name: can_fail_name,
-                    args: vec![],
-                    result_type_ids: vec![builtin_type_ids::INT],
-                    handling: FallibleHandling::Propagate,
-                    location: location.clone(),
-                },
+            runtime_handled_function_call_item(
+                can_fail_name,
+                vec![builtin_type_ids::INT],
+                FallibleHandling::Propagate,
                 location.clone(),
             ),
-            node(
-                NodeKind::Rvalue(Expression::int(
-                    1,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
+            runtime_operand_item(Expression::int(
+                1,
                 location.clone(),
-            ),
-            node(NodeKind::Operator(Operator::Add), location.clone()),
+                ValueMode::ImmutableOwned,
+            )),
+            runtime_operator_item(Operator::Add, location.clone()),
         ],
         builtin_type_ids::INT,
         location.clone(),
@@ -1104,19 +1099,23 @@ fn statement_catch_handler_lowering_builds_explicit_result_branching() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::HandledFallibleFunctionCall {
-                name: can_fail_name,
-                args: vec![],
-                result_type_ids: vec![TypeEnvironment::new().builtins().string],
-                handling: FallibleHandling::Handler {
+            NodeKind::ExpressionStatement(wrap_catch_expression(
+                Expression::handled_fallible_function_call(
+                    can_fail_name,
+                    vec![],
+                    vec![builtin_type_ids::STRING],
+                    FallibleExpressionHandling::Recover,
+                    location.clone(),
+                ),
+                FallibleHandling::Handler {
                     error: Some(CatchErrorBinding {
                         error_name,
                         error_binding,
                     }),
                     body: vec![],
                 },
-                location: location.clone(),
-            },
+                vec![],
+            )),
             location.clone(),
         )],
         location.clone(),

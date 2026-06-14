@@ -338,43 +338,43 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean help</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>help</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Prints the current command list and supported flags.</td>
      <td style="padding: 0.2em 0.5em;  "> Use this when the docs and local compiler may be out of sync.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean --version</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>--version</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Prints the current compiler/tool version.</td>
      <td style="padding: 0.2em 0.5em;  "> <code>-v</code> and <code>-V</code> are also accepted.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean new html</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>new html</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Creates a complete HTML project scaffold.</td>
      <td style="padding: 0.2em 0.5em;  "> Accepts an optional path and <code>--force</code>. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including <code>src/#page.bst</code>, <code>lib/</code>, output manifests, and an optional .gitignore.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean check .</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>check .</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.</td>
      <td style="padding: 0.2em 0.5em;  "> Add <code>--terse</code> for compact one-line diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean dev .</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>dev .</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.</td>
      <td style="padding: 0.2em 0.5em;  "> This is the main day-to-day command for working on HTML projects.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean build .</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>build .</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Builds the project and writes output files.</td>
      <td style="padding: 0.2em 0.5em;  "> Without <code>--release</code>, directory projects write to the configured dev output folder. With <code>--release</code>, they write to the configured release output folder.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>bean tests</code> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>tests</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Runs the compiler integration test suite.</td>
      <td style="padding: 0.2em 0.5em;  "> Mainly useful when working on the compiler itself. Use <code>--backend html</code> or <code>--backend html_wasm</code> to focus one backend profile.</td>
         </tr>
@@ -451,7 +451,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>No</span> project path specified. <span class='bst-code-struct'>Current</span> directory<span class='bst-code-operator'>:</span> <span class='bst-code-operator'>/</span>your<span class='bst-code-operator'>/</span>path
-    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project in this directory<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project <span class='bst-code-keyword'>in</span> this directory<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>
     </code></pre><p>If the target directory already exists, you are given three choices:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -463,9 +463,9 @@ body {
     <span class='bst-code-struct'>Target</span> directory already exists<span class='bst-code-operator'>:</span>
     <span class='bst-code-operator'>/</span>path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>target
 
-    <span class='bst-code-struct'>What</span> do you want to do<span class='bst-code-operator'>?</span>
+    <span class='bst-code-struct'>What</span> <span class='bst-code-keyword'>do</span> you want to <span class='bst-code-keyword'>do</span><span class='bst-code-operator'>?</span>
       <span class='bst-code-number'>1.</span> <span class='bst-code-struct'>Create</span> the project inside this directory
-      <span class='bst-code-number'>2.</span> <span class='bst-code-struct'>Create</span> a new child folder for the project inside this directory
+      <span class='bst-code-number'>2.</span> <span class='bst-code-struct'>Create</span> a new child folder <span class='bst-code-keyword'>for</span> the project inside this directory
       <span class='bst-code-number'>3.</span> <span class='bst-code-struct'>Cancel</span>
 
     <span class='bst-code-struct'>Choose</span> <span class='bst-code-number'>1</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>2</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span>
@@ -477,7 +477,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>The</span> project target contains directories that do not exist<span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>The</span> project target contains directories that <span class='bst-code-keyword'>do</span> not exist<span class='bst-code-operator'>:</span>
     <span class='bst-code-operator'>/</span>path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>new<span class='bst-code-operator'>/</span>site
 
     <span class='bst-code-struct'>Create</span> the missing directories and scaffold the project there<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>

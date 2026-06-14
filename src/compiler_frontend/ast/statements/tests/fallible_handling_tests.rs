@@ -5,7 +5,9 @@
 //! parser and validation drift during refactors.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, FallibleHandling};
+use crate::compiler_frontend::ast::expressions::expression::{
+    ExpressionKind, FallibleExpressionHandling, FallibleHandling,
+};
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidAssignmentTargetReason, InvalidResultHandlingReason,
@@ -42,9 +44,10 @@ fn parses_catch_handler_with_fallback() {
     else {
         panic!("expected handled call expression in catch value block")
     };
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
     let FallibleHandling::Handler {
         body: handler_body, ..
-    } = handling
+    } = &value_catch.handler
     else {
         panic!("expected catch handler handling")
     };
@@ -75,7 +78,8 @@ fn parses_catch_handler_fallback_that_reads_error_binding() {
     else {
         panic!("expected handled call expression in catch value block")
     };
-    let FallibleHandling::Handler { body, .. } = handling else {
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
+    let FallibleHandling::Handler { body, .. } = &value_catch.handler else {
         panic!("expected catch handler handling")
     };
 
@@ -107,7 +111,8 @@ fn parses_inline_catch_fallback_as_value_block() {
     else {
         panic!("expected handled call expression in catch value block")
     };
-    let FallibleHandling::Handler { body, .. } = handling else {
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
+    let FallibleHandling::Handler { body, .. } = &value_catch.handler else {
         panic!("expected catch handler handling")
     };
 
@@ -137,7 +142,8 @@ fn parses_inline_catch_fallback_that_reads_error_binding() {
     else {
         panic!("expected handled call expression in catch value block")
     };
-    let FallibleHandling::Handler { body, error } = handling else {
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
+    let FallibleHandling::Handler { body, error } = &value_catch.handler else {
         panic!("expected catch handler handling")
     };
 
@@ -172,9 +178,10 @@ fn parses_catch_handler_without_fallback_when_handler_guarantees_return() {
     else {
         panic!("expected handled call expression in catch value block")
     };
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
     let FallibleHandling::Handler {
         body: handler_body, ..
-    } = handling
+    } = &value_catch.handler
     else {
         panic!("expected catch handler handling")
     };
@@ -204,9 +211,10 @@ fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false() {
     else {
         panic!("expected handled call expression in catch value block")
     };
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
     let FallibleHandling::Handler {
         body: handler_body, ..
-    } = handling
+    } = &value_catch.handler
     else {
         panic!("expected catch handler handling")
     };
@@ -237,9 +245,10 @@ fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false_no_
     else {
         panic!("expected handled call expression in catch value block")
     };
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
     let FallibleHandling::Handler {
         body: handler_body, ..
-    } = handling
+    } = &value_catch.handler
     else {
         panic!("expected catch handler handling")
     };
@@ -471,13 +480,23 @@ fn accepts_empty_catch_on_zero_success_statement() {
     );
 
     let body = function_body_by_name(&ast, &string_table, "recover");
-    let NodeKind::Rvalue(expression) = &body[0].kind else {
+    let NodeKind::ExpressionStatement(expression) = &body[0].kind else {
         panic!("expected expression statement in recover()")
     };
 
+    let ExpressionKind::ValueBlock { block } = &expression.kind else {
+        panic!("expected zero-success catch statement to parse as a catch value block");
+    };
+    let ValueBlock::Catch(value_catch) = block.as_ref() else {
+        panic!("expected catch value block");
+    };
+    assert!(value_catch.result_type_ids.is_empty());
     assert!(matches!(
-        expression.kind,
-        ExpressionKind::HandledFallibleFunctionCall { .. }
+        value_catch.handled_value.kind,
+        ExpressionKind::HandledFallibleFunctionCall {
+            handling: FallibleExpressionHandling::Recover,
+            ..
+        }
     ));
 }
 

@@ -39,7 +39,7 @@ fn truncated_template_head_stream_returns_missing_closing_delimiter() {
         scope,
         vec![
             token(TokenKind::TemplateHead, 1),
-            token(TokenKind::IntLiteral(3), 1),
+            numeric_token("3", 1, &mut string_table),
         ],
     );
 
@@ -60,7 +60,7 @@ fn single_item_template_head_with_close_is_foldable() {
         scope,
         vec![
             token(TokenKind::TemplateHead, 1),
-            token(TokenKind::IntLiteral(3), 1),
+            numeric_token("3", 1, &mut string_table),
             token(TokenKind::TemplateClose, 1),
             token(TokenKind::Eof, 1),
         ],

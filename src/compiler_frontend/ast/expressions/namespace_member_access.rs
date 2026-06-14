@@ -5,15 +5,17 @@
 //! live inside the generic identifier parser.
 
 use super::error::ExpressionParseError;
+use super::expression_rpn::ExpressionRpnItem;
 use super::external_namespace_members::{
     ExternalNamespaceConstantMemberInput, ExternalNamespaceFunctionMemberInput,
     parse_external_namespace_constant_member, parse_external_namespace_function_member,
 };
-use super::parse_expression_dispatch::push_expression_node;
+use super::parse_expression_dispatch::{
+    ExpressionOperandInput, push_expression_operand_at_location,
+};
 use super::source_function_calls::{SourceCallableMemberInput, parse_source_callable_member};
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::statements::declarations::create_reference;
+use crate::compiler_frontend::ast::field_access::reference_expression_from_declaration;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidFieldAccessReason, NamespaceTypeValueMisuseKind,
@@ -33,7 +35,7 @@ pub(super) struct NamespaceMemberAccessInput<'a, 'env> {
     pub(super) token_stream: &'a mut FileTokens,
     pub(super) context: &'a ScopeContext,
     pub(super) type_interner: &'a mut AstTypeInterner<'env>,
-    pub(super) expression: &'a mut Vec<AstNode>,
+    pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
     pub(super) allow_boundary_catch: bool,
     pub(super) expected_result_evidence_allowed: bool,
     pub(super) record_name: StringId,
@@ -126,21 +128,25 @@ pub(super) fn parse_namespace_member_access(
                     return Ok(());
                 }
 
-                let reference_node = create_reference(
-                    token_stream,
+                let reference_expression = reference_expression_from_declaration(
                     declaration,
                     context,
                     type_interner,
-                    string_table,
-                )?;
-                push_expression_node(
+                    member_location.clone(),
+                );
+                token_stream.advance();
+
+                push_expression_operand_at_location(
                     token_stream,
                     context,
                     type_interner,
                     string_table,
                     expression,
                     allow_boundary_catch,
-                    reference_node,
+                    ExpressionOperandInput {
+                        operand: reference_expression,
+                        wrapper_location: member_location,
+                    },
                 )?;
                 return Ok(());
             }

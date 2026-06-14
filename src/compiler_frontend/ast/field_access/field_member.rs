@@ -6,9 +6,12 @@
 use super::MemberStepContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, expression_value_shape_for_type_id,
+};
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidFieldAccessReason};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
@@ -16,6 +19,7 @@ use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
+use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 
 use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
@@ -97,7 +101,7 @@ fn const_inline_field_value_from_receiver(
     field_name: StringId,
 ) -> Option<Expression> {
     let receiver_value = match &receiver_node.kind {
-        NodeKind::Rvalue(expression) => expression,
+        NodeKind::ExpressionStatement(expression) => expression,
         NodeKind::VariableDeclaration(declaration) => &declaration.value,
         _ => return None,
     };
@@ -196,11 +200,13 @@ fn resolve_field_member(
 
 pub(super) fn parse_member_name_typed(
     token_stream: &FileTokens,
-    string_table: &mut StringTable,
+    _string_table: &StringTable,
 ) -> Result<StringId, ExpressionParseError> {
     match token_stream.current_token_kind() {
         TokenKind::Symbol(id) => Ok(*id),
-        TokenKind::IntLiteral(value) => Ok(string_table.get_or_intern(value.to_string())),
+        TokenKind::NumericLiteral(token) if token.kind == NumericLiteralKind::WholeNumber => {
+            Ok(token.normalized_text)
+        }
         TokenKind::Must | TokenKind::TraitThis => {
             let keyword = reserved_trait_keyword_or_dispatch_mismatch(
                 token_stream.current_token_kind(),
@@ -266,28 +272,42 @@ pub(super) fn parse_field_member_access_typed(
         .into());
     }
 
-    let result_node = if let Some(inlined_expression) = field.const_inline_value {
-        AstNode {
-            kind: NodeKind::Rvalue(inlined_expression),
-            scope: scope_context.scope.clone(),
-            location: member_location,
-        }
+    let result_expression = if let Some(inlined_expression) = field.const_inline_value {
+        inlined_expression
     } else {
         increment_ast_counter(AstCounter::PostfixReceiverNodesCopied);
 
-        AstNode {
-            kind: NodeKind::FieldAccess {
-                base: Box::new(receiver_node.to_owned()),
+        let base_expression = match &receiver_node.kind {
+            NodeKind::ExpressionStatement(expression) => expression.to_owned(),
+            NodeKind::VariableDeclaration(declaration) => declaration.value.to_owned(),
+            _ => {
+                return Err(CompilerError::compiler_error(format!(
+                    "Expected expression receiver node, found {:?}",
+                    receiver_node.kind
+                ))
+                .into());
+            }
+        };
+
+        let mut expression = Expression::new(
+            ExpressionKind::FieldAccess {
+                base: Box::new(base_expression),
                 field: field.field_name,
-                diagnostic_type: field.diagnostic_type,
-                type_id: field.type_id,
-                const_record_state: field.const_record_state,
-                value_mode: field.value_mode,
             },
-            scope: scope_context.scope.to_owned(),
-            location: member_location,
-        }
+            member_location.clone(),
+            field.type_id,
+            field.diagnostic_type,
+            field.value_mode,
+        );
+        expression.const_record_state = field.const_record_state;
+        expression.value_shape =
+            expression_value_shape_for_type_id(field.type_id, &expression.diagnostic_type);
+        expression
     };
 
-    Ok(Some(result_node))
+    Ok(Some(AstNode {
+        kind: NodeKind::ExpressionStatement(result_expression),
+        scope: scope_context.scope.to_owned(),
+        location: member_location,
+    }))
 }

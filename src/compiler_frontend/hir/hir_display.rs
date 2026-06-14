@@ -12,7 +12,12 @@ use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::FallibleCarrierVariant;
 #[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpression, HirExpressionKind, HirVariantCarrier, ValueKind,
+};
+use crate::compiler_frontend::hir::numeric::HirNumericOp;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::numeric::{HirNumericOperands, NumericFailureMode};
 // WHY: FallibleCarrierVariant is still used by HirConstValue and its Display impl.
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::datatypes::definitions::{
@@ -112,6 +117,13 @@ impl<'a> HirDisplayContext<'a> {
     #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn with_type_environment(mut self, type_environment: &'a TypeEnvironment) -> Self {
         self.type_environment = Some(type_environment);
+        self
+    }
+
+    #[cfg(any(test, feature = "show_hir"))]
+    #[allow(dead_code)] // show_hir builds keep this test helper for focused display rendering.
+    pub(crate) fn with_options(mut self, options: HirDisplayOptions) -> Self {
+        self.options = options;
         self
     }
 
@@ -369,6 +381,75 @@ impl<'a> HirDisplayContext<'a> {
                 out.push(')');
                 out
             }
+
+            HirStatementKind::NumericOp {
+                op,
+                failure_mode,
+                operands,
+                result,
+            } => {
+                let mut out = String::new();
+
+                let _ = write!(out, "{} = ", self.local_label(*result));
+                let _ = write!(
+                    out,
+                    "numeric_{}_{}(",
+                    op.source_name(),
+                    match failure_mode {
+                        NumericFailureMode::ReturnError => "err",
+                        NumericFailureMode::Trap => "trap",
+                    }
+                );
+
+                match operands {
+                    HirNumericOperands::Unary { operand } => {
+                        let _ = write!(out, "{}", self.render_expression(operand));
+                    }
+                    HirNumericOperands::Binary { left, right } => {
+                        let _ = write!(
+                            out,
+                            "{}, {}",
+                            self.render_expression(left),
+                            self.render_expression(right)
+                        );
+                    }
+                }
+
+                out.push(')');
+                out
+            }
+
+            HirStatementKind::FormatFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                format!(
+                    "{} = format_float_{}({})",
+                    self.local_label(*result),
+                    match failure_mode {
+                        NumericFailureMode::ReturnError => "err",
+                        NumericFailureMode::Trap => "trap",
+                    },
+                    self.render_expression(source)
+                )
+            }
+
+            HirStatementKind::ValidateFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                format!(
+                    "{} = validate_float_{}({})",
+                    self.local_label(*result),
+                    match failure_mode {
+                        NumericFailureMode::ReturnError => "err",
+                        NumericFailureMode::Trap => "trap",
+                    },
+                    self.render_expression(source)
+                )
+            }
         }
     }
 
@@ -576,22 +657,7 @@ impl<'a> HirDisplayContext<'a> {
                 variant_index,
                 fields,
             } => {
-                let carrier_label = match carrier {
-                    #[cfg(any(test, feature = "show_hir"))]
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        choice_id,
-                    } => format!("choice={}", self.choice_label(*choice_id)),
-                    #[cfg(not(any(test, feature = "show_hir")))]
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        ..
-                    } => "choice".to_owned(),
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
-                        "option".to_owned()
-                    }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
-                        "result".to_owned()
-                    }
-                };
+                let carrier_label = self.variant_carrier_label(carrier);
                 let fields_str = if fields.is_empty() {
                     String::new()
                 } else {
@@ -615,22 +681,7 @@ impl<'a> HirDisplayContext<'a> {
                 variant_index,
                 field_index,
             } => {
-                let carrier_label = match carrier {
-                    #[cfg(any(test, feature = "show_hir"))]
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        choice_id,
-                    } => format!("choice={}", self.choice_label(*choice_id)),
-                    #[cfg(not(any(test, feature = "show_hir")))]
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        ..
-                    } => "choice".to_owned(),
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
-                        "option".to_owned()
-                    }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
-                        "result".to_owned()
-                    }
-                };
+                let carrier_label = self.variant_carrier_label(carrier);
                 format!(
                     "variant_payload_get({}, tag={}, field={}) from {}",
                     carrier_label,
@@ -758,6 +809,7 @@ impl<'a> HirDisplayContext<'a> {
                 BuiltinTypeKey::Bool => "Bool".to_owned(),
                 BuiltinTypeKey::Int => "Int".to_owned(),
                 BuiltinTypeKey::Float => "Float".to_owned(),
+                // Decimal is intentionally inactive in the Alpha surface.
                 BuiltinTypeKey::Decimal => "Decimal".to_owned(),
                 BuiltinTypeKey::Char => "Char".to_owned(),
                 BuiltinTypeKey::String => "String".to_owned(),
@@ -975,6 +1027,19 @@ impl<'a> HirDisplayContext<'a> {
         format!("r{}", region_id.0)
     }
 
+    fn variant_carrier_label(&self, carrier: &HirVariantCarrier) -> String {
+        match carrier {
+            #[cfg(any(test, feature = "show_hir"))]
+            HirVariantCarrier::Choice { choice_id } => {
+                format!("choice={}", self.choice_label(*choice_id))
+            }
+            #[cfg(not(any(test, feature = "show_hir")))]
+            HirVariantCarrier::Choice { .. } => "choice".to_owned(),
+            HirVariantCarrier::Option => "option".to_owned(),
+            HirVariantCarrier::Fallible => "result".to_owned(),
+        }
+    }
+
     fn push_indented_line(&self, out: &mut String, indent: usize, line: &str) {
         for _ in 0..indent {
             out.push(' ');
@@ -990,9 +1055,9 @@ impl<'a> HirDisplayContext<'a> {
     }
 }
 
-// ============================================================================
-// Convenience Display Hooks
-// ============================================================================
+// -----------------------------
+//  Convenience Display Hooks
+// -----------------------------
 
 // Debug display helpers: gated to test builds and the "show_hir" feature.
 // The `#[allow(dead_code)]` annotations are needed because rustc does not see
@@ -1085,9 +1150,9 @@ impl HirMatchArm {
     }
 }
 
-// ============================================================================
-// Simple Token Displays
-// ============================================================================
+// ---------------------------
+//  Simple Token Displays
+// ---------------------------
 
 macro_rules! impl_hir_id_display {
     ($type:ty, $prefix:literal) => {
@@ -1136,6 +1201,12 @@ impl Display for HirUnaryOp {
             HirUnaryOp::Neg => write!(f, "-"),
             HirUnaryOp::Not => write!(f, "!"),
         }
+    }
+}
+
+impl Display for HirNumericOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.source_name())
     }
 }
 

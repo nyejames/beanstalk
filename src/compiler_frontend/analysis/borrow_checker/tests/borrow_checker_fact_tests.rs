@@ -16,7 +16,8 @@ use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
-    function_node, make_test_variable, node, reference_expr, symbol, test_location,
+    assignment_target, function_node, make_test_variable, node, reference_expr, symbol,
+    test_location,
 };
 use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
 use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
@@ -60,30 +61,24 @@ fn statement_terminator_and_value_facts_are_populated() {
                     Expression::bool(true, test_location(3), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::Assignment {
-                            target: Box::new(node(
-                                NodeKind::Rvalue(reference_expr(
-                                    x.clone(),
-                                    DataType::Int,
-                                    builtin_type_ids::INT,
-                                    test_location(4),
-                                )),
+                            target: assignment_target(
+                                x.clone(),
+                                DataType::Int,
+                                builtin_type_ids::INT,
                                 test_location(4),
-                            )),
+                            ),
                             value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                         },
                         test_location(4),
                     )],
                     Some(vec![node(
                         NodeKind::Assignment {
-                            target: Box::new(node(
-                                NodeKind::Rvalue(reference_expr(
-                                    x.clone(),
-                                    DataType::Int,
-                                    builtin_type_ids::INT,
-                                    test_location(5),
-                                )),
+                            target: assignment_target(
+                                x.clone(),
+                                DataType::Int,
+                                builtin_type_ids::INT,
                                 test_location(5),
-                            )),
+                            ),
                             value: Expression::int(3, test_location(5), ValueMode::ImmutableOwned),
                         },
                         test_location(5),
@@ -409,6 +404,17 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
         }
         HirStatementKind::Expr(expr) => collect_expression_values(&expr, out),
         HirStatementKind::CastOp { source, .. } => collect_expression_values(&source, out),
+        HirStatementKind::NumericOp { operands, .. } => match operands {
+            crate::compiler_frontend::hir::numeric::HirNumericOperands::Unary { operand } => {
+                collect_expression_values(&operand, out);
+            }
+            crate::compiler_frontend::hir::numeric::HirNumericOperands::Binary { left, right } => {
+                collect_expression_values(&left, out);
+                collect_expression_values(&right, out);
+            }
+        },
+        HirStatementKind::FormatFloat { source, .. }
+        | HirStatementKind::ValidateFloat { source, .. } => collect_expression_values(&source, out),
         HirStatementKind::Drop(_) => {}
         HirStatementKind::PushRuntimeFragment { value, .. } => {
             collect_expression_values(&value, out)

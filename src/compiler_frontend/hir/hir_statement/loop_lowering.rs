@@ -18,6 +18,7 @@ use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKin
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId, RegionId};
+use crate::compiler_frontend::hir::numeric::HirNumericOp;
 use crate::compiler_frontend::hir::operators::HirBinOp;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
@@ -520,22 +521,16 @@ impl<'a> HirBuilder<'a> {
             abs_negate_region,
         );
         let abs_zero = self.range_loop_zero_literal(types, location, abs_negate_region);
-        let abs_negated = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(abs_zero),
-                op: HirBinOp::Sub,
-                right: Box::new(abs_step_current),
-            },
-            types.binding,
-            ValueKind::RValue,
-            abs_negate_region,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(locals.step),
-                value: abs_negated,
-            },
+        let abs_sub_op = if types.binding == types.float_type {
+            HirNumericOp::FloatSub
+        } else {
+            HirNumericOp::IntSub
+        };
+        self.emit_checked_numeric_assignment(
+            locals.step,
+            abs_sub_op,
+            abs_zero,
+            abs_step_current,
             location,
         )?;
         self.emit_jump_to(
@@ -597,22 +592,16 @@ impl<'a> HirBuilder<'a> {
             desc_negate_region,
         );
         let desc_zero = self.range_loop_zero_literal(types, location, desc_negate_region);
-        let desc_negated = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(desc_zero),
-                op: HirBinOp::Sub,
-                right: Box::new(desc_step_current),
-            },
-            types.binding,
-            ValueKind::RValue,
-            desc_negate_region,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(locals.step),
-                value: desc_negated,
-            },
+        let desc_sub_op = if types.binding == types.float_type {
+            HirNumericOp::FloatSub
+        } else {
+            HirNumericOp::IntSub
+        };
+        self.emit_checked_numeric_assignment(
+            locals.step,
+            desc_sub_op,
+            desc_zero,
+            desc_step_current,
             location,
         )?;
         self.emit_jump_to(
@@ -848,23 +837,16 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Place,
             step_region,
         );
-        let stepped = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(step_current),
-                op: HirBinOp::Add,
-                right: Box::new(step_delta),
-            },
-            types.binding,
-            ValueKind::RValue,
-            step_region,
-        );
-
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(locals.current),
-                value: stepped,
-            },
+        let current_add_op = if types.binding == types.float_type {
+            HirNumericOp::FloatAdd
+        } else {
+            HirNumericOp::IntAdd
+        };
+        self.emit_checked_numeric_assignment(
+            locals.current,
+            current_add_op,
+            step_current,
+            step_delta,
             location,
         )?;
 
@@ -882,22 +864,11 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Const,
             step_region,
         );
-        let index_next = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(index_current),
-                op: HirBinOp::Add,
-                right: Box::new(index_delta),
-            },
-            types.int_type,
-            ValueKind::RValue,
-            step_region,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(locals.iteration_index),
-                value: index_next,
-            },
+        self.emit_checked_numeric_assignment(
+            locals.iteration_index,
+            HirNumericOp::IntAdd,
+            index_current,
+            index_delta,
             location,
         )?;
         self.emit_jump_to(
@@ -1143,22 +1114,11 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Const,
             step_region,
         );
-        let next_index = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(step_current),
-                op: HirBinOp::Add,
-                right: Box::new(step_delta),
-            },
-            int_ty,
-            ValueKind::RValue,
-            step_region,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(iteration_index_local),
-                value: next_index,
-            },
+        self.emit_checked_numeric_assignment(
+            iteration_index_local,
+            HirNumericOp::IntAdd,
+            step_current,
+            step_delta,
             location,
         )?;
         self.emit_jump_to(

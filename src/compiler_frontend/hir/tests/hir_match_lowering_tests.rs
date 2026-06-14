@@ -267,7 +267,7 @@ fn lowers_match_with_literal_arms_and_explicit_default_wildcard() {
                     )),
                     guard: None,
                     body: vec![node(
-                        NodeKind::Rvalue(Expression::int(
+                        NodeKind::ExpressionStatement(Expression::int(
                             9,
                             test_location(3),
                             ValueMode::ImmutableOwned,
@@ -283,7 +283,7 @@ fn lowers_match_with_literal_arms_and_explicit_default_wildcard() {
                     )),
                     guard: None,
                     body: vec![node(
-                        NodeKind::Rvalue(Expression::int(
+                        NodeKind::ExpressionStatement(Expression::int(
                             8,
                             test_location(3),
                             ValueMode::ImmutableOwned,
@@ -293,7 +293,7 @@ fn lowers_match_with_literal_arms_and_explicit_default_wildcard() {
                 },
             ],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     0,
                     test_location(3),
                     ValueMode::ImmutableOwned,
@@ -364,7 +364,7 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                     ValueMode::ImmutableOwned,
                 )),
                 body: vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         9,
                         test_location(3),
                         ValueMode::ImmutableOwned,
@@ -373,7 +373,7 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                 )],
             }],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     8,
                     test_location(4),
                     ValueMode::ImmutableOwned,
@@ -726,7 +726,7 @@ fn lowers_relational_pattern_to_hir_relational() {
                 },
                 guard: None,
                 body: vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         9,
                         test_location(3),
                         ValueMode::ImmutableOwned,
@@ -735,7 +735,7 @@ fn lowers_relational_pattern_to_hir_relational() {
                 )],
             }],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     8,
                     test_location(4),
                     ValueMode::ImmutableOwned,
@@ -821,7 +821,7 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                     ValueMode::ImmutableOwned,
                 )),
                 body: vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         9,
                         test_location(3),
                         ValueMode::ImmutableOwned,
@@ -830,7 +830,7 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                 )],
             }],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     8,
                     test_location(4),
                     ValueMode::ImmutableOwned,
@@ -928,7 +928,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                     },
                     guard: None,
                     body: vec![node(
-                        NodeKind::Rvalue(Expression::int(
+                        NodeKind::ExpressionStatement(Expression::int(
                             1,
                             test_location(4),
                             ValueMode::ImmutableOwned,
@@ -946,7 +946,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                     },
                     guard: None,
                     body: vec![node(
-                        NodeKind::Rvalue(Expression::int(
+                        NodeKind::ExpressionStatement(Expression::int(
                             2,
                             test_location(5),
                             ValueMode::ImmutableOwned,
@@ -1057,7 +1057,7 @@ fn lowers_capture_pattern_to_hir_capture_with_assignment() {
                 },
                 guard: None,
                 body: vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         1,
                         test_location(3),
                         ValueMode::ImmutableOwned,
@@ -1066,7 +1066,7 @@ fn lowers_capture_pattern_to_hir_capture_with_assignment() {
                 )],
             }],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     2,
                     test_location(4),
                     ValueMode::ImmutableOwned,
@@ -1166,7 +1166,7 @@ fn lowers_option_present_capture_to_payload_assignment() {
                 },
                 guard: None,
                 body: vec![node(
-                    NodeKind::Rvalue(reference_expr(
+                    NodeKind::ExpressionStatement(reference_expr(
                         capture_path,
                         builtin_type_ids::INT,
                         test_location(3),
@@ -1176,7 +1176,7 @@ fn lowers_option_present_capture_to_payload_assignment() {
                 )],
             }],
             default: Some(vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     0,
                     test_location(4),
                     ValueMode::ImmutableOwned,

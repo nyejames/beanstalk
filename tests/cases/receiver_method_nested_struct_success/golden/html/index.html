@@ -469,23 +469,161 @@ body {
         console.log(__bs_value_to_string(value));
     }
 
+    const __BS_INT_MIN = -2147483648;
+    const __BS_INT_MAX = 2147483647;
+
+    function __bs_numeric_trap(carrier) {
+        if (carrier && carrier.tag === "ok") {
+            return carrier.value;
+        }
+        if (carrier && carrier.tag === "err") {
+            throw new Error(__bs_error_message(carrier.value));
+        }
+        throw new Error("Expected internal numeric result carrier during trap lowering");
+    }
+
+    function __bs_int_ok(value) {
+        return { tag: "ok", value: Object.is(value, -0) ? 0 : value };
+    }
+
+    function __bs_int_check(value) {
+        if (!Number.isInteger(value) || value < __BS_INT_MIN || value > __BS_INT_MAX) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_ok(value);
+    }
+
+    function __bs_int_add(a, b) {
+        const result = a + b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_sub(a, b) {
+        const result = a - b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_mul(a, b) {
+        const result = a * b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_div(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        if (a === __BS_INT_MIN && b === -1) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(Math.trunc(a / b));
+    }
+
+    function __bs_int_mod(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        if (a === __BS_INT_MIN && b === -1) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(a % b);
+    }
+
+    function __bs_int_pow(a, b) {
+        if (!Number.isInteger(b) || b < 0) {
+            return __bs_error_result("Invalid exponent", 302);
+        }
+        const result = Math.pow(a, b);
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_neg(a) {
+        if (a === __BS_INT_MIN) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(-a);
+    }
+
+    function __bs_float_add(a, b) {
+        const result = a + b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_sub(a, b) {
+        const result = a - b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_mul(a, b) {
+        const result = a * b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_div(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        const result = a / b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_mod(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        const result = a % b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_pow(a, b) {
+        const result = Math.pow(a, b);
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_neg(a) {
+        const result = -a;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
     function bst_bump_inner_fn6(bst_this_l22) {
+        let bst___hir_tmp_3_l23 = __bs_binding(undefined);
         
         bst_this_l22 = __bs_param_binding(bst_this_l22);
         
-        __bs_write(__bs_field(__bs_field(bst_this_l22, "bst_inner_fld4"), "bst_value_fld3"), (__bs_read(__bs_field(__bs_field(bst_this_l22, "bst_inner_fld4"), "bst_value_fld3")) + 1));
+        __bs_assign_value(bst___hir_tmp_3_l23, __bs_numeric_trap(__bs_int_add(__bs_read(__bs_field(__bs_field(bst_this_l22, "bst_inner_fld4"), "bst_value_fld3")), 1)));
+        __bs_write(__bs_field(__bs_field(bst_this_l22, "bst_inner_fld4"), "bst_value_fld3"), __bs_read(bst___hir_tmp_3_l23));
         return;
     }
 
     function bst_start_fn7() {
-        let bst___hir_tmp_3_l23 = __bs_binding(undefined);
-        let bst_o_l24 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l24 = __bs_binding(undefined);
+        let bst_o_l25 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_3_l23, []);
-        __bs_assign_value(bst_o_l24, { bst_inner_fld4: { bst_value_fld3: 10 }, bst_label_fld5: "test" });
-        bst_bump_inner_fn6(bst_o_l24);
-        __bs_io(__bs_read(__bs_field(__bs_field(bst_o_l24, "bst_inner_fld4"), "bst_value_fld3")));
-        return __bs_read(bst___hir_tmp_3_l23);
+        __bs_assign_value(bst___hir_tmp_4_l24, []);
+        __bs_assign_value(bst_o_l25, { bst_inner_fld4: { bst_value_fld3: 10 }, bst_label_fld5: "test" });
+        bst_bump_inner_fn6(bst_o_l25);
+        __bs_io(__bs_read(__bs_field(__bs_field(bst_o_l25, "bst_inner_fld4"), "bst_value_fld3")));
+        return __bs_read(bst___hir_tmp_4_l24);
     }
 
     </script>

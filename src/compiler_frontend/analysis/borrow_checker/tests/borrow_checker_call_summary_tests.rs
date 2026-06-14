@@ -8,7 +8,10 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, FallibleHandling, Operator,
+    Expression, FallibleExpressionHandling, Operator,
+};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
@@ -18,11 +21,14 @@ use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, BorrowDiagnosticKind, DiagnosticPayload, InvalidMutableAccessReason,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
+use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::external_packages::test_support::{
     TestExternalAbiType as ExternalAbiType, TestExternalAccessKind as ExternalAccessKind,
     TestExternalReturnAlias as ExternalReturnAlias,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
     assignment_target, fresh_success_returns, function_node, make_test_variable, node, param,
@@ -36,8 +42,37 @@ use crate::compiler_frontend::tests::external_package_support::{
     default_external_package_registry, register_external_function,
 };
 use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::value_mode::ValueMode;
+
+fn function_call_node(
+    name: InternedPath,
+    args: Vec<CallArgument>,
+    result_type_ids: Vec<TypeId>,
+    location: SourceLocation,
+) -> NodeKind {
+    NodeKind::ExpressionStatement(Expression::function_call_with_arguments(
+        name,
+        args,
+        result_type_ids,
+        location,
+    ))
+}
+
+fn host_function_call_node(
+    id: ExternalFunctionId,
+    args: Vec<CallArgument>,
+    result_type_ids: Vec<TypeId>,
+    location: SourceLocation,
+) -> NodeKind {
+    NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
+        id,
+        args,
+        result_type_ids,
+        location,
+    ))
+}
 
 #[test]
 fn user_function_returning_param_aliases_caller_root() {
@@ -115,12 +150,12 @@ fn user_function_returning_param_aliases_caller_root() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         x,
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(12),
-                    )),
+                    ),
                     value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
@@ -206,7 +241,7 @@ fn fallible_alias_return_propagation_validates_success_alias_metadata() {
             test_location(30),
         )],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut expression_types,
         test_location(30),
     );
@@ -331,12 +366,12 @@ fn fresh_user_return_does_not_alias_caller_roots() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         x,
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(12),
-                    )),
+                    ),
                     value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
@@ -431,12 +466,12 @@ fn default_user_returning_param_is_fresh_by_default() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         x,
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(12),
-                    )),
+                    ),
                     value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
@@ -494,16 +529,16 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mut_sink,
-                    args: vec![CallArgument::positional(
+                function_call_node(
+                    mut_sink,
+                    vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(11)),
                         CallAccessMode::Shared,
                         test_location(11),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
         ],
@@ -569,9 +604,9 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mut2,
-                    args: vec![
+                function_call_node(
+                    mut2,
+                    vec![
                         CallArgument::positional(
                             reference_expr(
                                 x,
@@ -589,9 +624,9 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
                         )
                         .with_passing_mode(CallPassingMode::FreshMutableValue),
                     ],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
         ],
@@ -636,16 +671,16 @@ fn host_mutable_parameter_requires_mutable_access() {
                 test_location(1),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: host_fn,
-                    args: vec![CallArgument::positional(
+                host_function_call_node(
+                    host_fn,
+                    vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(2)),
                         CallAccessMode::Shared,
                         test_location(2),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(2),
-                },
+                    vec![],
+                    test_location(2),
+                ),
                 test_location(2),
             ),
         ],
@@ -687,16 +722,16 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
                 test_location(1),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: host_fn,
-                    args: vec![CallArgument::positional(
+                host_function_call_node(
+                    host_fn,
+                    vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(2)),
                         CallAccessMode::Shared,
                         test_location(2),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(2),
-                },
+                    vec![],
+                    test_location(2),
+                ),
                 test_location(2),
             ),
         ],
@@ -737,16 +772,16 @@ fn host_shared_parameter_is_shared_only() {
                 test_location(1),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: host_fn,
-                    args: vec![CallArgument::positional(
+                host_function_call_node(
+                    host_fn,
+                    vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(2)),
                         CallAccessMode::Shared,
                         test_location(2),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(2),
-                },
+                    vec![],
+                    test_location(2),
+                ),
                 test_location(2),
             ),
         ],
@@ -810,9 +845,9 @@ fn two_mutable_args_to_same_root_are_rejected() {
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mut2,
-                    args: vec![
+                function_call_node(
+                    mut2,
+                    vec![
                         CallArgument::positional(
                             reference_expr(
                                 x.clone(),
@@ -834,9 +869,9 @@ fn two_mutable_args_to_same_root_are_rejected() {
                             test_location(11),
                         ),
                     ],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
             node(
@@ -910,9 +945,9 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: read_then_mut,
-                    args: vec![
+                function_call_node(
+                    read_then_mut,
+                    vec![
                         CallArgument::positional(
                             reference_expr(
                                 x.clone(),
@@ -934,9 +969,9 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
                             test_location(11),
                         ),
                     ],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
         ],
@@ -987,12 +1022,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::HostFunctionCall {
-                name: missing_host,
-                args: vec![],
-                result_type_ids: vec![],
-                location: test_location(1),
-            },
+            host_function_call_node(missing_host, vec![], vec![], test_location(1)),
             test_location(1),
         )],
         test_location(1),
@@ -1005,12 +1035,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::HostFunctionCall {
-                name: one_arg,
-                args: vec![],
-                result_type_ids: vec![],
-                location: test_location(2),
-            },
+            host_function_call_node(one_arg, vec![], vec![], test_location(2)),
             test_location(2),
         )],
         test_location(2),
@@ -1072,9 +1097,9 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mut_user,
-                    args: vec![CallArgument::positional(
+                function_call_node(
+                    mut_user,
+                    vec![CallArgument::positional(
                         reference_expr(
                             x.clone(),
                             DataType::Int,
@@ -1084,9 +1109,9 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
                         CallAccessMode::Shared,
                         test_location(11),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
             node(
@@ -1138,16 +1163,16 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
                 test_location(10),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: bad_alias_host,
-                    args: vec![CallArgument::positional(
+                host_function_call_node(
+                    bad_alias_host,
+                    vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(11)),
                         CallAccessMode::Shared,
                         test_location(11),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(11),
-                },
+                    vec![],
+                    test_location(11),
+                ),
                 test_location(11),
             ),
         ],
@@ -1210,9 +1235,9 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
                 test_location(10),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mut_user,
-                    args: vec![CallArgument::positional(
+                function_call_node(
+                    mut_user,
+                    vec![CallArgument::positional(
                         reference_expr(
                             x.clone(),
                             DataType::Int,
@@ -1222,9 +1247,9 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
                         CallAccessMode::Shared,
                         same_line.clone(),
                     )],
-                    result_type_ids: vec![],
-                    location: same_line.clone(),
-                },
+                    vec![],
+                    same_line.clone(),
+                ),
                 same_line.clone(),
             ),
             node(
@@ -1275,16 +1300,16 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
         vec![
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         param_calls.clone(),
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(2),
-                    )),
+                    ),
                     value: Expression::runtime(
-                        vec![
-                            node(
-                                NodeKind::Rvalue(Expression::reference_with_type_id(
+                        ExpressionRpn {
+                            items: vec![
+                                ExpressionRpnItem::Operand(Expression::reference_with_type_id(
                                     param_calls,
                                     DataType::Int,
                                     builtin_type_ids::INT,
@@ -1292,18 +1317,17 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                                     ValueMode::MutableOwned,
                                     crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState::RuntimeValue,
                                 )),
-                                test_location(2),
-                            ),
-                            node(
-                                NodeKind::Rvalue(Expression::int(
+                                ExpressionRpnItem::Operand(Expression::int(
                                     1,
                                     test_location(2),
                                     ValueMode::ImmutableOwned,
                                 )),
-                                test_location(2),
-                            ),
-                            node(NodeKind::Operator(Operator::Add), test_location(2)),
-                        ],
+                                ExpressionRpnItem::Operator {
+                                    operator: Operator::Add,
+                                    location: test_location(2),
+                                },
+                            ],
+                        },
                         DataType::Int,
                         test_location(2),
                         ValueMode::MutableOwned,
@@ -1324,9 +1348,9 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
     );
 
     let short_circuit_value = Expression::runtime(
-        vec![
-            node(
-                NodeKind::Rvalue(Expression::reference_with_type_id(
+        ExpressionRpn {
+            items: vec![
+                ExpressionRpnItem::Operand(Expression::reference_with_type_id(
                     lhs.clone(),
                     DataType::Bool,
                     builtin_type_ids::BOOL,
@@ -1334,10 +1358,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     ValueMode::ImmutableOwned,
                     crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState::RuntimeValue,
                 )),
-                test_location(11),
-            ),
-            node(
-                NodeKind::Rvalue(Expression::function_call(
+                ExpressionRpnItem::Operand(Expression::function_call(
                     rhs_name,
                     vec![Expression::reference_with_type_id(
                         calls.clone(),
@@ -1350,10 +1371,12 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     vec![builtin_type_ids::BOOL],
                     test_location(11),
                 )),
-                test_location(11),
-            ),
-            node(NodeKind::Operator(Operator::And), test_location(11)),
-        ],
+                ExpressionRpnItem::Operator {
+                    operator: Operator::And,
+                    location: test_location(11),
+                },
+            ],
+        },
         DataType::Bool,
         test_location(11),
         ValueMode::ImmutableOwned,

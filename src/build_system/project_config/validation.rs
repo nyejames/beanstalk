@@ -267,7 +267,7 @@ fn extract_config_declaration(
 /// without re-inspecting the AST expression.
 enum ValidatedConfigValue {
     String(String),
-    Int(i64),
+    Int(i32),
     Bool(bool),
     StringCollection(Vec<ValidatedConfigString>),
 }
@@ -364,7 +364,7 @@ fn format_closed_string_set_expected(allowed: &[&str]) -> String {
 ///
 /// WHY: numeric config keys must not accept floats, bools, or strings through coercion or
 /// stringification. Config validation consumes the AST-folded scalar directly.
-fn extract_int_value(expression: &Expression) -> Option<i64> {
+fn extract_int_value(expression: &Expression) -> Option<i32> {
     match &expression.kind {
         ExpressionKind::Int(value) => Some(*value),
         ExpressionKind::Coerced { value, .. } => extract_int_value(value),
@@ -652,7 +652,7 @@ fn apply_validated_config_value(
 fn apply_core_int_config_entry(
     config: &mut Config,
     key: &str,
-    value: i64,
+    value: i32,
     location: &SourceLocation,
     string_table: &mut StringTable,
 ) -> Result<(), Vec<CompilerDiagnostic>> {
@@ -673,7 +673,7 @@ fn apply_core_int_config_entry(
 }
 
 fn validate_template_const_loop_iteration_limit(
-    value: i64,
+    value: i32,
     location: &SourceLocation,
     string_table: &mut StringTable,
 ) -> Result<usize, Vec<CompilerDiagnostic>> {
@@ -688,7 +688,7 @@ fn validate_template_const_loop_iteration_limit(
         )]);
     }
 
-    if value > MAX_TEMPLATE_CONST_LOOP_ITERATIONS as i64 {
+    if value > MAX_TEMPLATE_CONST_LOOP_ITERATIONS as i32 {
         return Err(vec![config_diagnostic(
             Some(string_table.intern(TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY)),
             InvalidConfigReason::InvalidProjectSettingValue {

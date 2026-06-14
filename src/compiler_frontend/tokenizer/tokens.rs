@@ -6,6 +6,7 @@
 pub use crate::compiler_frontend::compiler_messages::source_location::{
     CharPosition, SourceLocation,
 };
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
@@ -500,8 +501,7 @@ pub enum TokenKind {
     // Values
     StringSliceLiteral(StringId),
     Path(Vec<PathTokenItem>), // Compile time path resolution
-    FloatLiteral(f64),
-    IntLiteral(i64),
+    NumericLiteral(NumericLiteralToken),
     CharLiteral(char),
     RawStringLiteral(StringId),
     BoolLiteral(bool),
@@ -676,6 +676,10 @@ impl TokenKind {
                 *id = remap.get(*id);
             }
 
+            TokenKind::NumericLiteral(token) => {
+                token.remap_string_ids(remap);
+            }
+
             TokenKind::Path(items) => {
                 for item in items {
                     item.remap_string_ids(remap);
@@ -729,6 +733,31 @@ impl TokenKind {
                 | TokenKind::LessThanOrEqual
                 | TokenKind::GreaterThan
                 | TokenKind::GreaterThanOrEqual
+        )
+    }
+
+    /// Returns true when this token can be the left operand of a following symbolic operator.
+    ///
+    /// WHAT: gives the tokenizer a small, syntax-only way to classify `-` and spacing-sensitive
+    /// operators without depending on AST expression parsing.
+    /// WHY: signed numeric literals and binary-operator spacing are lexical/readability rules,
+    /// but they still need to know whether the preceding token looked like an operand.
+    pub fn can_end_expression(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::Symbol(_)
+                | TokenKind::This
+                | TokenKind::NumericLiteral(_)
+                | TokenKind::StringSliceLiteral(_)
+                | TokenKind::RawStringLiteral(_)
+                | TokenKind::CharLiteral(_)
+                | TokenKind::BoolLiteral(_)
+                | TokenKind::NoneLiteral
+                | TokenKind::CloseParenthesis
+                | TokenKind::CloseCurly
+                | TokenKind::TemplateClose
+                | TokenKind::Bang
+                | TokenKind::QuestionMark
         )
     }
 }

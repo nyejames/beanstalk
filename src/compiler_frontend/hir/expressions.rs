@@ -117,7 +117,7 @@ pub enum HirExpressionKind {
     // -------------------------
     //  Literals
     // -------------------------
-    Int(i64),
+    Int(i32),
     Float(f64),
     Bool(bool),
     Char(char),

@@ -123,7 +123,7 @@ fn start_function_can_reference_module_constant() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::Rvalue(reference_expr(
+            NodeKind::ExpressionStatement(reference_expr(
                 third_const.clone(),
                 builtin_type_ids::INT,
                 test_location(2),

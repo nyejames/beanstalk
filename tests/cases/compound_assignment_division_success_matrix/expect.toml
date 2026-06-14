@@ -8,6 +8,6 @@ kind = "html"
 must_contain = [
   "\" count=\"",
   "\", ratio=\"",
-  "Math.trunc(__lhs / __rhs);",
-  "Integer division by zero",
+  "__bs_int_div",
+  "Division by zero",
 ]

@@ -76,7 +76,7 @@ pub(crate) struct MatchArmCoverageRecord {
 /// Hashable key for comparing literal match patterns.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum LiteralPatternKey {
-    Int(i64),
+    Int(i32),
     Float(u64),
     StringSlice(StringId),
     Bool(bool),

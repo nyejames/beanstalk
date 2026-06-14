@@ -94,7 +94,7 @@ impl<'a> HirBuilder<'a> {
             location,
             success_region,
         );
-        let success_payload = self.make_expression(
+        let mut success_payload = self.make_expression(
             location,
             HirExpressionKind::FallibleUnwrapSuccess {
                 result: Box::new(success_result),
@@ -103,6 +103,9 @@ impl<'a> HirBuilder<'a> {
             ValueKind::RValue,
             success_region,
         );
+        if result_carrier.validate_float_success {
+            success_payload = self.emit_validated_float_value(success_payload, location)?;
+        }
         self.emit_terminator(
             branch.success_block,
             HirTerminator::ReturnSuccess(success_payload),

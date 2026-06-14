@@ -17,7 +17,7 @@ fn then_value(line: i32) -> AstNode {
     node(
         NodeKind::ThenValue(ProducedValues {
             expressions: vec![Expression::int(
-                line as i64,
+                line,
                 test_location(line),
                 ValueMode::ImmutableOwned,
             )],
@@ -30,7 +30,7 @@ fn then_value(line: i32) -> AstNode {
 fn return_value(line: i32) -> AstNode {
     node(
         NodeKind::Return(vec![Expression::int(
-            line as i64,
+            line,
             test_location(line),
             ValueMode::ImmutableOwned,
         )]),
@@ -38,10 +38,10 @@ fn return_value(line: i32) -> AstNode {
     )
 }
 
-fn rvalue(line: i32) -> AstNode {
+fn expression_statement(line: i32) -> AstNode {
     node(
-        NodeKind::Rvalue(Expression::int(
-            line as i64,
+        NodeKind::ExpressionStatement(Expression::int(
+            line,
             test_location(line),
             ValueMode::ImmutableOwned,
         )),
@@ -61,7 +61,11 @@ fn assert_statement(condition: Expression, line: i32) -> AstNode {
 
 #[test]
 fn branch_flow_reports_direct_value_production() {
-    let flow = analyze_branch_flow(&[rvalue(1), then_value(2), rvalue(3)]);
+    let flow = analyze_branch_flow(&[
+        expression_statement(1),
+        then_value(2),
+        expression_statement(3),
+    ]);
 
     assert_eq!(
         flow,
@@ -85,7 +89,7 @@ fn branch_flow_requires_both_if_paths_to_produce() {
         NodeKind::If(
             Expression::bool(true, test_location(4), ValueMode::ImmutableOwned),
             vec![then_value(5)],
-            Some(vec![rvalue(6)]),
+            Some(vec![expression_statement(6)]),
         ),
         test_location(4),
     );
@@ -152,7 +156,7 @@ fn branch_flow_combines_match_arms_and_default() {
 #[test]
 fn branch_flow_reports_assert_false_as_terminal() {
     let flow = analyze_branch_flow(&[
-        rvalue(1),
+        expression_statement(1),
         assert_statement(
             Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
             2,

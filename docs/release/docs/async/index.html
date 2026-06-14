@@ -480,14 +480,14 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    producer <span class='bst-code-operator'>|</span>writer <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    producer <span class='bst-code-operator'>|</span>writer <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
             i <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>&gt;</span> writer
             yield
         ;
     ;
 
-    consumer <span class='bst-code-operator'>|</span>reader <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    consumer <span class='bst-code-operator'>|</span>reader <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>loop</span><span class='bst-code-operator'>:</span>
             value <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>&lt;</span> reader
             io<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>

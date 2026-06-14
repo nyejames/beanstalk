@@ -43,7 +43,9 @@ use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
-use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -138,15 +140,7 @@ fn normalize_ast_node_templates(
         | NodeKind::Assignment { .. }
         | NodeKind::StructDefinition(_, _) => normalize_declaration_templates(node, context),
 
-        NodeKind::FunctionCall { .. }
-        | NodeKind::HostFunctionCall { .. }
-        | NodeKind::MethodCall { .. }
-        | NodeKind::CollectionBuiltinCall { .. }
-        | NodeKind::MapBuiltinCall { .. }
-        | NodeKind::HandledFallibleHostFunctionCall { .. }
-        | NodeKind::HandledFallibleFunctionCall { .. } => normalize_call_templates(node, context),
-
-        NodeKind::MultiBind { value, .. } | NodeKind::Rvalue(value) => {
+        NodeKind::MultiBind { value, .. } | NodeKind::ExpressionStatement(value) => {
             normalize_expression_templates(value, context)
         }
 
@@ -156,8 +150,6 @@ fn normalize_ast_node_templates(
 
         NodeKind::ReturnError(value) => normalize_expression_templates(value, context),
 
-        NodeKind::FieldAccess { base, .. } => normalize_ast_node_templates(base, context),
-
         // Runtime fragment push — normalize the template expression it carries.
         NodeKind::PushStartRuntimeFragment(expression) => {
             normalize_expression_templates(expression, context)
@@ -166,7 +158,7 @@ fn normalize_ast_node_templates(
         NodeKind::Assert { condition, .. } => normalize_expression_templates(condition, context),
 
         // Terminal nodes (no templates to normalize)
-        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
+        NodeKind::Break | NodeKind::Continue => Ok(()),
         NodeKind::ThenValue(produced_values) => {
             for expression in &mut produced_values.expressions {
                 normalize_expression_templates_with_context(
@@ -295,10 +287,7 @@ fn normalize_declaration_templates(
             normalize_expression_templates(&mut declaration.value, context)
         }
 
-        NodeKind::Assignment { target, value } => {
-            normalize_ast_node_templates(target, context)?;
-            normalize_expression_templates(value, context)
-        }
+        NodeKind::Assignment { value, .. } => normalize_expression_templates(value, context),
 
         NodeKind::StructDefinition(_, fields) => {
             for field in fields {
@@ -312,46 +301,6 @@ fn normalize_declaration_templates(
         }
 
         _ => unreachable!("normalize_declaration_templates called with non-declaration node"),
-    }
-}
-
-/// Normalizes templates in call-shaped AST nodes.
-///
-/// WHAT: Handles normalization for function calls, host function calls, method
-/// calls, collection builtin calls, and fallible-handled function calls by
-/// recursively normalizing arguments and fallible handling.
-///
-/// WHY: Call nodes have similar structure (receiver/target + arguments) and can
-/// be handled together to avoid duplication.
-fn normalize_call_templates(
-    node: &mut AstNode,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-) -> Result<(), TemplateNormalizationError> {
-    match &mut node.kind {
-        NodeKind::MethodCall { receiver, args, .. }
-        | NodeKind::CollectionBuiltinCall { receiver, args, .. }
-        | NodeKind::MapBuiltinCall { receiver, args, .. } => {
-            normalize_ast_node_templates(receiver, context)?;
-            normalize_call_argument_values(args, context)?;
-            Ok(())
-        }
-
-        NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
-            normalize_call_argument_values(args, context)?;
-            Ok(())
-        }
-
-        NodeKind::HandledFallibleFunctionCall { args, handling, .. }
-        | NodeKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-            normalize_call_argument_values(args, context)?;
-            normalize_fallible_handling_templates(
-                handling,
-                context,
-                HelperArtifactPolicy::RejectFinalHelperValue,
-            )
-        }
-
-        _ => unreachable!("normalize_call_templates called with non-call node"),
     }
 }
 
@@ -475,6 +424,15 @@ fn normalize_expression_templates(
     Ok(())
 }
 
+fn normalize_place_expression_templates(
+    place: &mut PlaceExpression,
+) -> Result<(), TemplateNormalizationError> {
+    match &mut place.kind {
+        PlaceExpressionKind::Local(_) => Ok(()),
+        PlaceExpressionKind::Field { base, .. } => normalize_place_expression_templates(base),
+    }
+}
+
 fn normalize_expression_templates_with_context(
     expression: &mut Expression,
     context: &mut TemplateNormalizationContext<'_, '_>,
@@ -482,17 +440,36 @@ fn normalize_expression_templates_with_context(
 ) -> Result<(), TemplateNormalizationError> {
     let folded_template = match &mut expression.kind {
         ExpressionKind::Copy(place) => {
-            normalize_ast_node_templates(place, context)?;
+            normalize_place_expression_templates(place)?;
             None
         }
 
-        ExpressionKind::Runtime(nodes) => {
-            normalize_nodes(nodes, context)?;
+        ExpressionKind::Runtime(rpn) => {
+            for item in &mut rpn.items {
+                match item {
+                    ExpressionRpnItem::Operand(expression) => {
+                        normalize_expression_templates_with_context(
+                            expression,
+                            context,
+                            helper_artifact_policy,
+                        )?;
+                    }
+                    ExpressionRpnItem::Operator { .. } => {}
+                }
+            }
             None
         }
 
-        ExpressionKind::Function(_, body) => {
-            normalize_nodes(body, context)?;
+        ExpressionKind::FieldAccess { base, .. } => {
+            normalize_expression_templates_with_context(base, context, helper_artifact_policy)?;
+            None
+        }
+
+        ExpressionKind::MethodCall { receiver, args, .. }
+        | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+        | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+            normalize_expression_templates_with_context(receiver, context, helper_artifact_policy)?;
+            normalize_call_argument_values(args, context)?;
             None
         }
 
@@ -508,8 +485,8 @@ fn normalize_expression_templates_with_context(
             None
         }
 
-        ExpressionKind::HandledFallibleHostFunctionCall { args, handling, .. }
-        | ExpressionKind::HandledFallibleFunctionCall { args, handling, .. } => {
+        ExpressionKind::HandledFallibleHostFunctionCall { args, .. }
+        | ExpressionKind::HandledFallibleFunctionCall { args, .. } => {
             for argument in args {
                 normalize_expression_templates_with_context(
                     &mut argument.value,
@@ -517,7 +494,6 @@ fn normalize_expression_templates_with_context(
                     helper_artifact_policy,
                 )?;
             }
-            normalize_fallible_handling_templates(handling, context, helper_artifact_policy)?;
             None
         }
 
@@ -538,9 +514,6 @@ fn normalize_expression_templates_with_context(
                 context,
                 helper_artifact_policy,
             )?;
-            if let CastHandling::Recover(handling) = &mut cast.handling {
-                normalize_fallible_handling_templates(handling, context, helper_artifact_policy)?;
-            }
             None
         }
 
@@ -551,9 +524,8 @@ fn normalize_expression_templates_with_context(
             None
         }
 
-        ExpressionKind::HandledFallibleExpression { value, handling } => {
+        ExpressionKind::HandledFallibleExpression { value, .. } => {
             normalize_expression_templates_with_context(value, context, helper_artifact_policy)?;
-            normalize_fallible_handling_templates(handling, context, helper_artifact_policy)?;
             None
         }
 
@@ -648,6 +620,11 @@ fn normalize_expression_templates_with_context(
                         context,
                         helper_artifact_policy,
                     )?;
+                    normalize_fallible_handling_templates(
+                        &mut value_catch.handler,
+                        context,
+                        helper_artifact_policy,
+                    )?;
                 }
             }
             None
@@ -661,6 +638,7 @@ fn normalize_expression_templates_with_context(
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_)
         | ExpressionKind::Path(_)
+        | ExpressionKind::Function(_)
         | ExpressionKind::Reference(_) => None,
 
         ExpressionKind::ChoiceConstruct { fields, .. } => {

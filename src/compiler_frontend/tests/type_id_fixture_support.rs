@@ -12,8 +12,13 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::const_values::facts::AstConstFacts;
 use crate::compiler_frontend::ast::expressions::expression::{
-    ConstRecordState, Expression, ExpressionKind,
+    ConstRecordState, Expression, ExpressionKind, FallibleExpressionHandling, FallibleHandling,
+    Operator, expression_value_shape_for_type_id,
 };
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
+use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, ReturnChannel, ReturnSlot,
 };
@@ -168,20 +173,102 @@ pub(crate) fn no_value_expr(
 }
 
 pub(crate) fn runtime_expr(
-    nodes: Vec<AstNode>,
+    items: Vec<ExpressionRpnItem>,
     type_id: TypeId,
     location: SourceLocation,
     value_mode: ValueMode,
 ) -> Expression {
-    let contains_regular_division = nodes.iter().any(node_has_regular_division);
+    let contains_regular_division = items.iter().any(rpn_item_has_regular_division);
     Expression::new(
-        ExpressionKind::Runtime(nodes),
+        ExpressionKind::Runtime(ExpressionRpn { items }),
         location,
         type_id,
         DataType::Inferred,
         value_mode,
     )
     .with_regular_division_provenance(contains_regular_division)
+}
+
+pub(crate) fn runtime_operand_item(expression: Expression) -> ExpressionRpnItem {
+    ExpressionRpnItem::Operand(expression)
+}
+
+pub(crate) fn runtime_operator_item(
+    operator: Operator,
+    location: SourceLocation,
+) -> ExpressionRpnItem {
+    ExpressionRpnItem::Operator { operator, location }
+}
+
+pub(crate) fn runtime_function_call_item(
+    name: InternedPath,
+    result_type_ids: Vec<TypeId>,
+    location: SourceLocation,
+) -> ExpressionRpnItem {
+    let expression_type_id = single_fixture_result_type_id(&result_type_ids);
+
+    runtime_operand_item(Expression::new(
+        ExpressionKind::FunctionCall {
+            name,
+            args: vec![],
+            result_type_ids,
+        },
+        location,
+        expression_type_id,
+        DataType::Inferred,
+        ValueMode::MutableOwned,
+    ))
+}
+
+pub(crate) fn runtime_handled_function_call_item(
+    name: InternedPath,
+    result_type_ids: Vec<TypeId>,
+    handling: FallibleHandling,
+    location: SourceLocation,
+) -> ExpressionRpnItem {
+    let expression_type_id = single_fixture_result_type_id(&result_type_ids);
+    let expression_handling = fixture_fallible_expression_handling(&handling);
+
+    runtime_operand_item(Expression::new(
+        ExpressionKind::HandledFallibleFunctionCall {
+            name,
+            args: vec![],
+            result_type_ids,
+            handling: expression_handling,
+        },
+        location,
+        expression_type_id,
+        DataType::Inferred,
+        ValueMode::MutableOwned,
+    ))
+}
+
+fn rpn_item_has_regular_division(item: &ExpressionRpnItem) -> bool {
+    matches!(
+        item,
+        ExpressionRpnItem::Operator {
+            operator: Operator::Divide,
+            ..
+        }
+    )
+}
+
+fn single_fixture_result_type_id(result_type_ids: &[TypeId]) -> TypeId {
+    match result_type_ids {
+        [] => builtin_type_ids::NONE,
+        [single] => *single,
+        multiple => panic!(
+            "test fixture runtime RPN call operand must have at most one result, got {}",
+            multiple.len()
+        ),
+    }
+}
+
+fn fixture_fallible_expression_handling(handling: &FallibleHandling) -> FallibleExpressionHandling {
+    match handling {
+        FallibleHandling::Propagate => FallibleExpressionHandling::Propagate,
+        FallibleHandling::Handler { .. } => FallibleExpressionHandling::Recover,
+    }
 }
 
 pub(crate) fn collection_expr(
@@ -198,16 +285,6 @@ pub(crate) fn collection_expr(
         value_mode,
     )
     .with_regular_division_provenance(contains_regular_division)
-}
-
-fn node_has_regular_division(node: &AstNode) -> bool {
-    use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-    matches!(
-        node.kind,
-        NodeKind::Operator(
-            crate::compiler_frontend::ast::expressions::expression::Operator::Divide
-        )
-    )
 }
 
 pub(crate) fn multi_bind_target(
@@ -228,22 +305,29 @@ pub(crate) fn multi_bind_target(
 }
 
 pub(crate) fn field_access_node(
-    base: AstNode,
+    base: Expression,
     field: crate::compiler_frontend::symbols::string_interning::StringId,
     type_id: TypeId,
     const_record_state: ConstRecordState,
     value_mode: ValueMode,
     location: SourceLocation,
 ) -> AstNode {
-    AstNode {
-        kind: NodeKind::FieldAccess {
+    let mut expression = Expression::new(
+        ExpressionKind::FieldAccess {
             base: Box::new(base),
             field,
-            diagnostic_type: DataType::Inferred,
-            type_id,
-            const_record_state,
-            value_mode,
         },
+        location.clone(),
+        type_id,
+        DataType::Inferred,
+        value_mode,
+    );
+    expression.const_record_state = const_record_state;
+    expression.value_shape =
+        expression_value_shape_for_type_id(type_id, &expression.diagnostic_type);
+
+    AstNode {
+        kind: NodeKind::ExpressionStatement(expression),
         location,
         scope: InternedPath::new(),
     }
@@ -295,17 +379,30 @@ pub(crate) fn result_carrier_type_id(
 
 pub(crate) fn handled_result_expr(
     value: Expression,
-    handling: crate::compiler_frontend::ast::expressions::expression::FallibleHandling,
+    handling: FallibleHandling,
     result_type_id: TypeId,
+    result_type_ids: Vec<TypeId>,
     location: SourceLocation,
 ) -> Expression {
-    Expression::handled_result_with_type_id(
+    let expression_handling = match &handling {
+        FallibleHandling::Propagate => FallibleExpressionHandling::Propagate,
+        FallibleHandling::Handler { .. } => FallibleExpressionHandling::Recover,
+    };
+
+    let handled_expression = Expression::handled_result_with_type_id(
         value,
-        handling,
+        expression_handling,
         result_type_id,
         DataType::Inferred,
-        location,
-    )
+        location.clone(),
+    );
+
+    match handling {
+        FallibleHandling::Propagate => handled_expression,
+        FallibleHandling::Handler { .. } => {
+            wrap_catch_expression(handled_expression, handling, result_type_ids)
+        }
+    }
 }
 
 pub(crate) fn alias_candidates_return_slot(
@@ -392,34 +489,6 @@ fn register_collection_types_from_node(node: &mut AstNode, type_environment: &mu
         NodeKind::PushStartRuntimeFragment(expr) => {
             register_collection_types_from_expression(expr, type_environment);
         }
-        NodeKind::FieldAccess { base, .. } => {
-            register_collection_types_from_node(base, type_environment);
-        }
-        NodeKind::MethodCall { receiver, args, .. } => {
-            register_collection_types_from_node(receiver, type_environment);
-            for arg in args {
-                register_collection_types_from_expression(&mut arg.value, type_environment);
-            }
-        }
-        NodeKind::CollectionBuiltinCall { receiver, args, .. }
-        | NodeKind::MapBuiltinCall { receiver, args, .. } => {
-            register_collection_types_from_node(receiver, type_environment);
-            for arg in args {
-                register_collection_types_from_expression(&mut arg.value, type_environment);
-            }
-        }
-        NodeKind::FunctionCall { args, .. } => {
-            for arg in args {
-                register_collection_types_from_expression(&mut arg.value, type_environment);
-            }
-        }
-        NodeKind::HandledFallibleFunctionCall { args, .. }
-        | NodeKind::HandledFallibleHostFunctionCall { args, .. }
-        | NodeKind::HostFunctionCall { args, .. } => {
-            for arg in args {
-                register_collection_types_from_expression(&mut arg.value, type_environment);
-            }
-        }
         NodeKind::StructDefinition(_, fields) => {
             for field in fields.iter_mut() {
                 register_collection_types_from_expression(&mut field.value, type_environment);
@@ -453,15 +522,17 @@ fn register_collection_types_from_expression(
     }
 
     match &mut expr.kind {
-        ExpressionKind::Runtime(nodes) => {
-            register_collection_types_from_nodes(nodes, type_environment);
+        ExpressionKind::Runtime(rpn) => {
+            for item in &mut rpn.items {
+                if let ExpressionRpnItem::Operand(expression) = item {
+                    register_collection_types_from_expression(expression, type_environment);
+                }
+            }
         }
-        ExpressionKind::Copy(base) => {
-            register_collection_types_from_node(base, type_environment);
+        ExpressionKind::Copy(_) => {
+            // Places carry no nested expressions that need collection-type registration.
         }
-        ExpressionKind::Function(_, body) => {
-            register_collection_types_from_nodes(body, type_environment);
-        }
+        ExpressionKind::Function(_) => {}
         ExpressionKind::FunctionCall { args, .. }
         | ExpressionKind::HandledFallibleFunctionCall { args, .. }
         | ExpressionKind::HandledFallibleHostFunctionCall { args, .. }

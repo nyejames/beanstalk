@@ -965,7 +965,9 @@ fn numeric_query_recognizes_numeric_builtins() {
 
     assert!(env.is_numeric(env.builtins().int));
     assert!(env.is_numeric(env.builtins().float));
-    assert!(env.is_numeric(env.builtins().decimal));
+    // Decimal is intentionally inactive in the Alpha surface: it remains seeded in
+    // the environment for stable TypeId layout, but it must not be treated as numeric.
+    assert!(!env.is_numeric(env.builtins().decimal));
     assert!(!env.is_numeric(env.builtins().bool));
     assert!(!env.is_numeric(env.builtins().string));
 }

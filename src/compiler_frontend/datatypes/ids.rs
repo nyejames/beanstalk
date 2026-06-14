@@ -32,6 +32,8 @@ pub mod builtin_type_ids {
     pub const BOOL: TypeId = TypeId(0);
     pub const INT: TypeId = TypeId(1);
     pub const FLOAT: TypeId = TypeId(2);
+    // Decimal is intentionally inactive in the Alpha surface. The constant is kept
+    // only to preserve the stable builtin TypeId layout seeded by TypeEnvironment::new.
     pub const DECIMAL: TypeId = TypeId(3);
     pub const STRING: TypeId = TypeId(4);
     pub const CHAR: TypeId = TypeId(5);
@@ -82,6 +84,8 @@ pub enum BuiltinTypeKey {
     Bool,
     Int,
     Float,
+    // Decimal is intentionally inactive in the Alpha surface. The key is kept only
+    // to preserve the stable builtin TypeId layout seeded by TypeEnvironment::new.
     Decimal,
     String,
     Char,

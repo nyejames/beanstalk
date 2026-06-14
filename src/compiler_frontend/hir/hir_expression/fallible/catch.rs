@@ -36,7 +36,7 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: emits the call, then delegates to `lower_fallible_carrier_with_branching` to build
     /// the success/error/merge blocks.
-    pub(super) fn lower_handled_fallible_call_with_branching(
+    pub(crate) fn lower_handled_fallible_call_with_branching(
         &mut self,
         target: CallTarget,
         args: &[CallArgument],
@@ -50,7 +50,10 @@ impl<'a> HirBuilder<'a> {
             err_type,
             value_required,
             location,
+            ..
         } = context;
+        let validate_float_success =
+            matches!(&target, CallTarget::ExternalFunction(_)) && self.type_id_is_float(ok_type);
         let result_local =
             self.emit_result_call_to_current_block(target, args, carrier_type, location)?;
         let current_block = self.current_block_id_or_error(location)?;
@@ -66,6 +69,7 @@ impl<'a> HirBuilder<'a> {
                 err_type,
                 value_required,
                 location,
+                validate_float_success,
             },
         })
     }
@@ -95,6 +99,7 @@ impl<'a> HirBuilder<'a> {
             err_type,
             value_required,
             location,
+            validate_float_success,
         } = handled_result;
 
         let region = self.current_region_or_error(location)?;
@@ -141,6 +146,11 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::RValue,
                 success_region,
             );
+            let success_payload = if validate_float_success {
+                self.emit_validated_float_value(success_payload, location)?
+            } else {
+                success_payload
+            };
             self.assign_fallible_success_payload_to_result_locals(FallibleSuccessAssignment {
                 success_payload,
                 carrier_local: result_local,

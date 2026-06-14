@@ -6,9 +6,9 @@
 //! annotation phases, so they live in one small submodule to avoid cross-file
 //! duplication.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ReactiveTemplateMetadata,
+    Expression, ReactiveTemplateMetadata,
 };
 
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -78,14 +78,13 @@ pub(super) fn merge_optional_metadata(
     }
 }
 
-pub(super) fn reference_path_for_node(node: &AstNode) -> Option<&InternedPath> {
-    let NodeKind::Rvalue(expression) = &node.kind else {
-        return None;
-    };
+pub(super) fn reference_path_for_place_expression(
+    place: &crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpression,
+) -> Option<&InternedPath> {
+    use crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpressionKind;
 
-    let ExpressionKind::Reference(path) = &expression.kind else {
-        return None;
-    };
-
-    Some(path)
+    match &place.kind {
+        PlaceExpressionKind::Local(path) => Some(path),
+        PlaceExpressionKind::Field { base, .. } => reference_path_for_place_expression(base),
+    }
 }

@@ -199,11 +199,31 @@ fn runtime_prelude_contains_cast_helpers() {
     );
     assert!(
         source.contains("function __bs_cast_int_in_range(value)"),
-        "prelude must contain the shared safe-integer range predicate"
+        "prelude must contain the shared i32 range predicate"
     );
     assert!(
-        source.contains("function __bs_normalize_numeric_text("),
-        "prelude must contain the numeric text normalizer"
+        !source.contains("function __bs_normalize_numeric_text("),
+        "String -> Int must not emit the whitespace-trimming numeric text normalizer"
+    );
+}
+
+/// Verifies that the expression-level `Float -> String` helper also emits the shared formatter.
+/// [prelude-presence] [float-helper]
+#[test]
+fn runtime_prelude_contains_float_formatter_for_float_to_string_cast() {
+    let source = lower_minimal_module_with_float_string_cast("main");
+
+    assert!(
+        source.contains("function __bs_cast_float_to_string("),
+        "Float -> String expression casts must emit their cast helper"
+    );
+    assert!(
+        source.contains("function __bs_format_float("),
+        "Float -> String expression casts must emit the Beanstalk formatter helper"
+    );
+    assert!(
+        source.contains("function __bs_numeric_trap("),
+        "Float -> String expression casts use the shared numeric trap helper"
     );
 }
 

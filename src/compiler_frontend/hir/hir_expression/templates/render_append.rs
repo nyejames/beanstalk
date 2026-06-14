@@ -6,8 +6,8 @@
 //! concatenation semantics, and runtime slot source/site plans use that same append path after
 //! AST has finished routing and validation.
 
-use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBodyEmission, TemplateControlFlow,
     TemplateLoopControlKind,
@@ -19,6 +19,7 @@ use crate::compiler_frontend::ast::templates::template_slots::{
     RuntimeSlotContributionSourceId, RuntimeSlotSiteId, RuntimeSlotSitePiece,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -362,8 +363,11 @@ impl<'a> HirBuilder<'a> {
         let location = &expression.location;
         let string_ty = builtin_type_ids::STRING;
         let region = self.current_region_or_error(location)?;
-        let chunk_as_string =
-            self.coerce_expression_to_string(lowered, location, string_ty, region);
+        let chunk_as_string = if direct_subscription {
+            self.coerce_reactive_subscription_to_string(lowered, location, string_ty, region)
+        } else {
+            self.coerce_expression_to_string(lowered, location, string_ty, region)
+        }?;
 
         if direct_subscription
             || expression
@@ -377,6 +381,36 @@ impl<'a> HirBuilder<'a> {
         // Non-reactive chunks inside a reactive template are snapshots. Store the rendered chunk
         // once so later rerenders do not accidentally turn ordinary `[source]` reads live.
         self.materialize_reactive_template_snapshot_chunk(chunk_as_string, location)
+    }
+
+    /// Coerces a direct reactive subscription chunk without eager statement materialization.
+    ///
+    /// WHAT: Float subscriptions use a lazy expression-level cast so the JS snapshot function
+    ///       formats the current source value on every rerender.
+    /// WHY: ordinary `FormatFloat` statements are correct for non-reactive chunks, but direct
+    ///      `$(source)` pieces must stay inside the returned expression tree instead of becoming
+    ///      one-time snapshot statements.
+    fn coerce_reactive_subscription_to_string(
+        &mut self,
+        expression: HirExpression,
+        location: &SourceLocation,
+        string_ty: TypeId,
+        region: RegionId,
+    ) -> Result<HirExpression, CompilerError> {
+        if expression.ty == self.type_environment.builtins().float {
+            return Ok(self.make_expression(
+                location,
+                HirExpressionKind::Cast {
+                    source: Box::new(expression),
+                    policy: BuiltinCastPolicyId::FloatToString,
+                },
+                string_ty,
+                ValueKind::RValue,
+                region,
+            ));
+        }
+
+        self.coerce_expression_to_string(expression, location, string_ty, region)
     }
 
     fn materialize_reactive_template_snapshot_chunk(
@@ -735,7 +769,8 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Place,
             region,
         );
-        let chunk_as_string = self.coerce_expression_to_string(chunk, location, string_ty, region);
+        let chunk_as_string =
+            self.coerce_expression_to_string(chunk, location, string_ty, region)?;
         let next_value = self.make_expression(
             location,
             HirExpressionKind::BinOp {
@@ -763,19 +798,25 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
         string_ty: TypeId,
         region: RegionId,
-    ) -> HirExpression {
+    ) -> Result<HirExpression, CompilerError> {
         if expression.ty == builtin_type_ids::STRING {
-            return expression;
+            return Ok(expression);
         }
 
         if expression.ty == self.type_environment.builtins().none {
-            return self.make_expression(
+            return Ok(self.make_expression(
                 location,
                 HirExpressionKind::StringLiteral(String::new()),
                 string_ty,
                 ValueKind::Const,
                 region,
-            );
+            ));
+        }
+
+        // `Float` template chunks must use the Beanstalk-owned formatter instead of target-native
+        // stringification so casts and templates share one formatting contract.
+        if expression.ty == self.type_environment.builtins().float {
+            return self.emit_formatted_float_value(expression, location);
         }
 
         let empty = self.make_expression(
@@ -786,7 +827,7 @@ impl<'a> HirBuilder<'a> {
             region,
         );
 
-        self.make_expression(
+        Ok(self.make_expression(
             location,
             HirExpressionKind::BinOp {
                 left: Box::new(empty),
@@ -796,7 +837,7 @@ impl<'a> HirBuilder<'a> {
             string_ty,
             ValueKind::RValue,
             region,
-        )
+        ))
     }
 }
 
@@ -810,9 +851,9 @@ fn runtime_template_for_expression(expression: &Expression) -> Option<&Template>
         // before the outer template accumulator receives the rendered wrapper.
         ExpressionKind::Coerced { value, .. } => runtime_template_for_expression(value),
 
-        ExpressionKind::Runtime(nodes) if nodes.len() == 1 => match &nodes[0].kind {
-            NodeKind::Rvalue(value) => runtime_template_for_expression(value),
-            _ => None,
+        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => match &rpn.items[0] {
+            ExpressionRpnItem::Operand(expression) => runtime_template_for_expression(expression),
+            ExpressionRpnItem::Operator { .. } => None,
         },
 
         _ => None,

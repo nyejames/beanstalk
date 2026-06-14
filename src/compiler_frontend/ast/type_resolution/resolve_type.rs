@@ -325,6 +325,8 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
         DataType::Bool => Some(type_environment.builtins().bool),
         DataType::Int => Some(type_environment.builtins().int),
         DataType::Float => Some(type_environment.builtins().float),
+        // Decimal is intentionally inactive in the Alpha surface. The reverse lookup
+        // is preserved only for diagnostic round-tripping of the inactive builtin.
         DataType::Decimal => Some(type_environment.builtins().decimal),
         DataType::StringSlice => Some(type_environment.builtins().string),
         DataType::Char => Some(type_environment.builtins().char),

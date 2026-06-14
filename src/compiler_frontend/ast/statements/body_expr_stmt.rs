@@ -6,9 +6,10 @@
 //! statement-position filtering and targeted diagnostics.
 
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidResultHandlingReason,
@@ -24,25 +25,42 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// Direct calls and handled fallible calls are always valid statements.
 /// Runtime expressions are valid only when they contain at least one
 /// call-like node, since a runtime block without calls has no side effects.
-fn is_expression_statement(expression: &Expression) -> bool {
+pub(crate) fn is_expression_statement(expression: &Expression) -> bool {
     match &expression.kind {
         // Direct calls and handled-fallible operations are valid statements.
         ExpressionKind::FunctionCall { .. }
         | ExpressionKind::HandledFallibleFunctionCall { .. }
         | ExpressionKind::HandledFallibleHostFunctionCall { .. }
         | ExpressionKind::HandledFallibleExpression { .. }
-        | ExpressionKind::HostFunctionCall { .. } => true,
+        | ExpressionKind::HostFunctionCall { .. }
+        | ExpressionKind::MethodCall { .. }
+        | ExpressionKind::CollectionBuiltinCall { .. }
+        | ExpressionKind::MapBuiltinCall { .. } => true,
+
+        // Error-only `catch` recovery lowers control flow and handler side effects, but it
+        // produces no success value. Value-producing catch blocks with result slots remain
+        // invalid as standalone statements because that would discard the success value.
+        ExpressionKind::ValueBlock { block } => {
+            matches!(
+                block.as_ref(),
+                ValueBlock::Catch(value_catch) if value_catch.result_type_ids.is_empty()
+            )
+        }
 
         // Runtime expressions are valid only when they contain at least one
         // call-like node (method, builtin, function, or host call).
-        ExpressionKind::Runtime(nodes) => nodes.iter().any(|node| {
+        ExpressionKind::Runtime(rpn) => rpn.items.iter().any(|item| {
             matches!(
-                node.kind,
-                NodeKind::MethodCall { .. }
-                    | NodeKind::CollectionBuiltinCall { .. }
-                    | NodeKind::MapBuiltinCall { .. }
-                    | NodeKind::FunctionCall { .. }
-                    | NodeKind::HostFunctionCall { .. }
+                item,
+                ExpressionRpnItem::Operand(expression)
+                    if matches!(
+                        expression.kind,
+                        ExpressionKind::MethodCall { .. }
+                            | ExpressionKind::CollectionBuiltinCall { .. }
+                            | ExpressionKind::MapBuiltinCall { .. }
+                            | ExpressionKind::FunctionCall { .. }
+                            | ExpressionKind::HostFunctionCall { .. }
+                    )
             )
         }),
 

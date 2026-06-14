@@ -242,16 +242,16 @@ fn reachability_records_reactive_runtime_fragment_and_external_sinks() {
                 test_location(5),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: ExternalFunctionId::Io,
-                    args: vec![CallArgument::positional(
+                NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
+                    ExternalFunctionId::Io,
+                    vec![CallArgument::positional(
                         reactive_view_reference(),
                         CallAccessMode::Shared,
                         test_location(6),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(6),
-                },
+                    vec![],
+                    test_location(6),
+                )),
                 test_location(6),
             ),
         ],

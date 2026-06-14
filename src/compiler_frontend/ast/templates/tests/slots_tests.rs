@@ -1,5 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpn;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
 };
@@ -23,6 +24,7 @@ use crate::compiler_frontend::ast::templates::template_slots::{
     SlotResolutionMode, SlotResolutionOutcome,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -97,7 +99,7 @@ fn test_parse_positional_slot() {
     // Position at directive
     tokens.advance();
 
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), SlotKey::Positional(1));
 }
@@ -109,13 +111,13 @@ fn test_parse_positional_slot_zero_errors() {
 
     tokens.advance();
 
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
         DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::IntLiteral(0),
-        }
+            found: TokenKind::NumericLiteral(token),
+        } if token.kind == NumericLiteralKind::WholeNumber
     ));
 }
 
@@ -131,8 +133,8 @@ fn test_parse_insert_positional_errors() {
     assert!(matches!(
         result.unwrap_err().payload,
         DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::IntLiteral(1),
-        }
+            found: TokenKind::NumericLiteral(token),
+        } if token.kind == NumericLiteralKind::WholeNumber
     ));
 }
 
@@ -534,7 +536,7 @@ fn route_slot_contributions_detects_runtime_contribution_content() {
     assert!(wrapper.has_unresolved_slots());
 
     let runtime_expression = Expression::runtime_with_type_id(
-        Vec::new(),
+        ExpressionRpn::empty(),
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),
@@ -614,7 +616,7 @@ fn runtime_slot_application_plan_builds_render_plan_for_runtime_contribution() {
     let mut string_table = StringTable::new();
     let wrapper = template_from_source("[:[$slot]]", &mut string_table);
     let runtime_expression = Expression::runtime_with_type_id(
-        Vec::new(),
+        ExpressionRpn::empty(),
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),
@@ -657,7 +659,7 @@ fn runtime_slot_application_plan_builds_one_site_per_repeated_placeholder() {
     let mut string_table = StringTable::new();
     let wrapper = template_from_source("[:[$slot(1)] and [$slot(1)]]", &mut string_table);
     let runtime_expression = Expression::runtime_with_type_id(
-        Vec::new(),
+        ExpressionRpn::empty(),
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),
@@ -701,14 +703,14 @@ fn runtime_slot_application_plan_builds_one_source_per_contribution_atom() {
     let mut string_table = StringTable::new();
     let wrapper = template_from_source("[:[$slot]]", &mut string_table);
     let first_expression = Expression::runtime_with_type_id(
-        Vec::new(),
+        ExpressionRpn::empty(),
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),
         ValueMode::ImmutableOwned,
     );
     let second_expression = Expression::runtime_with_type_id(
-        Vec::new(),
+        ExpressionRpn::empty(),
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),

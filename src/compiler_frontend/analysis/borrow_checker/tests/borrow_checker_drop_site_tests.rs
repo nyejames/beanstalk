@@ -108,24 +108,24 @@ fn emits_advisory_break_and_region_exit_drop_sites() {
                     Expression::bool(true, test_location(2), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::Assignment {
-                            target: Box::new(assignment_target(
+                            target: assignment_target(
                                 x.clone(),
                                 DataType::Int,
                                 builtin_type_ids::INT,
                                 test_location(3),
-                            )),
+                            ),
                             value: Expression::int(2, test_location(3), ValueMode::ImmutableOwned),
                         },
                         test_location(3),
                     )],
                     Some(vec![node(
                         NodeKind::Assignment {
-                            target: Box::new(assignment_target(
+                            target: assignment_target(
                                 x,
                                 DataType::Int,
                                 builtin_type_ids::INT,
                                 test_location(4),
-                            )),
+                            ),
                             value: Expression::int(3, test_location(4), ValueMode::ImmutableOwned),
                         },
                         test_location(4),

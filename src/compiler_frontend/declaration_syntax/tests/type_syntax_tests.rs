@@ -33,9 +33,18 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::{
 use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationKind, GenericDeclarationMetadata,
 };
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+
+fn numeric_token(value: &str, string_table: &mut StringTable) -> Token {
+    Token::new(
+        TokenKind::NumericLiteral(NumericLiteralToken::test_new(value, string_table)),
+        SourceLocation::default(),
+    )
+}
+
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
@@ -960,7 +969,7 @@ fn parses_collection_with_capacity() {
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::IntLiteral(64)),
+            numeric_token("64", &mut string_table),
             token(TokenKind::DatatypeInt),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
@@ -1026,7 +1035,7 @@ fn rejects_old_post_element_collection_capacity_syntax() {
         vec![
             token(TokenKind::OpenCurly),
             token(TokenKind::DatatypeInt),
-            token(TokenKind::IntLiteral(64)),
+            numeric_token("64", &mut string_table),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
@@ -1047,11 +1056,11 @@ fn rejects_old_post_element_collection_capacity_syntax() {
                 payload,
                 DiagnosticPayload::ExpectedToken {
                     expected: TokenKind::CloseCurly,
-                    found: Some(TokenKind::IntLiteral(64)),
+                    found: Some(TokenKind::NumericLiteral(_)),
                 }
             )
         },
-        "ExpectedToken(CloseCurly, IntLiteral(64))",
+        "ExpectedToken(CloseCurly, NumericLiteral(64))",
     );
 }
 
@@ -1063,7 +1072,7 @@ fn parses_collection_with_generic_element_and_capacity() {
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::IntLiteral(16)),
+            numeric_token("16", &mut string_table),
             token(TokenKind::Symbol(box_name)),
             token(TokenKind::Of),
             token(TokenKind::DatatypeString),
@@ -1101,7 +1110,7 @@ fn rejects_collection_capacity_arithmetic_before_optional_element() {
             token(TokenKind::OpenCurly),
             token(TokenKind::Symbol(capacity_name)),
             token(TokenKind::Add),
-            token(TokenKind::IntLiteral(16)),
+            numeric_token("16", &mut string_table),
             token(TokenKind::DatatypeInt),
             token(TokenKind::QuestionMark),
             token(TokenKind::CloseCurly),
@@ -1229,7 +1238,7 @@ fn rejects_capacity_only_shorthand_in_signature_context() {
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::IntLiteral(64)),
+            numeric_token("64", &mut string_table),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
@@ -1299,7 +1308,7 @@ fn parses_capacity_only_shorthand_in_declaration_target() {
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::IntLiteral(64)),
+            numeric_token("64", &mut string_table),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
@@ -1603,7 +1612,7 @@ fn rejects_fixed_capacity_map_syntax_on_key_side() {
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::IntLiteral(4)),
+            numeric_token("4", &mut string_table),
             token(TokenKind::DatatypeString),
             token(TokenKind::Assign),
             token(TokenKind::DatatypeInt),
@@ -1642,7 +1651,7 @@ fn rejects_fixed_capacity_map_syntax_on_value_side() {
             token(TokenKind::OpenCurly),
             token(TokenKind::DatatypeString),
             token(TokenKind::Assign),
-            token(TokenKind::IntLiteral(4)),
+            numeric_token("4", &mut string_table),
             token(TokenKind::DatatypeInt),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
@@ -1719,7 +1728,7 @@ fn rejects_postfix_capacity_map_syntax_with_colon() {
             token(TokenKind::Assign),
             token(TokenKind::DatatypeInt),
             token(TokenKind::Colon),
-            token(TokenKind::IntLiteral(5)),
+            numeric_token("5", &mut string_table),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
@@ -1756,7 +1765,7 @@ fn rejects_postfix_capacity_map_syntax_with_number() {
             token(TokenKind::DatatypeString),
             token(TokenKind::Assign),
             token(TokenKind::DatatypeInt),
-            token(TokenKind::IntLiteral(5)),
+            numeric_token("5", &mut string_table),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
@@ -1792,7 +1801,7 @@ fn rejects_postfix_capacity_map_syntax_on_key_side() {
             token(TokenKind::OpenCurly),
             token(TokenKind::DatatypeString),
             token(TokenKind::Colon),
-            token(TokenKind::IntLiteral(5)),
+            numeric_token("5", &mut string_table),
             token(TokenKind::Assign),
             token(TokenKind::DatatypeInt),
             token(TokenKind::CloseCurly),

@@ -5,11 +5,12 @@
 //! callers can run it against worker-local string tables before deterministic module aggregation.
 #![allow(clippy::result_large_err)]
 
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
 use crate::compiler_frontend::keywords::{
     attached_bang_keyword_token_kind, is_identifier_continue, is_valid_identifier,
     keyword_token_kind,
 };
+use crate::compiler_frontend::numeric_text::token::NumericLiteralSign;
 use crate::compiler_frontend::paths::const_paths::parse_file_path;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::FileId;
@@ -38,6 +39,129 @@ macro_rules! return_token {
     };
 }
 
+/// Immediate lexical surroundings for the next token.
+///
+/// WHAT: carries the previous emitted token and the previous non-newline token into token
+/// recognition.
+/// WHY: signed literals and spacing diagnostics need a small amount of left context, but the
+/// tokenizer must not ask AST parsing whether a token is in expression position.
+#[derive(Clone, Copy)]
+struct LexerTokenContext<'a> {
+    previous_token_kind: Option<&'a TokenKind>,
+    last_meaningful_token_kind: Option<&'a TokenKind>,
+    meaningful_token_before_last_kind: Option<&'a TokenKind>,
+}
+
+impl<'a> LexerTokenContext<'a> {
+    fn previous_can_end_expression(self) -> bool {
+        self.last_meaningful_token_kind
+            .is_some_and(TokenKind::can_end_expression)
+    }
+
+    fn has_leading_whitespace(self, whitespace_before_current: bool) -> bool {
+        matches!(self.previous_token_kind, Some(TokenKind::Newline)) || whitespace_before_current
+    }
+}
+
+fn next_char_is_whitespace_or_end(stream: &mut TokenStream<'_>) -> bool {
+    stream
+        .peek()
+        .is_none_or(|character| character.is_whitespace())
+}
+
+fn next_char_is_missing_rhs_boundary(stream: &mut TokenStream<'_>) -> bool {
+    stream
+        .peek()
+        .is_none_or(|character| matches!(character, '\n' | '\r' | ',' | ')' | ']' | '}' | ';'))
+}
+
+fn symbolic_spacing_error(stream: &mut TokenStream<'_>) -> CompilerDiagnostic {
+    CompilerDiagnostic::common_syntax_mistake(
+        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        stream.new_location(),
+    )
+}
+
+fn unary_negation_spacing_error(stream: &mut TokenStream<'_>) -> CompilerDiagnostic {
+    CompilerDiagnostic::common_syntax_mistake(
+        CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing,
+        stream.new_location(),
+    )
+}
+
+/// Enforce spacing only when the current symbolic token is acting as a binary operator.
+///
+/// WHAT: requires whitespace before and after symbolic operators with expression operands.
+/// WHY: tokenizer-front-loaded spacing catches ambiguous forms such as `a+b` and `a*-1`
+/// before later parsing can reinterpret the same characters in a less readable way.
+fn require_symbolic_binary_spacing(
+    stream: &mut TokenStream<'_>,
+    context: LexerTokenContext<'_>,
+    whitespace_before_current: bool,
+) -> Result<(), CompilerDiagnostic> {
+    if !context.previous_can_end_expression() {
+        return Ok(());
+    }
+
+    if !context.has_leading_whitespace(whitespace_before_current)
+        || !next_char_is_whitespace_or_end(stream)
+    {
+        return Err(symbolic_spacing_error(stream));
+    }
+
+    Ok(())
+}
+
+fn less_than_is_generic_angle_start(
+    stream: &mut TokenStream<'_>,
+    context: LexerTokenContext<'_>,
+    whitespace_before_current: bool,
+) -> bool {
+    matches!(context.previous_token_kind, Some(TokenKind::Symbol(_)))
+        && !whitespace_before_current
+        && stream
+            .peek()
+            .is_some_and(|character| character.is_uppercase())
+}
+
+fn greater_than_is_generic_angle_end(
+    stream: &mut TokenStream<'_>,
+    context: LexerTokenContext<'_>,
+    whitespace_before_current: bool,
+) -> bool {
+    matches!(context.previous_token_kind, Some(TokenKind::Symbol(_)))
+        && !whitespace_before_current
+        && matches!(stream.peek(), Some('(' | ','))
+}
+
+fn less_than_is_template_tag_start(
+    stream: &mut TokenStream<'_>,
+    context: LexerTokenContext<'_>,
+    whitespace_before_current: bool,
+) -> bool {
+    stream.mode != TokenizeMode::Normal
+        && !whitespace_before_current
+        && (matches!(stream.peek(), Some('/'))
+            || (matches!(context.previous_token_kind, Some(TokenKind::TemplateClose))
+                && stream
+                    .peek()
+                    .is_some_and(|character| character.is_alphabetic())))
+}
+
+fn greater_than_is_template_tag_end(
+    stream: &TokenStream<'_>,
+    context: LexerTokenContext<'_>,
+    whitespace_before_current: bool,
+) -> bool {
+    stream.mode != TokenizeMode::Normal
+        && !whitespace_before_current
+        && matches!(context.previous_token_kind, Some(TokenKind::Symbol(_)))
+        && matches!(
+            context.meaningful_token_before_last_kind,
+            Some(TokenKind::LessThan | TokenKind::Divide)
+        )
+}
+
 /// Tokenize one source file and optionally attach stable file identity metadata.
 ///
 /// WHAT: wraps lexing output in `FileTokens` carrying both logical path and optional `FileId`.
@@ -58,6 +182,8 @@ pub fn tokenize(
     let mut stream = TokenStream::new(source_code, src_path, entry_mode);
 
     let mut token: Token = Token::new(TokenKind::ModuleStart, SourceLocation::default());
+    let mut last_meaningful_token_kind: Option<TokenKind> = None;
+    let mut meaningful_token_before_last_kind: Option<TokenKind> = None;
 
     loop {
         token_log!(#token);
@@ -67,7 +193,19 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, style_directives, string_table)?;
+
+        let previous_token_kind = tokens.last().map(|token| &token.kind);
+        if !matches!(previous_token_kind, Some(TokenKind::Newline)) {
+            meaningful_token_before_last_kind = last_meaningful_token_kind.clone();
+            last_meaningful_token_kind = previous_token_kind.cloned();
+        }
+
+        let context = LexerTokenContext {
+            previous_token_kind,
+            last_meaningful_token_kind: last_meaningful_token_kind.as_ref(),
+            meaningful_token_before_last_kind: meaningful_token_before_last_kind.as_ref(),
+        };
+        token = get_token_kind(&mut stream, style_directives, string_table, context)?;
     }
 
     tokens.push(token);
@@ -79,15 +217,18 @@ pub fn tokenize(
     ))
 }
 
-pub fn get_token_kind(
+fn get_token_kind(
     stream: &mut TokenStream<'_>,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
+    context: LexerTokenContext<'_>,
 ) -> Result<Token, CompilerDiagnostic> {
     // WHY: Comments do not produce tokens. A labeled loop allows the comment handler
     // to restart tokenization with `continue` instead of a recursive call, preventing
     // stack overflow in files with deep comment blocks.
     'next_token: loop {
+        let mut whitespace_before_current = false;
+
         let mut current_char = match stream.next() {
             Some(ch) => ch,
             None => return_token!(TokenKind::Eof, stream),
@@ -132,6 +273,8 @@ pub fn get_token_kind(
         // ------------
 
         while current_char.is_whitespace() {
+            whitespace_before_current = true;
+
             if current_char == '\n' {
                 // Skip trailing whitespace after a newline to reduce redundant tokens.
                 // The parser treats consecutive newlines as a single boundary.
@@ -254,6 +397,30 @@ pub fn get_token_kind(
                 return_token!(TokenKind::FatArrow, stream);
             }
 
+            // `==` is a common equality mistake. Keep it on the existing parser diagnostic path
+            // instead of reporting the first `=` as a spacing error.
+            if stream.peek() != Some(&'=') {
+                let previous_is_mutable_marker =
+                    matches!(context.previous_token_kind, Some(TokenKind::Mutable));
+                let previous_can_start_assignment = previous_is_mutable_marker
+                    || context
+                        .previous_token_kind
+                        .is_some_and(TokenKind::can_end_expression);
+
+                if previous_can_start_assignment
+                    && !matches!(context.previous_token_kind, Some(TokenKind::Bang))
+                    && !next_char_is_missing_rhs_boundary(stream)
+                {
+                    let missing_left_spacing = !previous_is_mutable_marker
+                        && !context.has_leading_whitespace(whitespace_before_current);
+                    let missing_right_spacing = !next_char_is_whitespace_or_end(stream);
+
+                    if missing_left_spacing || missing_right_spacing {
+                        return Err(symbolic_spacing_error(stream));
+                    }
+                }
+            }
+
             return_token!(TokenKind::Assign, stream);
         }
 
@@ -326,10 +493,36 @@ pub fn get_token_kind(
             }
 
             if next_char.is_numeric() {
+                if context.previous_can_end_expression() {
+                    return Err(symbolic_spacing_error(stream));
+                }
+
+                let first_digit = stream.advance_after_peek(
+                    "Tokenizer peeked a signed numeric literal digit but could not advance.",
+                );
+                return tokenize_numeric_literal(
+                    first_digit,
+                    stream,
+                    string_table,
+                    NumericLiteralSign::Negative,
+                );
+            }
+
+            if context.previous_can_end_expression() {
+                if !context.has_leading_whitespace(whitespace_before_current)
+                    || !next_char_is_whitespace_or_end(stream)
+                {
+                    return Err(symbolic_spacing_error(stream));
+                }
+
+                return_token!(TokenKind::Subtract, stream);
+            }
+
+            if !next_char_is_whitespace_or_end(stream) {
                 return_token!(TokenKind::Negative, stream);
             }
 
-            return_token!(TokenKind::Subtract, stream);
+            return Err(unary_negation_spacing_error(stream));
         }
 
         // ------------------------
@@ -344,7 +537,15 @@ pub fn get_token_kind(
                 return_token!(TokenKind::AddAssign, stream);
             }
 
-            return_token!(TokenKind::Add, stream);
+            if context.previous_can_end_expression() {
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+                return_token!(TokenKind::Add, stream);
+            }
+
+            return Err(CompilerDiagnostic::common_syntax_mistake(
+                CommonSyntaxMistakeReason::UnsupportedUnaryPlus,
+                stream.new_location(),
+            ));
         }
 
         if current_char == '*' {
@@ -355,6 +556,7 @@ pub fn get_token_kind(
                 return_token!(TokenKind::MultiplyAssign, stream);
             }
 
+            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
             return_token!(TokenKind::Multiply, stream);
         }
 
@@ -370,6 +572,7 @@ pub fn get_token_kind(
                         stream.next();
                         return_token!(TokenKind::IntDivideAssign, stream);
                     }
+                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                     return_token!(TokenKind::IntDivide, stream);
                 }
 
@@ -380,6 +583,7 @@ pub fn get_token_kind(
                 }
             }
 
+            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
             return_token!(TokenKind::Divide, stream);
         }
 
@@ -391,6 +595,7 @@ pub fn get_token_kind(
                 return_token!(TokenKind::ModulusAssign, stream);
             }
 
+            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
             return_token!(TokenKind::Modulus, stream);
         }
 
@@ -402,6 +607,7 @@ pub fn get_token_kind(
                 return_token!(TokenKind::ExponentAssign, stream);
             }
 
+            require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
             return_token!(TokenKind::Exponent, stream);
         }
 
@@ -413,6 +619,7 @@ pub fn get_token_kind(
             if let Some(&next_char) = stream.peek() {
                 if next_char == '=' {
                     stream.next();
+                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                     return_token!(TokenKind::GreaterThanOrEqual, stream);
                 }
 
@@ -422,6 +629,11 @@ pub fn get_token_kind(
                 }
             }
 
+            if !greater_than_is_generic_angle_end(stream, context, whitespace_before_current)
+                && !greater_than_is_template_tag_end(stream, context, whitespace_before_current)
+            {
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            }
             return_token!(TokenKind::GreaterThan, stream);
         }
 
@@ -429,6 +641,7 @@ pub fn get_token_kind(
             if let Some(&next_char) = stream.peek() {
                 if next_char == '=' {
                     stream.next();
+                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                     return_token!(TokenKind::LessThanOrEqual, stream);
                 }
 
@@ -438,10 +651,22 @@ pub fn get_token_kind(
                 }
             }
 
+            if !less_than_is_generic_angle_start(stream, context, whitespace_before_current)
+                && !less_than_is_template_tag_start(stream, context, whitespace_before_current)
+            {
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
+            }
             return_token!(TokenKind::LessThan, stream);
         }
 
         if current_char == '~' {
+            if context.previous_can_end_expression()
+                && stream.peek() == Some(&'=')
+                && !context.has_leading_whitespace(whitespace_before_current)
+            {
+                return Err(symbolic_spacing_error(stream));
+            }
+
             return_token!(TokenKind::Mutable, stream);
         }
 
@@ -476,7 +701,12 @@ pub fn get_token_kind(
 
         // Numeric literals
         if current_char.is_numeric() {
-            return tokenize_numeric_literal(current_char, stream, string_table);
+            return tokenize_numeric_literal(
+                current_char,
+                stream,
+                string_table,
+                NumericLiteralSign::Positive,
+            );
         }
 
         // Keywords or variables starting with a letter

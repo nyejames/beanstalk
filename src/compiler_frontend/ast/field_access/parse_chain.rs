@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionValueShape};
-use crate::compiler_frontend::ast::place_access::ast_node_is_place;
+use crate::compiler_frontend::ast::expressions::parse_expression_places::place_expression_from_expression;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -29,12 +29,18 @@ use super::map_builtin::parse_map_builtin_member_typed;
 use super::receiver_calls::parse_receiver_method_call_typed;
 use super::{MemberStepContext, ReceiverAccessMode};
 
-fn receiver_reference_node(
+/// Builds the expression payload for a declaration reference without choosing an AST node shape.
+///
+/// WHAT: preserves constant-context inlining, placeholder typing, value shape, and reactive
+/// metadata exactly as the field-access receiver path expects.
+/// WHY: expression parsing can push plain references as narrow operands while member/place
+/// parsing can still wrap the same payload as a temporary `AstNode` during migration.
+pub(crate) fn reference_expression_from_declaration(
     reference_arg: &Declaration,
     context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
+    type_interner: &AstTypeInterner<'_>,
     base_location: SourceLocation,
-) -> AstNode {
+) -> Expression {
     if context.kind.is_constant_context() {
         if reference_arg.is_unresolved_constant_placeholder() {
             let placeholder_type = context
@@ -47,34 +53,25 @@ fn receiver_reference_node(
                 .first()
                 .copied()
                 .unwrap_or(reference_arg.value.type_id);
-            let ref_expr = Expression::reference_with_type_id(
+            return Expression::reference_with_type_id(
                 reference_arg.id.to_owned(),
                 placeholder_type,
                 placeholder_type_id,
-                base_location.clone(),
+                base_location,
                 ValueMode::ImmutableOwned,
                 reference_arg.value.const_record_state,
             );
-            return AstNode {
-                kind: NodeKind::Rvalue(ref_expr),
-                location: base_location,
-                scope: context.scope.clone(),
-            };
         }
 
         let mut inlined_expression = reference_arg.value.to_owned();
         inlined_expression.value_mode = ValueMode::ImmutableOwned;
-        AstNode {
-            kind: NodeKind::Rvalue(inlined_expression),
-            location: base_location,
-            scope: context.scope.clone(),
-        }
+        inlined_expression
     } else {
         let mut ref_expr = Expression::reference_with_type_id(
             reference_arg.id.to_owned(),
             reference_arg.value.diagnostic_type.to_owned(),
             reference_arg.value.type_id,
-            base_location.clone(),
+            base_location,
             reference_arg.value.value_mode.to_owned(),
             reference_arg.value.const_record_state,
         );
@@ -90,11 +87,25 @@ fn receiver_reference_node(
             ref_expr = ref_expr.with_reactive_template_metadata(template_metadata);
         }
 
-        AstNode {
-            kind: NodeKind::Rvalue(ref_expr),
-            scope: context.scope.to_owned(),
-            location: base_location,
-        }
+        ref_expr
+    }
+}
+
+fn receiver_reference_node(
+    reference_arg: &Declaration,
+    context: &ScopeContext,
+    type_interner: &AstTypeInterner<'_>,
+    base_location: SourceLocation,
+) -> AstNode {
+    AstNode {
+        kind: NodeKind::ExpressionStatement(reference_expression_from_declaration(
+            reference_arg,
+            context,
+            type_interner,
+            base_location.clone(),
+        )),
+        scope: context.scope.to_owned(),
+        location: base_location,
     }
 }
 
@@ -109,22 +120,44 @@ fn type_id_is_external(type_id: TypeId, type_interner: &AstTypeInterner<'_>) -> 
     )
 }
 
-pub(crate) fn parse_postfix_chain(
+pub(crate) fn parse_postfix_chain_expression(
     token_stream: &mut FileTokens,
-    receiver_node: AstNode,
+    receiver_expression: Expression,
+    receiver_location: SourceLocation,
     receiver_access_mode: ReceiverAccessMode,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
-    parse_postfix_chain_typed(
+) -> Result<Expression, ExpressionParseError> {
+    let receiver_node = AstNode {
+        kind: NodeKind::ExpressionStatement(receiver_expression),
+        scope: context.scope.to_owned(),
+        location: receiver_location,
+    };
+
+    let postfix_node = parse_postfix_chain_typed(
         token_stream,
         receiver_node,
         receiver_access_mode,
         context,
         type_interner,
         string_table,
-    )
+    )?;
+
+    expression_from_postfix_node(&postfix_node)
+}
+
+pub(crate) fn expression_from_postfix_node(
+    postfix_node: &AstNode,
+) -> Result<Expression, ExpressionParseError> {
+    match &postfix_node.kind {
+        NodeKind::ExpressionStatement(expression) => Ok(expression.to_owned()),
+
+        unexpected_kind => Err(CompilerError::compiler_error(format!(
+            "Expected postfix expression node, found {unexpected_kind:?}"
+        ))
+        .into()),
+    }
 }
 
 fn parse_postfix_chain_typed(
@@ -251,17 +284,17 @@ fn parse_postfix_chain_typed(
     // ----------------------------
     //  Validate assignment receiver is a place
     // ----------------------------
-    if token_stream.current_token_kind().is_assignment_operator()
-        && !ast_node_is_place(&receiver_node)
-    {
-        let receiver_type_id = receiver_node_type_id(&receiver_node)?;
-        let diagnostic = CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::NotMutablePlace,
-            None,
-            Some(receiver_type_id),
-            receiver_node.location.clone(),
-        );
-        return Err(diagnostic.into());
+    if token_stream.current_token_kind().is_assignment_operator() {
+        let receiver_expression = expression_from_postfix_node(&receiver_node)?;
+        if place_expression_from_expression(&receiver_expression).is_none() {
+            let diagnostic = CompilerDiagnostic::invalid_assignment_target(
+                InvalidAssignmentTargetReason::NotMutablePlace,
+                None,
+                Some(receiver_expression.type_id),
+                receiver_node.location.clone(),
+            );
+            return Err(diagnostic.into());
+        }
     }
 
     if receiver_access_mode == ReceiverAccessMode::Mutable && !encountered_receiver_call {
@@ -283,18 +316,20 @@ pub fn parse_field_access(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
-    parse_field_access_with_receiver_access(
+) -> Result<Expression, ExpressionParseError> {
+    let postfix_node = parse_field_access_with_receiver_access(
         token_stream,
         base_arg,
         context,
         ReceiverAccessMode::Shared,
         type_interner,
         string_table,
-    )
+    )?;
+
+    expression_from_postfix_node(&postfix_node)
 }
 
-pub(crate) fn parse_field_access_with_receiver_access(
+fn parse_field_access_with_receiver_access(
     token_stream: &mut FileTokens,
     base_arg: &Declaration,
     context: &ScopeContext,
@@ -311,6 +346,38 @@ pub(crate) fn parse_field_access_with_receiver_access(
     parse_postfix_chain_typed(
         token_stream,
         receiver_reference_node(base_arg, context, type_interner, base_location),
+        receiver_access_mode,
+        context,
+        type_interner,
+        string_table,
+    )
+}
+
+pub(crate) fn parse_field_access_expression_with_receiver_access(
+    token_stream: &mut FileTokens,
+    base_arg: &Declaration,
+    context: &ScopeContext,
+    receiver_access_mode: ReceiverAccessMode,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
+    let base_location = if token_stream.index > 0 {
+        token_stream.tokens[token_stream.index - 1].location.clone()
+    } else {
+        token_stream.current_location()
+    };
+
+    let receiver_expression = reference_expression_from_declaration(
+        base_arg,
+        context,
+        type_interner,
+        base_location.clone(),
+    );
+
+    parse_postfix_chain_expression(
+        token_stream,
+        receiver_expression,
+        base_location,
         receiver_access_mode,
         context,
         type_interner,

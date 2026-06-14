@@ -25,8 +25,7 @@ use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
-    function_node, make_test_variable, node, runtime_function_call_node, runtime_operator_node,
-    test_location,
+    function_node, make_test_variable, node, test_location,
 };
 
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -35,7 +34,8 @@ use crate::compiler_frontend::hir::hir_builder::{
     assert_no_placeholder_terminators, build_ast, lower_ast,
 };
 use crate::compiler_frontend::tests::type_id_fixture_support::{
-    fresh_success_returns, reference_expr, runtime_expr,
+    fresh_success_returns, reference_expr, runtime_expr, runtime_function_call_item,
+    runtime_operand_item, runtime_operator_item,
 };
 
 fn blocks_with_user_function_call(module: &HirModule, function_id: FunctionId) -> Vec<BlockId> {
@@ -172,20 +172,17 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
 
     let condition = runtime_expr(
         vec![
-            node(
-                NodeKind::Rvalue(Expression::bool(
-                    false,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
+            runtime_operand_item(Expression::bool(
+                false,
                 location.clone(),
-            ),
-            runtime_function_call_node(
+                ValueMode::ImmutableOwned,
+            )),
+            runtime_function_call_item(
                 rhs_name.clone(),
                 vec![builtin_type_ids::BOOL],
                 location.clone(),
             ),
-            runtime_operator_node(Operator::And, location.clone()),
+            runtime_operator_item(Operator::And, location.clone()),
         ],
         builtin_type_ids::BOOL,
         location.clone(),
@@ -202,7 +199,7 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
             NodeKind::If(
                 condition,
                 vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         1,
                         location.clone(),
                         ValueMode::ImmutableOwned,
@@ -303,20 +300,17 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
 
     let condition = runtime_expr(
         vec![
-            node(
-                NodeKind::Rvalue(Expression::bool(
-                    true,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
+            runtime_operand_item(Expression::bool(
+                true,
                 location.clone(),
-            ),
-            runtime_function_call_node(
+                ValueMode::ImmutableOwned,
+            )),
+            runtime_function_call_item(
                 rhs_name.clone(),
                 vec![builtin_type_ids::BOOL],
                 location.clone(),
             ),
-            runtime_operator_node(Operator::Or, location.clone()),
+            runtime_operator_item(Operator::Or, location.clone()),
         ],
         builtin_type_ids::BOOL,
         location.clone(),
@@ -333,7 +327,7 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
             NodeKind::If(
                 condition,
                 vec![node(
-                    NodeKind::Rvalue(Expression::int(
+                    NodeKind::ExpressionStatement(Expression::int(
                         1,
                         location.clone(),
                         ValueMode::ImmutableOwned,
@@ -410,25 +404,19 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
 
     let condition = runtime_expr(
         vec![
-            node(
-                NodeKind::Rvalue(reference_expr(
-                    lhs_name.clone(),
-                    builtin_type_ids::BOOL,
-                    location.clone(),
-                    ValueMode::ImmutableReference,
-                )),
+            runtime_operand_item(reference_expr(
+                lhs_name.clone(),
+                builtin_type_ids::BOOL,
                 location.clone(),
-            ),
-            node(
-                NodeKind::Rvalue(reference_expr(
-                    rhs_name.clone(),
-                    builtin_type_ids::BOOL,
-                    location.clone(),
-                    ValueMode::ImmutableReference,
-                )),
+                ValueMode::ImmutableReference,
+            )),
+            runtime_operand_item(reference_expr(
+                rhs_name.clone(),
+                builtin_type_ids::BOOL,
                 location.clone(),
-            ),
-            runtime_operator_node(Operator::And, location.clone()),
+                ValueMode::ImmutableReference,
+            )),
+            runtime_operator_item(Operator::And, location.clone()),
         ],
         builtin_type_ids::BOOL,
         location.clone(),
@@ -460,7 +448,7 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
                 NodeKind::If(
                     condition,
                     vec![node(
-                        NodeKind::Rvalue(Expression::int(
+                        NodeKind::ExpressionStatement(Expression::int(
                             1,
                             location.clone(),
                             ValueMode::ImmutableOwned,

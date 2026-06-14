@@ -124,8 +124,15 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
                 .join(", ");
             format!("path `{path}`")
         }
-        TokenKind::FloatLiteral(value) => format!("float literal `{value}`"),
-        TokenKind::IntLiteral(value) => format!("integer literal `{value}`"),
+        TokenKind::NumericLiteral(token) => {
+            let text = string_table.resolve(token.normalized_text);
+            match token.kind {
+                crate::compiler_frontend::numeric_text::token::NumericLiteralKind::WholeNumber => {
+                    format!("integer literal `{text}`")
+                }
+                _ => format!("float literal `{text}`"),
+            }
+        }
         TokenKind::CharLiteral(value) => format!("character literal `{value}`"),
         TokenKind::RawStringLiteral(value) => {
             format!("raw string literal `{}`", string_table.resolve(*value))

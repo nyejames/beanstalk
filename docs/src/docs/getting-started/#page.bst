@@ -33,43 +33,43 @@ page_head #= theme_head
         [header: [: Command] [: Use] [: Notes] ]
 
         [data:
-            [: [$html:<code>bean help</code>] ]
+            [: [$html:<code>help</code>] ]
             [: Prints the current command list and supported flags.]
             [: Use this when the docs and local compiler may be out of sync.]
         ]
 
         [data:
-            [: [$html:<code>bean --version</code>] ]
+            [: [$html:<code>--version</code>] ]
             [: Prints the current compiler/tool version.]
             [: [$html:<code>-v</code>] and [$html:<code>-V</code>] are also accepted.]
         ]
 
         [data:
-            [: [$html:<code>bean new html</code>] ]
+            [: [$html:<code>new html</code>] ]
             [: Creates a complete HTML project scaffold.]
             [: Accepts an optional path and [$html:<code>--force</code>]. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including [$html:<code>src/#page.bst</code>], [$html:<code>lib/</code>], output manifests, and an optional .gitignore.]
         ]
 
         [data:
-            [: [$html:<code>bean check .</code>] ]
+            [: [$html:<code>check .</code>] ]
             [: Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.]
             [: Add [$html:<code>--terse</code>] for compact one-line diagnostics.]
         ]
 
         [data:
-            [: [$html:<code>bean dev .</code>] ]
+            [: [$html:<code>dev .</code>] ]
             [: Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.]
             [: This is the main day-to-day command for working on HTML projects.]
         ]
 
         [data:
-            [: [$html:<code>bean build .</code>] ]
+            [: [$html:<code>build .</code>] ]
             [: Builds the project and writes output files.]
             [: Without [$html:<code>--release</code>], directory projects write to the configured dev output folder. With [$html:<code>--release</code>], they write to the configured release output folder.]
         ]
 
         [data:
-            [: [$html:<code>bean tests</code>] ]
+            [: [$html:<code>tests</code>] ]
             [: Runs the compiler integration test suite.]
             [: Mainly useful when working on the compiler itself. Use [$html:<code>--backend html</code>] or [$html:<code>--backend html_wasm</code>] to focus one backend profile.]
         ]
@@ -142,14 +142,14 @@ page_head #= theme_head
 
     If you omit the path, bean asks for confirmation in the current directory:
 
-    [codeblock, $code("text"):
+    [codeblock, $code("bash"):
         No project path specified. Current directory: /your/path
         Create the new HTML project in this directory? y/N:
     ]
 
     If the target directory already exists, you are given three choices:
 
-    [codeblock, $code("text"):
+    [codeblock, $code("bash"):
         Target directory already exists:
         /path/to/target
 
@@ -163,7 +163,7 @@ page_head #= theme_head
 
     If the path contains directories that do not exist, bean asks before creating them:
 
-    [codeblock, $code("text"):
+    [codeblock, $code("bash"):
         The project target contains directories that do not exist:
         /path/to/new/site
 
@@ -172,13 +172,13 @@ page_head #= theme_head
 
     After the final directory is chosen, bean asks for the project name:
 
-    [codeblock, $code("text"):
+    [codeblock, $code("bash"):
         Project name (press Enter to use project directory name):
     ]
 
     Then it asks whether to add a .gitignore with Beanstalk defaults:
 
-    [codeblock, $code("text"):
+    [codeblock, $code("bash"):
         Add a .gitignore with Beanstalk defaults? Y/n:
     ]
 

@@ -62,12 +62,12 @@ fn reactive_assignment_records_invalidation_after_initialization() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         count_path.clone(),
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(2),
-                    )),
+                    ),
                     value: Expression::int(2, test_location(2), ValueMode::ImmutableOwned),
                 },
                 test_location(2),
@@ -144,12 +144,12 @@ fn reactive_subscription_followed_by_mutation_is_valid_and_dirtying() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         count_path.clone(),
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(4),
-                    )),
+                    ),
                     value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
@@ -213,9 +213,9 @@ fn mutable_call_argument_records_reactive_invalidation() {
                 test_location(2),
             ),
             node(
-                NodeKind::FunctionCall {
-                    name: mutate_path,
-                    args: vec![CallArgument::positional(
+                NodeKind::ExpressionStatement(Expression::function_call_with_arguments(
+                    mutate_path,
+                    vec![CallArgument::positional(
                         reference_expr(
                             count_path.clone(),
                             DataType::Int,
@@ -225,9 +225,9 @@ fn mutable_call_argument_records_reactive_invalidation() {
                         CallAccessMode::Shared,
                         test_location(3),
                     )],
-                    result_type_ids: vec![],
-                    location: test_location(3),
-                },
+                    vec![],
+                    test_location(3),
+                )),
                 test_location(3),
             ),
         ],
@@ -323,12 +323,12 @@ fn reactive_parameter_does_not_grant_mutation_permission() {
         },
         vec![node(
             NodeKind::Assignment {
-                target: Box::new(assignment_target(
+                target: assignment_target(
                     param_path,
                     DataType::Int,
                     builtin_type_ids::INT,
                     test_location(2),
-                )),
+                ),
                 value: Expression::int(2, test_location(2), ValueMode::ImmutableOwned),
             },
             test_location(2),

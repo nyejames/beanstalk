@@ -67,7 +67,7 @@ fn generic_parameter_id_for_receiver_reference(
 ) -> Option<GenericParameterId> {
     let active_context = scope_context.active_generic_type_context()?;
 
-    let NodeKind::Rvalue(expression) = &receiver_node.kind else {
+    let NodeKind::ExpressionStatement(expression) = &receiver_node.kind else {
         return None;
     };
 

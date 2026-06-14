@@ -5,11 +5,14 @@
 
 use super::MemberStepContext;
 use super::builtin_call_args::parse_builtin_method_args_typed;
+use super::parse_chain::expression_from_postfix_node;
 use super::receiver_access::{
     ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
 };
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_arguments;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::fallible_handling::token_stream_starts_fallible_handling_suffix;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
@@ -248,15 +251,19 @@ pub(super) fn parse_collection_builtin_member_typed(
 
     increment_ast_counter(AstCounter::PostfixReceiverNodesCopied);
 
+    let receiver_expression = expression_from_postfix_node(receiver_node)?;
+    let builtin_expression = Expression::collection_builtin_call_with_typed_arguments(
+        receiver_expression,
+        builtin,
+        mutating_receiver_required,
+        normalize_call_arguments(&args),
+        result_type_ids,
+        type_interner.environment_mut_for_derived_types(),
+        member_location.clone(),
+    );
+
     Ok(Some(AstNode {
-        kind: NodeKind::CollectionBuiltinCall {
-            receiver: Box::new(receiver_node.to_owned()),
-            op: builtin,
-            receiver_requires_mutable: mutating_receiver_required,
-            args,
-            result_type_ids,
-            location: member_location.clone(),
-        },
+        kind: NodeKind::ExpressionStatement(builtin_expression),
         scope: scope_context.scope.to_owned(),
         location: member_location,
     }))

@@ -6,12 +6,15 @@
 //! before validation can recognize dependency-sorted const declarations.
 
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, LoopBindings, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::LoopBindings;
+use crate::compiler_frontend::ast::const_eval::constant_fold;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -118,9 +121,12 @@ pub(super) fn expression_is_const_evaluable_with_bindings(
             expression_is_const_evaluable_with_bindings(value, loop_binding_paths)
         }
 
-        ExpressionKind::Runtime(nodes) => nodes
-            .iter()
-            .all(|node| node_is_const_evaluable_with_bindings(node, loop_binding_paths)),
+        ExpressionKind::Runtime(rpn) => rpn.items.iter().all(|item| match item {
+            ExpressionRpnItem::Operand(expression) => {
+                expression_is_const_evaluable_with_bindings(expression, loop_binding_paths)
+            }
+            ExpressionRpnItem::Operator { .. } => true,
+        }),
 
         ExpressionKind::Template(template) => {
             template_is_const_evaluable_with_bindings(template, loop_binding_paths)
@@ -261,8 +267,8 @@ fn inline_source_consts_for_const_required_condition(
     // coercion to survive so validation and folding still see an option scrutinee.
     let substituted = substitute_source_consts_in_expression(expression, context);
 
-    if let ExpressionKind::Runtime(nodes) = &substituted.kind {
-        return fold_substituted_runtime_condition(&substituted, nodes, string_table);
+    if let ExpressionKind::Runtime(rpn) = &substituted.kind {
+        return fold_substituted_runtime_condition(&substituted, rpn, string_table);
     }
 
     substituted
@@ -293,14 +299,17 @@ fn substitute_source_consts_in_expression(
             }
         }
 
-        ExpressionKind::Runtime(nodes) => {
-            let substituted_nodes = nodes
+        ExpressionKind::Runtime(rpn) => {
+            let substituted_items = rpn
+                .items
                 .iter()
-                .map(|node| substitute_source_consts_in_node(node, context))
+                .map(|item| substitute_source_consts_in_rpn_item(item, context))
                 .collect();
 
             Expression {
-                kind: ExpressionKind::Runtime(substituted_nodes),
+                kind: ExpressionKind::Runtime(ExpressionRpn {
+                    items: substituted_items,
+                }),
                 ..expression
             }
         }
@@ -309,30 +318,28 @@ fn substitute_source_consts_in_expression(
     }
 }
 
-fn substitute_source_consts_in_node(node: &AstNode, context: &ScopeContext) -> AstNode {
-    let NodeKind::Rvalue(expression) = &node.kind else {
-        return node.clone();
-    };
-
-    AstNode {
-        kind: NodeKind::Rvalue(substitute_source_consts_in_expression(
-            expression.clone(),
-            context,
-        )),
-        location: node.location.clone(),
-        scope: node.scope.clone(),
+fn substitute_source_consts_in_rpn_item(
+    item: &ExpressionRpnItem,
+    context: &ScopeContext,
+) -> ExpressionRpnItem {
+    match item {
+        ExpressionRpnItem::Operand(expression) => ExpressionRpnItem::Operand(
+            substitute_source_consts_in_expression(expression.clone(), context),
+        ),
+        operator @ ExpressionRpnItem::Operator { .. } => operator.clone(),
     }
 }
 
 fn fold_substituted_runtime_condition(
     expression: &Expression,
-    nodes: &[AstNode],
+    rpn: &ExpressionRpn,
     string_table: &mut StringTable,
 ) -> Expression {
-    match constant_fold(nodes, string_table) {
-        Ok(ConstantFoldResult::Folded(stack)) => {
+    match constant_fold(&rpn.items, string_table) {
+        Ok(stack) => {
             if stack.len() == 1
-                && let NodeKind::Rvalue(folded) = &stack[0].kind
+                && let ExpressionRpnItem::Operand(folded) = &stack[0]
+                && folded.is_compile_time_constant()
             {
                 return folded.clone();
             }
@@ -340,7 +347,7 @@ fn fold_substituted_runtime_condition(
             expression.clone()
         }
 
-        Ok(ConstantFoldResult::Unchanged) | Err(_) => expression.clone(),
+        Err(_) => expression.clone(),
     }
 }
 
@@ -364,18 +371,5 @@ fn source_const_value_is_condition_decidable(expression: &Expression) -> bool {
         ExpressionKind::OptionNone => true,
         ExpressionKind::Coerced { value, .. } => value.is_compile_time_constant(),
         _ => expression.is_compile_time_constant(),
-    }
-}
-
-fn node_is_const_evaluable_with_bindings(
-    node: &AstNode,
-    loop_binding_paths: &[InternedPath],
-) -> bool {
-    match &node.kind {
-        NodeKind::Rvalue(expression) => {
-            expression_is_const_evaluable_with_bindings(expression, loop_binding_paths)
-        }
-        NodeKind::Operator(_) => true,
-        _ => false,
     }
 }

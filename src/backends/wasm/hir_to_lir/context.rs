@@ -182,7 +182,7 @@ pub(crate) fn lower_type_to_abi(
         HirTypeClass::Unit => WasmAbiType::Void,
         HirTypeClass::Bool | HirTypeClass::Char => WasmAbiType::I32,
         HirTypeClass::Int => WasmAbiType::I64,
-        HirTypeClass::Float | HirTypeClass::Decimal => WasmAbiType::F64,
+        HirTypeClass::Float => WasmAbiType::F64,
         HirTypeClass::Function | HirTypeClass::HeapAllocated => WasmAbiType::Handle,
     }
 }

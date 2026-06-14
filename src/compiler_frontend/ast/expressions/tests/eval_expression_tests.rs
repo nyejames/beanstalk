@@ -6,8 +6,9 @@
 //!      shape drift before it reaches HIR lowering.
 
 use super::*;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::{
@@ -96,28 +97,19 @@ fn ordinary_expression_rejects_path_string_concatenation() {
     });
 
     let nodes = vec![
-        AstNode {
-            kind: NodeKind::Rvalue(Expression::path(
-                compile_time_paths,
-                SourceLocation::default(),
-            )),
+        ExpressionRpnItem::Operand(Expression::path(
+            compile_time_paths,
+            SourceLocation::default(),
+        )),
+        ExpressionRpnItem::Operator {
+            operator: Operator::Add,
             location: SourceLocation::default(),
-            scope: source_scope.clone(),
         },
-        AstNode {
-            kind: NodeKind::Operator(Operator::Add),
-            location: SourceLocation::default(),
-            scope: source_scope.clone(),
-        },
-        AstNode {
-            kind: NodeKind::Rvalue(Expression::string_slice(
-                string_table.get_or_intern(String::from("?v=1")),
-                SourceLocation::default(),
-                ValueMode::ImmutableOwned,
-            )),
-            location: SourceLocation::default(),
-            scope: source_scope,
-        },
+        ExpressionRpnItem::Operand(Expression::string_slice(
+            string_table.get_or_intern(String::from("?v=1")),
+            SourceLocation::default(),
+            ValueMode::ImmutableOwned,
+        )),
     ];
 
     let mut current_type = ExpectedType::Infer;
@@ -416,7 +408,6 @@ fn copied_template_string_preserves_template_shape() {
 #[test]
 fn template_shaped_string_operand_is_rejected() {
     let mut string_table = StringTable::new();
-    let source_scope = InternedPath::from_single_str("#page.bst", &mut string_table);
 
     let mut template_like_string = Expression::string_slice(
         string_table.get_or_intern(String::from("template text")),
@@ -426,24 +417,15 @@ fn template_shaped_string_operand_is_rejected() {
     template_like_string.value_shape = ExpressionValueShape::TemplateString;
 
     let nodes = vec![
-        AstNode {
-            kind: NodeKind::Rvalue(Expression::string_slice(
-                string_table.get_or_intern(String::from("plain ")),
-                SourceLocation::default(),
-                ValueMode::ImmutableOwned,
-            )),
+        ExpressionRpnItem::Operand(Expression::string_slice(
+            string_table.get_or_intern(String::from("plain ")),
+            SourceLocation::default(),
+            ValueMode::ImmutableOwned,
+        )),
+        ExpressionRpnItem::Operand(template_like_string),
+        ExpressionRpnItem::Operator {
+            operator: Operator::Add,
             location: SourceLocation::default(),
-            scope: source_scope.clone(),
-        },
-        AstNode {
-            kind: NodeKind::Rvalue(template_like_string),
-            location: SourceLocation::default(),
-            scope: source_scope.clone(),
-        },
-        AstNode {
-            kind: NodeKind::Operator(Operator::Add),
-            location: SourceLocation::default(),
-            scope: source_scope,
         },
     ];
 

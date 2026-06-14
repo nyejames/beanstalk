@@ -8,6 +8,7 @@ use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal, terse,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
@@ -41,6 +42,13 @@ fn token(kind: TokenKind, line: i32) -> Token {
                 char_column: 120, // Arbitrary number
             },
         },
+    )
+}
+
+fn numeric_token(value: &str, line: i32, string_table: &mut StringTable) -> Token {
+    token(
+        TokenKind::NumericLiteral(NumericLiteralToken::test_new(value, string_table)),
+        line,
     )
 }
 

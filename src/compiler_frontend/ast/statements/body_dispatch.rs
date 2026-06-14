@@ -364,8 +364,7 @@ pub(crate) fn parse_function_body_statements(
 
             // Expression statements
             TokenKind::OpenParenthesis
-            | TokenKind::FloatLiteral(_)
-            | TokenKind::IntLiteral(_)
+            | TokenKind::NumericLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::CharLiteral(_)
@@ -379,7 +378,7 @@ pub(crate) fn parse_function_body_statements(
                 )?;
 
                 body_nodes.push(AstNode {
-                    kind: NodeKind::Rvalue(expression),
+                    kind: NodeKind::ExpressionStatement(expression),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });

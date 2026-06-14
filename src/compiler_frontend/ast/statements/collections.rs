@@ -277,7 +277,7 @@ fn parse_collection_literal(
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum KnownMapKey {
     String(StringId),
-    Int(i64),
+    Int(i32),
     Bool(bool),
     Char(char),
 }

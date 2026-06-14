@@ -5,8 +5,8 @@
 //! surfaces does not keep bloating the generic expression parser.
 
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::statements::collections::new_curly_literal;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
@@ -31,7 +31,7 @@ pub(crate) fn parse_curly_literal_expression(
     type_interner: &mut AstTypeInterner<'_>,
     expected_type: &ExpectedType,
     value_mode: &ValueMode,
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
     let curly_context = match expected_type {
@@ -71,17 +71,13 @@ pub(crate) fn parse_curly_literal_expression(
         ExpectedType::Infer => ExpectedCurlyLiteralContext::Infer,
     };
 
-    expression.push(AstNode {
-        kind: NodeKind::Rvalue(new_curly_literal(
-            token_stream,
-            curly_context,
-            context,
-            type_interner,
-            value_mode,
-            string_table,
-        )?),
-        location: token_stream.current_location(),
-        scope: context.scope.clone(),
-    });
+    expression.push(ExpressionRpnItem::Operand(new_curly_literal(
+        token_stream,
+        curly_context,
+        context,
+        type_interner,
+        value_mode,
+        string_table,
+    )?));
     Ok(())
 }

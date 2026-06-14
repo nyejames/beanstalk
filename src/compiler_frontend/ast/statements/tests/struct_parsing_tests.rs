@@ -85,14 +85,9 @@ fn parses_struct_construction_and_field_access_in_declarations() {
     let NodeKind::VariableDeclaration(value_decl) = &body[1].kind else {
         panic!("expected field-read declaration");
     };
-    let ExpressionKind::Runtime(nodes) = &value_decl.value.kind else {
-        panic!("field access should stay as a runtime expression");
-    };
     assert!(
-        nodes
-            .iter()
-            .any(|node| matches!(node.kind, NodeKind::FieldAccess { .. })),
-        "runtime field access should preserve a field-access AST node"
+        matches!(value_decl.value.kind, ExpressionKind::FieldAccess { .. }),
+        "field access should be stored as an expression-owned field-access payload"
     );
 }
 

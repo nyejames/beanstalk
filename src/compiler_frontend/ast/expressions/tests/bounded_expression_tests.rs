@@ -17,6 +17,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -35,6 +36,13 @@ fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
         vec![],
     );
     (scope, context)
+}
+
+fn numeric_token(value: &str, scope: &InternedPath, string_table: &mut StringTable) -> Token {
+    Token::new(
+        TokenKind::NumericLiteral(NumericLiteralToken::test_new(value, string_table)),
+        SourceLocation::new(scope.clone(), Default::default(), Default::default()),
+    )
 }
 
 fn token(kind: TokenKind, scope: &InternedPath) -> Token {
@@ -115,7 +123,7 @@ fn bounded_expression_parses_simple_literal() {
     let (scope, context) = test_scope(&mut string_table);
 
     let tokens = vec![
-        token(TokenKind::IntLiteral(42), &scope),
+        numeric_token("42", &scope, &mut string_table),
         token(TokenKind::Comma, &scope),
         token(TokenKind::Eof, &scope),
     ];
@@ -145,12 +153,12 @@ fn bounded_expression_nested_parentheses() {
     let (scope, context) = test_scope(&mut string_table);
 
     let tokens = vec![
-        token(TokenKind::IntLiteral(1), &scope),
+        numeric_token("1", &scope, &mut string_table),
         token(TokenKind::Add, &scope),
         token(TokenKind::OpenParenthesis, &scope),
-        token(TokenKind::IntLiteral(2), &scope),
+        numeric_token("2", &scope, &mut string_table),
         token(TokenKind::Add, &scope),
-        token(TokenKind::IntLiteral(3), &scope),
+        numeric_token("3", &scope, &mut string_table),
         token(TokenKind::CloseParenthesis, &scope),
         token(TokenKind::Comma, &scope),
         token(TokenKind::Eof, &scope),
@@ -185,9 +193,9 @@ fn bounded_expression_nested_curly_braces() {
     // The comma inside the collection must not terminate the bounded expression.
     let tokens = vec![
         token(TokenKind::OpenCurly, &scope),
-        token(TokenKind::IntLiteral(2), &scope),
+        numeric_token("2", &scope, &mut string_table),
         token(TokenKind::Comma, &scope),
-        token(TokenKind::IntLiteral(3), &scope),
+        numeric_token("3", &scope, &mut string_table),
         token(TokenKind::CloseCurly, &scope),
         token(TokenKind::Comma, &scope),
         token(TokenKind::Eof, &scope),
@@ -217,9 +225,9 @@ fn bounded_expression_missing_delimiter_reaches_eof() {
     let (scope, context) = test_scope(&mut string_table);
 
     let tokens = vec![
-        token(TokenKind::IntLiteral(1), &scope),
+        numeric_token("1", &scope, &mut string_table),
         token(TokenKind::Add, &scope),
-        token(TokenKind::IntLiteral(2), &scope),
+        numeric_token("2", &scope, &mut string_table),
         token(TokenKind::Eof, &scope),
     ];
     let mut stream = FileTokens::new(scope, tokens);

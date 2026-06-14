@@ -4,18 +4,21 @@
 //! namespace records.
 //! WHY: identifier tokens fan out into the largest number of semantic cases and need isolated handling.
 
-use super::call_argument::normalize_call_arguments;
 use super::choice_constructor::parse_choice_construct;
 use super::error::ExpressionParseError;
-use super::expression::{Expression, ExpressionKind, HandledFallibleHostFunctionCallInput};
-use super::function_calls::{ExternalFunctionCallParseInput, parse_external_function_call};
+use super::expression::{Expression, ExpressionKind};
+use super::expression_rpn::ExpressionRpnItem;
+use super::function_calls::{
+    ExternalFunctionCallParseInput, parse_external_function_call_expression,
+};
 use super::namespace_member_access::{NamespaceMemberAccessInput, parse_namespace_member_access};
-use super::parse_expression_dispatch::push_expression_node;
+use super::parse_expression_dispatch::{
+    ExpressionOperandInput, push_expression_operand, push_expression_operand_at_location,
+};
 use super::source_function_calls::{SourceCallableMemberInput, parse_source_callable_member};
 use super::struct_instance::{StructConstructorParseInput, parse_struct_constructor_expression};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::field_access::reference_expression_from_declaration;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
-use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -27,14 +30,14 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::external_packages::ExternalConstantValue;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 pub(super) fn parse_identifier_or_call(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     allow_boundary_catch: bool,
     expected_result_evidence_allowed: bool,
     string_table: &mut StringTable,
@@ -122,18 +125,14 @@ pub(super) fn parse_identifier_or_call(
                 string_table,
             )?;
 
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 expression,
                 allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(struct_instance),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                },
+                struct_instance,
             )?;
 
             return Ok(());
@@ -149,20 +148,14 @@ pub(super) fn parse_identifier_or_call(
                     type_interner,
                     string_table,
                 )?;
-                let choice_location = choice_value.location.to_owned();
-
-                push_expression_node(
+                push_expression_operand(
                     token_stream,
                     context,
                     type_interner,
                     string_table,
                     expression,
                     allow_boundary_catch,
-                    AstNode {
-                        kind: NodeKind::Rvalue(choice_value),
-                        location: choice_location,
-                        scope: context.scope.clone(),
-                    },
+                    choice_value,
                 )?;
 
                 return Ok(());
@@ -228,16 +221,26 @@ pub(super) fn parse_identifier_or_call(
             }
 
             None => {
-                let reference_node =
-                    create_reference(token_stream, binding, context, type_interner, string_table)?;
-                push_expression_node(
+                let reference_location = token_stream.current_location();
+                let reference_expression = reference_expression_from_declaration(
+                    binding,
+                    context,
+                    type_interner,
+                    reference_location.clone(),
+                );
+                token_stream.advance();
+
+                push_expression_operand_at_location(
                     token_stream,
                     context,
                     type_interner,
                     string_table,
                     expression,
                     allow_boundary_catch,
-                    reference_node,
+                    ExpressionOperandInput {
+                        operand: reference_expression,
+                        wrapper_location: reference_location,
+                    },
                 )?;
                 return Ok(()); // Will have moved onto the next token already
             }
@@ -300,18 +303,14 @@ pub(super) fn parse_identifier_or_call(
             ExternalConstantValue::Bool(value) => Expression::bool(value, location, value_mode),
         };
 
-        push_expression_node(
+        push_expression_operand(
             token_stream,
             context,
             type_interner,
             string_table,
             expression,
             allow_boundary_catch,
-            AstNode {
-                kind: NodeKind::Rvalue(const_expr),
-                location: SourceLocation::default(),
-                scope: context.scope.clone(),
-            },
+            const_expr,
         )?;
         return Ok(());
     }
@@ -334,112 +333,32 @@ pub(super) fn parse_identifier_or_call(
         // External calls parse from metadata directly; do not synthesize fake parameter declarations.
         token_stream.advance();
 
-        let function_call_node = parse_external_function_call(ExternalFunctionCallParseInput {
+        let function_call_expression =
+            parse_external_function_call_expression(ExternalFunctionCallParseInput {
+                token_stream,
+                external_function_id: function_id,
+                external_function: host_function_definition,
+                context,
+                value_required: true,
+                allow_boundary_catch: allow_boundary_catch
+                    && expression.is_empty()
+                    && fallible_catch_allowed_in_context(context),
+                warnings: None,
+                type_interner,
+                string_table,
+            })?;
+
+        push_expression_operand(
             token_stream,
-            external_function_id: function_id,
-            external_function: host_function_definition,
             context,
-            value_required: true,
-            allow_boundary_catch: allow_boundary_catch
-                && expression.is_empty()
-                && fallible_catch_allowed_in_context(context),
-            warnings: None,
             type_interner,
             string_table,
-        })?;
+            expression,
+            allow_boundary_catch,
+            function_call_expression,
+        )?;
 
-        match function_call_node.kind {
-            NodeKind::HostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids,
-                location,
-            } => {
-                let normalized_args = normalize_call_arguments(&args);
-                let func_call_expr = Expression::host_function_call_with_typed_arguments(
-                    host_function_id,
-                    normalized_args,
-                    result_type_ids,
-                    type_interner.environment_mut_for_derived_types(),
-                    location,
-                );
-
-                push_expression_node(
-                    token_stream,
-                    context,
-                    type_interner,
-                    string_table,
-                    expression,
-                    allow_boundary_catch,
-                    AstNode {
-                        kind: NodeKind::Rvalue(func_call_expr),
-                        location: SourceLocation::default(),
-                        scope: context.scope.clone(),
-                    },
-                )?;
-
-                return Ok(());
-            }
-
-            NodeKind::HandledFallibleHostFunctionCall {
-                name: host_function_id,
-                args,
-                result_type_ids,
-                error_type_id,
-                handling,
-                location,
-            } => {
-                let normalized_args = normalize_call_arguments(&args);
-                let func_call_expr =
-                    Expression::handled_fallible_host_function_call_with_typed_arguments(
-                        HandledFallibleHostFunctionCallInput {
-                            id: host_function_id,
-                            args: normalized_args,
-                            result_type_ids,
-                            error_type_id,
-                            handling,
-                            location,
-                        },
-                        type_interner.environment_mut_for_derived_types(),
-                    );
-
-                push_expression_node(
-                    token_stream,
-                    context,
-                    type_interner,
-                    string_table,
-                    expression,
-                    allow_boundary_catch,
-                    AstNode {
-                        kind: NodeKind::Rvalue(func_call_expr),
-                        location: SourceLocation::default(),
-                        scope: context.scope.clone(),
-                    },
-                )?;
-
-                return Ok(());
-            }
-
-            NodeKind::Rvalue(expression_value) => {
-                push_expression_node(
-                    token_stream,
-                    context,
-                    type_interner,
-                    string_table,
-                    expression,
-                    allow_boundary_catch,
-                    AstNode {
-                        kind: NodeKind::Rvalue(expression_value),
-                        location: SourceLocation::default(),
-                        scope: context.scope.clone(),
-                    },
-                )?;
-
-                return Ok(());
-            }
-
-            _ => {}
-        }
+        return Ok(());
     }
 
     // Receiver methods cannot be called as free functions.
@@ -502,7 +421,7 @@ fn parse_this_reference(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     allow_boundary_catch: bool,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
@@ -526,22 +445,26 @@ fn parse_this_reference(
         .into());
     };
 
-    let reference_node = create_reference(
-        token_stream,
+    let reference_location = token_stream.current_location();
+    let reference_expression = reference_expression_from_declaration(
         receiver_declaration,
         context,
         type_interner,
-        string_table,
-    )?;
+        reference_location.clone(),
+    );
+    token_stream.advance();
 
-    push_expression_node(
+    push_expression_operand_at_location(
         token_stream,
         context,
         type_interner,
         string_table,
         expression,
         allow_boundary_catch,
-        reference_node,
+        ExpressionOperandInput {
+            operand: reference_expression,
+            wrapper_location: reference_location,
+        },
     )?;
 
     Ok(())

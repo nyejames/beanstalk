@@ -7,6 +7,8 @@
 
 use super::*;
 use crate::compiler_frontend::datatypes::parsed::ParsedCollectionCapacity;
+use crate::compiler_frontend::numeric_text::parse::materialize_i32;
+use crate::compiler_frontend::numeric_text::token::{NumericLiteralKind, NumericLiteralSign};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::Token;
 
@@ -324,7 +326,7 @@ fn parse_collection_type(
             return Ok(ParsedTypeRef::Collection {
                 element: Box::new(element),
                 location,
-                fixed_capacity: parsed_capacity(&inner_tokens[..split_idx])?,
+                fixed_capacity: parsed_capacity(&inner_tokens[..split_idx], string_table)?,
             });
         }
     }
@@ -334,7 +336,7 @@ fn parse_collection_type(
         return Ok(ParsedTypeRef::Collection {
             element: Box::new(ParsedTypeRef::Inferred),
             location,
-            fixed_capacity: parsed_capacity(&inner_tokens)?,
+            fixed_capacity: parsed_capacity(&inner_tokens, string_table)?,
         });
     }
 
@@ -395,6 +397,7 @@ fn collect_collection_inner_tokens(
 ///      named constants can still hold arithmetic before they are used in type annotations.
 fn parsed_capacity(
     tokens: &[Token],
+    string_table: &StringTable,
 ) -> Result<Option<ParsedCollectionCapacity>, CompilerDiagnostic> {
     if tokens.is_empty() {
         return Ok(None);
@@ -402,9 +405,31 @@ fn parsed_capacity(
 
     if tokens.len() == 1 {
         match &tokens[0].kind {
-            TokenKind::IntLiteral(value) => {
+            TokenKind::NumericLiteral(token) => {
+                if token.kind != NumericLiteralKind::WholeNumber {
+                    return Err(CompilerDiagnostic::invalid_collection_type(
+                        InvalidCollectionTypeReason::CapacityNotInt,
+                        tokens[0].location.clone(),
+                    ));
+                }
+
+                let value = materialize_i32(token, string_table).map_err(|reason| {
+                    CompilerDiagnostic::invalid_number_literal(
+                        token.normalized_text,
+                        reason,
+                        tokens[0].location.clone(),
+                    )
+                })?;
+
+                if token.sign == NumericLiteralSign::Negative {
+                    return Err(CompilerDiagnostic::invalid_collection_type(
+                        InvalidCollectionTypeReason::NegativeCapacity,
+                        tokens[0].location.clone(),
+                    ));
+                }
+
                 return Ok(Some(ParsedCollectionCapacity::Literal {
-                    value: *value,
+                    value,
                     location: tokens[0].location.clone(),
                 }));
             }
@@ -413,12 +438,6 @@ fn parsed_capacity(
                     name: *name,
                     location: tokens[0].location.clone(),
                 }));
-            }
-            TokenKind::FloatLiteral(_) => {
-                return Err(CompilerDiagnostic::invalid_collection_type(
-                    InvalidCollectionTypeReason::CapacityNotInt,
-                    tokens[0].location.clone(),
-                ));
             }
             _ => {}
         }
@@ -573,7 +592,10 @@ fn map_side_looks_like_fixed_capacity(
         let type_tokens = &tokens[split_idx..];
         if collection_type_slice_can_start_type(type_tokens, context, string_table)
             && parse_type_slice_exact(type_tokens, token_stream, context, string_table).is_some()
-            && matches!(parsed_capacity(&tokens[..split_idx]), Ok(Some(_)))
+            && matches!(
+                parsed_capacity(&tokens[..split_idx], string_table),
+                Ok(Some(_))
+            )
         {
             return true;
         }
@@ -606,9 +628,7 @@ fn map_side_looks_like_postfix_capacity(
             }
             return matches!(
                 remaining.first().map(|t| &t.kind),
-                Some(TokenKind::Colon)
-                    | Some(TokenKind::IntLiteral(_))
-                    | Some(TokenKind::FloatLiteral(_))
+                Some(TokenKind::Colon) | Some(TokenKind::NumericLiteral(_))
             );
         }
     }
@@ -838,7 +858,7 @@ fn generic_argument_list_is_finished(token: &TokenKind) -> bool {
             | TokenKind::QuestionMark
             | TokenKind::Eof
             | TokenKind::End
-            | TokenKind::IntLiteral(_)
+            | TokenKind::NumericLiteral(_)
     )
 }
 

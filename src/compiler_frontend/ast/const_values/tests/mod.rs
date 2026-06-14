@@ -1,6 +1,6 @@
 //! Tests for the shared AST const value resolver.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_values::facts::{
     ConstBindingScope, ConstBindingSource, ConstFactValueKind,
 };
@@ -9,6 +9,9 @@ use crate::compiler_frontend::ast::const_values::resolver::{
 };
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
+};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -36,19 +39,14 @@ fn make_environment_with(
     env
 }
 
-fn rvalue_node(expression: Expression) -> AstNode {
-    AstNode {
-        kind: NodeKind::Rvalue(expression),
-        location: SourceLocation::default(),
-        scope: InternedPath::new(),
-    }
+fn rvalue_item(expression: Expression) -> ExpressionRpnItem {
+    ExpressionRpnItem::Operand(expression)
 }
 
-fn operator_node(operator: Operator) -> AstNode {
-    AstNode {
-        kind: NodeKind::Operator(operator),
+fn operator_item(operator: Operator) -> ExpressionRpnItem {
+    ExpressionRpnItem::Operator {
+        operator,
         location: SourceLocation::default(),
-        scope: InternedPath::new(),
     }
 }
 
@@ -93,19 +91,21 @@ fn literal_string_resolves_as_const() {
 #[test]
 fn folded_arithmetic_resolves_to_literal() {
     let mut string_table = StringTable::new();
-    let rpn = vec![
-        rvalue_node(Expression::int(
-            1,
-            empty_location(),
-            ValueMode::ImmutableOwned,
-        )),
-        rvalue_node(Expression::int(
-            2,
-            empty_location(),
-            ValueMode::ImmutableOwned,
-        )),
-        operator_node(Operator::Add),
-    ];
+    let rpn = ExpressionRpn {
+        items: vec![
+            rvalue_item(Expression::int(
+                1,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            rvalue_item(Expression::int(
+                2,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            operator_item(Operator::Add),
+        ],
+    };
     let expression = Expression::runtime_with_type_id(
         rpn,
         DataType::Int,
@@ -127,20 +127,22 @@ fn folded_arithmetic_resolves_to_literal() {
 #[test]
 fn folded_arithmetic_with_reference_substitution_resolves() {
     let mut string_table = StringTable::new();
-    let rpn = vec![
-        rvalue_node(Expression::reference(
-            InternedPath::from_single_str("x", &mut string_table),
-            DataType::Int,
-            empty_location(),
-            ValueMode::ImmutableReference,
-        )),
-        rvalue_node(Expression::int(
-            5,
-            empty_location(),
-            ValueMode::ImmutableOwned,
-        )),
-        operator_node(Operator::Multiply),
-    ];
+    let rpn = ExpressionRpn {
+        items: vec![
+            rvalue_item(Expression::reference(
+                InternedPath::from_single_str("x", &mut string_table),
+                DataType::Int,
+                empty_location(),
+                ValueMode::ImmutableReference,
+            )),
+            rvalue_item(Expression::int(
+                5,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            operator_item(Operator::Multiply),
+        ],
+    };
     let expression = Expression::runtime_with_type_id(
         rpn,
         DataType::Int,
@@ -172,15 +174,17 @@ fn folded_arithmetic_with_coerced_reference_substitution_resolves() {
         empty_location(),
         ValueMode::ImmutableReference,
     );
-    let rpn = vec![
-        rvalue_node(Expression::coerced(reference, builtin_type_ids::INT)),
-        rvalue_node(Expression::int(
-            2,
-            empty_location(),
-            ValueMode::ImmutableOwned,
-        )),
-        operator_node(Operator::Add),
-    ];
+    let rpn = ExpressionRpn {
+        items: vec![
+            rvalue_item(Expression::coerced(reference, builtin_type_ids::INT)),
+            rvalue_item(Expression::int(
+                2,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            operator_item(Operator::Add),
+        ],
+    };
     let expression = Expression::runtime_with_type_id(
         rpn,
         DataType::Int,
@@ -349,7 +353,7 @@ fn fact_value_kind_from_literal_is_literal() {
 #[test]
 fn fact_value_kind_from_runtime_is_non_const() {
     let expression = Expression::runtime_with_type_id(
-        vec![],
+        ExpressionRpn { items: vec![] },
         DataType::Int,
         builtin_type_ids::INT,
         SourceLocation::default(),
@@ -389,20 +393,22 @@ fn coerced_expression_resolves_inner_value() {
 #[test]
 fn runtime_rpn_with_unresolved_reference_fails() {
     let mut string_table = StringTable::new();
-    let rpn = vec![
-        rvalue_node(Expression::reference(
-            InternedPath::from_single_str("missing", &mut string_table),
-            DataType::Int,
-            empty_location(),
-            ValueMode::ImmutableReference,
-        )),
-        rvalue_node(Expression::int(
-            2,
-            empty_location(),
-            ValueMode::ImmutableOwned,
-        )),
-        operator_node(Operator::Add),
-    ];
+    let rpn = ExpressionRpn {
+        items: vec![
+            rvalue_item(Expression::reference(
+                InternedPath::from_single_str("missing", &mut string_table),
+                DataType::Int,
+                empty_location(),
+                ValueMode::ImmutableReference,
+            )),
+            rvalue_item(Expression::int(
+                2,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            operator_item(Operator::Add),
+        ],
+    };
     let expression = Expression::runtime_with_type_id(
         rpn,
         DataType::Int,

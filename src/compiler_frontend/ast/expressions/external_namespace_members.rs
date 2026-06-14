@@ -4,13 +4,14 @@
 //! WHY: external package calls use registry IDs and backend metadata, which should stay separate
 //! from source namespace handling.
 
-use super::call_argument::normalize_call_arguments;
 use super::error::ExpressionParseError;
-use super::expression::{Expression, HandledFallibleHostFunctionCallInput};
-use super::function_calls::{ExternalFunctionCallParseInput, parse_external_function_call};
-use super::parse_expression_dispatch::push_expression_node;
+use super::expression::Expression;
+use super::expression_rpn::ExpressionRpnItem;
+use super::function_calls::{
+    ExternalFunctionCallParseInput, parse_external_function_call_expression,
+};
+use super::parse_expression_dispatch::push_expression_operand;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -35,7 +36,7 @@ pub(super) struct ExternalNamespaceFunctionMemberInput<'a, 'env> {
     pub(super) token_stream: &'a mut FileTokens,
     pub(super) context: &'a ScopeContext,
     pub(super) type_interner: &'a mut AstTypeInterner<'env>,
-    pub(super) expression: &'a mut Vec<AstNode>,
+    pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
     pub(super) allow_boundary_catch: bool,
     pub(super) string_table: &'a mut StringTable,
 }
@@ -88,112 +89,32 @@ pub(super) fn parse_external_namespace_function_member(
     // external call parser sees the expected token stream position.
     token_stream.advance();
 
-    // The shared call parser needs the effective boundary-catch flag up front.
-    // push_expression_node recomputes the same condition later, so the raw
-    // parameter is passed through unchanged there.
-    let function_call_node = parse_external_function_call(ExternalFunctionCallParseInput {
+    // The shared call parser consumes external-call result handling itself, so
+    // it needs the effective boundary-catch flag before argument parsing starts.
+    let function_call_expression =
+        parse_external_function_call_expression(ExternalFunctionCallParseInput {
+            token_stream,
+            external_function_id: function_id,
+            external_function,
+            context,
+            value_required: true,
+            allow_boundary_catch: allow_boundary_catch
+                && expression.is_empty()
+                && fallible_catch_allowed_in_context(context),
+            warnings: None,
+            type_interner,
+            string_table,
+        })?;
+
+    push_expression_operand(
         token_stream,
-        external_function_id: function_id,
-        external_function,
         context,
-        value_required: true,
-        allow_boundary_catch: allow_boundary_catch
-            && expression.is_empty()
-            && fallible_catch_allowed_in_context(context),
-        warnings: None,
         type_interner,
         string_table,
-    })?;
-
-    // parse_external_function_call returns either a plain host call or a handled
-    // fallible variant.  Other node kinds are not produced for external calls.
-    match function_call_node.kind {
-        NodeKind::HostFunctionCall {
-            name,
-            args,
-            result_type_ids,
-            location,
-        } => {
-            let normalized_args = normalize_call_arguments(&args);
-            let function_call_expression = Expression::host_function_call_with_typed_arguments(
-                name,
-                normalized_args,
-                result_type_ids,
-                type_interner.environment_mut_for_derived_types(),
-                location,
-            );
-
-            push_expression_node(
-                token_stream,
-                context,
-                type_interner,
-                string_table,
-                expression,
-                allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(function_call_expression),
-                    location: SourceLocation::default(),
-                    scope: context.scope.clone(),
-                },
-            )?;
-        }
-
-        NodeKind::HandledFallibleHostFunctionCall {
-            name,
-            args,
-            result_type_ids,
-            error_type_id,
-            handling,
-            location,
-        } => {
-            let normalized_args = normalize_call_arguments(&args);
-            let function_call_expression =
-                Expression::handled_fallible_host_function_call_with_typed_arguments(
-                    HandledFallibleHostFunctionCallInput {
-                        id: name,
-                        args: normalized_args,
-                        result_type_ids,
-                        error_type_id,
-                        handling,
-                        location,
-                    },
-                    type_interner.environment_mut_for_derived_types(),
-                );
-
-            push_expression_node(
-                token_stream,
-                context,
-                type_interner,
-                string_table,
-                expression,
-                allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(function_call_expression),
-                    location: SourceLocation::default(),
-                    scope: context.scope.clone(),
-                },
-            )?;
-        }
-
-        NodeKind::Rvalue(expression_value) => {
-            push_expression_node(
-                token_stream,
-                context,
-                type_interner,
-                string_table,
-                expression,
-                allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(expression_value),
-                    location: SourceLocation::default(),
-                    scope: context.scope.clone(),
-                },
-            )?;
-        }
-
-        // Non-call node kinds are not produced for external namespace members.
-        _ => {}
-    }
+        expression,
+        allow_boundary_catch,
+        function_call_expression,
+    )?;
 
     Ok(())
 }
@@ -210,7 +131,7 @@ pub(super) struct ExternalNamespaceConstantMemberInput<'a, 'env> {
     pub(super) token_stream: &'a mut FileTokens,
     pub(super) context: &'a ScopeContext,
     pub(super) type_interner: &'a mut AstTypeInterner<'env>,
-    pub(super) expression: &'a mut Vec<AstNode>,
+    pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
     pub(super) allow_boundary_catch: bool,
     pub(super) string_table: &'a mut StringTable,
 }
@@ -275,18 +196,14 @@ pub(super) fn parse_external_namespace_constant_member(
         ExternalConstantValue::Bool(value) => Expression::bool(value, member_location, value_mode),
     };
 
-    push_expression_node(
+    push_expression_operand(
         token_stream,
         context,
         type_interner,
         string_table,
         expression,
         allow_boundary_catch,
-        AstNode {
-            kind: NodeKind::Rvalue(constant_expression),
-            location: SourceLocation::default(),
-            scope: context.scope.clone(),
-        },
+        constant_expression,
     )?;
 
     Ok(())

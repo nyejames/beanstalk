@@ -11,7 +11,6 @@ pub(crate) enum AstCounter {
     ScopeLocalDeclarationsClonedTotal,
     BoundedExpressionTokenWindows,
     BoundedExpressionTokenCopiesAvoided,
-    RuntimeRpnUnchangedFolds,
     TemplateNormalizationNodesVisited,
     ModuleConstantNormalizationExpressionsVisited,
     TemplatesFoldedDuringFinalization,
@@ -32,7 +31,6 @@ mod detailed {
     static SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_WINDOWS: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_COPIES_AVOIDED: AtomicUsize = AtomicUsize::new(0);
-    static RUNTIME_RPN_UNCHANGED_FOLDS: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATE_NORMALIZATION_NODES_VISITED: AtomicUsize = AtomicUsize::new(0);
     static MODULE_CONSTANT_NORMALIZATION_EXPRESSIONS_VISITED: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATES_FOLDED_DURING_FINALIZATION: AtomicUsize = AtomicUsize::new(0);
@@ -65,7 +63,6 @@ mod detailed {
             counter_value(AstCounter::BoundedExpressionTokenWindows);
         let bounded_expression_token_copies_avoided =
             counter_value(AstCounter::BoundedExpressionTokenCopiesAvoided);
-        let runtime_rpn_unchanged_folds = counter_value(AstCounter::RuntimeRpnUnchangedFolds);
         let template_normalization_nodes_visited =
             counter_value(AstCounter::TemplateNormalizationNodesVisited);
         let module_constant_normalization_expressions_visited =
@@ -92,7 +89,6 @@ mod detailed {
             "  bounded expression token copies avoided = ",
             Dark Green bounded_expression_token_copies_avoided
         );
-        saying::say!("  runtime RPN unchanged folds = ", Dark Green runtime_rpn_unchanged_folds);
         saying::say!(
             "  template normalization nodes visited = ",
             Dark Green template_normalization_nodes_visited
@@ -115,13 +111,12 @@ mod detailed {
         );
     }
 
-    fn all_counters() -> [AstCounter; 10] {
+    fn all_counters() -> [AstCounter; 9] {
         [
             AstCounter::ScopeContextsCreated,
             AstCounter::ScopeLocalDeclarationsClonedTotal,
             AstCounter::BoundedExpressionTokenWindows,
             AstCounter::BoundedExpressionTokenCopiesAvoided,
-            AstCounter::RuntimeRpnUnchangedFolds,
             AstCounter::TemplateNormalizationNodesVisited,
             AstCounter::ModuleConstantNormalizationExpressionsVisited,
             AstCounter::TemplatesFoldedDuringFinalization,
@@ -141,8 +136,6 @@ mod detailed {
             AstCounter::BoundedExpressionTokenCopiesAvoided => {
                 &BOUNDED_EXPRESSION_TOKEN_COPIES_AVOIDED
             }
-
-            AstCounter::RuntimeRpnUnchangedFolds => &RUNTIME_RPN_UNCHANGED_FOLDS,
 
             AstCounter::TemplateNormalizationNodesVisited => &TEMPLATE_NORMALIZATION_NODES_VISITED,
 

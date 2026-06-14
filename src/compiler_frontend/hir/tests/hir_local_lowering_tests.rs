@@ -9,13 +9,14 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::HirExpressionKind;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
-    function_node, make_test_variable, node, test_location,
+    assignment_target, function_node, make_test_variable, node, test_location,
 };
 
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -175,19 +176,14 @@ fn assignment_lowers_value_prelude_before_assign() {
         test_location(1),
     );
 
-    let target_node = node(
-        NodeKind::Rvalue(reference_expr(
-            x.clone(),
-            builtin_type_ids::INT,
-            test_location(5),
-            ValueMode::MutableReference,
-        )),
-        test_location(5),
-    );
-
     let assignment = node(
         NodeKind::Assignment {
-            target: Box::new(target_node),
+            target: assignment_target(
+                x.clone(),
+                DataType::Int,
+                builtin_type_ids::INT,
+                test_location(5),
+            ),
             value: Expression::function_call(
                 helper,
                 vec![],
@@ -245,7 +241,7 @@ fn assignment_lowers_value_prelude_before_assign() {
 }
 
 #[test]
-fn call_statements_emit_without_result_binding() {
+fn call_expression_statements_materialize_result_values() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let callee = super::symbol("callee", &mut string_table);
@@ -276,25 +272,25 @@ fn call_statements_emit_without_result_binding() {
         },
         vec![
             node(
-                NodeKind::FunctionCall {
-                    name: callee,
-                    args: vec![],
-                    result_type_ids: vec![builtin_type_ids::INT],
-                    location: test_location(2),
-                },
+                NodeKind::ExpressionStatement(Expression::function_call_with_arguments(
+                    callee,
+                    vec![],
+                    vec![builtin_type_ids::INT],
+                    test_location(2),
+                )),
                 test_location(2),
             ),
             node(
-                NodeKind::HostFunctionCall {
-                    name: alloc_id,
-                    args: vec![CallArgument::positional(
+                NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
+                    alloc_id,
+                    vec![CallArgument::positional(
                         Expression::int(1, test_location(3), ValueMode::ImmutableOwned),
                         CallAccessMode::Shared,
                         test_location(3),
                     )],
-                    result_type_ids: vec![builtin_type_ids::INT],
-                    location: test_location(3),
-                },
+                    vec![builtin_type_ids::INT],
+                    test_location(3),
+                )),
                 test_location(3),
             ),
         ],
@@ -317,7 +313,11 @@ fn call_statements_emit_without_result_binding() {
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(call_results, vec![None, None]);
+    assert_eq!(call_results.len(), 2);
+    assert!(
+        call_results.iter().all(Option::is_some),
+        "non-unit call expression statements should materialize their result before it is discarded"
+    );
 }
 
 #[test]

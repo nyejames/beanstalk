@@ -18,7 +18,6 @@ kind = "html"
 must_contain = [
     "function __bs_cast_int(",
     "function __bs_cast_int_in_range(",
-    "function __bs_normalize_numeric_text(",
 ]
 
 [[backends.html.artifact_assertions]]
@@ -26,4 +25,5 @@ path = "index.html"
 kind = "html"
 must_not_contain = [
     "function __bs_cast_float(",
+    "function __bs_normalize_numeric_text(",
 ]

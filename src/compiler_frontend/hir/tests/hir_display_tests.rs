@@ -7,10 +7,13 @@
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
-use crate::compiler_frontend::hir::hir_display::HirDisplayContext;
-use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+use crate::compiler_frontend::hir::hir_display::{HirDisplayContext, HirDisplayOptions};
+use crate::compiler_frontend::hir::ids::{HirNodeId, HirValueId, LocalId, RegionId};
+use crate::compiler_frontend::hir::numeric::NumericFailureMode;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 fn render_collection_type(type_environment: &TypeEnvironment, type_id: TypeId) -> String {
     let string_table = StringTable::new();
@@ -95,4 +98,88 @@ fn hir_display_renders_nested_fixed_collection_type() {
         "expected HIR display to contain '{{4 {{8 Int}}}}', got: {}",
         rendered
     );
+}
+
+fn float_expression(value: f64) -> HirExpression {
+    HirExpression {
+        id: HirValueId(0),
+        kind: HirExpressionKind::Float(value),
+        ty: TypeId(0),
+        value_kind: ValueKind::RValue,
+        region: RegionId(0),
+    }
+}
+
+fn float_statement(kind: HirStatementKind) -> HirStatement {
+    HirStatement {
+        id: HirNodeId(0),
+        kind,
+        location: SourceLocation::default(),
+    }
+}
+
+fn terse_display_context(string_table: &StringTable) -> HirDisplayContext<'_> {
+    HirDisplayContext::new(string_table).with_options(HirDisplayOptions {
+        include_ids: false,
+        include_types: false,
+        include_value_kinds: false,
+        include_regions: false,
+        multiline_match_arms: false,
+    })
+}
+
+#[test]
+fn hir_display_renders_format_float_trap() {
+    let string_table = StringTable::new();
+    let display = terse_display_context(&string_table);
+
+    let rendered = display.render_statement(&float_statement(HirStatementKind::FormatFloat {
+        source: float_expression(1.5),
+        failure_mode: NumericFailureMode::Trap,
+        result: LocalId(9000),
+    }));
+
+    assert_eq!(rendered, "l9000 = format_float_trap(1.5)");
+}
+
+#[test]
+fn hir_display_renders_format_float_return_error() {
+    let string_table = StringTable::new();
+    let display = terse_display_context(&string_table);
+
+    let rendered = display.render_statement(&float_statement(HirStatementKind::FormatFloat {
+        source: float_expression(-0.25),
+        failure_mode: NumericFailureMode::ReturnError,
+        result: LocalId(9001),
+    }));
+
+    assert_eq!(rendered, "l9001 = format_float_err(-0.25)");
+}
+
+#[test]
+fn hir_display_renders_validate_float_trap() {
+    let string_table = StringTable::new();
+    let display = terse_display_context(&string_table);
+
+    let rendered = display.render_statement(&float_statement(HirStatementKind::ValidateFloat {
+        source: float_expression(2.5),
+        failure_mode: NumericFailureMode::Trap,
+        result: LocalId(9002),
+    }));
+
+    assert_eq!(rendered, "l9002 = validate_float_trap(2.5)");
+}
+
+#[test]
+fn hir_display_renders_validate_float_return_error() {
+    let string_table = StringTable::new();
+    let display = terse_display_context(&string_table);
+
+    let rendered = display.render_statement(&float_statement(HirStatementKind::ValidateFloat {
+        source: float_expression(0.0),
+        failure_mode: NumericFailureMode::ReturnError,
+        result: LocalId(9003),
+    }));
+
+    assert_eq!(rendered, "l9003 = validate_float_err(0)");
 }

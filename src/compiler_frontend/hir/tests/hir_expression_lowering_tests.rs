@@ -11,10 +11,11 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
 };
 use crate::compiler_frontend::ast::expressions::expression::{
     ConstRecordState, Expression, ExpressionKind,
-    FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleHandling, Operator,
-    ReactiveSource, ReactiveSourceKind,
+    FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleExpressionHandling,
+    FallibleHandling, Operator, ReactiveSource, ReactiveSourceKind,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry;
+use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
 use crate::compiler_frontend::ast::templates::template::{
@@ -55,6 +56,7 @@ use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{
     BlockId, ChoiceId, FieldId, FunctionId, LocalId, RegionId, StructId,
 };
+use crate::compiler_frontend::hir::numeric::NumericFailureMode;
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -69,12 +71,13 @@ use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     choice_construct_expr, const_record_reference_expr, field_access_node, handled_result_expr,
-    option_none_expr, reference_expr, result_carrier_type_id, runtime_expr,
+    option_none_expr, reference_expr, result_carrier_type_id, runtime_expr, runtime_operand_item,
+    runtime_operator_item,
 };
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
 
-fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
+pub(crate) fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
     let mut builder = HirBuilder::new(
         string_table,
@@ -115,7 +118,7 @@ pub(crate) fn location(line: i32) -> SourceLocation {
     }
 }
 
-fn register_local(
+pub(crate) fn register_local(
     builder: &mut HirBuilder<'_>,
     name: InternedPath,
     local_id: LocalId,
@@ -141,23 +144,6 @@ fn field_symbol(
     string_table: &mut StringTable,
 ) -> InternedPath {
     parent.append(string_table.intern(field_name))
-}
-
-fn rvalue_node(expr: Expression) -> AstNode {
-    let location = expr.location.clone();
-    AstNode {
-        kind: NodeKind::Rvalue(expr),
-        location,
-        scope: InternedPath::new(),
-    }
-}
-
-fn operator_node(op: Operator, location: SourceLocation) -> AstNode {
-    AstNode {
-        kind: NodeKind::Operator(op),
-        location,
-        scope: InternedPath::new(),
-    }
 }
 
 fn runtime_template_expression(location: SourceLocation, content: Vec<Expression>) -> Expression {
@@ -731,30 +717,30 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
         location.clone(),
     );
 
-    let nodes = vec![
-        rvalue_node(reference_expr(
+    let items = vec![
+        runtime_operand_item(reference_expr(
             x,
             builtin_type_ids::INT,
             location.clone(),
             ValueMode::ImmutableReference,
         )),
-        rvalue_node(Expression::int(
+        runtime_operand_item(Expression::int(
             2,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        rvalue_node(reference_expr(
+        runtime_operand_item(reference_expr(
             y,
             builtin_type_ids::INT,
             location.clone(),
             ValueMode::ImmutableReference,
         )),
-        operator_node(Operator::Multiply, location.clone()),
-        operator_node(Operator::Add, location.clone()),
+        runtime_operator_item(Operator::Multiply, location.clone()),
+        runtime_operator_item(Operator::Add, location.clone()),
     ];
 
     let expr = runtime_expr(
-        nodes,
+        items,
         builtin_type_ids::INT,
         location.clone(),
         ValueMode::MutableOwned,
@@ -764,13 +750,14 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
         .expect("runtime arithmetic lowering should succeed");
 
     assert!(lowered.prelude.is_empty());
-    assert!(matches!(
-        lowered.value.kind,
-        HirExpressionKind::BinOp {
-            op: HirBinOp::Add,
-            ..
-        }
-    ));
+    assert_eq!(lowered.value.ty, builtin_type_ids::INT);
+    assert!(
+        matches!(
+            lowered.value.kind,
+            HirExpressionKind::Load(HirPlace::Local(_))
+        ),
+        "checked integer addition should return a load of the NumericOp result local"
+    );
 }
 
 #[test]
@@ -780,28 +767,28 @@ fn runtime_division_subexpression_infers_float_type_in_hir() {
     let mut builder = setup_builder(&mut string_table);
     let expected_float = builtin_type_ids::FLOAT;
 
-    let nodes = vec![
-        rvalue_node(Expression::int(
+    let items = vec![
+        runtime_operand_item(Expression::int(
             5,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        rvalue_node(Expression::int(
+        runtime_operand_item(Expression::int(
             2,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        operator_node(Operator::Divide, location.clone()),
-        rvalue_node(Expression::int(
+        runtime_operator_item(Operator::Divide, location.clone()),
+        runtime_operand_item(Expression::int(
             1,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        operator_node(Operator::Add, location.clone()),
+        runtime_operator_item(Operator::Add, location.clone()),
     ];
 
     let expr = runtime_expr(
-        nodes,
+        items,
         builtin_type_ids::FLOAT,
         location.clone(),
         ValueMode::MutableOwned,
@@ -810,16 +797,14 @@ fn runtime_division_subexpression_infers_float_type_in_hir() {
         .lower_expression(&expr)
         .expect("runtime division lowering should succeed");
 
-    let HirExpressionKind::BinOp { left, op, .. } = &lowered.value.kind else {
-        panic!("expected outer addition binop");
-    };
-    assert!(matches!(op, HirBinOp::Add));
-    let HirExpressionKind::BinOp { op: inner_op, .. } = &left.kind else {
-        panic!("expected left operand to be division binop");
-    };
-    assert!(matches!(inner_op, HirBinOp::Div));
-    assert_eq!(left.ty, expected_float);
     assert_eq!(lowered.value.ty, expected_float);
+    assert!(
+        matches!(
+            lowered.value.kind,
+            HirExpressionKind::Load(HirPlace::Local(_))
+        ),
+        "checked addition should return a load of the NumericOp result local"
+    );
 }
 
 #[test]
@@ -829,22 +814,22 @@ fn runtime_integer_division_lowers_to_hir_int_div_with_int_type() {
     let mut builder = setup_builder(&mut string_table);
     let expected_int = builtin_type_ids::INT;
 
-    let nodes = vec![
-        rvalue_node(Expression::int(
+    let items = vec![
+        runtime_operand_item(Expression::int(
             5,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        rvalue_node(Expression::int(
+        runtime_operand_item(Expression::int(
             2,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        operator_node(Operator::IntDivide, location.clone()),
+        runtime_operator_item(Operator::IntDivide, location.clone()),
     ];
 
     let expr = runtime_expr(
-        nodes,
+        items,
         builtin_type_ids::INT,
         location.clone(),
         ValueMode::MutableOwned,
@@ -853,11 +838,14 @@ fn runtime_integer_division_lowers_to_hir_int_div_with_int_type() {
         .lower_expression(&expr)
         .expect("runtime integer division lowering should succeed");
 
-    let HirExpressionKind::BinOp { op, .. } = &lowered.value.kind else {
-        panic!("expected integer division binop");
-    };
-    assert!(matches!(op, HirBinOp::IntDiv));
     assert_eq!(lowered.value.ty, expected_int);
+    assert!(
+        matches!(
+            lowered.value.kind,
+            HirExpressionKind::Load(HirPlace::Local(_))
+        ),
+        "checked integer division should return a load of the NumericOp result local"
+    );
 }
 
 #[test]
@@ -866,17 +854,17 @@ fn lowers_unary_not_in_runtime_rpn() {
     let location = location(4);
     let mut builder = setup_builder(&mut string_table);
 
-    let nodes = vec![
-        rvalue_node(Expression::bool(
+    let items = vec![
+        runtime_operand_item(Expression::bool(
             true,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        operator_node(Operator::Not, location.clone()),
+        runtime_operator_item(Operator::Not, location.clone()),
     ];
 
     let expr = runtime_expr(
-        nodes,
+        items,
         builtin_type_ids::BOOL,
         location.clone(),
         ValueMode::MutableOwned,
@@ -900,22 +888,22 @@ fn lowers_range_operator_in_runtime_rpn() {
     let location = location(5);
     let mut builder = setup_builder(&mut string_table);
 
-    let nodes = vec![
-        rvalue_node(Expression::int(
+    let items = vec![
+        runtime_operand_item(Expression::int(
             1,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        rvalue_node(Expression::int(
+        runtime_operand_item(Expression::int(
             9,
             location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        operator_node(Operator::Range, location.clone()),
+        runtime_operator_item(Operator::Range, location.clone()),
     ];
 
     let expr = runtime_expr(
-        nodes,
+        items,
         builtin_type_ids::RANGE,
         location.clone(),
         ValueMode::MutableOwned,
@@ -1136,10 +1124,25 @@ fn expression_handled_fallible_call_fallback_uses_variant_result_type_ids() {
     );
     let test_scope = function_name.clone();
 
-    let call_expr = Expression::handled_fallible_function_call_with_typed_arguments(
+    let handled_call_expr = Expression::handled_fallible_function_call_with_typed_arguments(
         function_name,
         vec![],
         vec![builtin_type_ids::INT],
+        FallibleExpressionHandling::Recover,
+        &mut builder.type_environment,
+        location.clone(),
+    );
+    assert!(
+        matches!(
+            &handled_call_expr.kind,
+            ExpressionKind::HandledFallibleFunctionCall { result_type_ids, .. }
+                if result_type_ids.as_slice() == [builtin_type_ids::INT]
+        ),
+        "typed handled fallible call construction should store canonical result TypeIds immediately"
+    );
+
+    let call_expr = wrap_catch_expression(
+        handled_call_expr,
         FallibleHandling::Handler {
             error: None,
             body: vec![AstNode {
@@ -1155,16 +1158,7 @@ fn expression_handled_fallible_call_fallback_uses_variant_result_type_ids() {
                 scope: test_scope,
             }],
         },
-        &mut builder.type_environment,
-        location.clone(),
-    );
-    assert!(
-        matches!(
-            &call_expr.kind,
-            ExpressionKind::HandledFallibleFunctionCall { result_type_ids, .. }
-                if result_type_ids.as_slice() == [builtin_type_ids::INT]
-        ),
-        "typed handled fallible call construction should store canonical result TypeIds immediately"
+        vec![builtin_type_ids::INT],
     );
 
     let lowered = builder
@@ -1215,6 +1209,7 @@ fn expression_handled_result_derives_success_slots_from_tuple_type_id() {
             }],
         },
         ok_type,
+        vec![builtin_type_ids::INT, builtin_type_ids::BOOL],
         location.clone(),
     );
 
@@ -1327,34 +1322,27 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
         location.clone(),
     );
 
-    let receiver = AstNode {
-        kind: NodeKind::Rvalue(reference_expr(
+    let method_expression = Expression::method_call_with_typed_arguments(
+        reference_expr(
             receiver_name,
             receiver_type_id,
             location.clone(),
             ValueMode::MutableReference,
-        )),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
+        ),
+        method_path.clone(),
+        method_name,
+        vec![CallArgument::positional(
+            Expression::int(7, location.clone(), ValueMode::ImmutableOwned),
+            CallAccessMode::Shared,
+            location.clone(),
+        )],
+        vec![builtin_type_ids::INT],
+        &mut builder.type_environment,
+        location.clone(),
+    );
 
     let lowered = builder
-        .lower_ast_node_as_expression(&AstNode {
-            kind: NodeKind::MethodCall {
-                receiver: Box::new(receiver),
-                method_path: method_path.clone(),
-                method: method_name,
-                args: vec![CallArgument::positional(
-                    Expression::int(7, location.clone(), ValueMode::ImmutableOwned),
-                    CallAccessMode::Shared,
-                    location.clone(),
-                )],
-                result_type_ids: vec![builtin_type_ids::INT],
-                location: location.clone(),
-            },
-            location: location.clone(),
-            scope: InternedPath::new(),
-        })
+        .lower_expression(&method_expression)
         .expect("receiver method call lowering should succeed");
 
     assert_eq!(lowered.prelude.len(), 1);
@@ -1392,30 +1380,23 @@ fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() 
         location.clone(),
     );
 
-    let receiver = AstNode {
-        kind: NodeKind::Rvalue(reference_expr(
+    let method_expression = Expression::method_call_with_typed_arguments(
+        reference_expr(
             receiver_name,
             builtin_type_ids::INT,
             location.clone(),
             ValueMode::ImmutableReference,
-        )),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
+        ),
+        method_path.clone(),
+        method_name,
+        vec![],
+        vec![builtin_type_ids::INT],
+        &mut builder.type_environment,
+        location.clone(),
+    );
 
     let lowered = builder
-        .lower_ast_node_as_expression(&AstNode {
-            kind: NodeKind::MethodCall {
-                receiver: Box::new(receiver),
-                method_path: method_path.clone(),
-                method: method_name,
-                args: vec![],
-                result_type_ids: vec![builtin_type_ids::INT],
-                location: location.clone(),
-            },
-            location: location.clone(),
-            scope: InternedPath::new(),
-        })
+        .lower_expression(&method_expression)
         .expect("builtin scalar receiver method call lowering should succeed");
 
     assert_eq!(lowered.prelude.len(), 1);
@@ -1530,7 +1511,7 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
     let mut builder = setup_builder(&mut string_table);
 
     let expr = runtime_expr(
-        vec![operator_node(Operator::Add, location.clone())],
+        vec![runtime_operator_item(Operator::Add, location.clone())],
         builtin_type_ids::INT,
         location,
         ValueMode::MutableOwned,
@@ -2032,7 +2013,7 @@ fn runtime_template_control_flow_bool_if_branch_preserves_fallible_propagation_c
         can_fail_name,
         vec![],
         vec![builtin_type_ids::STRING],
-        FallibleHandling::Propagate,
+        FallibleExpressionHandling::Propagate,
         &mut builder.type_environment,
         location.clone(),
     );
@@ -2735,7 +2716,7 @@ fn count_block_appends_local_string(block: &HirBlock) -> usize {
         .count()
 }
 
-fn block_assigns_coerced_int_chunk(block: &HirBlock, expected: i64) -> bool {
+fn block_assigns_coerced_int_chunk(block: &HirBlock, expected: i32) -> bool {
     block.statements.iter().any(|statement| {
         let HirStatementKind::Assign { value, .. } = &statement.kind else {
             return false;
@@ -2981,19 +2962,15 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
         location.clone(),
     );
 
-    let base_node = AstNode {
-        kind: NodeKind::Rvalue(reference_expr(
-            local_name,
-            local_struct_type_id,
-            location.clone(),
-            ValueMode::ImmutableReference,
-        )),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
+    let base_expression = reference_expr(
+        local_name,
+        local_struct_type_id,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    );
 
     let field_access = field_access_node(
-        base_node,
+        base_expression,
         field_leaf,
         builtin_type_ids::INT,
         ConstRecordState::RuntimeValue,
@@ -3066,14 +3043,8 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
         location.clone(),
         ValueMode::ImmutableReference,
     );
-    let base_node = AstNode {
-        kind: NodeKind::Rvalue(format_reference),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
-
     let field_access = field_access_node(
-        base_node,
+        format_reference,
         center_leaf,
         builtin_type_ids::STRING,
         ConstRecordState::RuntimeValue,
@@ -3146,11 +3117,7 @@ fn const_record_module_constant_field_access_lowers_field_value_without_struct_c
     );
 
     let field_access = field_access_node(
-        AstNode {
-            kind: NodeKind::Rvalue(palette_reference),
-            location: location.clone(),
-            scope: InternedPath::new(),
-        },
+        palette_reference,
         red_leaf,
         builtin_type_ids::STRING,
         ConstRecordState::RuntimeValue,
@@ -3198,16 +3165,12 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         location.clone(),
     );
 
-    let receiver = AstNode {
-        kind: NodeKind::Rvalue(reference_expr(
-            receiver_name,
-            receiver_type_id,
-            location.clone(),
-            ValueMode::MutableReference,
-        )),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
+    let receiver_expression = reference_expr(
+        receiver_name,
+        receiver_type_id,
+        location.clone(),
+        ValueMode::MutableReference,
+    );
 
     let fallible_int_result = result_carrier_type_id(
         &mut builder.type_environment,
@@ -3282,19 +3245,18 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
             op,
             CollectionBuiltinOp::Set | CollectionBuiltinOp::Push | CollectionBuiltinOp::Remove
         );
+        let call_expression = Expression::collection_builtin_call_with_typed_arguments(
+            receiver_expression.clone(),
+            op,
+            receiver_requires_mutable,
+            args,
+            result_type_ids,
+            &mut builder.type_environment,
+            location.clone(),
+        );
+
         let lowered = builder
-            .lower_ast_node_as_expression(&AstNode {
-                kind: NodeKind::CollectionBuiltinCall {
-                    receiver: Box::new(receiver.clone()),
-                    op,
-                    receiver_requires_mutable,
-                    args,
-                    result_type_ids,
-                    location: location.clone(),
-                },
-                location: location.clone(),
-                scope: InternedPath::new(),
-            })
+            .lower_expression(&call_expression)
             .expect("collection builtin call lowering should succeed");
 
         assert_eq!(lowered.prelude.len(), 1);
@@ -3387,16 +3349,12 @@ fn map_builtin_calls_lower_to_first_class_hir_ops() {
         location.clone(),
     );
 
-    let receiver = AstNode {
-        kind: NodeKind::Rvalue(reference_expr(
-            scores_name,
-            map_type,
-            location.clone(),
-            ValueMode::MutableReference,
-        )),
-        location: location.clone(),
-        scope: InternedPath::new(),
-    };
+    let receiver_expression = reference_expr(
+        scores_name,
+        map_type,
+        location.clone(),
+        ValueMode::MutableReference,
+    );
     let fallible_int_result = result_carrier_type_id(
         &mut builder.type_environment,
         builtin_type_ids::INT,
@@ -3445,19 +3403,18 @@ fn map_builtin_calls_lower_to_first_class_hir_ops() {
     ];
 
     for (op, args, result_type_ids, expected_op, expected_arg_count) in cases {
+        let call_expression = Expression::map_builtin_call_with_typed_arguments(
+            receiver_expression.clone(),
+            op,
+            expected_op.requires_mutable_receiver(),
+            args,
+            result_type_ids.clone(),
+            &mut builder.type_environment,
+            location.clone(),
+        );
+
         let lowered = builder
-            .lower_ast_node_as_expression(&AstNode {
-                kind: NodeKind::MapBuiltinCall {
-                    receiver: Box::new(receiver.clone()),
-                    op,
-                    receiver_requires_mutable: expected_op.requires_mutable_receiver(),
-                    args,
-                    result_type_ids: result_type_ids.clone(),
-                    location: location.clone(),
-                },
-                location: location.clone(),
-                scope: InternedPath::new(),
-            })
+            .lower_expression(&call_expression)
             .expect("map builtin call should lower to first-class HIR");
 
         assert_eq!(lowered.prelude.len(), 1);
@@ -3792,4 +3749,271 @@ fn lowers_fallible_success_to_hir_variant_construct() {
         }
         other => panic!("expected VariantConstruct(Result, 0, [_]), got {other:?}"),
     }
+}
+
+#[test]
+fn external_float_call_emits_validate_float_in_current_block() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+    let float_type = builder
+        .lower_type_id(builtin_type_ids::FLOAT, &location)
+        .expect("builtin Float TypeId should lower in test context");
+
+    let call_expr = Expression::host_function_call_with_typed_arguments(
+        ExternalFunctionId::Synthetic(0),
+        vec![],
+        vec![builtin_type_ids::FLOAT],
+        &mut builder.type_environment,
+        location.clone(),
+    );
+
+    let lowered = builder
+        .lower_expression_value_to_current_block(&call_expr)
+        .expect("external Float call should lower");
+
+    assert_eq!(lowered.ty, float_type);
+
+    let statements = builder.test_current_block_statements();
+    assert!(
+        statements.iter().any(|statement| matches!(
+            &statement.kind,
+            HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(ExternalFunctionId::Synthetic(0)),
+                ..
+            }
+        )),
+        "external Float call should emit the raw Call statement"
+    );
+    assert!(
+        statements
+            .iter()
+            .any(|statement| matches!(&statement.kind, HirStatementKind::ValidateFloat { .. })),
+        "external Float call should emit ValidateFloat after the raw call"
+    );
+}
+
+#[test]
+fn external_float_call_in_builtin_error_function_validates_with_return_error() {
+    let mut string_table = StringTable::new();
+    let function_name = super::symbol("external_float_boundary", &mut string_table);
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+    let float_type = builder
+        .lower_type_id(builtin_type_ids::FLOAT, &location)
+        .expect("builtin Float TypeId should lower in test context");
+    let int_type = builder
+        .lower_type_id(builtin_type_ids::INT, &location)
+        .expect("builtin Int TypeId should lower in test context");
+    let error_type = builder.test_register_builtin_error_type();
+    let return_type = result_carrier_type_id(&mut builder.type_environment, int_type, error_type);
+
+    builder.test_register_function_with_return_type(function_name, FunctionId(98), return_type);
+    builder.test_set_current_function(FunctionId(98));
+
+    let call_expr = Expression::host_function_call_with_typed_arguments(
+        ExternalFunctionId::Synthetic(1),
+        vec![],
+        vec![builtin_type_ids::FLOAT],
+        &mut builder.type_environment,
+        location.clone(),
+    );
+
+    let lowered = builder
+        .lower_expression_value_to_current_block(&call_expr)
+        .expect("external Float call should lower in builtin Error function");
+
+    assert_eq!(lowered.ty, float_type);
+
+    let validate_modes: Vec<_> = builder
+        .module
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .filter_map(|statement| match &statement.kind {
+            HirStatementKind::ValidateFloat { failure_mode, .. } => Some(*failure_mode),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        validate_modes,
+        vec![NumericFailureMode::ReturnError],
+        "external Float boundary validation inside builtin Error! functions should be recoverable"
+    );
+}
+
+#[test]
+fn external_int_call_does_not_emit_validate_float() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+
+    let call_expr = Expression::host_function_call_with_typed_arguments(
+        ExternalFunctionId::Synthetic(0),
+        vec![],
+        vec![builtin_type_ids::INT],
+        &mut builder.type_environment,
+        location.clone(),
+    );
+
+    let lowered = builder
+        .lower_expression(&call_expr)
+        .expect("external Int call should lower");
+
+    assert_eq!(lowered.value.ty, builtin_type_ids::INT);
+
+    let prelude_has_validate = lowered
+        .prelude
+        .iter()
+        .any(|statement| matches!(&statement.kind, HirStatementKind::ValidateFloat { .. }));
+    assert!(
+        !prelude_has_validate,
+        "external Int call should not emit ValidateFloat"
+    );
+}
+
+#[test]
+fn external_fallible_float_call_propagation_validates_success() {
+    let mut string_table = StringTable::new();
+    let function_name = super::symbol("fallible_float", &mut string_table);
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+    let float_type = builder
+        .lower_type_id(builtin_type_ids::FLOAT, &location)
+        .expect("builtin Float TypeId should lower in test context");
+    let error_type = builder.test_register_builtin_error_type();
+    let carrier_type =
+        result_carrier_type_id(&mut builder.type_environment, float_type, error_type);
+
+    builder.test_register_function_with_return_type(
+        function_name.clone(),
+        FunctionId(99),
+        carrier_type,
+    );
+    builder.test_set_current_function(FunctionId(99));
+
+    let handled_call_expr =
+        Expression::handled_fallible_host_function_call_with_typed_arguments(
+            crate::compiler_frontend::ast::expressions::expression::HandledFallibleHostFunctionCallInput {
+                id: ExternalFunctionId::Synthetic(1),
+                args: vec![],
+                result_type_ids: vec![builtin_type_ids::FLOAT],
+                error_type_id: error_type,
+                handling: FallibleExpressionHandling::Propagate,
+                location: location.clone(),
+            },
+            &mut builder.type_environment,
+        );
+
+    let lowered = builder
+        .lower_expression_value_to_current_block(&handled_call_expr)
+        .expect("fallible external Float call should lower");
+
+    assert_eq!(lowered.ty, float_type);
+
+    let all_statements: Vec<_> = builder
+        .module
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect();
+    assert!(
+        all_statements.iter().any(|statement| matches!(
+            &statement.kind,
+            HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(ExternalFunctionId::Synthetic(1)),
+                ..
+            }
+        )),
+        "fallible external Float call should emit the raw Call statement"
+    );
+    assert!(
+        all_statements
+            .iter()
+            .any(|statement| matches!(&statement.kind, HirStatementKind::ValidateFloat { .. })),
+        "fallible external Float call should validate the unwrapped success Float"
+    );
+}
+
+#[test]
+fn external_fallible_float_call_catch_validates_success() {
+    let mut string_table = StringTable::new();
+    let function_name = super::symbol("fallible_float_catch", &mut string_table);
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+    let float_type = builder
+        .lower_type_id(builtin_type_ids::FLOAT, &location)
+        .expect("builtin Float TypeId should lower in test context");
+    let error_type = builder.test_register_builtin_error_type();
+    let carrier_type =
+        result_carrier_type_id(&mut builder.type_environment, float_type, error_type);
+
+    builder.test_register_function_with_return_type(
+        function_name.clone(),
+        FunctionId(100),
+        carrier_type,
+    );
+
+    let handled_call_expr =
+        Expression::handled_fallible_host_function_call_with_typed_arguments(
+            crate::compiler_frontend::ast::expressions::expression::HandledFallibleHostFunctionCallInput {
+                id: ExternalFunctionId::Synthetic(2),
+                args: vec![],
+                result_type_ids: vec![builtin_type_ids::FLOAT],
+                error_type_id: error_type,
+                handling: FallibleExpressionHandling::Propagate,
+                location: location.clone(),
+            },
+            &mut builder.type_environment,
+        );
+
+    let catch_expr = wrap_catch_expression(
+        handled_call_expr,
+        FallibleHandling::Handler {
+            error: None,
+            body: vec![AstNode {
+                kind: NodeKind::ThenValue(ProducedValues {
+                    expressions: vec![Expression::float(
+                        0.0,
+                        location.clone(),
+                        ValueMode::ImmutableOwned,
+                    )],
+                    location: location.clone(),
+                }),
+                location: location.clone(),
+                scope: function_name,
+            }],
+        },
+        vec![builtin_type_ids::FLOAT],
+    );
+
+    let lowered = builder
+        .lower_expression(&catch_expr)
+        .expect("fallible external Float catch should lower");
+
+    assert_eq!(lowered.value.ty, float_type);
+
+    let all_statements: Vec<_> = builder
+        .module
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect();
+    assert!(
+        all_statements.iter().any(|statement| matches!(
+            &statement.kind,
+            HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(ExternalFunctionId::Synthetic(2)),
+                ..
+            }
+        )),
+        "fallible external Float catch should emit the raw Call statement"
+    );
+    assert!(
+        all_statements
+            .iter()
+            .any(|statement| matches!(&statement.kind, HirStatementKind::ValidateFloat { .. })),
+        "fallible external Float catch should validate the unwrapped success Float before merge"
+    );
 }

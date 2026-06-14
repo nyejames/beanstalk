@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::ast_nodes::MatchExhaustiveness;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, FallibleHandling};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
@@ -154,6 +154,7 @@ impl ValueMatchBlock {
 #[derive(Clone, Debug)]
 pub struct ValueCatchBlock {
     pub handled_value: Box<Expression>,
+    pub handler: FallibleHandling,
     pub location: SourceLocation,
     pub result_type_ids: Vec<TypeId>,
 }
@@ -161,6 +162,7 @@ pub struct ValueCatchBlock {
 impl ValueCatchBlock {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.handled_value.remap_string_ids(remap);
+        self.handler.remap_string_ids(remap);
         self.location.remap_string_ids(remap);
     }
 }

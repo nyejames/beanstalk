@@ -18,9 +18,6 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 
 ### Code navigation map
 
-This document is the stage-boundary contract. For a compact agent-oriented locator, use the hidden
-root `.index` only when needed.
-
 - Project/build entry:
   [`src/main.rs`](../src/main.rs),
   [`src/projects/`](../src/projects/),
@@ -140,8 +137,8 @@ root `.index` only when needed.
 - [`src/compiler_frontend/ast/`](../src/compiler_frontend/ast/) builds the typed AST from sorted
   headers, resolves semantic information, parses executable bodies, folds constants/templates, and
   prepares HIR input
-- [`src/compiler_frontend/optimizers/constant_folding.rs`](../src/compiler_frontend/optimizers/constant_folding.rs)
-  supports AST compile-time evaluation for constants and foldable template expressions
+- [`src/compiler_frontend/ast/const_eval/`](../src/compiler_frontend/ast/const_eval/)
+  owns AST compile-time evaluation for constants and foldable template expressions
 - [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/) lowers the typed AST into the first
   backend-facing semantic IR
 - [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/)
@@ -331,14 +328,14 @@ Stage 0 builds the module inputs consumed by the frontend. It:
 
 - uses [`project_config.rs`](../src/build_system/project_config.rs) and
   [`project_config/`](../src/build_system/project_config/) for `#config.bst` parsing and
-  validation;
+  validation.
 - uses [`entry_discovery.rs`](../src/build_system/create_project_modules/entry_discovery.rs),
   [`module_inventory.rs`](../src/build_system/create_project_modules/module_inventory.rs),
   [`reachable_file_discovery.rs`](../src/build_system/create_project_modules/reachable_file_discovery.rs),
   and [`source_library_discovery.rs`](../src/build_system/create_project_modules/source_library_discovery.rs)
-  for directory/module graph discovery;
+  for directory/module graph discovery.
 - uses [`frontend_orchestration.rs`](../src/build_system/create_project_modules/frontend_orchestration.rs)
-  to drive each discovered module through the frontend pipeline;
+  to drive each discovered module through the frontend pipeline.
 - compiles `#config.bst` and reachable core/builder source-library support files through the frontend up to AST, then extracts folded immutable known-key declarations authored in `#config.bst` into `Config` from shared AST const facts after enforcing each key's registered value shape
 - allows config imports only from core/builder libraries and keeps project-local config imports rejected by design
 - stops config compilation at AST; config does not need HIR
@@ -367,6 +364,10 @@ Tokenization converts source text into structured tokens with source locations. 
 - basic lexical recognition
 - source location tracking
 - string and template delimiter context
+- lexical numeric grammar, including normalized numeric text, lowercase exponent syntax, attached
+  signed literal classification, numeric separator diagnostics, and no semantic `Int` / `Float`
+  materialization
+- symbolic binary-operator spacing and unary-negation spacing diagnostics
 - style directive token recognition through the merged directive registry
 - syntax-level rejection of unsupported or unknown directive forms where applicable
 
@@ -594,6 +595,9 @@ Constants and top-level const templates must fold at compile time.
 Runtime expressions in constants are rejected.
 
 Runtime expressions that cannot fold are currently represented in AST as stack-oriented RPN node vectors before HIR lowering.
+Those expression vectors are expression-only structures, not broad statement fragments:
+`ExpressionKind::Runtime` carries `ExpressionRpn`, copy expressions carry `PlaceExpression`, and
+`ExpressionKind::ValueBlock` is the only expression variant allowed to carry statement bodies.
 
 ### Templates
 
@@ -658,7 +662,14 @@ HIR owns:
 * stable external function IDs selected during AST resolution
 * builtin runtime cast expressions and fallible cast operations that survive AST folding, represented as `HirExpressionKind::Cast { source, policy }` and `HirStatementKind::CastOp { policy, source, result }`
 * direct user-function calls emitted during HIR lowering for user-defined cast evidence selected by AST
-* backend-neutral syntactic reachability over functions, blocks, external call IDs, and scalar-keyed hashmap operations from explicit roots
+* checked numeric effects represented as `HirStatementKind::NumericOp` with the selected
+  `NumericFailureMode`, so runtime arithmetic failure behavior is explicit before borrow
+  validation and backend lowering
+* Float formatting and external Float boundary validation represented as `FormatFloat` and
+  `ValidateFloat` statements
+* backend-neutral syntactic reachability over functions, blocks, external call IDs, runtime casts,
+  checked numeric operations, Float formatting/validation, and scalar-keyed hashmap operations from
+  explicit roots
 * enough structure for borrow validation and later backend lowering
 
 HIR does not:
@@ -678,13 +689,15 @@ HIR does not:
 
 [`src/compiler_frontend/hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs)
 records reachable functions, blocks, external calls, runtime casts, and scalar-keyed hashmap
-construction/use. JS lowering uses those facts for artifact planning. HTML-Wasm uses the same
+construction/use, plus checked numeric operations and Float formatting/validation statements. JS
+lowering uses those facts for artifact planning. HTML-Wasm uses the same
 reachable facts through
 [`src/backends/backend_feature_validation.rs`](../src/backends/backend_feature_validation.rs) and
 [`src/backends/external_package_validation.rs`](../src/backends/external_package_validation.rs) to
-reject reachable unsupported JS-backed external calls, hashmap use, runtime casts, reactive sinks,
-and other target-gated features before Wasm lowering. Unreachable helper functions remain valid
-typed HIR and do not block backend builds.
+reject reachable unsupported JS-backed external calls, hashmap use, runtime casts, checked numeric
+operations, Float formatting, Float boundary validation, reactive sinks, and other target-gated
+features before Wasm lowering. Unreachable helper functions remain valid typed HIR and do not block
+backend builds.
 
 ### External calls
 
@@ -753,7 +766,7 @@ Backends consume compiled modules containing:
 Backends own target-specific output generation.
 They must preserve Beanstalk semantics even when backend representations differ.
 For the HTML JS path, backend lowering owns emitted JS assets, registered runtime modules, generated external-call glue, import-map HTML, and the final mapping from stable external function IDs to runtime wrapper names. Runtime module emission and import-map entries are driven by module external-import metadata recorded from accepted JS runtime imports, not by function fallibility.
-HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. Static trait-bound calls have already resolved to concrete source calls before HIR, so backends do not re-solve trait semantics. The JS backend lowers language-owned hashmaps through focused runtime helpers rather than source-library or external package calls. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls and reachable hashmap construction/use fail with structured diagnostics before lowering.
+HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. Static trait-bound calls have already resolved to concrete source calls before HIR, so backends do not re-solve trait semantics. The JS backend lowers language-owned hashmaps, checked numeric operations, Float formatting, and Float boundary validation through focused runtime helpers rather than source-library or external package calls. Backends must not silently lower Beanstalk numeric source operations to unchecked target-native arithmetic. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls, runtime casts, checked numeric operations, Float formatting/validation, and hashmap construction/use fail with structured diagnostics before lowering.
 
 Ownership-aware backends may use borrow facts and memory-model metadata for optimization.
 GC-only backends can lower through the semantic baseline without deterministic drop behavior.

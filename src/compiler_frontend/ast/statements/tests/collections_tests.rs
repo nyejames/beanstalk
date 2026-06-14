@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleHandling,
+    Expression, ExpressionKind, FallibleExpressionHandling,
 };
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
@@ -25,12 +25,8 @@ use crate::compiler_frontend::tests::parse_support::{
 };
 
 fn runtime_collection_builtin_op(expression: &Expression) -> CollectionBuiltinOp {
-    let ExpressionKind::Runtime(nodes) = &expression.kind else {
-        panic!("expected runtime expression");
-    };
-    assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
-    let NodeKind::CollectionBuiltinCall { op, .. } = &nodes[0].kind else {
-        panic!("expected collection builtin call node");
+    let ExpressionKind::CollectionBuiltinCall { op, .. } = &expression.kind else {
+        panic!("expected collection builtin call expression");
     };
 
     *op
@@ -160,7 +156,7 @@ fn parses_push_after_explicit_empty_collection() {
     );
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Rvalue(push_expr) = &body[1].kind else {
+    let NodeKind::ExpressionStatement(push_expr) = &body[1].kind else {
         panic!("expected push statement");
     };
 
@@ -219,7 +215,7 @@ fn parses_collection_get_with_fallback_handler_and_propagation() {
     let ExpressionKind::HandledFallibleExpression { handling, .. } = &values[0].kind else {
         panic!("expected handled fallible expression for propagation");
     };
-    assert!(matches!(handling, FallibleHandling::Propagate));
+    assert!(matches!(handling, FallibleExpressionHandling::Propagate));
 }
 
 // --------------------------
@@ -234,7 +230,7 @@ fn parses_collection_mutators_and_length_calls() {
     );
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Rvalue(set_expr) = &body[1].kind else {
+    let NodeKind::ExpressionStatement(set_expr) = &body[1].kind else {
         panic!("expected set(...) statement");
     };
     assert_eq!(
@@ -242,7 +238,7 @@ fn parses_collection_mutators_and_length_calls() {
         CollectionBuiltinOp::Set
     );
 
-    let NodeKind::Rvalue(push_expr) = &body[2].kind else {
+    let NodeKind::ExpressionStatement(push_expr) = &body[2].kind else {
         panic!("expected push(...) statement");
     };
     assert_eq!(
@@ -276,7 +272,7 @@ fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
     );
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Rvalue(push_expr) = &body[1].kind else {
+    let NodeKind::ExpressionStatement(push_expr) = &body[1].kind else {
         panic!("expected push(...) statement");
     };
     assert_eq!(
@@ -284,7 +280,7 @@ fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
         CollectionBuiltinOp::Push
     );
 
-    let NodeKind::Rvalue(set_expr) = &body[2].kind else {
+    let NodeKind::ExpressionStatement(set_expr) = &body[2].kind else {
         panic!("expected set(...) statement");
     };
     assert_eq!(
@@ -832,12 +828,11 @@ fn rejects_const_map_literal() {
 // --------------------------
 
 fn runtime_map_builtin_op(expression: &Expression) -> MapBuiltinOp {
-    let ExpressionKind::Runtime(nodes) = &expression.kind else {
-        panic!("expected runtime expression");
-    };
-    assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
-    let NodeKind::MapBuiltinCall { op, .. } = &nodes[0].kind else {
-        panic!("expected map builtin call node, got {:?}", nodes[0].kind);
+    let ExpressionKind::MapBuiltinCall { op, .. } = &expression.kind else {
+        panic!(
+            "expected map builtin call expression, got {:?}",
+            expression.kind
+        );
     };
 
     *op
@@ -919,8 +914,8 @@ fn parses_map_set_with_mutable_receiver() {
     );
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Rvalue(expr) = &body[1].kind else {
-        panic!("expected rvalue statement");
+    let NodeKind::ExpressionStatement(expr) = &body[1].kind else {
+        panic!("expected expression statement");
     };
 
     assert_eq!(handled_map_builtin_op(expr), MapBuiltinOp::Set);
@@ -949,8 +944,8 @@ fn parses_map_clear_with_mutable_receiver() {
         parse_single_file_ast("scores ~{String = Int} = {\"Ada\" = 10}\n~scores.clear()\n");
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Rvalue(expr) = &body[1].kind else {
-        panic!("expected rvalue statement");
+    let NodeKind::ExpressionStatement(expr) = &body[1].kind else {
+        panic!("expected expression statement");
     };
 
     assert_eq!(runtime_map_builtin_op(expr), MapBuiltinOp::Clear);

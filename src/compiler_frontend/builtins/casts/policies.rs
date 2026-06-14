@@ -9,10 +9,13 @@
 //!      The constant folder and later backend phases can ask the policy owner
 //!      for the same answer instead of duplicating per-cast ad hoc match logic.
 
-use crate::compiler_frontend::builtins::casts::numeric_limits::int_is_alpha_runtime_safe;
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
-use std::num::IntErrorKind;
+use crate::compiler_frontend::compiler_messages::NumberLiteralErrorReason;
+use crate::compiler_frontend::numeric_text::format::format_finite_float;
+use crate::compiler_frontend::numeric_text::parse::{
+    parse_numeric_text_to_f64, parse_numeric_text_to_i32,
+};
 
 /// A literal scalar value in policy space.
 ///
@@ -25,11 +28,11 @@ use std::num::IntErrorKind;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BuiltinCastLiteral {
     Bool(bool),
-    Int(i64),
+    Int(i32),
     Float(f64),
     String(String),
     Char(char),
-    Error { message: String, code: i64 },
+    Error { message: String, code: i32 },
 }
 
 impl BuiltinCastLiteral {
@@ -126,10 +129,16 @@ fn float_to_string(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Bu
         ));
     };
 
-    // Rust's default float formatting is a stable round-trippable decimal for finite
-    // floats. The plan defers custom shortest-decimal formatting until backend
-    // formatting parity becomes a hard requirement, so we use it directly here.
-    Ok(BuiltinCastLiteral::String(value.to_string()))
+    // Beanstalk `Float` is finite `f64`, so a non-finite value reaching the cast
+    // policy is a defensive invariant failure rather than ordinary user input.
+    let text = format_finite_float(*value).map_err(|error| {
+        BuiltinCastError::new(
+            BuiltinErrorCode::FloatFormatInvariant,
+            format!("Float -> String formatting failed: {error}"),
+        )
+    })?;
+
+    Ok(BuiltinCastLiteral::String(text))
 }
 
 fn bool_to_string(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {
@@ -168,7 +177,7 @@ fn char_to_int(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Builti
             ),
         ));
     };
-    Ok(BuiltinCastLiteral::Int(*value as i64))
+    Ok(BuiltinCastLiteral::Int(*value as i32))
 }
 
 fn string_to_error(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {
@@ -222,18 +231,16 @@ fn float_to_int(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Built
         ));
     }
 
-    // Truncate toward zero, then apply the Alpha JS-safe integer materialization
-    // policy so folded and runtime casts agree on the representable range.
+    // Truncate toward zero, then require the result to fit Beanstalk's signed i32 Int.
     let truncated = value.trunc();
-    let truncated_int = truncated as i64;
-    if !int_is_alpha_runtime_safe(truncated_int) {
+    if truncated < (i32::MIN as f64) || truncated > (i32::MAX as f64) {
         return Err(BuiltinCastError::new(
             BuiltinErrorCode::FloatCastToIntOutOfRange,
             format!("Float -> Int source {value} is out of Int range"),
         ));
     }
 
-    Ok(BuiltinCastLiteral::Int(truncated_int))
+    Ok(BuiltinCastLiteral::Int(truncated as i32))
 }
 
 fn int_to_char(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {
@@ -295,35 +302,17 @@ fn string_to_int(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Buil
         ));
     };
 
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err(BuiltinCastError::new(
-            BuiltinErrorCode::IntParseInvalidFormat,
-            "String -> Int text is empty",
-        ));
-    }
-
-    let parsed: i64 = trimmed.parse().map_err(|error: std::num::ParseIntError| {
-        let code = match error.kind() {
-            IntErrorKind::PosOverflow | IntErrorKind::NegOverflow => {
-                BuiltinErrorCode::IntParseOutOfRange
-            }
-            _ => BuiltinErrorCode::IntParseInvalidFormat,
-        };
-
-        BuiltinCastError::new(code, format!("Cannot parse Int from {trimmed:?}"))
-    })?;
-
-    // Apply the Alpha JS-safe integer materialization policy so folded and
-    // runtime casts agree on the representable range.
-    if !int_is_alpha_runtime_safe(parsed) {
-        return Err(BuiltinCastError::new(
+    match parse_numeric_text_to_i32(text) {
+        Ok(value) => Ok(BuiltinCastLiteral::Int(value)),
+        Err(NumberLiteralErrorReason::OutsideIntRange) => Err(BuiltinCastError::new(
             BuiltinErrorCode::IntParseOutOfRange,
-            format!("Cannot parse Int from {trimmed:?}"),
-        ));
+            format!("Cannot parse Int from {text:?}"),
+        )),
+        Err(_) => Err(BuiltinCastError::new(
+            BuiltinErrorCode::IntParseInvalidFormat,
+            format!("Cannot parse Int from {text:?}"),
+        )),
     }
-
-    Ok(BuiltinCastLiteral::Int(parsed))
 }
 
 fn string_to_float(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {
@@ -337,38 +326,19 @@ fn string_to_float(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Bu
         ));
     };
 
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return Err(BuiltinCastError::new(
-            BuiltinErrorCode::FloatParseInvalidFormat,
-            "String -> Float text is empty",
-        ));
-    }
-
-    let parsed: f64 = trimmed.parse().map_err(|_| {
-        // Reject `NaN` and `Infinity` text with the dedicated
-        // `FloatParseOutOfRange` code so callers can distinguish literal
-        // non-finite text from arbitrary invalid format text.
-        if trimmed.eq_ignore_ascii_case("nan") || trimmed.eq_ignore_ascii_case("infinity") {
-            return BuiltinCastError::new(
+    match parse_numeric_text_to_f64(text) {
+        Ok(value) => Ok(BuiltinCastLiteral::Float(value)),
+        Err(NumberLiteralErrorReason::NonFiniteFloat | NumberLiteralErrorReason::ParseOverflow) => {
+            Err(BuiltinCastError::new(
                 BuiltinErrorCode::FloatParseOutOfRange,
-                format!("Cannot parse Float from {trimmed:?}"),
-            );
+                format!("Cannot parse Float from {text:?}"),
+            ))
         }
-        BuiltinCastError::new(
+        Err(_) => Err(BuiltinCastError::new(
             BuiltinErrorCode::FloatParseInvalidFormat,
-            format!("Cannot parse Float from {trimmed:?}"),
-        )
-    })?;
-
-    if !parsed.is_finite() {
-        return Err(BuiltinCastError::new(
-            BuiltinErrorCode::FloatParseOutOfRange,
-            format!("String -> Float parsed {trimmed:?} is not finite"),
-        ));
+            format!("Cannot parse Float from {text:?}"),
+        )),
     }
-
-    Ok(BuiltinCastLiteral::Float(parsed))
 }
 
 fn string_to_bool(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {

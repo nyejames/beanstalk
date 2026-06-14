@@ -35,6 +35,28 @@ pub(crate) fn invalid_number_literal_message(
         NumberLiteralErrorReason::MissingFractionalDigits => {
             format!("Numeric literal '{literal}' is missing fractional digits.")
         }
+        NumberLiteralErrorReason::UppercaseExponentMarker => {
+            format!(
+                "Numeric literal '{literal}' uses `E`; Beanstalk exponent literals use lowercase `e`."
+            )
+        }
+        NumberLiteralErrorReason::MissingExponentDigits => {
+            format!("Numeric literal '{literal}' is missing exponent digits.")
+        }
+        NumberLiteralErrorReason::InvalidExponentSignPlacement => {
+            format!(
+                "Numeric literal '{literal}' has an exponent sign that is not immediately after `e`."
+            )
+        }
+        NumberLiteralErrorReason::InvalidSeparatorPlacement => {
+            format!("Numeric literal '{literal}' has an invalid `_` separator placement.")
+        }
+        NumberLiteralErrorReason::OutsideIntRange => {
+            format!("Integer literal '{literal}' is outside the supported Int range.")
+        }
+        NumberLiteralErrorReason::NonFiniteFloat => {
+            format!("Float literal '{literal}' does not materialize to a finite Float.")
+        }
         NumberLiteralErrorReason::ParseOverflow => {
             format!(
                 "Invalid integer literal / Float literal '{literal}': value is too large to represent."
@@ -168,6 +190,16 @@ pub(crate) fn common_syntax_mistake_message(
         CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {
             "Invalid reactive binding syntax. Use `name $= value` for inferred reactive bindings or `name $Type = value` for explicit reactive types. For collection and option types, attach `$` to the first token of the type: `names ${String} = ...` or `value $String? = ...`.".to_string()
         }
+        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing => {
+            "Symbolic binary operators require whitespace on both sides.".to_string()
+        }
+        CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing => {
+            "Unary negation must be attached to its operand with no intervening whitespace."
+                .to_string()
+        }
+        CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {
+            "Unary plus is not supported in Beanstalk.".to_string()
+        }
     }
 }
 
@@ -215,6 +247,15 @@ pub(crate) fn common_syntax_mistake_suggestion(reason: &CommonSyntaxMistakeReaso
         }
         CommonSyntaxMistakeReason::InvalidReactiveBindingSpacing => {
             "Remove the space after `$` so it is immediately followed by `=` or the type annotation"
+        }
+        CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing => {
+            "Add spaces around the operator, for example `left + right`"
+        }
+        CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing => {
+            "Write unary negation as `-value` or `-1`"
+        }
+        CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {
+            "Remove the leading `+`; use the value directly"
         }
     }
 }

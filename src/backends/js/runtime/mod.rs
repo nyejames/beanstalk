@@ -20,12 +20,31 @@ mod cloning;
 mod collections;
 mod errors;
 mod maps;
+mod numeric;
 mod places;
 mod reactivity;
 mod results;
 mod strings;
 
 use crate::backends::js::JsEmitter;
+
+/// Describes which checked numeric runtime helper families are required by emitted JS.
+///
+/// WHY: arithmetic helpers, Float formatting, and Float boundary validation share the same
+/// `__bs_numeric_trap` carrier wrapper, but the helper bodies themselves should stay
+/// demand-driven so unrelated programs do not grow extra runtime surface.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct NumericRuntimeHelperUsage {
+    pub(crate) numeric_ops: bool,
+    pub(crate) format_float: bool,
+    pub(crate) validate_float: bool,
+}
+
+impl NumericRuntimeHelperUsage {
+    pub(crate) fn any(self) -> bool {
+        self.numeric_ops || self.format_float || self.validate_float
+    }
+}
 
 impl<'hir> JsEmitter<'hir> {
     /// Emits the full JS runtime prelude.
@@ -46,6 +65,7 @@ impl<'hir> JsEmitter<'hir> {
     ///   map helpers             — guarded get/set/remove and infallible contains/clear/length for ordered maps
     ///   string helpers          — value-to-string conversion and IO output
     ///   cast helpers            — numeric and string casting with Result-typed errors
+    ///   numeric helpers         — checked i32 and finite f64 arithmetic with trap/Error carriers
     ///   choice helpers          — structural equality for nominal choice carriers
     ///   reactivity helpers      — reactive source bindings, scheduler, and template-string values
     ///
@@ -54,6 +74,7 @@ impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_runtime_prelude(
         &mut self,
         emitted_code_uses_maps: bool,
+        emitted_code_uses_numeric_helpers: NumericRuntimeHelperUsage,
         emitted_code_uses_reactive_sources: bool,
         emitted_code_uses_reactive_templates: bool,
     ) {
@@ -69,6 +90,9 @@ impl<'hir> JsEmitter<'hir> {
         }
         self.emit_runtime_string_helpers(emitted_code_uses_maps);
         self.emit_runtime_cast_helpers();
+        if emitted_code_uses_numeric_helpers.any() {
+            self.emit_runtime_numeric_helpers(emitted_code_uses_numeric_helpers);
+        }
         if emitted_code_uses_reactive_sources {
             self.emit_runtime_reactive_source_helpers();
         }

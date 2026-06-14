@@ -49,7 +49,6 @@ pub(crate) fn parsed_ref_to_data_type(parsed: &ParsedTypeRef) -> DataType {
         ParsedTypeRef::BuiltinBool { .. } => DataType::Bool,
         ParsedTypeRef::BuiltinInt { .. } => DataType::Int,
         ParsedTypeRef::BuiltinFloat { .. } => DataType::Float,
-        ParsedTypeRef::BuiltinDecimal { .. } => DataType::Decimal,
         ParsedTypeRef::BuiltinString { .. } => DataType::StringSlice,
         ParsedTypeRef::BuiltinChar { .. } => DataType::Char,
         ParsedTypeRef::BuiltinNone { .. } => DataType::None,

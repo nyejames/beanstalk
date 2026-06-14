@@ -45,10 +45,10 @@ pub(super) fn resolve_unary_operator_type(
         }
 
         // Unary minus preserves the numeric payload type. The tokenizer/parser already own the
-        // distinction between negative literals and a runtime unary subtraction operator.
-        Operator::Subtract => Ok(operand.to_owned()),
+        // distinction between signed numeric literals and a runtime unary negation operator.
+        Operator::Negate => Ok(operand.to_owned()),
 
-        // Defensive fallback: `Not` and `Subtract` are the only operators that can appear in
+        // Defensive fallback: `Not` and `Negate` are the only operators that can appear in
         // unary position. Preserving the operand type keeps the function total without a panic.
         _ => Ok(operand.to_owned()),
     }

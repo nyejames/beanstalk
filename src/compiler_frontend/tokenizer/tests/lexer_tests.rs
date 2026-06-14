@@ -3,9 +3,10 @@ use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal::format_payload_guidance,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, NumberLiteralErrorReason,
-    SyntaxDiagnosticKind,
+    CommonSyntaxMistakeReason, CompilerDiagnostic, DiagnosticKind, DiagnosticPayload,
+    NumberLiteralErrorReason, SyntaxDiagnosticKind,
 };
+use crate::compiler_frontend::numeric_text::token::NumericLiteralSign;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
     TemplateHeadCompatibility,
@@ -28,6 +29,22 @@ fn tokenize_source(source: &str) -> (FileTokens, StringTable) {
 fn tokenize_html_source(source: &str) -> (FileTokens, StringTable) {
     let style_directives = html_project_test_style_directives();
     tokenize_source_with_registry(source, &style_directives)
+}
+
+fn tokenize_source_error(source: &str) -> (CompilerDiagnostic, StringTable) {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let diagnostic = tokenize(
+        source,
+        &source_path,
+        TokenizerEntryMode::SourceFile,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect_err("tokenization should fail");
+    (diagnostic, string_table)
 }
 
 fn tokenize_source_with_registry(
@@ -105,6 +122,52 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
         .iter()
         .position(|token| predicate(&token.kind))
         .expect("expected token to be present")
+}
+
+fn assert_invalid_number_literal(
+    diagnostic: &CompilerDiagnostic,
+    string_table: &StringTable,
+    expected_literal: &str,
+    expected_reason: NumberLiteralErrorReason,
+) {
+    match &diagnostic.payload {
+        DiagnosticPayload::InvalidNumberLiteral {
+            literal_text,
+            reason,
+        } => {
+            assert_eq!(string_table.resolve(*literal_text), expected_literal);
+            assert_eq!(*reason, expected_reason);
+        }
+        payload => panic!("expected invalid number literal payload, found {payload:?}"),
+    }
+}
+
+fn assert_common_syntax_mistake(
+    diagnostic: &CompilerDiagnostic,
+    expected_reason: CommonSyntaxMistakeReason,
+) {
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::CommonSyntaxMistake)
+    );
+
+    match &diagnostic.payload {
+        DiagnosticPayload::CommonSyntaxMistake { reason } => {
+            assert_eq!(*reason, expected_reason);
+        }
+        payload => panic!("expected common syntax mistake payload, found {payload:?}"),
+    }
+}
+
+fn numeric_literal_signs(file_tokens: &FileTokens) -> Vec<NumericLiteralSign> {
+    file_tokens
+        .tokens
+        .iter()
+        .filter_map(|token| match &token.kind {
+            TokenKind::NumericLiteral(token) => Some(token.sign),
+            _ => None,
+        })
+        .collect()
 }
 
 fn collect_literal_texts(file_tokens: &FileTokens, string_table: &StringTable) -> Vec<String> {
@@ -318,32 +381,171 @@ fn tokenizes_double_slash_equals_as_integer_division_assignment_operator() {
 }
 
 #[test]
-fn rejects_non_finite_float_literal_values() {
-    let mut string_table = StringTable::new();
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
-    let source = format!("value = {}.0\n", "9".repeat(400));
+fn rejects_uppercase_exponent_marker() {
+    let (error, string_table) = tokenize_source_error("value = 1E6\n");
 
-    let error = tokenize(
-        &source,
-        &source_path,
-        TokenizerEntryMode::SourceFile,
-        &style_directives,
-        &mut string_table,
-        None,
-    )
-    .expect_err("oversized float literal should be rejected");
+    assert_invalid_number_literal(
+        &error,
+        &string_table,
+        "1E6",
+        NumberLiteralErrorReason::UppercaseExponentMarker,
+    );
+}
 
-    match &error.payload {
-        DiagnosticPayload::InvalidNumberLiteral {
-            literal_text,
-            reason,
-        } => {
-            assert!(string_table.resolve(*literal_text).starts_with("999"));
-            assert_eq!(*reason, NumberLiteralErrorReason::ParseOverflow);
-        }
-        payload => panic!("expected invalid number literal payload, found {payload:?}"),
+#[test]
+fn rejects_missing_exponent_digits() {
+    for (source, expected_literal) in [
+        ("value = 1e\n", "1e"),
+        ("value = 1e+\n", "1e+"),
+        ("value = 1e-\n", "1e-"),
+    ] {
+        let (error, string_table) = tokenize_source_error(source);
+
+        assert_invalid_number_literal(
+            &error,
+            &string_table,
+            expected_literal,
+            NumberLiteralErrorReason::MissingExponentDigits,
+        );
     }
+}
+
+#[test]
+fn rejects_multiple_decimal_points_in_numeric_literal() {
+    let (error, string_table) = tokenize_source_error("value = 1.2.3\n");
+
+    assert_invalid_number_literal(
+        &error,
+        &string_table,
+        "1.2",
+        NumberLiteralErrorReason::MultipleDecimalPoints,
+    );
+}
+
+#[test]
+fn tokenizes_lowercase_exponent_literals() {
+    let (file_tokens, string_table) = tokenize_source("value = 1e6 1e-6 1e+6 1.0e+21\n");
+    let numeric_texts: Vec<String> = file_tokens
+        .tokens
+        .iter()
+        .filter_map(|token| match &token.kind {
+            TokenKind::NumericLiteral(token) => {
+                Some(string_table.resolve(token.normalized_text).to_owned())
+            }
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        numeric_texts,
+        vec!["1e6", "1e-6", "1e+6", "1.0e+21"],
+        "lowercase exponent literals should keep their normalized text"
+    );
+}
+
+#[test]
+fn tokenizes_signed_numeric_literals() {
+    let (file_tokens, string_table) = tokenize_source("value = {-1, -1.5, -1e6}\n");
+    let numeric_texts: Vec<String> = file_tokens
+        .tokens
+        .iter()
+        .filter_map(|token| match &token.kind {
+            TokenKind::NumericLiteral(token) => {
+                Some(string_table.resolve(token.normalized_text).to_owned())
+            }
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        numeric_literal_signs(&file_tokens),
+        vec![
+            NumericLiteralSign::Negative,
+            NumericLiteralSign::Negative,
+            NumericLiteralSign::Negative
+        ]
+    );
+    assert_eq!(numeric_texts, vec!["1", "1.5", "1e6"]);
+}
+
+#[test]
+fn preserves_signed_numeric_literal_after_binary_operator() {
+    let (file_tokens, _string_table) = tokenize_source("value = count * -1\n");
+
+    assert!(
+        file_tokens.tokens.iter().any(|token| matches!(
+            &token.kind,
+            TokenKind::NumericLiteral(token) if token.sign == NumericLiteralSign::Negative
+        )),
+        "`-1` after a spaced binary operator should remain one signed numeric token"
+    );
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Negative)),
+        "signed numeric literals should not also emit a unary Negative token"
+    );
+}
+
+#[test]
+fn tokenizes_attached_unary_negation_for_non_numeric_operands() {
+    let (file_tokens, _string_table) = tokenize_source("value = -count\nother = total * -count\n");
+
+    let negative_count = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::Negative))
+        .count();
+    assert_eq!(negative_count, 2);
+}
+
+#[test]
+fn rejects_unary_plus() {
+    for source in ["value = +1\n", "value = +count\n"] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(&diagnostic, CommonSyntaxMistakeReason::UnsupportedUnaryPlus);
+    }
+}
+
+#[test]
+fn rejects_unary_negation_with_whitespace() {
+    for source in ["value = - 1\n", "value = - count\n"] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidUnaryNegationSpacing,
+        );
+    }
+}
+
+#[test]
+fn rejects_missing_symbolic_binary_operator_spacing() {
+    for source in [
+        "value = a+b\n",
+        "value = a-1\n",
+        "value = a -1\n",
+        "value = a- 1\n",
+        "value = a*-1\n",
+        "value = a//b\n",
+        "count=1\n",
+        "count =1\n",
+        "count~=1\n",
+        "value = a<b\n",
+        "value = a>=b\n",
+    ] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        );
+    }
+}
+
+#[test]
+fn tokenizer_does_not_steal_parser_owned_punctuation_diagnostics() {
+    tokenize_source("value = identity<Int>(42)\n");
+    tokenize_source(r#"scores = {"Ada" =}"#);
 }
 
 #[test]

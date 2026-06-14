@@ -11,6 +11,8 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::numeric_text::parse::{materialize_f64, materialize_i32_with_sign};
+use crate::compiler_frontend::numeric_text::token::{NumericLiteralKind, NumericLiteralSign};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
@@ -61,22 +63,40 @@ pub fn parse_non_choice_pattern(
 pub(super) fn parse_literal_pattern(
     token_stream: &mut FileTokens,
     subject_type_id: TypeId,
-    _string_table: &StringTable,
+    string_table: &StringTable,
     type_environment: &TypeEnvironment,
 ) -> Result<Expression, CompilerDiagnostic> {
     reject_deferred_pattern_lead_token(token_stream)?;
 
     let pattern = match token_stream.current_token_kind() {
         // Simple scalar and string literals.
-        TokenKind::IntLiteral(value) => {
+        TokenKind::NumericLiteral(token) => {
             let location = token_stream.current_location();
-            let expression = Expression::int(*value, location, ValueMode::ImmutableOwned);
-            token_stream.advance();
-            expression
-        }
-        TokenKind::FloatLiteral(value) => {
-            let location = token_stream.current_location();
-            let expression = Expression::float(*value, location, ValueMode::ImmutableOwned);
+            let token = token.to_owned();
+
+            let expression = if token.kind == NumericLiteralKind::WholeNumber {
+                let value_i32 = materialize_i32_with_sign(&token, token.sign, string_table)
+                    .map_err(|reason| {
+                        CompilerDiagnostic::invalid_number_literal(
+                            token.normalized_text,
+                            reason,
+                            location.clone(),
+                        )
+                    })?;
+
+                Expression::int(value_i32, location, ValueMode::ImmutableOwned)
+            } else {
+                let value = materialize_f64(&token, string_table).map_err(|reason| {
+                    CompilerDiagnostic::invalid_number_literal(
+                        token.normalized_text,
+                        reason,
+                        location.clone(),
+                    )
+                })?;
+
+                Expression::float(value, location, ValueMode::ImmutableOwned)
+            };
+
             token_stream.advance();
             expression
         }
@@ -105,23 +125,33 @@ pub(super) fn parse_literal_pattern(
             token_stream.advance();
 
             match token_stream.current_token_kind() {
-                TokenKind::IntLiteral(value) => {
-                    let negated_value = -(*value);
-                    let expression = Expression::int(
-                        negated_value,
-                        minus_sign_location,
-                        ValueMode::ImmutableOwned,
-                    );
-                    token_stream.advance();
-                    expression
-                }
-                TokenKind::FloatLiteral(value) => {
-                    let negated_value = -(*value);
-                    let expression = Expression::float(
-                        negated_value,
-                        minus_sign_location,
-                        ValueMode::ImmutableOwned,
-                    );
+                TokenKind::NumericLiteral(token) => {
+                    let token = token.to_owned();
+                    let expression = if token.kind == NumericLiteralKind::WholeNumber {
+                        let value_i32 = materialize_i32_with_sign(
+                            &token,
+                            NumericLiteralSign::Negative,
+                            string_table,
+                        )
+                        .map_err(|reason| {
+                            CompilerDiagnostic::invalid_number_literal(
+                                token.normalized_text,
+                                reason,
+                                minus_sign_location.clone(),
+                            )
+                        })?;
+
+                        Expression::int(value_i32, minus_sign_location, ValueMode::ImmutableOwned)
+                    } else {
+                        let value = materialize_f64(&token, string_table).map_err(|reason| {
+                            CompilerDiagnostic::invalid_number_literal(
+                                token.normalized_text,
+                                reason,
+                                minus_sign_location.clone(),
+                            )
+                        })?;
+                        Expression::float(-value, minus_sign_location, ValueMode::ImmutableOwned)
+                    };
                     token_stream.advance();
                     expression
                 }
@@ -167,3 +197,7 @@ pub(super) fn parse_literal_pattern(
 
     Ok(pattern)
 }
+
+#[cfg(test)]
+#[path = "tests/literal_tests.rs"]
+mod tests;

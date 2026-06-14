@@ -1,6 +1,7 @@
 //! Contextual coercion tests.
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpn;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -9,7 +10,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-fn int_literal(value: i64) -> Expression {
+fn int_literal(value: i32) -> Expression {
     Expression::int(value, SourceLocation::default(), ValueMode::ImmutableOwned)
 }
 
@@ -34,7 +35,7 @@ fn float_declaration_from_int_expression_becomes_coerced() {
     // Simulate a runtime Int expression (non-constant)
     let env = TypeEnvironment::new();
     let runtime_expr = Expression::new(
-        ExpressionKind::Runtime(vec![]),
+        ExpressionKind::Runtime(ExpressionRpn::empty()),
         SourceLocation::default(),
         builtin_type_ids::INT,
         DataType::Int,

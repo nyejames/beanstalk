@@ -45,6 +45,12 @@ impl<'a> HirBuilder<'a> {
                     self.hir_error_location(location)
                 )
             }
+            Operator::Negate => {
+                return_hir_transformation_error!(
+                    "Unary negation cannot be lowered as a binary operator",
+                    self.hir_error_location(location)
+                )
+            }
             Operator::Range => {
                 return_hir_transformation_error!(
                     "Range operator is lowered as HirExpressionKind::Range",
@@ -61,7 +67,7 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<HirUnaryOp, CompilerError> {
         match op {
             Operator::Not => Ok(HirUnaryOp::Not),
-            Operator::Subtract => Ok(HirUnaryOp::Neg),
+            Operator::Negate => Ok(HirUnaryOp::Neg),
             _ => {
                 return_hir_transformation_error!(
                     format!("Unsupported unary operator: {:?}", op),
@@ -89,30 +95,25 @@ impl<'a> HirBuilder<'a> {
             | HirBinOp::And
             | HirBinOp::Or => builtin_type_ids::BOOL,
 
-            HirBinOp::Add | HirBinOp::Sub | HirBinOp::Mul | HirBinOp::Mod | HirBinOp::Exponent => {
+            // Checked numeric arithmetic is lowered through `HirStatementKind::NumericOp`, so the
+            // only plain binary operators that still reach this path are comparisons, booleans,
+            // and string concatenation.
+            HirBinOp::Add => {
                 let float = self.type_environment.builtins().float;
-                let decimal = self.type_environment.builtins().decimal;
                 let string = self.type_environment.builtins().string;
 
-                if left == float || right == float {
-                    float
-                } else if left == decimal || right == decimal {
-                    decimal
-                } else if left == string || right == string {
+                if left == string || right == string {
                     string
+                } else if left == float || right == float {
+                    float
                 } else {
                     left
                 }
             }
 
-            HirBinOp::Div => {
-                let decimal = self.type_environment.builtins().decimal;
-                if left == decimal || right == decimal {
-                    decimal
-                } else {
-                    self.type_environment.builtins().float
-                }
-            }
+            HirBinOp::Sub | HirBinOp::Mul | HirBinOp::Mod | HirBinOp::Exponent => left,
+
+            HirBinOp::Div => self.type_environment.builtins().float,
 
             HirBinOp::IntDiv => builtin_type_ids::INT,
         }

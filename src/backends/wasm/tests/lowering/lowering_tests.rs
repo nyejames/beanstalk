@@ -1250,6 +1250,8 @@ fn lower_type_to_abi_maps_all_hir_types_correctly() {
     let builtins = type_environment.builtins();
     let float_id = builtins.float;
     let char_id = builtins.char;
+    // Decimal is intentionally inactive in the Alpha surface; it must not lower to a
+    // numeric ABI type even though the builtin TypeId still exists.
     let decimal_id = builtins.decimal;
     let range_id = builtins.range;
 
@@ -1272,7 +1274,7 @@ fn lower_type_to_abi_maps_all_hir_types_correctly() {
     assert_eq!(lower_type_to_abi(&context, types.unit), WasmAbiType::Void);
     assert_eq!(lower_type_to_abi(&context, float_id), WasmAbiType::F64);
     assert_eq!(lower_type_to_abi(&context, char_id), WasmAbiType::I32);
-    assert_eq!(lower_type_to_abi(&context, decimal_id), WasmAbiType::F64);
+    assert_eq!(lower_type_to_abi(&context, decimal_id), WasmAbiType::Handle);
     assert_eq!(lower_type_to_abi(&context, range_id), WasmAbiType::Handle);
 }
 

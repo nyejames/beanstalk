@@ -2495,6 +2495,11 @@ path = "integer_literal_overflow"
 tags = ["integration","language", "diagnostics"]
 
 [[case]]
+id = "integer_literal_i32_boundaries"
+path = "integer_literal_i32_boundaries"
+tags = ["integration","language"]
+
+[[case]]
 id = "invalid_reassignment_shadowing"
 path = "invalid_reassignment_shadowing"
 tags = ["integration","diagnostics"]
@@ -4517,24 +4522,34 @@ path = "cast_const_error_materialization_rejected"
 tags = ["integration","diagnostics","cast","const"]
 
 [[case]]
-id = "cast_int_safe_integer_boundary_const_success"
-path = "cast_int_safe_integer_boundary_const_success"
-tags = ["integration","language","cast","const","safe-integer"]
+id = "cast_int_i32_boundary_const_success"
+path = "cast_int_i32_boundary_const_success"
+tags = ["integration","language","cast","const","i32"]
 
 [[case]]
-id = "cast_int_safe_integer_boundary_const_rejected"
-path = "cast_int_safe_integer_boundary_const_rejected"
-tags = ["integration","diagnostics","cast","const","safe-integer"]
+id = "cast_int_i32_boundary_const_rejected"
+path = "cast_int_i32_boundary_const_rejected"
+tags = ["integration","diagnostics","cast","const","i32"]
 
 [[case]]
-id = "cast_int_safe_integer_boundary_runtime_success"
-path = "cast_int_safe_integer_boundary_runtime_success"
-tags = ["integration","language","cast","runtime","safe-integer"]
+id = "cast_int_i32_boundary_runtime_success"
+path = "cast_int_i32_boundary_runtime_success"
+tags = ["integration","language","cast","runtime","i32"]
 
 [[case]]
-id = "cast_int_safe_integer_boundary_runtime_catch"
-path = "cast_int_safe_integer_boundary_runtime_catch"
-tags = ["integration","language","cast","runtime","safe-integer"]
+id = "cast_int_i32_boundary_runtime_catch"
+path = "cast_int_i32_boundary_runtime_catch"
+tags = ["integration","language","cast","runtime","i32"]
+
+[[case]]
+id = "cast_float_to_string_runtime_formatting"
+path = "cast_float_to_string_runtime_formatting"
+tags = ["integration","language","cast","runtime","float","formatting"]
+
+[[case]]
+id = "template_float_interpolation_runtime_formatting"
+path = "template_float_interpolation_runtime_formatting"
+tags = ["integration","language","templates","runtime","float","formatting"]
 
 [[case]]
 id = "cast_runtime_string_bool_catch_success"
@@ -4542,8 +4557,8 @@ path = "cast_runtime_string_bool_catch_success"
 tags = ["integration","language","cast","runtime"]
 
 [[case]]
-id = "cast_runtime_string_int_underscore_rejected"
-path = "cast_runtime_string_int_underscore_rejected"
+id = "cast_runtime_string_int_underscore_success"
+path = "cast_runtime_string_int_underscore_success"
 tags = ["integration","language","cast","runtime"]
 
 [[case]]
@@ -7527,3 +7542,103 @@ tags = ["integration", "language", "reactivity", "templates", "diagnostics"]
 id = "reactive_wasm_unreachable_helper_ignored"
 path = "reactive_wasm_unreachable_helper_ignored"
 tags = ["integration", "language", "reactivity", "templates"]
+
+[[case]]
+id = "checked_numeric_negative_int_exponent"
+path = "checked_numeric_negative_int_exponent"
+tags = ["integration", "language", "numeric", "const-eval", "diagnostics"]
+
+[[case]]
+id = "checked_numeric_float_modulo_by_zero"
+path = "checked_numeric_float_modulo_by_zero"
+tags = ["integration", "language", "numeric", "const-eval", "diagnostics"]
+
+[[case]]
+id = "checked_numeric_static_failure_in_runtime_expression"
+path = "checked_numeric_static_failure_in_runtime_expression"
+tags = ["integration", "language", "numeric", "const-eval", "diagnostics"]
+
+[[case]]
+id = "checked_numeric_mixed_int_float_fold"
+path = "checked_numeric_mixed_int_float_fold"
+tags = ["integration", "language", "numeric", "const-eval"]
+
+[[case]]
+id = "decimal_type_quarantined"
+path = "decimal_type_quarantined"
+tags = ["integration", "diagnostics", "numeric"]
+
+[[case]]
+id = "cast_string_to_float_grammar_success"
+path = "cast_string_to_float_grammar_success"
+tags = ["integration", "language", "numeric", "casts"]
+
+[[case]]
+id = "cast_string_to_float_grammar_invalid"
+path = "cast_string_to_float_grammar_invalid"
+tags = ["integration", "language", "numeric", "casts"]
+
+[[case]]
+id = "cast_string_to_float_const_grammar_success"
+path = "cast_string_to_float_const_grammar_success"
+tags = ["integration", "language", "numeric", "casts", "const-eval"]
+
+[[case]]
+id = "external_float_boundary_validation"
+path = "external_float_boundary_validation"
+tags = ["integration", "language", "numeric", "external"]
+
+[[case]]
+id = "checked_numeric_builtin_error_recovery"
+path = "checked_numeric_builtin_error_recovery"
+tags = ["integration", "language", "numeric", "js-backend"]
+
+[[case]]
+id = "checked_numeric_trap_mode"
+path = "checked_numeric_trap_mode"
+tags = ["integration", "language", "numeric", "js-backend"]
+
+[[case]]
+id = "checked_numeric_unreachable_helper_ignored"
+path = "checked_numeric_unreachable_helper_ignored"
+tags = ["integration", "language", "numeric", "html-wasm"]
+
+[[case]]
+id = "float_formatting_unreachable_helper_ignored"
+path = "float_formatting_unreachable_helper_ignored"
+tags = ["integration", "language", "cast", "runtime", "float", "formatting", "html-wasm"]
+
+[[case]]
+id = "numeric_literal_uppercase_e_rejected"
+path = "numeric_literal_uppercase_e_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "numeric_literal_malformed_exponent_rejected"
+path = "numeric_literal_malformed_exponent_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "numeric_literal_invalid_separator_rejected"
+path = "numeric_literal_invalid_separator_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "symbolic_binary_operator_spacing_rejected"
+path = "symbolic_binary_operator_spacing_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "unary_negation_spacing_rejected"
+path = "unary_negation_spacing_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "unary_plus_rejected"
+path = "unary_plus_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "float_literal_nonfinite_rejected"
+path = "float_literal_nonfinite_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]

@@ -65,6 +65,8 @@ pub struct BuiltinTypes {
     pub bool: TypeId,
     pub int: TypeId,
     pub float: TypeId,
+    // Decimal is intentionally inactive in the Alpha surface. The handle is kept
+    // only to preserve the stable builtin TypeId layout seeded by TypeEnvironment::new.
     pub decimal: TypeId,
     pub string: TypeId,
     pub char: TypeId,
@@ -281,6 +283,9 @@ impl TypeEnvironment {
         let bool_id = env.insert_builtin(BuiltinTypeKey::Bool);
         let int_id = env.insert_builtin(BuiltinTypeKey::Int);
         let float_id = env.insert_builtin(BuiltinTypeKey::Float);
+        // Decimal is intentionally inactive in the Alpha surface. It is seeded only
+        // to keep the stable builtin TypeId layout; no parser or operator path may
+        // produce a live Decimal type.
         let decimal_id = env.insert_builtin(BuiltinTypeKey::Decimal);
         let string_id = env.insert_builtin(BuiltinTypeKey::String);
         let char_id = env.insert_builtin(BuiltinTypeKey::Char);
@@ -1045,12 +1050,16 @@ impl TypeEnvironment {
     // --------------------------------------------------------
 
     /// Returns true if the type is a numeric scalar.
+    ///
+    /// Decimal is intentionally excluded: it is seeded in the environment to keep
+    /// stable builtin TypeId layout, but it is not an authorable or operator-active
+    /// numeric type in the Alpha surface.
     pub fn is_numeric(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
             Some(TypeDefinition::Builtin(builtin)) if matches!(
                 builtin.key,
-                BuiltinTypeKey::Int | BuiltinTypeKey::Float | BuiltinTypeKey::Decimal
+                BuiltinTypeKey::Int | BuiltinTypeKey::Float
             )
         )
     }

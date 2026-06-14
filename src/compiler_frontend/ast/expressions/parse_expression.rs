@@ -6,6 +6,7 @@
 use super::error::ExpressionParseError;
 use super::eval_expression::evaluate_expression;
 use super::expression::Expression;
+use super::expression_rpn::ExpressionRpnItem;
 use super::parse_expression_dispatch::{
     ExpressionDispatchState, ExpressionTokenStep, dispatch_expression_token,
 };
@@ -14,7 +15,6 @@ use super::parse_expression_input::{
 };
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReturnShapeReason};
 use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
@@ -189,7 +189,7 @@ pub(crate) fn create_expression_without_boundary_catch(
 pub(crate) fn create_expression_with_trailing_newline_policy(
     input: ExpressionParseInput<'_, '_>,
 ) -> Result<Expression, ExpressionParseError> {
-    let mut expression: Vec<AstNode> = Vec::new();
+    let mut expression: Vec<ExpressionRpnItem> = Vec::new();
 
     ast_log!(
         "Parsing ",

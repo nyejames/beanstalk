@@ -6,6 +6,7 @@ use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::numeric::NumericFailureMode;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 
@@ -183,7 +184,7 @@ fn collection_helpers_use_expected_error_code_for_invalid_receiver() {
 
     let expected_error = BuiltinErrorCode::CollectionExpectedOrderedCollection;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -205,7 +206,7 @@ fn collection_helpers_use_expected_error_code_for_out_of_bounds() {
 
     let expected_error = BuiltinErrorCode::CollectionIndexOutOfBounds;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -566,21 +567,35 @@ fn cast_int_accepts_integer_string() {
     let cast = helper_source(&source, "__bs_cast_int");
 
     assert!(
-        cast.contains("Number.parseInt(normalized, 10)") && cast.contains("{ tag: \"ok\""),
+        cast.contains("Number.parseInt(value.replace(/_/g, ''), 10)")
+            && cast.contains("{ tag: \"ok\""),
         "__bs_cast_int must parse integer strings and return ok"
     );
 }
 
-/// Verifies that `__bs_cast_int` uses the shared safe-integer range helpers. [cast]
+/// Verifies that `__bs_cast_int` applies numeric grammar to the whole string. [cast]
 #[test]
-fn cast_int_uses_safe_integer_range_helpers() {
+fn cast_int_does_not_trim_string_input() {
+    let source = lower_minimal_module_with_string_int_cast("main");
+    let cast = helper_source(&source, "__bs_cast_int");
+
+    assert!(
+        cast.contains("/^-?(?:\\d+(?:_\\d+)*)$/.test(value)")
+            && !cast.contains("__bs_normalize_numeric_text(value)"),
+        "__bs_cast_int must reject surrounding whitespace instead of trimming it"
+    );
+}
+
+/// Verifies that `__bs_cast_int` uses the shared i32 range helpers. [cast]
+#[test]
+fn cast_int_uses_i32_range_helpers() {
     let source = lower_minimal_module_with_string_int_cast("main");
 
     assert!(
         source.contains("function __bs_cast_int_in_range(value)")
-            && source.contains("const __BS_INT_CAST_MIN = -9007199254740991")
-            && source.contains("const __BS_INT_CAST_MAX = 9007199254740991"),
-        "__bs_cast_int must rely on shared Alpha safe-integer range helpers"
+            && source.contains("const __BS_INT_CAST_MIN = -2147483648")
+            && source.contains("const __BS_INT_CAST_MAX = 2147483647"),
+        "__bs_cast_int must rely on shared Alpha i32 range helpers"
     );
 
     let cast = helper_source(&source, "__bs_cast_int");
@@ -591,16 +606,16 @@ fn cast_int_uses_safe_integer_range_helpers() {
     );
 }
 
-/// Verifies that `__bs_cast_float_to_int` uses the shared safe-integer range helper. [cast]
+/// Verifies that `__bs_cast_float_to_int` uses the shared i32 range helper. [cast]
 #[test]
-fn cast_float_to_int_uses_safe_integer_range_helper() {
+fn cast_float_to_int_uses_i32_range_helper() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
     let region = RegionId(0);
 
     let source_expr = expression(
         1,
-        HirExpressionKind::Float(9007199254740992.0),
+        HirExpressionKind::Float((i32::MAX as f64) + 1.0),
         type_environment.builtins().float,
         region,
         ValueKind::Const,
@@ -653,7 +668,7 @@ fn cast_float_to_int_uses_safe_integer_range_helper() {
     let cast = helper_source(&output.source, "__bs_cast_float_to_int");
     assert!(
         cast.contains("!__bs_cast_int_in_range(truncated)"),
-        "__bs_cast_float_to_int must reject truncated values outside the safe-integer range"
+        "__bs_cast_float_to_int must reject truncated values outside the i32 range"
     );
 }
 
@@ -666,6 +681,44 @@ fn cast_float_rejects_invalid_string() {
     assert!(
         cast.contains("Cannot parse Float from text") && cast.contains("{ tag: \"err\""),
         "__bs_cast_float must return a Parse err for invalid strings"
+    );
+}
+
+/// Verifies that `__bs_cast_float` applies the shared Beanstalk numeric text grammar to
+/// the whole string and does not trim whitespace. [cast]
+#[test]
+fn cast_float_uses_shared_numeric_text_grammar() {
+    let source = lower_minimal_module_with_string_float_cast("main");
+    let cast = helper_source(&source, "__bs_cast_float");
+
+    assert!(
+        cast.contains("Number.parseFloat(value.replace(/_/g, \"\"))"),
+        "__bs_cast_float must parse the string after removing digit separators"
+    );
+    assert!(
+        cast.contains("/^-?\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?(?:e[+-]?\\d+(?:_\\d+)*)?$/"),
+        "__bs_cast_float must match the Beanstalk numeric text grammar exactly"
+    );
+    assert!(
+        !cast.contains("__bs_normalize_numeric_text"),
+        "__bs_cast_float must not trim surrounding whitespace"
+    );
+    assert!(
+        cast.contains("Number.isFinite(parsed)"),
+        "__bs_cast_float must reject non-finite parsed values"
+    );
+}
+
+/// Verifies that `__bs_cast_float` rejects non-finite parsed values with an out-of-range
+/// error carrier. [cast]
+#[test]
+fn cast_float_rejects_non_finite_parsed_value() {
+    let source = lower_minimal_module_with_string_float_cast("main");
+    let cast = helper_source(&source, "__bs_cast_float");
+
+    assert!(
+        cast.contains("Float value is out of supported range") && cast.contains("{ tag: \"err\""),
+        "__bs_cast_float must return an out-of-range err when Number.parseFloat yields Infinity"
     );
 }
 
@@ -797,7 +850,7 @@ fn collection_push_returns_capacity_exceeded_error() {
 
     let expected_error = BuiltinErrorCode::CollectionFixedCapacityExceeded;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -902,7 +955,7 @@ fn map_get_returns_key_not_found_for_missing_key() {
 
     let expected_error = BuiltinErrorCode::MapKeyNotFound;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -919,7 +972,7 @@ fn map_get_validates_receiver() {
 
     let expected_error = BuiltinErrorCode::MapExpectedOrderedMap;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -963,7 +1016,7 @@ fn map_remove_returns_key_not_found_for_missing_key() {
 
     let expected_error = BuiltinErrorCode::MapKeyNotFound;
     let expected_message = expected_error.default_message();
-    let expected_code = expected_error.as_i64();
+    let expected_code = expected_error.as_i32();
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
@@ -1031,5 +1084,181 @@ fn clone_value_deep_copies_map_entries() {
             && clone.contains("__bs_clone_value(key)")
             && clone.contains("__bs_clone_value(item)"),
         "__bs_clone_value must deep-copy map entries with recursive clone for keys and values"
+    );
+}
+
+// Float helper contract tests [float-helper]
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy)]
+enum FloatHelperEmission {
+    Format,
+    Validate,
+}
+
+/// Builds and lowers a minimal module that performs one Float helper statement.
+///
+/// WHY: Float helper contract tests need modules that emit each focused helper without duplicating
+/// HIR construction in every fixture.
+fn lower_minimal_module_with_float_helper(
+    function_name: &str,
+    helper: FloatHelperEmission,
+) -> String {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let source_expr = float_expression(1, 1.5, types.float, region);
+    let (statement_kind, result_type) = match helper {
+        FloatHelperEmission::Format => (
+            HirStatementKind::FormatFloat {
+                source: source_expr,
+                failure_mode: NumericFailureMode::Trap,
+                result: LocalId(0),
+            },
+            types.string,
+        ),
+        FloatHelperEmission::Validate => (
+            HirStatementKind::ValidateFloat {
+                source: source_expr,
+                failure_mode: NumericFailureMode::Trap,
+                result: LocalId(0),
+            },
+            types.float,
+        ),
+    };
+
+    let float_statement = statement(1, statement_kind, 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![local(0, result_type, region)],
+        statements: vec![float_statement],
+        terminator: HirTerminator::Return(unit_expression(2, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        function_name,
+        vec![block],
+        function,
+        &[(LocalId(0), "result")],
+    );
+
+    lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        JsLoweringConfig::direct_js(false),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed")
+    .source
+}
+
+fn lower_minimal_module_with_format_float(function_name: &str) -> String {
+    lower_minimal_module_with_float_helper(function_name, FloatHelperEmission::Format)
+}
+
+fn lower_minimal_module_with_validate_float(function_name: &str) -> String {
+    lower_minimal_module_with_float_helper(function_name, FloatHelperEmission::Validate)
+}
+
+/// Verifies that `__bs_float_validate` returns ok for finite values and rejects non-finite values.
+#[test]
+fn float_validate_helper_checks_finite() {
+    let source = lower_minimal_module_with_validate_float("main");
+    let validate = helper_source(&source, "__bs_float_validate");
+
+    assert!(
+        validate.contains("Number.isFinite(value)") && validate.contains("{ tag: \"ok\", value }"),
+        "__bs_float_validate must return an ok carrier for finite values"
+    );
+
+    let non_finite = BuiltinErrorCode::FloatBoundaryNonFinite;
+    let expected = format!(
+        r#"__bs_error_result("{}", {})"#,
+        non_finite.default_message(),
+        non_finite.as_i32()
+    );
+    assert!(
+        validate.contains(&expected),
+        "__bs_float_validate must use FloatBoundaryNonFinite for non-finite values"
+    );
+}
+
+/// Verifies that `__bs_format_float` rejects non-finite inputs defensively.
+#[test]
+fn format_float_helper_rejects_non_finite() {
+    let source = lower_minimal_module_with_format_float("main");
+    let format = helper_source(&source, "__bs_format_float");
+
+    let non_finite = BuiltinErrorCode::FloatFormatInvariant;
+    let expected = format!(
+        r#"__bs_error_result("{}", {})"#,
+        non_finite.default_message(),
+        non_finite.as_i32()
+    );
+    assert!(
+        format.contains(&expected),
+        "__bs_format_float must use FloatFormatInvariant for unexpected non-finite values"
+    );
+}
+
+/// Verifies that `__bs_format_float` normalizes `-0.0` to the string "0".
+#[test]
+fn format_float_helper_normalizes_negative_zero() {
+    let source = lower_minimal_module_with_format_float("main");
+    let format = helper_source(&source, "__bs_format_float");
+
+    assert!(
+        format.contains("Object.is(value, -0)")
+            && format.contains(r#"return { tag: "ok", value: "0" };"#),
+        "__bs_format_float must format -0.0 as the string 0"
+    );
+}
+
+/// Verifies that `__bs_format_float` uses explicit JS number formatting and normalizes exponent signs.
+#[test]
+fn format_float_helper_uses_to_string_and_normalizes_exponent() {
+    let source = lower_minimal_module_with_format_float("main");
+    let format = helper_source(&source, "__bs_format_float");
+
+    assert!(
+        format.contains("value.toString()"),
+        "__bs_format_float must format via Number.prototype.toString"
+    );
+    assert!(
+        format.contains(r#"replace(/e([+-]?)(\d+)/i"#),
+        "__bs_format_float must normalize exponent case and sign placeholders"
+    );
+    assert!(
+        format.contains(r#"const explicitSign = sign === "-" ? "-" : "+";"#),
+        "__bs_format_float must compute an explicit exponent sign"
+    );
+    assert!(
+        format.contains(r#"return "e" + explicitSign + digits;"#),
+        "__bs_format_float must emit lowercase e with explicit exponent sign"
+    );
+}
+
+/// Verifies that the expression-level `Float -> String` cast delegates to the shared formatter.
+#[test]
+fn cast_float_to_string_helper_uses_shared_float_formatter() {
+    let source = lower_minimal_module_with_float_string_cast("main");
+    let cast = helper_source(&source, "__bs_cast_float_to_string");
+
+    assert!(
+        cast.contains("__bs_numeric_trap(__bs_format_float(value))"),
+        "__bs_cast_float_to_string must use the Beanstalk Float formatter contract"
     );
 }

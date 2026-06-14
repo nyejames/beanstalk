@@ -4,14 +4,20 @@
 //! WHY: place rules differ from general expression parsing and benefit from one focused module.
 
 use super::error::ExpressionParseError;
-use super::parse_expression_dispatch::push_expression_node;
+use super::expression_rpn::ExpressionRpnItem;
+use super::parse_expression_dispatch::push_expression_operand;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::field_access::{
-    ReceiverAccessMode, parse_field_access_with_receiver_access,
+use crate::compiler_frontend::ast::expressions::expression::{
+    ConstRecordState, Expression, ExpressionKind, ExpressionValueShape,
+    expression_value_shape_for_type_id,
 };
-use crate::compiler_frontend::ast::place_access::ast_node_is_place;
-use crate::compiler_frontend::ast::statements::declarations::create_reference;
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    PlaceExpression, PlaceExpressionKind,
+};
+use crate::compiler_frontend::ast::field_access::{
+    ReceiverAccessMode, parse_field_access_expression_with_receiver_access,
+    parse_postfix_chain_expression, reference_expression_from_declaration,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
@@ -19,8 +25,17 @@ use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCopyTargetReason, InvalidReceiverCallReason, NameNamespace,
 };
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+
+pub(super) struct ParsedCopyPlace {
+    pub(super) place: PlaceExpression,
+    pub(super) diagnostic_type: DataType,
+    pub(super) type_id: TypeId,
+    pub(super) value_shape: ExpressionValueShape,
+}
 
 // WHAT: parses a `~name.<chain>` receiver expression.
 // WHY: mutable receiver syntax is a distinct place expression that must resolve to a field-access
@@ -29,7 +44,7 @@ pub(super) fn parse_mutable_receiver_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     allow_boundary_catch: bool,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
@@ -73,7 +88,7 @@ pub(super) fn parse_mutable_receiver_expression(
     }
 
     token_stream.advance();
-    let receiver_node = parse_field_access_with_receiver_access(
+    let receiver_expression = parse_field_access_expression_with_receiver_access(
         token_stream,
         receiver_declaration,
         context,
@@ -82,14 +97,14 @@ pub(super) fn parse_mutable_receiver_expression(
         string_table,
     )?;
 
-    push_expression_node(
+    push_expression_operand(
         token_stream,
         context,
         type_interner,
         string_table,
         expression,
         allow_boundary_catch,
-        receiver_node,
+        receiver_expression,
     )
 }
 
@@ -101,7 +116,16 @@ pub(super) fn parse_copy_place_expression(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<ParsedCopyPlace, ExpressionParseError> {
+    parse_copy_place_payload(token_stream, context, type_interner, string_table)
+}
+
+fn parse_copy_place_payload(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<ParsedCopyPlace, ExpressionParseError> {
     match token_stream.current_token_kind() {
         // Parenthesized places are allowed for grouping; the outer `(` location is preserved
         // so diagnostics point at the `copy(` call site rather than the inner name.
@@ -109,8 +133,8 @@ pub(super) fn parse_copy_place_expression(
             let open_location = token_stream.current_location();
             token_stream.advance();
 
-            let place =
-                parse_copy_place_expression(token_stream, context, type_interner, string_table)?;
+            let mut parsed_place =
+                parse_copy_place_payload(token_stream, context, type_interner, string_table)?;
 
             if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
                 return Err(CompilerDiagnostic::expected_token(
@@ -122,10 +146,8 @@ pub(super) fn parse_copy_place_expression(
             }
 
             token_stream.advance();
-            Ok(AstNode {
-                location: open_location,
-                ..place
-            })
+            parsed_place.place.location = open_location;
+            Ok(parsed_place)
         }
 
         // Named places: resolve the symbol and verify it denotes a place-capable value, not a function.
@@ -157,25 +179,45 @@ pub(super) fn parse_copy_place_expression(
                 )
                 .into())
             } else {
-                let place = create_reference(
-                    token_stream,
+                let reference_location = token_stream.current_location();
+                let reference_expression = reference_expression_from_declaration(
                     place_declaration,
                     context,
                     type_interner,
-                    string_table,
-                )?;
+                    reference_location.clone(),
+                );
+                token_stream.advance();
 
-                // create_reference may produce a non-place node in edge cases (e.g. certain
-                // builtin aliases), so verify the AST shape before accepting it.
-                if !ast_node_is_place(&place) {
+                let copied_expression = if token_stream.index < token_stream.length
+                    && token_stream.current_token_kind() == &TokenKind::Dot
+                {
+                    parse_postfix_chain_expression(
+                        token_stream,
+                        reference_expression,
+                        reference_location,
+                        ReceiverAccessMode::Shared,
+                        context,
+                        type_interner,
+                        string_table,
+                    )?
+                } else {
+                    reference_expression
+                };
+
+                let Some(place) = place_expression_from_expression(&copied_expression) else {
                     return Err(CompilerDiagnostic::invalid_copy_target(
                         InvalidCopyTargetReason::NonPlace,
-                        token_stream.current_location(),
+                        copied_expression.location,
                     )
                     .into());
-                }
+                };
 
-                Ok(place)
+                Ok(ParsedCopyPlace {
+                    place,
+                    diagnostic_type: copied_expression.diagnostic_type,
+                    type_id: copied_expression.type_id,
+                    value_shape: copied_expression.value_shape,
+                })
             }
         }
 
@@ -198,4 +240,75 @@ pub(super) fn parse_copy_place_expression(
         )
         .into()),
     }
+}
+
+pub(crate) fn place_expression_from_expression(expression: &Expression) -> Option<PlaceExpression> {
+    match &expression.kind {
+        ExpressionKind::Reference(path) => Some(PlaceExpression {
+            kind: PlaceExpressionKind::Local(path.clone()),
+            type_id: expression.type_id,
+            diagnostic_type: expression.diagnostic_type.clone(),
+            value_mode: expression.value_mode.clone(),
+            location: expression.location.clone(),
+        }),
+
+        ExpressionKind::FieldAccess { base, field } => {
+            let base_place = place_expression_from_expression(base)?;
+            Some(PlaceExpression {
+                kind: PlaceExpressionKind::Field {
+                    base: Box::new(base_place),
+                    field: *field,
+                },
+                type_id: expression.type_id,
+                diagnostic_type: expression.diagnostic_type.clone(),
+                value_mode: expression.value_mode.clone(),
+                location: expression.location.clone(),
+            })
+        }
+
+        _ => None,
+    }
+}
+
+/// Returns true when the place expression resolves to a mutable root place.
+///
+/// WHAT: a local place is mutable when its value mode says so; a field place is mutable when
+///       the base place it projects from is mutable.
+/// WHY: mutability for field projections is inherited from the root local/receiver, matching the
+///      language rule that `~obj.field.method()` requires `obj` to be mutable.
+pub(crate) fn place_expression_is_mutable(place: &PlaceExpression) -> bool {
+    match &place.kind {
+        PlaceExpressionKind::Local(_) => place.value_mode.is_mutable(),
+
+        PlaceExpressionKind::Field { base, .. } => place_expression_is_mutable(base),
+    }
+}
+
+/// Reconstructs an expression payload from a narrow place expression.
+///
+/// WHAT: compound assignment desugars `target op rhs` by reading the target place as a value.
+/// WHY: places do not carry enough metadata to be evaluated directly, so this builds the equivalent
+///      expression tree (local reference or field access) that the evaluator already understands.
+pub(crate) fn expression_from_place_expression(place: &PlaceExpression) -> Expression {
+    let kind = match &place.kind {
+        PlaceExpressionKind::Local(path) => ExpressionKind::Reference(path.clone()),
+
+        PlaceExpressionKind::Field { base, field } => ExpressionKind::FieldAccess {
+            base: Box::new(expression_from_place_expression(base)),
+            field: *field,
+        },
+    };
+
+    let mut expression = Expression::new(
+        kind,
+        place.location.clone(),
+        place.type_id,
+        place.diagnostic_type.clone(),
+        place.value_mode.clone(),
+    );
+    expression.const_record_state = ConstRecordState::RuntimeValue;
+    expression.value_shape =
+        expression_value_shape_for_type_id(place.type_id, &place.diagnostic_type);
+
+    expression
 }

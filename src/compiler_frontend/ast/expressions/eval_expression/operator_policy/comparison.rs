@@ -55,9 +55,9 @@ pub(super) fn resolve_comparison_operator_type(
         let bool_result = || ExpressionResultType::from_type_id(builtins.bool, type_environment);
 
         // Numeric scalars support full ordering and equality.
-        let same_numeric_scalar = lhs.type_id == builtins.int
-            || lhs.type_id == builtins.float
-            || lhs.type_id == builtins.decimal;
+        // Decimal is intentionally inactive in the Alpha surface and is not treated
+        // as a comparable numeric type.
+        let same_numeric_scalar = lhs.type_id == builtins.int || lhs.type_id == builtins.float;
 
         if same_numeric_scalar {
             return match op {

@@ -172,6 +172,10 @@ Choice payload fields do not currently support defaults.
 
 ### Numeric Semantics
 
+`Int` is a signed 32-bit integer with the range `-2147483648` through `2147483647`.
+`Float` is a finite `f64`; non-finite values are rejected at source, cast, arithmetic, and external
+boundary points that can introduce them.
+
 | Form | Result |
 |---|---|
 | Whole-number literal | `Int` |
@@ -181,7 +185,23 @@ Choice payload fields do not currently support defaults.
 | `//` | Integer division; `Int // Int -> Int`, truncating toward zero |
 | Mixed `Int`/`Float` arithmetic | `Float` |
 
-There is no implicit `Float -> Int` coercion. Use `cast!` at an explicit `Int` target when a fallible conversion is intended.
+Source numeric literals support lowercase exponent syntax such as `1e6`, `1e-6`, and `1.0e+21`.
+Uppercase `E` is rejected. A leading `-` is part of a signed numeric literal only in prefix position,
+for example `-1` or `-1e6`; unary negation for non-literals must also be attached, for example
+`-count`. Spaced unary negation such as `- count` and unary `+` are rejected.
+
+Symbolic binary operators must have spaces around them, such as `a + b` and `count = 1`.
+Forms like `a+b`, `a-1`, and `count=1` are syntax errors.
+
+Runtime numeric operations are checked. Integer overflow, divide/modulo by zero, invalid integer
+exponents, and non-finite Float results are failures. When the enclosing function has builtin
+`Error!` as its error return slot, numeric failures recover through that builtin `Error` channel.
+Custom fallible channels, non-fallible functions, and entry-file top-level runtime code use trap
+mode. Statically known numeric failures are compile-time diagnostics, even inside builtin
+`Error!` functions.
+
+There is no implicit `Float -> Int` coercion. Use `cast!` at an explicit `Int` target when a
+fallible conversion is intended.
 
 ### Explicit Casts
 
@@ -216,7 +236,10 @@ Rules:
 - Conditions, loop conditions, assertions, template interpolation, operator operands, expression statements, and untyped declarations are not cast targets.
 - `T?` receiving contexts cast to the inner builtin `T`, then use ordinary contextual `T -> T?` wrapping. Optional source values are not auto-unwrapped.
 - In `target T? = cast source catch:`, recovery handlers also produce the inner `T`; the compiler wraps the successful or recovered `T` into `T?` after the cast. `then none` is invalid in that handler because `none` is not an inner builtin cast result.
-- In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize only JavaScript-safe integer values from `-9007199254740991` through `9007199254740991`. Values outside that range fail the cast so compile-time folding and runtime lowering agree.
+- `String -> Int` and `Float -> Int` casts materialize signed 32-bit integer values from `-2147483648` through `2147483647`. Values outside that range fail the cast so compile-time folding and runtime lowering agree.
+- `String -> Int` and `String -> Float` casts use Beanstalk numeric text grammar over the whole string. Surrounding whitespace, uppercase exponent markers, unary plus, malformed separators/exponents, `NaN`, and infinity spellings are rejected.
+- `String -> Float` additionally rejects grammar-valid text that materializes to a non-finite `Float`.
+- `Float -> String` uses Beanstalk's formatter, not backend-native display. It normalizes `-0.0` to `0` and uses stable lowercase exponent formatting where exponential notation is required.
 - Same-type casts are invalid. `Int -> Float` contextual promotion remains separate from explicit casts, but `cast` is allowed when the source is naturally `Int` and the target is `Float`.
 - `cast expression` requires infallible evidence. `cast! expression` requires fallible evidence and propagates through the current function's `Error!` return slot. `cast expression catch:` requires fallible evidence and recovers locally.
 - `cast! expression catch:` is invalid. Propagation and local recovery are mutually exclusive.
@@ -329,6 +352,10 @@ fallback = parse_number(text) catch:
 ```
 
 Results are call-site-only. Public first-class `Result` values and result-pattern matching remain deferred. The special `!` return is only for the error path; success values use the normal return list.
+
+Automatic checked-numeric recovery is compiler-owned and applies only when the current function's
+fallible return slot is builtin `Error!`. It does not make numeric operators source-visible
+`Error!` expressions, and it does not adapt failures into custom fallible channels.
 
 #### Value-producing blocks and multi-returns
 
@@ -530,6 +557,8 @@ Core rules:
 - Top-level runtime templates run in entry `start()` order.
 - Top-level const templates fold at compile time and are merged separately.
 - Templates assigned to variables or returned from functions do not contribute page fragments by themselves.
+- Runtime Float interpolation and `Float -> String` casts use the same Beanstalk formatter as
+  compile-time folding, so template output does not depend on host-native Float stringification.
 
 ### Template Directives
 
@@ -858,6 +887,9 @@ Range rules:
 - With descending bounds, `by` is treated as a magnitude and the compiler applies the sign.
 - `by 0` is invalid.
 - Float ranges are supported, but `by` should be treated as required to avoid ambiguous or non-terminating loops.
+- Runtime range counter updates are checked numeric operations. Their failures follow the enclosing
+  numeric failure mode. Const range loops diagnose statically known counter failures during AST
+  folding.
 - Bindings use `|...|` after the loop source and may be omitted when unused.
 
 ```beanstalk

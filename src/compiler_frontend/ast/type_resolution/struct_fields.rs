@@ -1,9 +1,10 @@
 //! Struct field type resolution and default-value constant inlining.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::eval_expression::ExpressionTypingError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
@@ -247,12 +248,12 @@ fn inline_visible_constant_references_impl(
             .unwrap_or_else(|| expression.to_owned())),
 
         // Runtime expression — inline constants inside nested nodes, then re-evaluate.
-        ExpressionKind::Runtime(runtime_nodes) => {
-            let mut rewritten_nodes = Vec::with_capacity(runtime_nodes.len());
+        ExpressionKind::Runtime(rpn) => {
+            let mut rewritten_items = Vec::with_capacity(rpn.items.len());
 
-            for node in runtime_nodes {
-                rewritten_nodes.push(inline_visible_constant_references_in_node(
-                    node,
+            for item in &rpn.items {
+                rewritten_items.push(inline_visible_constant_references_in_rpn_item(
+                    item,
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
@@ -279,7 +280,7 @@ fn inline_visible_constant_references_impl(
                 AstTypeInterner::new(type_environment, &mut compatibility_cache);
             evaluate_expression(
                 &evaluation_context,
-                rewritten_nodes,
+                rewritten_items,
                 &mut type_interner,
                 &mut current_type,
                 &expression.value_mode,
@@ -416,37 +417,23 @@ fn expression_with_inlined_kind(expression: &Expression, kind: ExpressionKind) -
     rewritten
 }
 
-fn inline_visible_constant_references_in_node(
-    node: &AstNode,
+fn inline_visible_constant_references_in_rpn_item(
+    item: &ExpressionRpnItem,
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
     string_table: &mut StringTable,
-) -> Result<AstNode, StructFieldResolutionError> {
-    let mut rewritten_node = node.to_owned();
-
-    rewritten_node.kind = match &node.kind {
-        NodeKind::Rvalue(expression) => NodeKind::Rvalue(inline_visible_constant_references_impl(
-            expression,
-            declaration_table,
-            visible_declaration_ids,
-            type_environment,
-            string_table,
-        )?),
-
-        NodeKind::VariableDeclaration(declaration) => NodeKind::VariableDeclaration(Declaration {
-            id: declaration.id.to_owned(),
-            value: inline_visible_constant_references_impl(
-                &declaration.value,
+) -> Result<ExpressionRpnItem, StructFieldResolutionError> {
+    match item {
+        ExpressionRpnItem::Operand(expression) => Ok(ExpressionRpnItem::Operand(
+            inline_visible_constant_references_impl(
+                expression,
                 declaration_table,
                 visible_declaration_ids,
                 type_environment,
                 string_table,
             )?,
-        }),
-
-        _ => node.kind.to_owned(),
-    };
-
-    Ok(rewritten_node)
+        )),
+        ExpressionRpnItem::Operator { .. } => Ok(item.clone()),
+    }
 }

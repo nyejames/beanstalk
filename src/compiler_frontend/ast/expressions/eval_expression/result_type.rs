@@ -2,19 +2,20 @@
 //!
 //! WHAT: mirrors final RPN execution shape with a type-only stack.
 //! WHY: AST must enforce operator typing before folding/lowering so later stages never infer
-//!      type policy from runtime-oriented structures.
+//! type policy from runtime-oriented structures.
 
 use super::operator_policy::{resolve_binary_operator_type, resolve_unary_operator_type};
 use super::typing_error::ExpressionTypingError;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
-    ExpressionValueShape, Operator, expression_value_shape_for_diagnostic_type,
+    Expression, ExpressionValueShape, Operator, expression_value_shape_for_diagnostic_type,
 };
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, OperatorOperandPosition};
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::datatypes::{DataType, diagnostic_type_spelling};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Resolved type facts carried by the operator typing stack.
@@ -40,6 +41,14 @@ impl ExpressionResultType {
         }
     }
 
+    pub(super) fn from_expression(expression: &Expression) -> Self {
+        Self {
+            diagnostic_type: expression.diagnostic_type.to_owned(),
+            type_id: expression.type_id,
+            value_shape: expression.value_shape,
+        }
+    }
+
     pub(super) fn from_type_id_with_shape(
         type_id: TypeId,
         type_environment: &TypeEnvironment,
@@ -54,7 +63,7 @@ impl ExpressionResultType {
 }
 
 pub(super) fn resolve_expression_result_type(
-    output_queue: &[AstNode],
+    output_queue: &[ExpressionRpnItem],
     expression_location: &SourceLocation,
     string_table: &mut StringTable,
     type_environment: &TypeEnvironment,
@@ -67,113 +76,67 @@ pub(super) fn resolve_expression_result_type(
     //  Walk RPN output queue
     // ------------------------
 
-    for node in output_queue {
-        match &node.kind {
-            // Values and field accesses push their pre-resolved types directly.
-            NodeKind::Rvalue(expr) => stack.push(ExpressionResultType {
-                diagnostic_type: expr.diagnostic_type.to_owned(),
-                type_id: expr.type_id,
-                value_shape: expr.value_shape,
-            }),
-
-            NodeKind::FieldAccess {
-                type_id,
-                diagnostic_type,
-                ..
-            } => stack.push(ExpressionResultType {
-                diagnostic_type: diagnostic_type.to_owned(),
-                type_id: *type_id,
-                value_shape: expression_value_shape_for_diagnostic_type(diagnostic_type),
-            }),
-
-            // Calls may produce single or multiple results; the helper normalises them.
-            NodeKind::FunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::MethodCall {
-                result_type_ids, ..
-            }
-            | NodeKind::CollectionBuiltinCall {
-                result_type_ids, ..
-            }
-            | NodeKind::MapBuiltinCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HostFunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HandledFallibleHostFunctionCall {
-                result_type_ids, ..
-            }
-            | NodeKind::HandledFallibleFunctionCall {
-                result_type_ids, ..
-            } => {
-                stack.push(call_result_expression_type(
-                    result_type_ids,
-                    type_environment,
-                ));
+    for item in output_queue {
+        match item {
+            // Operand expressions push their pre-resolved types directly.
+            ExpressionRpnItem::Operand(expression) => {
+                stack.push(ExpressionResultType::from_expression(expression));
             }
 
             // Operators consume operand types from the stack and push the result type.
-            NodeKind::Operator(op) => match op.required_values() {
-                1 => {
-                    let Some(operand) = stack.pop() else {
-                        return Err(missing_operand_error(
-                            op,
-                            OperatorOperandPosition::Unary,
-                            &node.location,
-                            string_table,
-                        ));
-                    };
-                    stack.push(resolve_unary_operator_type(
-                        op,
-                        &operand,
-                        &node.location,
-                        type_environment,
-                    )?);
-                }
+            ExpressionRpnItem::Operator { operator, location } => {
+                match operator.required_values() {
+                    1 => {
+                        let Some(operand) = stack.pop() else {
+                            return Err(missing_operand_error(
+                                operator,
+                                OperatorOperandPosition::Unary,
+                                location,
+                                string_table,
+                            ));
+                        };
+                        stack.push(resolve_unary_operator_type(
+                            operator,
+                            &operand,
+                            location,
+                            type_environment,
+                        )?);
+                    }
 
-                2 => {
-                    let Some(rhs) = stack.pop() else {
-                        return Err(missing_operand_error(
-                            op,
-                            OperatorOperandPosition::BinaryRight,
-                            &node.location,
-                            string_table,
-                        ));
-                    };
-                    let Some(lhs) = stack.pop() else {
-                        return Err(missing_operand_error(
-                            op,
-                            OperatorOperandPosition::BinaryLeft,
-                            &node.location,
-                            string_table,
-                        ));
-                    };
-                    stack.push(resolve_binary_operator_type(
-                        &lhs,
-                        &rhs,
-                        op,
-                        &node.location,
-                        type_environment,
-                    )?);
-                }
+                    2 => {
+                        let Some(rhs) = stack.pop() else {
+                            return Err(missing_operand_error(
+                                operator,
+                                OperatorOperandPosition::BinaryRight,
+                                location,
+                                string_table,
+                            ));
+                        };
+                        let Some(lhs) = stack.pop() else {
+                            return Err(missing_operand_error(
+                                operator,
+                                OperatorOperandPosition::BinaryLeft,
+                                location,
+                                string_table,
+                            ));
+                        };
+                        stack.push(resolve_binary_operator_type(
+                            &lhs,
+                            &rhs,
+                            operator,
+                            location,
+                            type_environment,
+                        )?);
+                    }
 
-                _ => {
-                    return Err(CompilerError::compiler_error(format!(
-                        "Unsupported operator arity during expression typing: {:?}",
-                        op
-                    ))
-                    .into());
+                    _ => {
+                        return Err(CompilerError::compiler_error(format!(
+                            "Unsupported operator arity during expression typing: {:?}",
+                            operator
+                        ))
+                        .into());
+                    }
                 }
-            },
-
-            _ => {
-                return Err(CompilerError::compiler_error(format!(
-                    "Unsupported AST node found in expression typing: {:?}",
-                    node.kind
-                ))
-                .into());
             }
         }
     }
@@ -198,24 +161,6 @@ pub(super) fn resolve_expression_result_type(
         )
         .into()),
     }
-}
-
-fn call_result_expression_type(
-    result_type_ids: &[TypeId],
-    type_environment: &TypeEnvironment,
-) -> ExpressionResultType {
-    let type_id = match result_type_ids {
-        [] => type_environment.builtins().none,
-        [single] => *single,
-        // Multi-result calls are rejected by the statement/multi-bind owners.
-        // Keep expression-operator diagnostics user-facing if one reaches this path.
-        _ => type_environment.builtins().none,
-    };
-
-    // Call/field results carry no explicit caller-provided shape, so derive the shape from the
-    // canonical TypeId's diagnostic spelling. This preserves current behavior: String-typed
-    // results behave as plain string slices unless the source expression was a template/path.
-    ExpressionResultType::from_type_id(type_id, type_environment)
 }
 
 /// Build a missing-operand diagnostic for the given operator and stack position.

@@ -5,12 +5,15 @@
 //! WHY: one shared resolver avoids duplicating fold/reference logic across config,
 //!      AST finalization, and HIR metadata.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_eval::constant_fold;
 use crate::compiler_frontend::ast::const_values::facts::{
     AstConstDeclarationFact, ConstBindingScope, ConstBindingSource, ConstFactValueKind,
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
@@ -160,7 +163,7 @@ impl<'a> ConstValueResolver<'a> {
         match &expression.kind {
             ExpressionKind::Reference(path) => self.resolve_reference(path, environment),
 
-            ExpressionKind::Runtime(nodes) => self.resolve_runtime_rpn(nodes, environment),
+            ExpressionKind::Runtime(rpn) => self.resolve_runtime_rpn(rpn, environment),
 
             ExpressionKind::Coerced { value, .. } => {
                 // A coercion does not change whether the inner value is const.
@@ -173,9 +176,11 @@ impl<'a> ConstValueResolver<'a> {
             ExpressionKind::FunctionCall { .. }
             | ExpressionKind::HostFunctionCall { .. }
             | ExpressionKind::HandledFallibleFunctionCall { .. }
-            | ExpressionKind::HandledFallibleHostFunctionCall { .. } => {
-                Err(ConstResolutionError::CallInConstContext)
-            }
+            | ExpressionKind::HandledFallibleHostFunctionCall { .. }
+            | ExpressionKind::MethodCall { .. }
+            | ExpressionKind::CollectionBuiltinCall { .. }
+            | ExpressionKind::MapBuiltinCall { .. }
+            | ExpressionKind::FieldAccess { .. } => Err(ConstResolutionError::CallInConstContext),
 
             _ => Err(ConstResolutionError::NonConstExpression),
         }
@@ -205,45 +210,39 @@ impl<'a> ConstValueResolver<'a> {
     /// only when the result is a single compile-time expression.
     fn resolve_runtime_rpn(
         &mut self,
-        nodes: &[AstNode],
+        rpn: &ExpressionRpn,
         environment: &ConstValueEnvironment,
     ) -> Result<Expression, ConstResolutionError> {
-        let mut substituted = Vec::with_capacity(nodes.len());
+        let mut substituted = Vec::with_capacity(rpn.items.len());
 
-        for node in nodes {
-            let new_node = match &node.kind {
-                NodeKind::Rvalue(expression) => {
-                    self.resolve_runtime_rvalue_node(expression, node, environment)?
+        for item in &rpn.items {
+            let new_item = match item {
+                ExpressionRpnItem::Operand(expression) => {
+                    self.resolve_runtime_rvalue_operand(expression, environment)?
                 }
-                _ => node.clone(),
+                operator @ ExpressionRpnItem::Operator { .. } => operator.clone(),
             };
-            substituted.push(new_node);
+            substituted.push(new_item);
         }
 
-        match constant_fold(&substituted, self.string_table)
-            .map_err(|_| ConstResolutionError::NonFoldableRuntimeExpression)?
+        let stack = constant_fold(&substituted, self.string_table)
+            .map_err(|_| ConstResolutionError::NonFoldableRuntimeExpression)?;
+
+        if stack.len() == 1
+            && let ExpressionRpnItem::Operand(expression) = &stack[0]
+            && expression.is_compile_time_constant()
         {
-            ConstantFoldResult::Unchanged => {
-                Err(ConstResolutionError::NonFoldableRuntimeExpression)
-            }
-            ConstantFoldResult::Folded(stack) => {
-                if stack.len() == 1
-                    && let NodeKind::Rvalue(expression) = &stack[0].kind
-                    && expression.is_compile_time_constant()
-                {
-                    return Ok(expression.clone());
-                }
-                Err(ConstResolutionError::NonFoldableRuntimeExpression)
-            }
+            return Ok(expression.clone());
         }
+
+        Err(ConstResolutionError::NonFoldableRuntimeExpression)
     }
 
-    fn resolve_runtime_rvalue_node(
+    fn resolve_runtime_rvalue_operand(
         &mut self,
         expression: &Expression,
-        original_node: &AstNode,
         environment: &ConstValueEnvironment,
-    ) -> Result<AstNode, ConstResolutionError> {
+    ) -> Result<ExpressionRpnItem, ConstResolutionError> {
         let resolved = match &expression.kind {
             ExpressionKind::Reference(..) | ExpressionKind::Coerced { .. } => {
                 Some(self.resolve_expression(expression, environment)?)
@@ -252,13 +251,9 @@ impl<'a> ConstValueResolver<'a> {
         };
 
         if let Some(resolved_expression) = resolved {
-            return Ok(AstNode {
-                kind: NodeKind::Rvalue(resolved_expression),
-                location: original_node.location.clone(),
-                scope: original_node.scope.clone(),
-            });
+            return Ok(ExpressionRpnItem::Operand(resolved_expression));
         }
 
-        Ok(original_node.clone())
+        Ok(ExpressionRpnItem::Operand(expression.clone()))
     }
 }

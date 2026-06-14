@@ -5,9 +5,9 @@
 //! WHY: operator policy is a semantic diagnostic owner. It should not wrap normal source errors in
 //! `CompilerError`; only the surrounding AST boundary still needs that old return shape.
 
+use crate::compiler_frontend::ast::const_eval::ConstantFoldError;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::optimizers::constant_folding::ConstantFoldError;
 
 /// Either a user-facing diagnostic or an internal infrastructure failure.
 ///

@@ -58,10 +58,10 @@ fn parent_join_append_and_join_str_preserve_component_order() {
         "src/compiler_frontend/tests"
     );
 
-    let joined_str = root.join_str("optimizers", &mut string_table);
+    let joined_str = root.join_str("ast", &mut string_table);
     assert_eq!(
         joined_str.to_portable_string(&string_table),
-        "src/compiler_frontend/optimizers"
+        "src/compiler_frontend/ast"
     );
 }
 

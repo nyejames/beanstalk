@@ -12,6 +12,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 
@@ -35,6 +36,23 @@ impl<'a> HirValidator<'a> {
         self.require_block_id(arm.body, anchor)?;
         self.require_same_function_cfg_owner(source_block_id, arm.body, anchor)?;
         Ok(())
+    }
+
+    /// WHAT: returns `true` for arithmetic operators that must now be represented as
+    ///       `HirStatementKind::NumericOp` rather than plain `HirExpressionKind::BinOp`.
+    /// WHY: validation guards against regressions where numeric arithmetic bypasses the checked
+    ///      lowering path.
+    fn is_arithmetic_binop(&self, op: HirBinOp) -> bool {
+        matches!(
+            op,
+            HirBinOp::Add
+                | HirBinOp::Sub
+                | HirBinOp::Mul
+                | HirBinOp::Div
+                | HirBinOp::IntDiv
+                | HirBinOp::Mod
+                | HirBinOp::Exponent
+        )
     }
 
     pub(super) fn validate_pattern(
@@ -337,12 +355,29 @@ impl<'a> HirValidator<'a> {
                 let _ = self.validate_place(place, anchor)?;
             }
 
-            HirExpressionKind::BinOp { left, right, .. } => {
+            HirExpressionKind::BinOp { op, left, right } => {
+                let string_type = self.type_environment.builtins().string;
+                let is_string_concat =
+                    *op == HirBinOp::Add && (left.ty == string_type || right.ty == string_type);
+                if self.is_arithmetic_binop(*op) && !is_string_concat {
+                    return Err(self.error_with_hir(
+                        format!(
+                            "Plain HirBinOp::{op:?} arithmetic must be lowered through HirStatementKind::NumericOp"
+                        ),
+                        anchor,
+                    ));
+                }
                 self.validate_expression(left, anchor)?;
                 self.validate_expression(right, anchor)?;
             }
 
-            HirExpressionKind::UnaryOp { operand, .. } => {
+            HirExpressionKind::UnaryOp { op, operand } => {
+                if *op == HirUnaryOp::Neg {
+                    return Err(self.error_with_hir(
+                        "Plain HirUnaryOp::Neg must be lowered through HirStatementKind::NumericOp",
+                        anchor,
+                    ));
+                }
                 self.validate_expression(operand, anchor)?;
             }
 

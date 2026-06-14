@@ -25,7 +25,7 @@ fn lowers_while_to_header_body_exit_shape() {
         NodeKind::WhileLoop(
             Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
             vec![node(
-                NodeKind::Rvalue(Expression::int(
+                NodeKind::ExpressionStatement(Expression::int(
                     10,
                     test_location(2),
                     ValueMode::ImmutableOwned,

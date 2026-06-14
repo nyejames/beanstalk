@@ -6,9 +6,7 @@
 //!      `cast ... catch:` semantics work uniformly.
 
 use crate::backends::js::JsEmitter;
-use crate::compiler_frontend::builtins::casts::numeric_limits::{
-    JS_SAFE_INTEGER_MAX, JS_SAFE_INTEGER_MIN,
-};
+use crate::compiler_frontend::builtins::casts::numeric_limits::{I32_MAX, I32_MIN};
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 use std::collections::HashSet;
@@ -18,8 +16,8 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// WHAT: walks the used cast policies in a fixed, deterministic order and emits exactly the
     ///      helpers that the reachable code needs. `Int -> Float` is a JS identity and never
-    ///      emits a helper; numeric parsing helpers and their shared normalizer are only emitted
-    ///      when at least one helper that depends on them is emitted.
+    ///      emits a helper; numeric parsing helpers are only emitted when at least one parsing
+    ///      helper is reached.
     /// WHY: demand-driven emission keeps the prelude minimal. Modules that only use the identity
     ///      `Int -> Float` cast should not pay for numeric parsing helpers they never call, and
     ///      modules that only use a single numeric cast should still see only the helpers they
@@ -67,41 +65,20 @@ impl<'hir> JsEmitter<'hir> {
         }
     }
 
-    /// Emits the shared `__bs_normalize_numeric_text` helper.
-    ///
-    /// WHAT: emits `value.trim()` for the numeric parsing helpers (`__bs_cast_int` and
-    ///      `__bs_cast_float`) when one of them is actually emitted. Tracked through
-    ///      the `emitted` set so a single emission covers both callers.
-    /// WHY: avoids emitting a helper that is only ever called by numeric parsing when
-    ///      neither numeric parsing helper reaches the prelude.
-    fn emit_normalize_numeric_text(&mut self, emitted: &mut HashSet<&'static str>) {
-        if !emitted.insert("__bs_normalize_numeric_text") {
-            return;
-        }
-
-        self.emit_line("function __bs_normalize_numeric_text(value) {");
-        self.with_indent(|emitter| {
-            emitter.emit_line("return value.trim();");
-        });
-        self.emit_line("}");
-        self.emit_line("");
-    }
-
-    /// Emits the shared Alpha JS-safe integer range constants and predicate.
+    /// Emits the shared signed i32 cast range constants and predicate.
     ///
     /// WHAT: `__bs_cast_int_in_range` and the `__BS_INT_CAST_MIN`/`__BS_INT_CAST_MAX`
     ///      constants are derived from the Rust `numeric_limits` owner so the JS
     ///      runtime cannot drift from the Rust-side fold policy.
-    /// WHY: keeping one source of truth for the safe-integer bounds prevents the
-    ///      runtime from accepting or rejecting values that the compiler already
-    ///      folded differently.
+    /// WHY: keeping one source of truth for the i32 bounds prevents the runtime from
+    ///      accepting or rejecting values that the compiler already folded differently.
     fn emit_cast_int_range_helpers(&mut self, emitted: &mut HashSet<&'static str>) {
         if !emitted.insert("__bs_cast_int_in_range") {
             return;
         }
 
-        self.emit_line(&format!("const __BS_INT_CAST_MIN = {JS_SAFE_INTEGER_MIN};"));
-        self.emit_line(&format!("const __BS_INT_CAST_MAX = {JS_SAFE_INTEGER_MAX};"));
+        self.emit_line(&format!("const __BS_INT_CAST_MIN = {I32_MIN};"));
+        self.emit_line(&format!("const __BS_INT_CAST_MAX = {I32_MAX};"));
         self.emit_line("function __bs_cast_int_in_range(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line(
@@ -118,15 +95,14 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let int_invalid_format = BuiltinErrorCode::IntParseInvalidFormat;
-        let int_invalid_format_code = int_invalid_format.as_i64();
+        let int_invalid_format_code = int_invalid_format.as_i32();
         let int_invalid_format_message = int_invalid_format.default_message();
 
         let int_out_of_range = BuiltinErrorCode::IntParseOutOfRange;
-        let int_out_of_range_code = int_out_of_range.as_i64();
+        let int_out_of_range_code = int_out_of_range.as_i32();
         let int_out_of_range_message = int_out_of_range.default_message();
 
         self.emit_cast_int_range_helpers(emitted);
-        self.emit_normalize_numeric_text(emitted);
 
         self.emit_line("function __bs_cast_int(value) {");
         self.with_indent(|emitter| {
@@ -150,10 +126,9 @@ impl<'hir> JsEmitter<'hir> {
 
             emitter.emit_line("if (typeof value === \"string\") {");
             emitter.with_indent(|em| {
-                em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
-                em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized)) {");
+                em.emit_line("if (/^-?(?:\\d+(?:_\\d+)*)$/.test(value)) {");
                 em.with_indent(|inner| {
-                    inner.emit_line("const parsed = Number.parseInt(normalized, 10);");
+                    inner.emit_line("const parsed = Number.parseInt(value.replace(/_/g, ''), 10);");
                     inner.emit_line("if (!__bs_cast_int_in_range(parsed)) {");
                     inner.with_indent(|deep| {
                         deep.emit_line(&format!(
@@ -184,14 +159,12 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let float_invalid_format = BuiltinErrorCode::FloatParseInvalidFormat;
-        let float_invalid_format_code = float_invalid_format.as_i64();
+        let float_invalid_format_code = float_invalid_format.as_i32();
         let float_invalid_format_message = float_invalid_format.default_message();
 
         let float_out_of_range = BuiltinErrorCode::FloatParseOutOfRange;
-        let float_out_of_range_code = float_out_of_range.as_i64();
+        let float_out_of_range_code = float_out_of_range.as_i32();
         let float_out_of_range_message = float_out_of_range.default_message();
-
-        self.emit_normalize_numeric_text(emitted);
 
         self.emit_line("function __bs_cast_float(value) {");
         self.with_indent(|emitter| {
@@ -210,19 +183,9 @@ impl<'hir> JsEmitter<'hir> {
 
             emitter.emit_line("if (typeof value === \"string\") {");
             emitter.with_indent(|em| {
-                em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
-                em.emit_line(
-                    "if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {",
-                );
+                em.emit_line("if (/^-?\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?(?:e[+-]?\\d+(?:_\\d+)*)?$/.test(value)) {");
                 em.with_indent(|inner| {
-                    inner.emit_line(&format!(
-                        "return {{ tag: \"err\", value: __bs_make_error(\"{float_out_of_range_message}\", {float_out_of_range_code}, null, null) }};",
-                    ));
-                });
-                em.emit_line("}");
-                em.emit_line("if (/^[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {");
-                em.with_indent(|inner| {
-                    inner.emit_line("const parsed = Number.parseFloat(normalized);");
+                    inner.emit_line("const parsed = Number.parseFloat(value.replace(/_/g, \"\"));");
                     inner.emit_line("if (!Number.isFinite(parsed)) {");
                     inner.with_indent(|deep| {
                         deep.emit_line(&format!(
@@ -253,11 +216,11 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let invalid_value = BuiltinErrorCode::FloatCastToIntInvalidValue;
-        let invalid_value_code = invalid_value.as_i64();
+        let invalid_value_code = invalid_value.as_i32();
         let invalid_value_message = invalid_value.default_message();
 
         let out_of_range = BuiltinErrorCode::FloatCastToIntOutOfRange;
-        let out_of_range_code = out_of_range.as_i64();
+        let out_of_range_code = out_of_range.as_i32();
         let out_of_range_message = out_of_range.default_message();
 
         self.emit_cast_int_range_helpers(emitted);
@@ -305,7 +268,7 @@ impl<'hir> JsEmitter<'hir> {
 
         self.emit_line("function __bs_cast_float_to_string(value) {");
         self.with_indent(|emitter| {
-            emitter.emit_line("return String(value);");
+            emitter.emit_line("return __bs_numeric_trap(__bs_format_float(value));");
         });
         self.emit_line("}");
         self.emit_line("");
@@ -355,7 +318,7 @@ impl<'hir> JsEmitter<'hir> {
             return;
         }
 
-        let unknown_code = BuiltinErrorCode::UnknownOrUnassigned.as_i64();
+        let unknown_code = BuiltinErrorCode::UnknownOrUnassigned.as_i32();
 
         self.emit_line("function __bs_cast_string_to_error(value) {");
         self.with_indent(|emitter| {
@@ -386,7 +349,7 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let invalid_codepoint = BuiltinErrorCode::IntCastToCharInvalidCodepoint;
-        let invalid_codepoint_code = invalid_codepoint.as_i64();
+        let invalid_codepoint_code = invalid_codepoint.as_i32();
         let invalid_codepoint_message = invalid_codepoint.default_message();
 
         self.emit_line("function __bs_cast_int_to_char(value) {");
@@ -410,7 +373,7 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let invalid_format = BuiltinErrorCode::StringParseBoolInvalidFormat;
-        let invalid_format_code = invalid_format.as_i64();
+        let invalid_format_code = invalid_format.as_i32();
         let invalid_format_message = invalid_format.default_message();
 
         self.emit_line("function __bs_cast_string_to_bool(value) {");
@@ -436,7 +399,7 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let invalid_format = BuiltinErrorCode::StringParseCharInvalidFormat;
-        let invalid_format_code = invalid_format.as_i64();
+        let invalid_format_code = invalid_format.as_i32();
         let invalid_format_message = invalid_format.default_message();
 
         self.emit_line("function __bs_cast_string_to_char(value) {");

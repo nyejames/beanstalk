@@ -14,6 +14,7 @@ use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKin
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId};
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -829,6 +830,19 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
         HirStatementKind::CastOp { source, .. } => {
             collect_expression_loaded_locals(source, visitor);
         }
+        HirStatementKind::NumericOp { operands, .. } => match operands {
+            HirNumericOperands::Unary { operand } => {
+                collect_expression_loaded_locals(operand, visitor);
+            }
+            HirNumericOperands::Binary { left, right } => {
+                collect_expression_loaded_locals(left, visitor);
+                collect_expression_loaded_locals(right, visitor);
+            }
+        },
+        HirStatementKind::FormatFloat { source, .. }
+        | HirStatementKind::ValidateFloat { source, .. } => {
+            collect_expression_loaded_locals(source, visitor);
+        }
         HirStatementKind::Expr(expression) => {
             collect_expression_loaded_locals(expression, visitor);
         }
@@ -855,6 +869,9 @@ fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl
             result: Some(local),
             ..
         } => visitor(*local),
+        HirStatementKind::NumericOp { result, .. } => visitor(*result),
+        HirStatementKind::FormatFloat { result, .. }
+        | HirStatementKind::ValidateFloat { result, .. } => visitor(*result),
         HirStatementKind::Call { result: None, .. }
         | HirStatementKind::MapOp { result: None, .. }
         | HirStatementKind::CastOp { result: None, .. }

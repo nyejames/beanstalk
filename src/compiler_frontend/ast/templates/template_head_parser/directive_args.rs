@@ -26,6 +26,8 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::numeric_text::parse::materialize_i32;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
@@ -184,6 +186,7 @@ pub(crate) fn parse_required_parenthesized_expression(
 /// or positive positional integer.
 pub(crate) fn parse_optional_slot_target_argument(
     token_stream: &mut FileTokens,
+    string_table: &StringTable,
 ) -> Result<SlotKey, CompilerDiagnostic> {
     if !directive_has_arguments(token_stream) {
         return Ok(SlotKey::Default);
@@ -193,14 +196,30 @@ pub(crate) fn parse_optional_slot_target_argument(
 
     let target = match token_stream.current_token_kind() {
         TokenKind::StringSliceLiteral(name) => SlotKey::Named(*name),
-        TokenKind::IntLiteral(index) => {
-            if *index <= 0 {
+        TokenKind::NumericLiteral(token) => {
+            if token.kind != NumericLiteralKind::WholeNumber {
                 return Err(CompilerDiagnostic::unexpected_token(
                     token_stream.current_token_kind().to_owned(),
                     token_stream.current_location(),
                 ));
             }
-            SlotKey::Positional(*index as usize)
+
+            let index = materialize_i32(token, string_table).map_err(|reason| {
+                CompilerDiagnostic::invalid_number_literal(
+                    token.normalized_text,
+                    reason,
+                    token_stream.current_location(),
+                )
+            })?;
+
+            if index <= 0 {
+                return Err(CompilerDiagnostic::unexpected_token(
+                    token_stream.current_token_kind().to_owned(),
+                    token_stream.current_location(),
+                ));
+            }
+
+            SlotKey::Positional(index as usize)
         }
         TokenKind::CloseParenthesis => {
             return Err(CompilerDiagnostic::unexpected_token(
@@ -237,7 +256,7 @@ pub(crate) fn parse_required_slot_name_argument(
 
     let slot_name = match token_stream.current_token_kind() {
         TokenKind::StringSliceLiteral(name) => *name,
-        TokenKind::IntLiteral(_) => {
+        TokenKind::NumericLiteral(_) => {
             return Err(CompilerDiagnostic::unexpected_token(
                 token_stream.current_token_kind().to_owned(),
                 token_stream.current_location(),

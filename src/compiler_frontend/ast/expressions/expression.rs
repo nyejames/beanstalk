@@ -4,20 +4,26 @@
 //! WHY: parser and folding code should create expressions through one readable surface instead of
 //! manually reassembling `Expression` fields at each call site.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 pub use crate::compiler_frontend::ast::expressions::expression_kind::{
     ExpressionKind, MapLiteralEntry, Operator,
 };
+pub use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, PlaceExpression,
+};
 pub use crate::compiler_frontend::ast::expressions::expression_types::{
-    ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleHandling,
+    ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleExpressionHandling,
+    FallibleHandling,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, TemplateConstValueKind,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::builtins::CollectionBuiltinOp;
+use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey;
 use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
@@ -355,7 +361,7 @@ pub(crate) struct HandledFallibleHostFunctionCallInput {
     pub(crate) args: Vec<CallArgument>,
     pub(crate) result_type_ids: Vec<TypeId>,
     pub(crate) error_type_id: TypeId,
-    pub(crate) handling: FallibleHandling,
+    pub(crate) handling: FallibleExpressionHandling,
     pub(crate) location: SourceLocation,
 }
 
@@ -393,6 +399,26 @@ pub(crate) fn expression_value_shape_for_diagnostic_type(
     }
 }
 
+/// Best-effort value-shape hint from semantic type plus diagnostic spelling.
+///
+/// WHAT: preserves plain-string behavior when a conversion boundary has only a
+/// canonical `String` `TypeId` and no richer template/path source shape.
+/// WHY: expression conversions should not accidentally treat source calls or
+/// field reads returning `String` as ordinary values with no string operator
+/// policy.
+pub(crate) fn expression_value_shape_for_type_id(
+    type_id: TypeId,
+    diagnostic_type: &DataType,
+) -> ExpressionValueShape {
+    let value_shape = expression_value_shape_for_diagnostic_type(diagnostic_type);
+
+    if value_shape == ExpressionValueShape::Ordinary && type_id == builtin_type_ids::STRING {
+        return ExpressionValueShape::PlainStringSlice;
+    }
+
+    value_shape
+}
+
 /// Best-effort bridge for parse/header paths that still start from diagnostic spelling.
 ///
 /// WHAT: maps syntax/display-only `DataType` values to builtin TypeId hints when the caller does
@@ -404,6 +430,8 @@ pub(crate) fn type_id_hint_for_diagnostic_type(data_type: &DataType) -> TypeId {
         DataType::Bool | DataType::True | DataType::False => builtin_type_ids::BOOL,
         DataType::Int => builtin_type_ids::INT,
         DataType::Float => builtin_type_ids::FLOAT,
+        // Decimal is intentionally inactive in the Alpha surface. The hint is
+        // preserved only for diagnostic round-tripping of the inactive builtin.
         DataType::Decimal => builtin_type_ids::DECIMAL,
         DataType::StringSlice
         | DataType::Template
@@ -500,7 +528,7 @@ impl Expression {
                 string_table.resolve(*variant).to_owned()
             }
 
-            // Functions and calls
+            // Functions, calls, and expression-owned member/builtin access.
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::FunctionCall { .. } => String::new(),
             ExpressionKind::HandledFallibleFunctionCall { .. } => String::new(),
@@ -509,6 +537,10 @@ impl Expression {
             ExpressionKind::HandledFallibleExpression { .. } => String::new(),
             ExpressionKind::OptionPropagation { .. } => String::new(),
             ExpressionKind::HostFunctionCall { .. } => String::new(),
+            ExpressionKind::FieldAccess { .. } => String::new(),
+            ExpressionKind::MethodCall { .. } => String::new(),
+            ExpressionKind::CollectionBuiltinCall { .. } => String::new(),
+            ExpressionKind::MapBuiltinCall { .. } => String::new(),
 
             // Carriers and special forms
             ExpressionKind::FallibleCarrierConstruct { variant, value } => match variant {
@@ -618,19 +650,24 @@ impl Expression {
         expression
     }
 
-    /// Wraps a list of runtime AST nodes into a single runtime expression.
+    /// Wraps an expression-owned runtime RPN stack into a single runtime expression.
     pub fn runtime_with_type_id(
-        expressions: Vec<AstNode>,
+        rpn: ExpressionRpn,
         data_type: DataType,
         type_id: TypeId,
         location: SourceLocation,
         value_mode: ValueMode,
     ) -> Self {
-        let contains_regular_division = expressions.iter().any(Self::node_has_regular_division);
+        let contains_regular_division = rpn.contains_regular_division();
         let value_shape = expression_value_shape_for_diagnostic_type(&data_type);
 
+        debug_assert!(
+            rpn.validate_no_statement_bodies(),
+            "Runtime RPN must not carry statement bodies"
+        );
+
         let mut expression = Self::new(
-            ExpressionKind::Runtime(expressions),
+            ExpressionKind::Runtime(rpn),
             location,
             type_id,
             data_type,
@@ -642,7 +679,7 @@ impl Expression {
     }
 
     /// Constructs an integer literal expression.
-    pub fn int(value: i64, location: SourceLocation, value_mode: ValueMode) -> Self {
+    pub fn int(value: i32, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::Int(value),
             builtin_type_ids::INT,
@@ -724,13 +761,12 @@ impl Expression {
     pub fn function(
         receiver: Option<ReceiverKey>,
         signature: FunctionSignature,
-        body: Vec<AstNode>,
         type_id: TypeId,
         location: SourceLocation,
     ) -> Self {
         let function_data_type = DataType::Function(Box::new(receiver.clone()), signature.clone());
         let mut expression = Self::new(
-            ExpressionKind::Function(signature, body),
+            ExpressionKind::Function(signature),
             location,
             type_id,
             function_data_type,
@@ -762,12 +798,93 @@ impl Expression {
         )
     }
 
+    /// Constructs a resolved receiver method call expression.
+    pub(crate) fn method_call_with_typed_arguments(
+        receiver: Expression,
+        method_path: InternedPath,
+        method: StringId,
+        args: Vec<CallArgument>,
+        result_type_ids: Vec<TypeId>,
+        type_environment: &mut TypeEnvironment,
+        location: SourceLocation,
+    ) -> Self {
+        let resolved_types = ResolvedCallTypes::new(result_type_ids, type_environment);
+
+        let result_type_ids = resolved_types.result_type_ids.clone();
+        Self::call_expression_with_resolved_types(
+            ExpressionKind::MethodCall {
+                receiver: Box::new(receiver),
+                method_path,
+                method,
+                args,
+                result_type_ids,
+                location: location.clone(),
+            },
+            resolved_types,
+            location,
+        )
+    }
+
+    /// Constructs a resolved collection builtin receiver call expression.
+    pub(crate) fn collection_builtin_call_with_typed_arguments(
+        receiver: Expression,
+        op: CollectionBuiltinOp,
+        receiver_requires_mutable: bool,
+        args: Vec<CallArgument>,
+        result_type_ids: Vec<TypeId>,
+        type_environment: &mut TypeEnvironment,
+        location: SourceLocation,
+    ) -> Self {
+        let resolved_types = ResolvedCallTypes::new(result_type_ids, type_environment);
+
+        let result_type_ids = resolved_types.result_type_ids.clone();
+        Self::call_expression_with_resolved_types(
+            ExpressionKind::CollectionBuiltinCall {
+                receiver: Box::new(receiver),
+                op,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location: location.clone(),
+            },
+            resolved_types,
+            location,
+        )
+    }
+
+    /// Constructs a resolved map builtin receiver call expression.
+    pub(crate) fn map_builtin_call_with_typed_arguments(
+        receiver: Expression,
+        op: MapBuiltinOp,
+        receiver_requires_mutable: bool,
+        args: Vec<CallArgument>,
+        result_type_ids: Vec<TypeId>,
+        type_environment: &mut TypeEnvironment,
+        location: SourceLocation,
+    ) -> Self {
+        let resolved_types = ResolvedCallTypes::new(result_type_ids, type_environment);
+
+        let result_type_ids = resolved_types.result_type_ids.clone();
+        Self::call_expression_with_resolved_types(
+            ExpressionKind::MapBuiltinCall {
+                receiver: Box::new(receiver),
+                op,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location: location.clone(),
+            },
+            resolved_types,
+            location,
+        )
+    }
+
     /// Constructs a resolved fallible function call with explicit error handling.
     pub(crate) fn handled_fallible_function_call_with_typed_arguments(
         name: InternedPath,
         args: Vec<CallArgument>,
         result_type_ids: Vec<TypeId>,
-        handling: FallibleHandling,
+        handling: FallibleExpressionHandling,
         type_environment: &mut TypeEnvironment,
         location: SourceLocation,
     ) -> Self {
@@ -926,7 +1043,7 @@ impl Expression {
     /// Wraps a fallible expression with explicit handling.
     pub fn handled_result_with_type_id(
         value: Expression,
-        handling: FallibleHandling,
+        handling: FallibleExpressionHandling,
         result_type_id: TypeId,
         diagnostic_type: DataType,
         location: SourceLocation,
@@ -1092,8 +1209,9 @@ impl Expression {
     }
 
     /// Constructs a copy expression from an AST node place.
+    /// Constructs a copy expression from a frontend place expression.
     pub fn copy_with_type_id(
-        place: AstNode,
+        place: PlaceExpression,
         data_type: DataType,
         type_id: TypeId,
         location: SourceLocation,
@@ -1101,7 +1219,7 @@ impl Expression {
     ) -> Self {
         let value_shape = expression_value_shape_for_diagnostic_type(&data_type);
         let mut expression = Self::new(
-            ExpressionKind::Copy(Box::new(place)),
+            ExpressionKind::Copy(place),
             location,
             type_id,
             data_type,
@@ -1280,6 +1398,10 @@ impl Expression {
             | ExpressionKind::HandledFallibleHostFunctionCall { .. }
             | ExpressionKind::HostFunctionCall { .. }
             | ExpressionKind::StructDefinition(..)
+            | ExpressionKind::FieldAccess { .. }
+            | ExpressionKind::MethodCall { .. }
+            | ExpressionKind::CollectionBuiltinCall { .. }
+            | ExpressionKind::MapBuiltinCall { .. }
             | ExpressionKind::NoValue
             | ExpressionKind::OptionNone
             | ExpressionKind::ValueBlock { .. } => ConstValueKind::NonConst,
@@ -1288,15 +1410,6 @@ impl Expression {
             // does not change whether an expression is compile-time foldable.
             ExpressionKind::Coerced { value, .. } => value.const_value_kind(),
             // Dynamic trait wrappers are runtime-only; they cannot appear in const contexts
-        }
-    }
-
-    /// Checks whether an AST node contains a regular division operator.
-    fn node_has_regular_division(node: &AstNode) -> bool {
-        match &node.kind {
-            NodeKind::Operator(Operator::Divide) => true,
-            NodeKind::Rvalue(expr) => expr.contains_regular_division,
-            _ => false,
         }
     }
 

@@ -8,6 +8,7 @@ use super::*;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::LocalId;
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 
 pub(crate) fn transfer_statement(
     context: &BorrowTransferContext<'_>,
@@ -206,6 +207,61 @@ pub(crate) fn transfer_statement(
             )?;
         }
 
+        HirStatementKind::FormatFloat { source, result, .. }
+        | HirStatementKind::ValidateFloat { source, result, .. } => {
+            let location = context.diagnostics.statement_error_location(statement);
+            transfer_call_arguments_and_result(
+                &mut CallTransferContext {
+                    context,
+                    layout,
+                    state,
+                    block_id,
+                    current_order: statement_order,
+                    tracker: &mut tracker,
+                    location,
+                    stats,
+                    value_fact_buffer,
+                },
+                &[CallArgumentTransfer {
+                    argument: source,
+                    effect: ArgEffect::SharedBorrow,
+                }],
+                Some(*result),
+                CallResultAlias::Fresh,
+            )?;
+        }
+
+        HirStatementKind::NumericOp {
+            operands, result, ..
+        } => {
+            let location = context.diagnostics.statement_error_location(statement);
+            let arguments = numeric_op_arguments(operands);
+            let call_args = arguments
+                .iter()
+                .map(|argument| CallArgumentTransfer {
+                    argument,
+                    effect: ArgEffect::SharedBorrow,
+                })
+                .collect::<Vec<_>>();
+
+            transfer_call_arguments_and_result(
+                &mut CallTransferContext {
+                    context,
+                    layout,
+                    state,
+                    block_id,
+                    current_order: statement_order,
+                    tracker: &mut tracker,
+                    location,
+                    stats,
+                    value_fact_buffer,
+                },
+                &call_args,
+                Some(*result),
+                CallResultAlias::Fresh,
+            )?;
+        }
+
         HirStatementKind::Expr(expression) => {
             let location = context.diagnostics.statement_error_location(statement);
             let mut read_env = SharedReadEnv {
@@ -293,6 +349,21 @@ pub(crate) fn transfer_statement(
             )?;
         }
         HirStatementKind::CastOp { source, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                source,
+                block_id,
+                statement_order,
+                context.diagnostics.value_error_location(
+                    source.id,
+                    context.diagnostics.statement_error_location(statement),
+                ),
+                &context.diagnostics,
+            )?;
+        }
+        HirStatementKind::FormatFloat { source, .. }
+        | HirStatementKind::ValidateFloat { source, .. } => {
             transfer_aggregate_expression_ownership(
                 layout,
                 state,
@@ -609,6 +680,15 @@ fn transfer_call_result_alias(
     };
     input.state.update_local_state(local_index, new_local_state);
     Ok(())
+}
+
+fn numeric_op_arguments(operands: &HirNumericOperands) -> Vec<&HirExpression> {
+    match operands {
+        HirNumericOperands::Unary { operand } => vec![operand],
+        HirNumericOperands::Binary { left, right } => {
+            vec![left, right]
+        }
+    }
 }
 
 fn map_argument_effect(op: HirMapOp, arg_index: usize) -> ArgEffect {

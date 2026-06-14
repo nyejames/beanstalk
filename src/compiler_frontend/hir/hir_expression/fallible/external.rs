@@ -26,8 +26,7 @@ pub(crate) struct ExternalFallibleCallLoweringInput<'a> {
     pub(crate) result_type_ids: &'a [FrontendTypeId],
     pub(crate) error_type_id: FrontendTypeId,
     pub(crate) handling:
-        &'a crate::compiler_frontend::ast::expressions::expression::FallibleHandling,
-    pub(crate) value_required: bool,
+        &'a crate::compiler_frontend::ast::expressions::expression::FallibleExpressionHandling,
     pub(crate) location: &'a SourceLocation,
 }
 
@@ -36,7 +35,7 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: interns the fallible carrier type for external calls where the metadata provides the
     /// error type directly instead of deriving it from a user function signature.
-    pub(super) fn fallible_call_carrier_from_slots(
+    pub(crate) fn fallible_call_carrier_from_slots(
         &mut self,
         result_type_ids: &[FrontendTypeId],
         error_type_id: FrontendTypeId,
@@ -74,6 +73,7 @@ impl<'a> HirBuilder<'a> {
             carrier_type,
             ok_type,
             err_type,
+            validate_float_success: self.type_id_is_float(ok_type),
         })
     }
 }

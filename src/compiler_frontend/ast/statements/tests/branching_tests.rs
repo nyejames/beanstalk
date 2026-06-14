@@ -8,6 +8,9 @@ use crate::compiler_frontend::ast::ast_nodes::MatchExhaustiveness;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchPattern, RelationalPatternOp,
 };
@@ -61,23 +64,23 @@ fn rejects_same_line_else_if_statement() {
 }
 
 fn runtime_operator_sequence(expression: &Expression) -> Vec<Operator> {
-    fn collect_operators_from_runtime_nodes(nodes: &[AstNode], out: &mut Vec<Operator>) {
-        for node in nodes {
-            match &node.kind {
-                NodeKind::Operator(operator) => out.push(operator.to_owned()),
-                NodeKind::Rvalue(Expression {
-                    kind: ExpressionKind::Runtime(inner_nodes),
+    fn collect_operators_from_rpn(rpn: &ExpressionRpn, out: &mut Vec<Operator>) {
+        for item in &rpn.items {
+            match item {
+                ExpressionRpnItem::Operator { operator, .. } => out.push(operator.to_owned()),
+                ExpressionRpnItem::Operand(Expression {
+                    kind: ExpressionKind::Runtime(inner_rpn),
                     ..
-                }) => collect_operators_from_runtime_nodes(inner_nodes, out),
+                }) => collect_operators_from_rpn(inner_rpn, out),
                 _ => {}
             }
         }
     }
 
     match &expression.kind {
-        ExpressionKind::Runtime(nodes) => {
+        ExpressionKind::Runtime(rpn) => {
             let mut operators = Vec::new();
-            collect_operators_from_runtime_nodes(nodes, &mut operators);
+            collect_operators_from_rpn(rpn, &mut operators);
             operators
         }
         _ => vec![],

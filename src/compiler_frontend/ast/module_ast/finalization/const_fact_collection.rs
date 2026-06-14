@@ -13,9 +13,10 @@ use crate::compiler_frontend::ast::const_values::resolver::{
 };
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::expression_types::{
-    CastHandling, FallibleHandling,
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
 };
+use crate::compiler_frontend::ast::expressions::expression_types::FallibleHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -269,37 +270,11 @@ impl<'a> ConstFactCollector<'a> {
                 self.walk_expression_for_body_local(expression, env);
             }
 
-            NodeKind::FieldAccess { base, .. } => {
-                self.walk_node_for_body_local(base, env);
-            }
-
-            NodeKind::MethodCall { receiver, args, .. } => {
-                self.walk_node_for_body_local(receiver, env);
-                self.walk_call_arguments_for_body_local(args, env);
-            }
-
-            NodeKind::CollectionBuiltinCall { receiver, args, .. }
-            | NodeKind::MapBuiltinCall { receiver, args, .. } => {
-                self.walk_node_for_body_local(receiver, env);
-                self.walk_call_arguments_for_body_local(args, env);
-            }
-
-            NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
-                self.walk_call_arguments_for_body_local(args, env);
-            }
-
-            NodeKind::HandledFallibleFunctionCall { args, handling, .. }
-            | NodeKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-                self.walk_call_arguments_for_body_local(args, env);
-                self.walk_fallible_handling_for_body_local(handling, env);
-            }
-
-            NodeKind::Assignment { target, value } => {
-                self.walk_node_for_body_local(target, env);
+            NodeKind::Assignment { value, .. } => {
                 self.walk_expression_for_body_local(value, env);
             }
 
-            NodeKind::MultiBind { value, .. } | NodeKind::Rvalue(value) => {
+            NodeKind::MultiBind { value, .. } | NodeKind::ExpressionStatement(value) => {
                 self.walk_expression_for_body_local(value, env);
             }
 
@@ -311,7 +286,7 @@ impl<'a> ConstFactCollector<'a> {
 
             // All other node kinds do not contain declarations or nested
             // bodies that need walking for const facts.
-            NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => {}
+            NodeKind::Break | NodeKind::Continue => {}
         }
     }
 
@@ -393,25 +368,45 @@ impl<'a> ConstFactCollector<'a> {
     ///       and fallible handling structures.
     /// WHY: expressions may contain scoped blocks or call arguments that
     ///      reference or declare const-foldable values.
+    fn walk_place_expression_for_body_local(place: &PlaceExpression) {
+        match &place.kind {
+            PlaceExpressionKind::Local(_) => {}
+            PlaceExpressionKind::Field { base, .. } => {
+                Self::walk_place_expression_for_body_local(base)
+            }
+        }
+    }
+
     fn walk_expression_for_body_local(
         &mut self,
         expression: &Expression,
         env: &mut ConstValueEnvironment,
     ) {
         match &expression.kind {
-            ExpressionKind::Runtime(nodes) => {
-                for node in nodes {
-                    self.walk_node_for_body_local(node, env);
+            ExpressionKind::Runtime(rpn) => {
+                for item in &rpn.items {
+                    match item {
+                        ExpressionRpnItem::Operand(expression) => {
+                            self.walk_expression_for_body_local(expression, env);
+                        }
+                        ExpressionRpnItem::Operator { .. } => {}
+                    }
                 }
             }
 
-            ExpressionKind::Copy(node) => {
-                self.walk_node_for_body_local(node, env);
+            ExpressionKind::Copy(place) => {
+                Self::walk_place_expression_for_body_local(place);
             }
 
-            ExpressionKind::Function(_, body) => {
-                let mut nested_env = env.clone();
-                self.walk_body_local(body, &mut nested_env);
+            ExpressionKind::FieldAccess { base, .. } => {
+                self.walk_expression_for_body_local(base, env);
+            }
+
+            ExpressionKind::MethodCall { receiver, args, .. }
+            | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+            | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+                self.walk_expression_for_body_local(receiver, env);
+                self.walk_call_arguments_for_body_local(args, env);
             }
 
             ExpressionKind::FunctionCall { args, .. }
@@ -419,24 +414,17 @@ impl<'a> ConstFactCollector<'a> {
                 self.walk_call_arguments_for_body_local(args, env);
             }
 
-            ExpressionKind::HandledFallibleFunctionCall { args, handling, .. }
-            | ExpressionKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
+            ExpressionKind::HandledFallibleFunctionCall { args, .. }
+            | ExpressionKind::HandledFallibleHostFunctionCall { args, .. } => {
                 self.walk_call_arguments_for_body_local(args, env);
-                self.walk_fallible_handling_for_body_local(handling, env);
             }
 
-            ExpressionKind::HandledFallibleExpression { value, handling } => {
+            ExpressionKind::HandledFallibleExpression { value, .. } => {
                 self.walk_expression_for_body_local(value, env);
-                self.walk_fallible_handling_for_body_local(handling, env);
             }
 
             ExpressionKind::Cast(cast) => {
                 self.walk_expression_for_body_local(&cast.source, env);
-                if let CastHandling::Recover(FallibleHandling::Handler { body, .. }) =
-                    &cast.handling
-                {
-                    self.walk_body_local(body, env);
-                }
             }
 
             ExpressionKind::FallibleCarrierConstruct { value, .. }
@@ -501,6 +489,7 @@ impl<'a> ConstFactCollector<'a> {
                 }
                 ValueBlock::Catch(value_catch) => {
                     self.walk_expression_for_body_local(&value_catch.handled_value, env);
+                    self.walk_fallible_handling_for_body_local(&value_catch.handler, env);
                 }
             },
 
@@ -514,6 +503,7 @@ impl<'a> ConstFactCollector<'a> {
             | ExpressionKind::Char(_)
             | ExpressionKind::Path(_)
             | ExpressionKind::Reference(_)
+            | ExpressionKind::Function(_)
             | ExpressionKind::Template(_) => {}
         }
     }

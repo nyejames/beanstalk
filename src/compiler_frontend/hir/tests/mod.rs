@@ -14,6 +14,8 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
+mod checked_numeric_lowering_tests;
+mod float_formatting_lowering_tests;
 mod hir_branch_lowering_tests;
 mod hir_const_facts_tests;
 mod hir_display_tests;

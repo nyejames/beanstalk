@@ -13,7 +13,9 @@ use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
-use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
@@ -149,7 +151,9 @@ fn validate_node(
 
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
-        | NodeKind::Rvalue(value) => validate_expression(value, type_environment, string_table),
+        | NodeKind::ExpressionStatement(value) => {
+            validate_expression(value, type_environment, string_table)
+        }
 
         // Declarations and assignments.
         NodeKind::VariableDeclaration(declaration) => {
@@ -157,7 +161,7 @@ fn validate_node(
         }
 
         NodeKind::Assignment { target, value } => {
-            validate_node(target, type_environment, string_table)?;
+            validate_place_expression(target, type_environment)?;
             validate_expression(value, type_environment, string_table)
         }
 
@@ -166,65 +170,6 @@ fn validate_node(
                 validate_multi_bind_target(target, type_environment)?;
             }
             validate_expression(value, type_environment, string_table)
-        }
-
-        // Field access and calls.
-        NodeKind::FieldAccess { base, type_id, .. } => {
-            validate_node(base, type_environment, string_table)?;
-            validate_type_id(*type_id, &node.location, type_environment)
-        }
-
-        NodeKind::MethodCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::CollectionBuiltinCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::MapBuiltinCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        } => {
-            validate_node(receiver, type_environment, string_table)?;
-            validate_call_arguments(args, type_environment, string_table)?;
-            validate_type_ids(result_type_ids, &node.location, type_environment)
-        }
-
-        NodeKind::FunctionCall {
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::HandledFallibleFunctionCall {
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::HostFunctionCall {
-            args,
-            result_type_ids,
-            ..
-        } => {
-            validate_call_arguments(args, type_environment, string_table)?;
-            validate_type_ids(result_type_ids, &node.location, type_environment)
-        }
-
-        NodeKind::HandledFallibleHostFunctionCall {
-            args,
-            result_type_ids,
-            error_type_id,
-            ..
-        } => {
-            validate_call_arguments(args, type_environment, string_table)?;
-            validate_type_ids(result_type_ids, &node.location, type_environment)?;
-            validate_type_ids(&[*error_type_id], &node.location, type_environment)
         }
 
         // Type and function definitions.
@@ -242,7 +187,7 @@ fn validate_node(
         }
 
         // Terminal nodes that contain no type-carrying positions.
-        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
+        NodeKind::Break | NodeKind::Continue => Ok(()),
 
         // Value-producing terminator inside an active value block.
         NodeKind::ThenValue(produced_values) => {
@@ -262,6 +207,19 @@ fn validate_node(
 ///
 /// WHY: Expressions are the leaves and branches of the AST value tree;
 /// unresolved types here would propagate into HIR as invalid semantic identity.
+fn validate_place_expression(
+    place: &PlaceExpression,
+    type_environment: &TypeEnvironment,
+) -> Result<(), CompilerError> {
+    validate_type_id(place.type_id, &place.location, type_environment)?;
+    match &place.kind {
+        PlaceExpressionKind::Local(_) => Ok(()),
+        PlaceExpressionKind::Field { base, .. } => {
+            validate_place_expression(base, type_environment)
+        }
+    }
+}
+
 fn validate_expression(
     expression: &Expression,
     type_environment: &TypeEnvironment,
@@ -271,20 +229,38 @@ fn validate_expression(
 
     match &expression.kind {
         // Recursive expression containers.
-        ExpressionKind::Runtime(nodes) => validate_nodes(nodes, type_environment, string_table),
-
-        ExpressionKind::Copy(place) => validate_node(place, type_environment, string_table),
-
-        // Function expressions.
-        ExpressionKind::Function(signature, body) => {
-            validate_signature(
-                signature,
-                &expression.location,
-                type_environment,
-                string_table,
-            )?;
-            validate_nodes(body, type_environment, string_table)
+        ExpressionKind::Runtime(rpn) => {
+            for item in &rpn.items {
+                match item {
+                    ExpressionRpnItem::Operand(expression) => {
+                        validate_expression(expression, type_environment, string_table)?;
+                    }
+                    ExpressionRpnItem::Operator { .. } => {}
+                }
+            }
+            Ok(())
         }
+
+        ExpressionKind::Copy(place) => validate_place_expression(place, type_environment),
+
+        ExpressionKind::FieldAccess { base, .. } => {
+            validate_expression(base, type_environment, string_table)
+        }
+
+        ExpressionKind::MethodCall { receiver, args, .. }
+        | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+        | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+            validate_expression(receiver, type_environment, string_table)?;
+            validate_call_arguments(args, type_environment, string_table)
+        }
+
+        // Function expressions carry signature metadata only; bodies are statement-level nodes.
+        ExpressionKind::Function(signature) => validate_signature(
+            signature,
+            &expression.location,
+            type_environment,
+            string_table,
+        ),
 
         // Calls.
         ExpressionKind::FunctionCall { args, .. }
@@ -292,20 +268,17 @@ fn validate_expression(
             validate_call_arguments(args, type_environment, string_table)
         }
 
-        ExpressionKind::HandledFallibleFunctionCall { args, handling, .. } => {
-            validate_call_arguments(args, type_environment, string_table)?;
-            validate_fallible_handling(handling, type_environment, string_table)
+        ExpressionKind::HandledFallibleFunctionCall { args, .. } => {
+            validate_call_arguments(args, type_environment, string_table)
         }
 
         ExpressionKind::HandledFallibleHostFunctionCall {
             args,
             error_type_id,
-            handling,
             ..
         } => {
             validate_call_arguments(args, type_environment, string_table)?;
-            validate_type_ids(&[*error_type_id], &expression.location, type_environment)?;
-            validate_fallible_handling(handling, type_environment, string_table)
+            validate_type_ids(&[*error_type_id], &expression.location, type_environment)
         }
 
         // Wrapped and coerced values.
@@ -318,13 +291,11 @@ fn validate_expression(
         ExpressionKind::Cast(cast) => {
             validate_expression(&cast.source, type_environment, string_table)?;
             validate_type_id(cast.target_type_id, &cast.location, type_environment)?;
-            validate_type_id(cast.source_type_id, &cast.source.location, type_environment)?;
-            validate_cast_handling(&cast.handling, type_environment, string_table)
+            validate_type_id(cast.source_type_id, &cast.source.location, type_environment)
         }
 
-        ExpressionKind::HandledFallibleExpression { value, handling } => {
-            validate_expression(value, type_environment, string_table)?;
-            validate_fallible_handling(handling, type_environment, string_table)
+        ExpressionKind::HandledFallibleExpression { value, .. } => {
+            validate_expression(value, type_environment, string_table)
         }
 
         // Template and collection literals.
@@ -375,7 +346,8 @@ fn validate_expression(
                 Ok(())
             }
             ValueBlock::Catch(value_catch) => {
-                validate_expression(&value_catch.handled_value, type_environment, string_table)
+                validate_expression(&value_catch.handled_value, type_environment, string_table)?;
+                validate_fallible_handling(&value_catch.handler, type_environment, string_table)
             }
         },
 
@@ -413,19 +385,6 @@ fn validate_fallible_handling(
         FallibleHandling::Propagate => Ok(()),
         FallibleHandling::Handler { body, .. } => {
             validate_nodes(body, type_environment, string_table)
-        }
-    }
-}
-
-fn validate_cast_handling(
-    handling: &CastHandling,
-    type_environment: &TypeEnvironment,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    match handling {
-        CastHandling::Infallible | CastHandling::Propagate => Ok(()),
-        CastHandling::Recover(handling) => {
-            validate_fallible_handling(handling, type_environment, string_table)
         }
     }
 }

@@ -69,22 +69,6 @@ pub(super) fn resolve_arithmetic_operator_type(
             };
         }
 
-        if lhs.type_id == builtins.decimal {
-            return match op {
-                Operator::Add
-                | Operator::Subtract
-                | Operator::Multiply
-                | Operator::Divide
-                | Operator::Modulus
-                | Operator::Exponent => Ok(ExpressionResultType::from_type_id(
-                    builtins.decimal,
-                    type_environment,
-                )),
-
-                _ => invalid_operator_types(lhs, rhs, op, location),
-            };
-        }
-
         // String concatenation is only supported via the `+` operator on plain string slices.
         // The result is itself a plain string slice so chained concatenation stays well-typed.
         if both_plain_string_slices(lhs, rhs, type_environment) && matches!(op, Operator::Add) {

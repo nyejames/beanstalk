@@ -10,15 +10,19 @@ use super::ReceiverAccessMode;
 use super::shared::{TraitSurfaceReceiverMethod, receiver_result_type_ids_for_call};
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, normalize_call_arguments,
+};
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallArgumentResolutionContext, CallDiagnosticContext,
     expectations_from_receiver_method_signature, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::function_calls::{
     NamedArgumentSyntax, parse_call_arguments_typed_with_expectations,
 };
+use crate::compiler_frontend::ast::field_access::parse_chain::expression_from_postfix_node;
 use crate::compiler_frontend::ast::field_access::receiver_access::{
     ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
 };
@@ -147,7 +151,7 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
             if let Some(template) =
                 scope_context.lookup_generic_function_template(&method_entry.function_path)
             {
-                let receiver_expr = receiver_node.get_expr()?.to_owned();
+                let receiver_expr = expression_from_postfix_node(receiver_node)?;
                 let receiver_access = if method_entry.receiver_mutable {
                     CallAccessMode::Mutable
                 } else {
@@ -227,15 +231,19 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
 
     increment_ast_counter(AstCounter::PostfixReceiverNodesCopied);
 
+    let receiver_expression = expression_from_postfix_node(receiver_node)?;
+    let method_call_expression = Expression::method_call_with_typed_arguments(
+        receiver_expression,
+        method_path,
+        member_name,
+        normalize_call_arguments(&args),
+        result_type_ids,
+        type_interner.environment_mut_for_derived_types(),
+        member_location.clone(),
+    );
+
     Ok(AstNode {
-        kind: NodeKind::MethodCall {
-            receiver: Box::new(receiver_node.to_owned()),
-            method_path,
-            method: member_name,
-            args,
-            result_type_ids,
-            location: member_location.clone(),
-        },
+        kind: NodeKind::ExpressionStatement(method_call_expression),
         scope: scope_context.scope.to_owned(),
         location: member_location,
     })

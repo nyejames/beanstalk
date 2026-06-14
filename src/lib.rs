@@ -21,6 +21,8 @@ mod backends {
     pub(crate) mod error_types;
     pub(crate) mod external_package_validation;
     pub(crate) mod js;
+    #[cfg(test)]
+    mod tests;
     pub(crate) mod wasm;
 }
 

@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleHandling,
+    Expression, ExpressionKind, FallibleExpressionHandling,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
@@ -14,123 +14,11 @@ use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirExpression;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::compiler_frontend::type_coercion::compatibility::is_postfix_error_compatible;
 use crate::return_hir_transformation_error;
 
 use super::carrier::EmittedFallibleCarrier;
 
 impl<'a> HirBuilder<'a> {
-    /// Lowers statement-position `call()!` into explicit success/error CFG edges.
-    ///
-    /// WHAT: the callee still returns the current backend boundary carrier, but HIR immediately
-    /// branches on that carrier. The success path continues in a new block and the error path
-    /// returns through the enclosing function's fallible error slot.
-    /// WHY: postfix propagation is control flow, not a value expression. Keeping zero-success
-    /// statement propagation in the CFG lets borrow validation and later backend lowering see the
-    /// error exit instead of relying on the JS runtime propagation helper.
-    pub(crate) fn lower_fallible_propagating_call_statement(
-        &mut self,
-        target: CallTarget,
-        args: &[CallArgument],
-        result_type_ids: &[FrontendTypeId],
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let (carrier_type, ok_type, err_type) =
-            self.result_call_carrier_slots(&target, location)?;
-        let requested_ok_type = self.lower_call_result_type(result_type_ids, location)?;
-
-        if requested_ok_type != ok_type || !self.is_unit_type(ok_type) {
-            return_hir_transformation_error!(
-                "Statement-position fallible propagation requires a zero-success fallible call",
-                self.hir_error_location(location)
-            );
-        }
-
-        let current_function_id = self.current_function_id_or_error(location)?;
-        let current_return_type = self
-            .function_by_id_or_error(current_function_id, location)?
-            .return_type;
-        let Some((_, current_error_type)) = self
-            .type_environment
-            .fallible_carrier_slots(current_return_type)
-        else {
-            return_hir_transformation_error!(
-                "Statement-position fallible propagation reached HIR outside a fallible function",
-                self.hir_error_location(location)
-            );
-        };
-
-        if !is_postfix_error_compatible(current_error_type, err_type, &self.type_environment) {
-            return_hir_transformation_error!(
-                "Statement-position fallible propagation error type does not match the enclosing function",
-                self.hir_error_location(location)
-            );
-        }
-
-        let result_local =
-            self.emit_result_call_to_current_block(target, args, carrier_type, location)?;
-        let branch = self.emit_result_carrier_branch(
-            result_local,
-            carrier_type,
-            location,
-            "propagate-fallible-ok",
-            "propagate-fallible-err",
-        )?;
-        self.emit_result_carrier_error_return(
-            branch.error_block,
-            result_local,
-            carrier_type,
-            current_error_type,
-            err_type,
-            location,
-        )?;
-
-        self.set_current_block(branch.success_block, location)
-    }
-
-    /// Lower a postfix-propagated fallible call and return its success payload.
-    ///
-    /// WHAT: emits the call carrier, branches on success/error, returns the error edge from the
-    /// enclosing fallible function, and leaves the builder on the success continuation.
-    /// WHY: runtime expression trees and call arguments can contain `call()!` below a larger
-    /// value expression, so they need the same explicit CFG split used by declaration RHSs.
-    pub(crate) fn lower_fallible_call_to_success_value(
-        &mut self,
-        target: CallTarget,
-        args: &[CallArgument],
-        result_type_ids: &[FrontendTypeId],
-        location: &SourceLocation,
-    ) -> Result<HirExpression, CompilerError> {
-        let result_carrier = self.emit_result_call_carrier_to_current_block(
-            target,
-            args,
-            result_type_ids,
-            location,
-        )?;
-
-        self.lower_fallible_carrier_to_success_value(result_carrier, location)
-    }
-
-    /// Lower a postfix-propagated external fallible call and return its success payload.
-    pub(crate) fn lower_external_fallible_call_to_success_value(
-        &mut self,
-        id: crate::compiler_frontend::external_packages::ExternalFunctionId,
-        args: &[CallArgument],
-        result_type_ids: &[FrontendTypeId],
-        error_type_id: FrontendTypeId,
-        location: &SourceLocation,
-    ) -> Result<HirExpression, CompilerError> {
-        let result_carrier = self.emit_external_result_call_carrier_to_current_block(
-            id,
-            args,
-            result_type_ids,
-            error_type_id,
-            location,
-        )?;
-
-        self.lower_fallible_carrier_to_success_value(result_carrier, location)
-    }
-
     /// Lowers value-position `expr!` when the surrounding statement owns the continuation.
     ///
     /// WHAT: emits the fallible carrier, branches on success/error, returns the error edge from
@@ -201,6 +89,7 @@ impl<'a> HirBuilder<'a> {
             carrier_type,
             ok_type,
             err_type,
+            validate_float_success: false,
         })
     }
 
@@ -243,6 +132,7 @@ impl<'a> HirBuilder<'a> {
             carrier_type,
             ok_type,
             err_type,
+            validate_float_success: false,
         })
     }
 
@@ -262,7 +152,7 @@ impl<'a> HirBuilder<'a> {
                 name,
                 args,
                 result_type_ids,
-                handling: FallibleHandling::Propagate,
+                handling: FallibleExpressionHandling::Propagate,
             } => {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 let carrier = self.emit_result_call_carrier_to_current_block(
@@ -280,7 +170,7 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_type_ids,
                 error_type_id,
-                handling: FallibleHandling::Propagate,
+                handling: FallibleExpressionHandling::Propagate,
             } => Ok(Some(
                 self.emit_external_result_call_carrier_to_current_block(
                     *id,
@@ -293,7 +183,7 @@ impl<'a> HirBuilder<'a> {
 
             ExpressionKind::HandledFallibleExpression {
                 value: result_value,
-                handling: FallibleHandling::Propagate,
+                handling: FallibleExpressionHandling::Propagate,
             } => Ok(Some(self.emit_result_expression_to_current_block(
                 result_value,
                 location,

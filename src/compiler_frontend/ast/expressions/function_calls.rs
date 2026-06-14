@@ -7,21 +7,25 @@
 
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, normalize_call_arguments,
+};
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallArgumentResolutionContext, CallDiagnosticContext, ExpectedParameterType,
     ParameterExpectation, expectations_from_host_function, expectations_from_user_parameters,
     resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_with_trailing_newline_policy;
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     FallibleCallSite, FallibleHostCallSite, HandledFallibleCall, HandledFallibleHostCall,
-    parse_fallible_handling_suffix_for_call, parse_fallible_handling_suffix_for_host_call,
+    parse_fallible_handling_suffix_for_call_expression,
+    parse_fallible_handling_suffix_for_host_call_expression,
     token_stream_starts_fallible_handling_suffix,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -74,16 +78,33 @@ pub struct ExternalFunctionCallParseInput<'a, 'b> {
     pub string_table: &'a mut StringTable,
 }
 
-/// Thin wrapper around the typed implementation.
-pub fn parse_function_call(
-    input: FunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
-    parse_function_call_typed(input)
+struct ParsedExternalFunctionCall {
+    id: ExternalFunctionId,
+    args: Vec<CallArgument>,
+    result_type_ids: Vec<TypeId>,
+    error_return_type_id: Option<TypeId>,
+    location: SourceLocation,
 }
 
-fn parse_function_call_typed(
+struct CallFinishContext<'a, 'b> {
+    token_stream: &'a mut FileTokens,
+    context: &'a ScopeContext,
+    value_required: bool,
+    allow_boundary_catch: bool,
+    warnings: Option<&'a mut Vec<CompilerDiagnostic>>,
+    type_interner: &'a mut AstTypeInterner<'b>,
+    string_table: &'a mut StringTable,
+}
+
+/// Parses a source-function call for expression position.
+///
+/// WHAT: resolves a source or visible external function call and returns the
+/// expression-owned call payload directly.
+/// WHY: call validation belongs here, while callers should consume the same
+/// expression contract in statement and expression positions.
+pub(crate) fn parse_function_call_expression(
     input: FunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let FunctionCallParseInput {
         token_stream,
         id,
@@ -105,7 +126,7 @@ fn parse_function_call_typed(
         .name()
         .and_then(|name| context.lookup_visible_external_function(name))
     {
-        return parse_external_function_call_typed(ExternalFunctionCallParseInput {
+        return parse_external_function_call_expression(ExternalFunctionCallParseInput {
             token_stream,
             external_function_id: function_id,
             external_function: host_function,
@@ -149,52 +170,72 @@ fn parse_function_call_typed(
         call_location: token_stream.current_location(),
     };
 
-    // ------------------------
-    //  Apply fallible handling
-    // ------------------------
-    if let Some(error_return_type_id) = signature.error_return_type_id() {
-        if token_stream_starts_fallible_handling_suffix(token_stream) {
-            return parse_fallible_handling_suffix_for_call(
-                token_stream,
-                context,
-                FallibleCallSite {
-                    call,
-                    error_return_type_id,
-                    value_required,
-                    allow_boundary_catch,
-                },
-                warnings,
-                type_interner,
-                string_table,
-            );
+    finish_function_call_expression(
+        call,
+        signature.error_return_type_id(),
+        CallFinishContext {
+            token_stream,
+            context,
+            value_required,
+            allow_boundary_catch,
+            warnings,
+            type_interner,
+            string_table,
+        },
+    )
+}
+
+fn finish_function_call_expression(
+    call: HandledFallibleCall,
+    error_return_type_id: Option<TypeId>,
+    finish: CallFinishContext<'_, '_>,
+) -> Result<Expression, ExpressionParseError> {
+    let CallFinishContext {
+        token_stream,
+        context,
+        value_required,
+        allow_boundary_catch,
+        warnings,
+        type_interner,
+        string_table,
+    } = finish;
+
+    let Some(error_return_type_id) = error_return_type_id else {
+        if matches!(
+            token_stream.current_token_kind(),
+            TokenKind::Bang | TokenKind::Catch
+        ) {
+            return Err(CompilerDiagnostic::invalid_result_handling(
+                InvalidResultHandlingReason::NotResultExpression,
+                token_stream.current_location(),
+            )
+            .into());
         }
 
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::UnhandledErrorReturn,
-            token_stream.current_location(),
-        )
-        .into());
-    } else if matches!(
-        token_stream.current_token_kind(),
-        TokenKind::Bang | TokenKind::Catch
-    ) {
-        return Err(CompilerDiagnostic::invalid_result_handling(
-            InvalidResultHandlingReason::NotResultExpression,
-            token_stream.current_location(),
-        )
-        .into());
+        return Ok(call.into_plain_expression(type_interner.environment_mut_for_derived_types()));
+    };
+
+    if token_stream_starts_fallible_handling_suffix(token_stream) {
+        return parse_fallible_handling_suffix_for_call_expression(
+            token_stream,
+            context,
+            FallibleCallSite {
+                call,
+                error_return_type_id,
+                value_required,
+                allow_boundary_catch,
+            },
+            warnings,
+            type_interner,
+            string_table,
+        );
     }
 
-    Ok(AstNode {
-        kind: NodeKind::FunctionCall {
-            name: call.name,
-            args: call.args,
-            result_type_ids: call.result_type_ids,
-            location: call.call_location,
-        },
-        location: token_stream.current_location(),
-        scope: context.scope.clone(),
-    })
+    Err(CompilerDiagnostic::invalid_result_handling(
+        InvalidResultHandlingReason::UnhandledErrorReturn,
+        token_stream.current_location(),
+    )
+    .into())
 }
 
 /// Whether the call surface accepts named arguments.
@@ -684,8 +725,7 @@ fn starts_simple_value_with_attached_type(token_stream: &FileTokens) -> bool {
 
     matches!(
         value_token.kind,
-        TokenKind::IntLiteral(_)
-            | TokenKind::FloatLiteral(_)
+        TokenKind::NumericLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::CharLiteral(_)
@@ -734,16 +774,15 @@ fn resolve_user_function_call_arguments(
     .map_err(ExpressionParseError::from)
 }
 
-/// Parses an external-function call using the shared argument resolver plus external-only validation.
-pub fn parse_external_function_call(
+/// Parses an external-function call for expression position.
+///
+/// WHAT: returns the narrowed expression call contract after shared external-call
+/// argument and signature validation.
+/// WHY: statement and expression parsing both consume the expression-owned call
+/// payload, avoiding a statement-shaped call-node detour for host functions.
+pub(crate) fn parse_external_function_call_expression(
     input: ExternalFunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
-    parse_external_function_call_typed(input)
-}
-
-fn parse_external_function_call_typed(
-    input: ExternalFunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let ExternalFunctionCallParseInput {
         token_stream,
         external_function_id,
@@ -755,6 +794,38 @@ fn parse_external_function_call_typed(
         type_interner,
         string_table,
     } = input;
+
+    let parsed_call = parse_external_function_call_parts(
+        token_stream,
+        external_function_id,
+        external_function,
+        context,
+        type_interner,
+        string_table,
+    )?;
+
+    finish_external_function_call_expression(
+        parsed_call,
+        CallFinishContext {
+            token_stream,
+            context,
+            value_required,
+            allow_boundary_catch,
+            warnings,
+            type_interner,
+            string_table,
+        },
+    )
+}
+
+fn parse_external_function_call_parts(
+    token_stream: &mut FileTokens,
+    external_function_id: ExternalFunctionId,
+    external_function: &ExternalFunctionDef,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<ParsedExternalFunctionCall, ExpressionParseError> {
     let location = token_stream.current_location();
 
     // ------------------------
@@ -820,15 +891,12 @@ fn parse_external_function_call_typed(
         location.clone(),
     )?;
 
-    // ------------------------
-    //  Apply fallible handling
-    // ------------------------
     let error_return_type_id = external_function.error_return_type_id(
         type_interner.environment_mut_for_derived_types(),
         builtin_error_type.type_id,
     );
 
-    if external_function.is_fallible() {
+    let error_return_type_id = if external_function.is_fallible() {
         let Some(error_return_type_id) = error_return_type_id else {
             return Err(CompilerError::compiler_error(format!(
                 "Fallible external function '{}' has no frontend-visible concrete error slot.",
@@ -837,16 +905,53 @@ fn parse_external_function_call_typed(
             .into());
         };
 
+        Some(error_return_type_id)
+    } else {
+        None
+    };
+
+    Ok(ParsedExternalFunctionCall {
+        id: external_function_id,
+        args,
+        result_type_ids,
+        error_return_type_id,
+        location,
+    })
+}
+
+fn finish_external_function_call_expression(
+    parsed_call: ParsedExternalFunctionCall,
+    finish: CallFinishContext<'_, '_>,
+) -> Result<Expression, ExpressionParseError> {
+    let CallFinishContext {
+        token_stream,
+        context,
+        value_required,
+        allow_boundary_catch,
+        warnings,
+        type_interner,
+        string_table,
+    } = finish;
+
+    let ParsedExternalFunctionCall {
+        id,
+        args,
+        result_type_ids,
+        error_return_type_id,
+        location,
+    } = parsed_call;
+
+    if let Some(error_type_id) = error_return_type_id {
         let call = HandledFallibleHostCall {
-            name: external_function_id,
+            name: id,
             args,
             result_type_ids,
-            error_type_id: error_return_type_id,
-            call_location: location.clone(),
+            error_type_id,
+            call_location: location,
         };
 
         if token_stream_starts_fallible_handling_suffix(token_stream) {
-            return parse_fallible_handling_suffix_for_host_call(
+            return parse_fallible_handling_suffix_for_host_call_expression(
                 token_stream,
                 context,
                 FallibleHostCallSite {
@@ -865,7 +970,9 @@ fn parse_external_function_call_typed(
             token_stream.current_location(),
         )
         .into());
-    } else if matches!(
+    }
+
+    if matches!(
         token_stream.current_token_kind(),
         TokenKind::Bang | TokenKind::Catch
     ) {
@@ -876,16 +983,14 @@ fn parse_external_function_call_typed(
         .into());
     }
 
-    Ok(AstNode {
-        kind: NodeKind::HostFunctionCall {
-            name: external_function_id,
-            args,
-            result_type_ids,
-            location: location.clone(),
-        },
+    let normalized_args = normalize_call_arguments(&args);
+    Ok(Expression::host_function_call_with_typed_arguments(
+        id,
+        normalized_args,
+        result_type_ids,
+        type_interner.environment_mut_for_derived_types(),
         location,
-        scope: context.scope.clone(),
-    })
+    ))
 }
 
 /// Verifies that every declared return slot has a corresponding frontend-visible type.

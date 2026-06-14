@@ -12,18 +12,22 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
+use crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_with_trailing_newline_policy,
 };
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
+use crate::compiler_frontend::ast::expressions::parse_expression_places::{
+    expression_from_place_expression, place_expression_from_expression, place_expression_is_mutable,
+};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
-use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
 use crate::compiler_frontend::ast::statements::value_production::receiver::try_parse_value_block_at_receiver;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueReceiverKind;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidResultHandlingReason,
     TypeMismatchContext,
@@ -38,31 +42,15 @@ use crate::compiler_frontend::type_coercion::parse_context::{
     ExpectedType, cast_target_context_for_type_id, parse_expectation_for_type_id,
 };
 
-/// Extract the canonical `TypeId` of an assignment target.
-///
-/// WHAT: resolves the semantic type of the place expression being assigned to.
-/// WHY: type checking for both simple and compound assignments needs the target
-///      type to validate the RHS and to build coercion nodes.
-fn assignment_target_value_type(target: &AstNode) -> Result<TypeId, CompilerError> {
-    target.expression_type_id()
-}
-
 /// Check that an expression's type is compatible with the assignment target.
 ///
 /// WHAT: compares the RHS expression type against the target type using the
 ///       declaration-compatibility relation.
 /// WHY: assignments are rejected when the value type cannot be coerced to the
 ///      target type; this helper emits the appropriate diagnostic.
-///
-/// Note: `_target`, `_assignment_operator`, and `_string_table` are reserved
-/// in the signature for future diagnostic enrichment and to keep call sites
-/// consistent with similar validation helpers in the expression module.
 fn validate_assignment_value_type(
     expected_type_id: TypeId,
     actual_value: &Expression,
-    _target: &AstNode,
-    _assignment_operator: &str,
-    _string_table: &StringTable,
     type_environment: &TypeEnvironment,
 ) -> Result<(), ExpressionParseError> {
     if is_declaration_compatible(expected_type_id, actual_value.type_id, type_environment) {
@@ -103,10 +91,9 @@ fn compound_assignment_operator(token_kind: &TokenKind) -> Option<(Operator, &'s
 ///      assignment plus the operator; bundling keeps the signature readable.
 struct CompoundAssignmentInput<'a> {
     variable_declaration: &'a Declaration,
-    target: &'a AstNode,
+    target: &'a PlaceExpression,
     target_type_id: TypeId,
     operator: Operator,
-    label: &'static str,
 }
 
 /// Build the RHS value for a compound assignment by evaluating `target op rhs`.
@@ -128,7 +115,6 @@ fn evaluate_compound_assignment_value(
         target,
         target_type_id,
         operator,
-        label,
     } = input;
     let location = target.location.clone();
     let mut expr_type = ExpectedType::Infer;
@@ -147,34 +133,23 @@ fn evaluate_compound_assignment_value(
         string_table,
     )?;
 
-    let rhs_node = AstNode {
-        kind: NodeKind::Rvalue(rhs),
-        location: location.clone(),
-        scope: context.scope.clone(),
-    };
-    let operator_node = AstNode {
-        kind: NodeKind::Operator(operator),
-        location,
-        scope: context.scope.clone(),
-    };
+    let target_expression = expression_from_place_expression(target);
+    let operator_item = ExpressionRpnItem::Operator { operator, location };
     let mut inferred = ExpectedType::Infer;
     let value = evaluate_expression(
         context,
-        vec![target.clone(), rhs_node, operator_node],
+        vec![
+            ExpressionRpnItem::Operand(target_expression),
+            ExpressionRpnItem::Operand(rhs),
+            operator_item,
+        ],
         type_interner,
         &mut inferred,
         &variable_declaration.value.value_mode,
         string_table,
     )?;
 
-    validate_assignment_value_type(
-        target_type_id,
-        &value,
-        target,
-        label,
-        string_table,
-        type_interner.environment(),
-    )?;
+    validate_assignment_value_type(target_type_id, &value, type_interner.environment())?;
 
     Ok(value)
 }
@@ -190,13 +165,13 @@ fn evaluate_compound_assignment_value(
 fn build_mutation_from_target(
     token_stream: &mut FileTokens,
     variable_declaration: &Declaration,
-    target: AstNode,
+    target: PlaceExpression,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, ExpressionParseError> {
     let location = token_stream.current_location();
-    let target_type_id = assignment_target_value_type(&target)?;
+    let target_type_id = target.type_id;
 
     ast_log!(
         "Handling mutation for ",
@@ -204,17 +179,7 @@ fn build_mutation_from_target(
         Blue variable_declaration.id.to_string(string_table)
     );
 
-    if !ast_node_is_place(&target) {
-        return Err(CompilerDiagnostic::invalid_assignment_target(
-            InvalidAssignmentTargetReason::NotMutablePlace,
-            None,
-            Some(target_type_id),
-            location,
-        )
-        .into());
-    }
-
-    if !ast_node_is_mutable_place(&target) {
+    if !place_expression_is_mutable(&target) {
         return Err(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::ImmutableVariable,
             variable_declaration.id.name(),
@@ -287,20 +252,13 @@ fn build_mutation_from_target(
                 .into());
             }
 
-            validate_assignment_value_type(
-                target_type_id,
-                &rhs,
-                &target,
-                "Assignment",
-                string_table,
-                type_interner.environment(),
-            )?;
+            validate_assignment_value_type(target_type_id, &rhs, type_interner.environment())?;
 
             coerce_expression_to_declared_type(rhs, target_type_id, type_interner.environment())
         }
 
         compound_token => {
-            let Some((operator, label)) = compound_assignment_operator(compound_token) else {
+            let Some((operator, _label)) = compound_assignment_operator(compound_token) else {
                 return Err(CompilerDiagnostic::invalid_assignment_target(
                     InvalidAssignmentTargetReason::ExpectedAssignmentOperator,
                     variable_declaration.id.name(),
@@ -320,7 +278,6 @@ fn build_mutation_from_target(
                     target: &target,
                     target_type_id,
                     operator,
-                    label,
                 },
                 type_interner,
                 string_table,
@@ -329,10 +286,7 @@ fn build_mutation_from_target(
     };
 
     Ok(AstNode {
-        kind: NodeKind::Assignment {
-            target: Box::new(target),
-            value,
-        },
+        kind: NodeKind::Assignment { target, value },
         location: location.clone(),
         scope: context.scope.clone(),
     })
@@ -347,7 +301,7 @@ fn build_mutation_from_target(
 pub(crate) fn handle_mutation_target(
     token_stream: &mut FileTokens,
     variable_declaration: &Declaration,
-    target: AstNode,
+    target: PlaceExpression,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
@@ -375,13 +329,23 @@ pub fn handle_mutation(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, ExpressionParseError> {
-    let target = parse_field_access(
+    let target_expression = parse_field_access(
         token_stream,
         variable_declaration,
         context,
         type_interner,
         string_table,
     )?;
+
+    let Some(target) = place_expression_from_expression(&target_expression) else {
+        return Err(CompilerDiagnostic::invalid_assignment_target(
+            InvalidAssignmentTargetReason::NotMutablePlace,
+            None,
+            Some(target_expression.type_id),
+            token_stream.current_location(),
+        )
+        .into());
+    };
 
     build_mutation_from_target(
         token_stream,

@@ -16,6 +16,9 @@ use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirMapOp};
 use crate::compiler_frontend::hir::ids::{HirNodeId, LocalId};
+use crate::compiler_frontend::hir::numeric::{
+    HirNumericOp, HirNumericOperands, NumericFailureMode,
+};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -101,5 +104,80 @@ pub enum HirStatementKind {
         args: Vec<HirExpression>,
         /// Local that receives the operation result, if any.
         result: Option<LocalId>,
+    },
+
+    // -------------------------
+    //  Checked Numeric Operations
+    // -------------------------
+    /// Perform a checked numeric operation and capture the result.
+    ///
+    /// WHAT: evaluates `operands` according to `op` and stores the produced value in `result`.
+    /// WHY: arithmetic failures (overflow, divide by zero, invalid exponent, non-finite `Float`)
+    ///      are semantic effects that must be visible to HIR validation and backend lowering.
+    ///
+    /// Result-local contract:
+    /// - In `NumericFailureMode::Trap` the result local receives the scalar success value.
+    ///   Failure is a runtime trap/throw and does not produce a user-visible carrier.
+    /// - In `NumericFailureMode::ReturnError` the result local receives the internal fallible
+    ///   carrier (success value or builtin `Error`). A later lowering helper is expected to branch
+    ///   with `HirTerminator::FallibleBranch` and unwrap success/error before borrow validation.
+    NumericOp {
+        /// The specific checked numeric operation (e.g. `IntAdd`, `FloatDiv`).
+        op: HirNumericOp,
+        /// How the operation should behave on failure.
+        failure_mode: NumericFailureMode,
+        /// The operand(s) to the operation.
+        operands: HirNumericOperands,
+        /// Local that receives the operation result or fallible carrier.
+        result: LocalId,
+    },
+
+    // -------------------------
+    //  Float Formatting & Validation
+    // -------------------------
+    /// Format a finite `Float` into a `String` using Beanstalk's formatting contract.
+    ///
+    /// WHAT: evaluates `source` (which must be a valid Beanstalk `Float`) and stores the formatted
+    ///      string in `result`.
+    /// WHY: `Float -> String` casts and runtime Float template interpolation must share one
+    ///      Beanstalk-owned formatter instead of relying on target-native stringification.
+    ///
+    /// Result-local contract:
+    /// - In `NumericFailureMode::Trap` the result local receives the scalar `String` success value.
+    ///   Failure (an unexpected non-finite input) is a runtime trap/throw.
+    /// - In `NumericFailureMode::ReturnError` the result local receives the internal fallible
+    ///   carrier (`String` success value or builtin `Error`). A later lowering helper is expected to
+    ///   branch with `HirTerminator::FallibleBranch` and unwrap success/error before borrow
+    ///   validation.
+    FormatFloat {
+        /// The `Float` expression to format.
+        source: HirExpression,
+        /// How the operation should behave on failure.
+        failure_mode: NumericFailureMode,
+        /// Local that receives the formatted string or fallible carrier.
+        result: LocalId,
+    },
+
+    /// Validate that a `Float` value is finite before exposing it as an ordinary Beanstalk `Float`.
+    ///
+    /// WHAT: evaluates `source` (a `Float` value coming from an external/backend boundary) and
+    ///      stores the validated finite `Float` in `result`.
+    /// WHY: Beanstalk `Float` is finite `f64`; values entering from external functions or backend
+    ///      boundaries must be checked explicitly rather than trusted implicitly.
+    ///
+    /// Result-local contract:
+    /// - In `NumericFailureMode::Trap` the result local receives the scalar `Float` success value.
+    ///   Failure (a non-finite input) is a runtime trap/throw.
+    /// - In `NumericFailureMode::ReturnError` the result local receives the internal fallible
+    ///   carrier (`Float` success value or builtin `Error`). A later lowering helper is expected to
+    ///   branch with `HirTerminator::FallibleBranch` and unwrap success/error before borrow
+    ///   validation.
+    ValidateFloat {
+        /// The `Float` expression to validate.
+        source: HirExpression,
+        /// How the operation should behave on failure.
+        failure_mode: NumericFailureMode,
+        /// Local that receives the validated float or fallible carrier.
+        result: LocalId,
     },
 }

@@ -119,16 +119,30 @@ pub(crate) enum CastHandling {
     Propagate,
 
     /// `cast expression catch:` / `cast expression catch |err|:` — local recovery.
-    Recover(FallibleHandling),
+    ///
+    /// WHAT: records only that the cast recovers locally. The handler body is owned by
+    /// `ValueCatchBlock` so expression variants stay bodyless.
+    Recover,
 }
 
 impl CastHandling {
-    /// Remap error binding names inside recovery handlers.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        if let Self::Recover(handling) = self {
-            handling.remap_string_ids(remap);
-        }
+    /// Keep the remap hook symmetric with other expression payloads.
+    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {
+        // Recovery handler bodies are stored on `ValueCatchBlock`, not here.
     }
+}
+
+/// Bodyless fallible handling stored by expression variants.
+///
+/// WHAT: expression nodes need to know whether they propagate or recover, but recovery handler
+/// bodies are statement fragments and therefore live on `ValueCatchBlock`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FallibleExpressionHandling {
+    /// The `!` operator: propagate the error upward to the caller.
+    Propagate,
+
+    /// `catch` local recovery; the handler body is stored by the enclosing `ValueCatchBlock`.
+    Recover,
 }
 
 /// How a fallible expression or call is handled at the use site.

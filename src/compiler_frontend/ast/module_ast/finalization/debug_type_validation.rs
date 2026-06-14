@@ -10,7 +10,10 @@ use crate::compiler_frontend::ast::AstChoiceDefinition;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, LoopBindings, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleHandling,
+    Expression, ExpressionKind, FallibleExpressionHandling, FallibleHandling,
+};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
@@ -90,7 +93,7 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
 
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
-        | NodeKind::Rvalue(value) => {
+        | NodeKind::ExpressionStatement(value) => {
             debug_validate_expression_type_id(value, type_environment);
         }
 
@@ -165,80 +168,6 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             debug_validate_declaration_type_id(declaration, type_environment);
         }
 
-        NodeKind::FieldAccess { base, type_id, .. } => {
-            debug_validate_node_type_ids(base, type_environment);
-            debug_validate_type_id(*type_id, type_environment, "field access");
-        }
-
-        NodeKind::MethodCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::CollectionBuiltinCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::MapBuiltinCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        } => {
-            debug_validate_node_type_ids(receiver, type_environment);
-            debug_validate_call_arguments_type_ids(args, type_environment);
-            debug_validate_type_ids(result_type_ids, type_environment, "call result");
-        }
-
-        NodeKind::FunctionCall {
-            args,
-            result_type_ids,
-            ..
-        }
-        | NodeKind::HostFunctionCall {
-            args,
-            result_type_ids,
-            ..
-        } => {
-            debug_validate_call_arguments_type_ids(args, type_environment);
-            debug_validate_type_ids(result_type_ids, type_environment, "call result");
-        }
-
-        NodeKind::HandledFallibleFunctionCall {
-            args,
-            result_type_ids,
-            handling,
-            ..
-        } => {
-            debug_validate_call_arguments_type_ids(args, type_environment);
-            debug_validate_type_ids(
-                result_type_ids,
-                type_environment,
-                "fallible-handled call result",
-            );
-            debug_validate_fallible_handling_type_ids(handling, type_environment);
-        }
-
-        NodeKind::HandledFallibleHostFunctionCall {
-            args,
-            result_type_ids,
-            error_type_id,
-            handling,
-            ..
-        } => {
-            debug_validate_call_arguments_type_ids(args, type_environment);
-            debug_validate_type_ids(
-                result_type_ids,
-                type_environment,
-                "fallible-handled external call result",
-            );
-            debug_validate_type_ids(&[*error_type_id], type_environment, "external call error");
-            debug_validate_fallible_handling_type_ids(handling, type_environment);
-        }
-
         NodeKind::StructDefinition(_, fields) => {
             debug_validate_declarations_type_ids(fields, type_environment);
         }
@@ -257,7 +186,7 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
         }
 
         NodeKind::Assignment { target, value } => {
-            debug_validate_node_type_ids(target, type_environment);
+            debug_validate_place_expression_type_ids(target, type_environment);
             debug_validate_expression_type_id(value, type_environment);
         }
 
@@ -269,7 +198,7 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
         }
 
         // Terminal nodes that carry no type identities.
-        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => {}
+        NodeKind::Break | NodeKind::Continue => {}
 
         NodeKind::ThenValue(produced_values) => {
             debug_validate_expressions_type_ids(&produced_values.expressions, type_environment);
@@ -277,19 +206,68 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
     }
 }
 
+fn debug_validate_place_expression_type_ids(
+    place: &PlaceExpression,
+    type_environment: &TypeEnvironment,
+) {
+    debug_validate_type_id(place.type_id, type_environment, "place expression");
+    match &place.kind {
+        PlaceExpressionKind::Local(_) => {}
+        PlaceExpressionKind::Field { base, .. } => {
+            debug_validate_place_expression_type_ids(base, type_environment)
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ExpressionValidationContext {
+    Ordinary,
+    ValueCatchHandledValue,
+}
+
 fn debug_validate_expression_type_id(expression: &Expression, type_environment: &TypeEnvironment) {
+    debug_validate_expression_type_id_with_context(
+        expression,
+        type_environment,
+        ExpressionValidationContext::Ordinary,
+    );
+}
+
+fn debug_validate_expression_type_id_with_context(
+    expression: &Expression,
+    type_environment: &TypeEnvironment,
+    context: ExpressionValidationContext,
+) {
     debug_validate_type_id(expression.type_id, type_environment, "expression");
 
     match &expression.kind {
-        ExpressionKind::Runtime(nodes) => {
-            debug_validate_nodes_type_ids(nodes, type_environment);
+        ExpressionKind::Runtime(rpn) => {
+            for item in &rpn.items {
+                match item {
+                    ExpressionRpnItem::Operand(expression) => {
+                        debug_validate_expression_type_id(expression, type_environment);
+                    }
+                    ExpressionRpnItem::Operator { .. } => {}
+                }
+            }
         }
 
         ExpressionKind::Copy(place) => {
-            debug_validate_node_type_ids(place, type_environment);
+            debug_validate_place_expression_type_ids(place, type_environment);
         }
 
-        ExpressionKind::Function(signature, body) => {
+        ExpressionKind::FieldAccess { base, .. } => {
+            debug_validate_expression_type_id(base, type_environment);
+        }
+
+        ExpressionKind::MethodCall { receiver, args, .. }
+        | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+        | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+            debug_validate_expression_type_id(receiver, type_environment);
+            debug_validate_call_arguments_type_ids(args, type_environment);
+        }
+
+        ExpressionKind::Function(signature) => {
             debug_validate_declarations_type_ids(&signature.parameters, type_environment);
             debug_validate_type_ids(
                 &signature.success_return_type_ids(),
@@ -303,7 +281,6 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
                     "function expression error return",
                 );
             }
-            debug_validate_nodes_type_ids(body, type_environment);
         }
 
         ExpressionKind::FunctionCall {
@@ -326,13 +303,13 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
             handling,
             ..
         } => {
+            debug_validate_recover_marker_context(*handling, context, "fallible function call");
             debug_validate_call_arguments_type_ids(args, type_environment);
             debug_validate_type_ids(
                 result_type_ids,
                 type_environment,
                 "fallible-handled expression call result",
             );
-            debug_validate_fallible_handling_type_ids(handling, type_environment);
         }
 
         ExpressionKind::HandledFallibleHostFunctionCall {
@@ -342,6 +319,11 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
             handling,
             ..
         } => {
+            debug_validate_recover_marker_context(
+                *handling,
+                context,
+                "fallible external function call",
+            );
             debug_validate_call_arguments_type_ids(args, type_environment);
             debug_validate_type_ids(
                 result_type_ids,
@@ -349,16 +331,20 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
                 "fallible-handled external expression call result",
             );
             debug_validate_type_ids(&[*error_type_id], type_environment, "external call error");
-            debug_validate_fallible_handling_type_ids(handling, type_environment);
         }
 
         ExpressionKind::Cast(cast) => {
+            if matches!(&cast.handling, CastHandling::Recover)
+                && context != ExpressionValidationContext::ValueCatchHandledValue
+            {
+                debug_assert!(
+                    false,
+                    "recovering cast expression reached AST finalization outside ValueBlock::Catch"
+                );
+            }
             debug_validate_expression_type_id(&cast.source, type_environment);
             debug_validate_type_id(cast.target_type_id, type_environment, "cast target");
             debug_validate_type_id(cast.source_type_id, type_environment, "cast source");
-            if let CastHandling::Recover(handling) = &cast.handling {
-                debug_validate_fallible_handling_type_ids(handling, type_environment);
-            }
         }
 
         ExpressionKind::FallibleCarrierConstruct { value, .. }
@@ -367,8 +353,8 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
         }
 
         ExpressionKind::HandledFallibleExpression { value, handling } => {
+            debug_validate_recover_marker_context(*handling, context, "fallible result expression");
             debug_validate_expression_type_id(value, type_environment);
-            debug_validate_fallible_handling_type_ids(handling, type_environment);
         }
 
         ExpressionKind::Template(template) => {
@@ -435,7 +421,20 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
                 }
             }
             ValueBlock::Catch(value_catch) => {
-                debug_validate_expression_type_id(&value_catch.handled_value, type_environment);
+                debug_assert!(
+                    matches!(value_catch.handler, FallibleHandling::Handler { .. }),
+                    "ValueBlock::Catch carried non-handler fallible handling"
+                );
+                debug_assert!(
+                    expression_is_recovering_catch_subject(&value_catch.handled_value),
+                    "ValueBlock::Catch handled value was not marked for recovery"
+                );
+                debug_validate_expression_type_id_with_context(
+                    &value_catch.handled_value,
+                    type_environment,
+                    ExpressionValidationContext::ValueCatchHandledValue,
+                );
+                debug_validate_fallible_handling_type_ids(&value_catch.handler, type_environment);
             }
         },
 
@@ -449,6 +448,35 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
         | ExpressionKind::Char(_)
         | ExpressionKind::Path(_)
         | ExpressionKind::Reference(_) => {}
+    }
+}
+
+fn expression_is_recovering_catch_subject(expression: &Expression) -> bool {
+    match &expression.kind {
+        ExpressionKind::HandledFallibleFunctionCall { handling, .. }
+        | ExpressionKind::HandledFallibleHostFunctionCall { handling, .. }
+        | ExpressionKind::HandledFallibleExpression { handling, .. } => {
+            matches!(handling, FallibleExpressionHandling::Recover)
+        }
+
+        ExpressionKind::Cast(cast) => matches!(&cast.handling, CastHandling::Recover),
+
+        _ => false,
+    }
+}
+
+fn debug_validate_recover_marker_context(
+    handling: FallibleExpressionHandling,
+    context: ExpressionValidationContext,
+    owner: &str,
+) {
+    if matches!(handling, FallibleExpressionHandling::Recover)
+        && context != ExpressionValidationContext::ValueCatchHandledValue
+    {
+        debug_assert!(
+            false,
+            "recovering {owner} reached AST finalization outside ValueBlock::Catch"
+        );
     }
 }
 

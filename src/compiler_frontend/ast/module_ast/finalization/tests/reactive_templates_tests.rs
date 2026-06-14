@@ -4,7 +4,10 @@ use super::propagate_reactive_template_metadata_in_ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ReactiveSource, ReactiveSourceKind, ReactiveTemplateMetadata,
+    Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind, ReactiveTemplateMetadata,
+};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -103,9 +106,9 @@ fn call_expression(function_path: InternedPath, arguments: Vec<CallArgument>) ->
     )
 }
 
-fn first_rvalue_metadata(ast: &[AstNode]) -> &ReactiveTemplateMetadata {
-    let NodeKind::Rvalue(expression) = &ast[1].kind else {
-        panic!("expected rvalue node");
+fn first_expression_statement_metadata(ast: &[AstNode]) -> &ReactiveTemplateMetadata {
+    let NodeKind::ExpressionStatement(expression) = &ast[1].kind else {
+        panic!("expected expression statement node");
     };
 
     expression
@@ -151,7 +154,7 @@ fn rebases_reactive_parameter_subscription_to_call_argument_source() {
     let mut ast = vec![
         function_node(function_path.clone(), signature, body, test_location(1)),
         node(
-            NodeKind::Rvalue(call_expression(
+            NodeKind::ExpressionStatement(call_expression(
                 function_path,
                 vec![CallArgument::positional(
                     argument,
@@ -165,7 +168,7 @@ fn rebases_reactive_parameter_subscription_to_call_argument_source() {
 
     propagate_reactive_template_metadata_in_ast(&mut ast);
 
-    let metadata = first_rvalue_metadata(&ast);
+    let metadata = first_expression_statement_metadata(&ast);
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, count_path);
     assert_eq!(
@@ -223,7 +226,7 @@ fn substitutes_string_parameter_template_value_from_call_argument() {
     let mut ast = vec![
         function_node(function_path.clone(), signature, body, test_location(1)),
         node(
-            NodeKind::Rvalue(call_expression(
+            NodeKind::ExpressionStatement(call_expression(
                 function_path,
                 vec![CallArgument::positional(
                     argument_template,
@@ -237,7 +240,7 @@ fn substitutes_string_parameter_template_value_from_call_argument() {
 
     propagate_reactive_template_metadata_in_ast(&mut ast);
 
-    let metadata = first_rvalue_metadata(&ast);
+    let metadata = first_expression_statement_metadata(&ast);
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, count_path);
     assert!(metadata.template_value_parameters.is_empty());
@@ -291,7 +294,7 @@ fn references_use_metadata_computed_for_prior_declarations() {
         function_node(function_path, signature, body, test_location(1)),
         node(NodeKind::VariableDeclaration(declaration), test_location(3)),
         node(
-            NodeKind::Rvalue(reference_expression(
+            NodeKind::ExpressionStatement(reference_expression(
                 view_path,
                 DataType::StringSlice,
                 builtin_type_ids::STRING,
@@ -302,8 +305,8 @@ fn references_use_metadata_computed_for_prior_declarations() {
 
     propagate_reactive_template_metadata_in_ast(&mut ast);
 
-    let NodeKind::Rvalue(expression) = &ast[2].kind else {
-        panic!("expected rvalue reference");
+    let NodeKind::ExpressionStatement(expression) = &ast[2].kind else {
+        panic!("expected expression statement reference");
     };
     let metadata = expression
         .reactive_template
@@ -322,18 +325,23 @@ fn runtime_string_operations_do_not_inherit_nested_template_metadata() {
     assert!(template.reactive_template.is_some());
 
     let runtime_expression = Expression::runtime_with_type_id(
-        vec![node(NodeKind::Rvalue(template), test_location(1))],
+        ExpressionRpn {
+            items: vec![ExpressionRpnItem::Operand(template)],
+        },
         DataType::StringSlice,
         builtin_type_ids::STRING,
         test_location(1),
         ValueMode::ImmutableOwned,
     );
 
-    let mut ast = vec![node(NodeKind::Rvalue(runtime_expression), test_location(1))];
+    let mut ast = vec![node(
+        NodeKind::ExpressionStatement(runtime_expression),
+        test_location(1),
+    )];
     propagate_reactive_template_metadata_in_ast(&mut ast);
 
-    let NodeKind::Rvalue(expression) = &ast[0].kind else {
-        panic!("expected rvalue node");
+    let NodeKind::ExpressionStatement(expression) = &ast[0].kind else {
+        panic!("expected expression statement node");
     };
     assert!(expression.reactive_template.is_none());
 }
@@ -355,16 +363,16 @@ fn sink_operand_expressions_keep_reactive_template_metadata() {
             test_location(1),
         ),
         node(
-            NodeKind::HostFunctionCall {
-                name: ExternalFunctionId::Io,
-                args: vec![CallArgument::positional(
+            NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
+                ExternalFunctionId::Io,
+                vec![CallArgument::positional(
                     host_call_template,
                     CallAccessMode::Shared,
                     test_location(2),
                 )],
-                result_type_ids: Vec::new(),
-                location: test_location(2),
-            },
+                Vec::new(),
+                test_location(2),
+            )),
             test_location(2),
         ),
     ];
@@ -376,7 +384,11 @@ fn sink_operand_expressions_keep_reactive_template_metadata() {
     };
     assert!(fragment.reactive_template.is_some());
 
-    let NodeKind::HostFunctionCall { args, .. } = &ast[1].kind else {
+    let NodeKind::ExpressionStatement(Expression {
+        kind: ExpressionKind::HostFunctionCall { args, .. },
+        ..
+    }) = &ast[1].kind
+    else {
         panic!("expected host function call");
     };
     assert!(args[0].value.reactive_template.is_some());

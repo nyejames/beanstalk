@@ -21,7 +21,9 @@
 //! - `direct_return`: `return fallible_call()!` success/error direct return branches.
 
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, FallibleHandling};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, FallibleExpressionHandling, FallibleHandling,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
@@ -54,6 +56,9 @@ pub(crate) struct FallibleBranchingContext<'a> {
     pub(crate) err_type: TypeId,
     pub(crate) value_required: bool,
     pub(crate) location: &'a SourceLocation,
+    /// True when the success payload is a `Float` entering from an external/backend boundary
+    /// and must be validated before catch success merging.
+    pub(crate) validate_float_success: bool,
 }
 
 /// Branch-entry metadata once the fallible expression has already produced a carrier local.
@@ -71,7 +76,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_handled_fallible_expression(
         &mut self,
         value: &Expression,
-        handling: &FallibleHandling,
+        handling: &FallibleExpressionHandling,
         location: &SourceLocation,
         expr_type_id: FrontendTypeId,
     ) -> Result<LoweredExpression, CompilerError> {
@@ -98,7 +103,7 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        if matches!(handling, FallibleHandling::Propagate) {
+        if matches!(handling, FallibleExpressionHandling::Propagate) {
             let result_carrier =
                 self.emit_lowered_result_expression_to_current_block(lowered, location)?;
             let success_value =
@@ -110,6 +115,42 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
+        return_hir_transformation_error!(
+            "Recovering fallible expression reached HIR outside a value catch block",
+            self.hir_error_location(location)
+        )
+    }
+
+    pub(crate) fn lower_recovering_fallible_expression(
+        &mut self,
+        value: &Expression,
+        handler: &FallibleHandling,
+        result_type_ids: &[FrontendTypeId],
+        value_required: bool,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered = self.lower_expression(value)?;
+        let ok_type = match self
+            .type_environment
+            .fallible_carrier_slots(lowered.value.ty)
+        {
+            Some((ok, _)) => ok,
+            None => {
+                return_hir_transformation_error!(
+                    "Recovering fallible expression reached HIR lowering without an internal carrier type",
+                    self.hir_error_location(location)
+                );
+            }
+        };
+
+        let expected_ok_type = self.lower_call_result_type(result_type_ids, location)?;
+        if expected_ok_type != ok_type {
+            return_hir_transformation_error!(
+                "Recovering fallible expression lowered with mismatched success type",
+                self.hir_error_location(location)
+            );
+        }
+
         let result_carrier =
             self.emit_lowered_result_expression_to_current_block(lowered, location)?;
         let current_block = self.current_block_id_or_error(location)?;
@@ -118,13 +159,14 @@ impl<'a> HirBuilder<'a> {
             current_block,
             result_local: result_carrier.result_local,
             handled_result: FallibleBranchingContext {
-                result_type_ids: &result_type_ids,
-                handling,
+                result_type_ids,
+                handling: handler,
                 carrier_type: result_carrier.carrier_type,
                 ok_type: result_carrier.ok_type,
                 err_type: result_carrier.err_type,
-                value_required: true,
+                value_required,
                 location,
+                validate_float_success: result_carrier.validate_float_success,
             },
         })
     }
@@ -134,12 +176,11 @@ impl<'a> HirBuilder<'a> {
         target: CallTarget,
         args: &[CallArgument],
         result_type_ids: &[FrontendTypeId],
-        handling: &FallibleHandling,
-        value_required: bool,
+        handling: &FallibleExpressionHandling,
+        _value_required: bool,
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        let (carrier_type, ok_type, err_type) =
-            self.result_call_carrier_slots(&target, location)?;
+        let (_, ok_type, _) = self.result_call_carrier_slots(&target, location)?;
 
         let requested_ok_type = self.lower_call_result_type(result_type_ids, location)?;
         if requested_ok_type != ok_type {
@@ -149,7 +190,7 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        if matches!(handling, FallibleHandling::Propagate) {
+        if matches!(handling, FallibleExpressionHandling::Propagate) {
             let result_carrier = self.emit_result_call_carrier_to_current_block(
                 target,
                 args,
@@ -167,18 +208,9 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
-        self.lower_handled_fallible_call_with_branching(
-            target,
-            args,
-            FallibleBranchingContext {
-                result_type_ids,
-                handling,
-                carrier_type,
-                ok_type,
-                err_type,
-                value_required,
-                location,
-            },
+        return_hir_transformation_error!(
+            "Recovering fallible call reached HIR outside a value catch block",
+            self.hir_error_location(location)
         )
     }
 
@@ -192,13 +224,10 @@ impl<'a> HirBuilder<'a> {
             result_type_ids,
             error_type_id,
             handling,
-            value_required,
             location,
         } = input;
-        let (carrier_type, ok_type, err_type) =
-            self.fallible_call_carrier_from_slots(result_type_ids, error_type_id, location)?;
 
-        if matches!(handling, FallibleHandling::Propagate) {
+        if matches!(handling, FallibleExpressionHandling::Propagate) {
             let result_carrier = self.emit_external_result_call_carrier_to_current_block(
                 id,
                 args,
@@ -217,18 +246,9 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
-        self.lower_handled_fallible_call_with_branching(
-            CallTarget::ExternalFunction(id),
-            args,
-            FallibleBranchingContext {
-                result_type_ids,
-                handling,
-                carrier_type,
-                ok_type,
-                err_type,
-                value_required,
-                location,
-            },
+        return_hir_transformation_error!(
+            "Recovering external fallible call reached HIR outside a value catch block",
+            self.hir_error_location(location)
         )
     }
 }

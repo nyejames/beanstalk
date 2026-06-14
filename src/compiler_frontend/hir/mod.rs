@@ -29,6 +29,7 @@ pub(crate) mod expressions;
 pub(crate) mod functions;
 pub(crate) mod ids;
 pub(crate) mod module;
+pub(crate) mod numeric;
 pub(crate) mod operators;
 pub(crate) mod patterns;
 pub(crate) mod places;

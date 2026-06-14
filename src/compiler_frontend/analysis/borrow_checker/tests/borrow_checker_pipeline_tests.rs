@@ -116,12 +116,12 @@ fn successful_borrow_report_can_be_stored_on_module() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(
+                    target: assignment_target(
                         counter.clone(),
                         DataType::Int,
                         builtin_type_ids::INT,
                         test_location(2),
-                    )),
+                    ),
                     value: Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                 },
                 test_location(2),

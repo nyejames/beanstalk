@@ -75,7 +75,7 @@ pub(crate) fn fold_collection_capacity(
 }
 
 fn validate_capacity_value(
-    value: i64,
+    value: i32,
     location: &SourceLocation,
 ) -> Result<usize, CompilerDiagnostic> {
     if value < 0 {

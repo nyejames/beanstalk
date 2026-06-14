@@ -6,6 +6,7 @@
 use super::error::ExpressionParseError;
 use super::eval_expression::evaluate_expression;
 use super::expression::{Expression, ExpressionKind, Operator};
+use super::expression_rpn::ExpressionRpnItem;
 use super::option_propagation::parse_option_propagation_suffix_for_expression;
 use super::parse_expression::{
     create_expression_until, create_expression_with_trailing_newline_policy,
@@ -18,12 +19,13 @@ use super::parse_expression_places::{
 };
 use super::parse_expression_templates::parse_template_expression;
 use crate::ast_log;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
-use crate::compiler_frontend::ast::field_access::{ReceiverAccessMode, parse_postfix_chain};
+use crate::compiler_frontend::ast::field_access::{
+    ReceiverAccessMode, parse_postfix_chain_expression,
+};
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     CastCatchSite, fallible_catch_allowed_in_context, parse_cast_catch_handling_suffix,
-    parse_fallible_handling_suffix_for_expression,
+    parse_fallible_handling_suffix_for_expression, wrap_catch_expression,
 };
 use crate::compiler_frontend::ast::statements::match_arm_boundaries::current_token_starts_match_arm_header;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -41,6 +43,7 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCastReason,
     InvalidControlFlowStatementReason, InvalidTemplateStructureReason, TypeMismatchContext,
 };
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
@@ -63,39 +66,24 @@ pub(super) struct ExpressionDispatchState<'a> {
     pub(super) consume_closing_parenthesis: bool,
     pub(super) allow_boundary_catch: bool,
     pub(super) allow_expected_result_evidence: bool,
-    pub(super) expression: &'a mut Vec<AstNode>,
+    pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
     pub(super) next_number_negative: &'a mut bool,
 }
 
-pub(super) fn push_expression_node(
+pub(super) struct ExpressionOperandInput {
+    pub(super) operand: Expression,
+    pub(super) wrapper_location: SourceLocation,
+}
+
+fn push_expression_after_suffixes(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     allow_boundary_catch: bool,
-    node: AstNode,
+    expression_after_postfix: Expression,
 ) -> Result<(), ExpressionParseError> {
-    // ----------------------------
-    //  Postfix field-access chain
-    // ----------------------------
-    // Postfix parsing happens after the primary node exists so fallible field-access chains bind to
-    // the fully-built primary expression instead of only the leading identifier token.
-    let node_after_postfix = if token_stream.index < token_stream.length
-        && token_stream.current_token_kind() == &TokenKind::Dot
-    {
-        parse_postfix_chain(
-            token_stream,
-            node,
-            ReceiverAccessMode::Shared,
-            context,
-            type_interner,
-            string_table,
-        )?
-    } else {
-        node
-    };
-
     // ----------------------------
     //  Common mistake: `!=`
     // ----------------------------
@@ -119,119 +107,183 @@ pub(super) fn push_expression_node(
     // ----------------------------
     //  Fallible handling suffix
     // ----------------------------
-    let node_after_fallible = if token_stream.index < token_stream.length
+    let expression_after_fallible = if token_stream.index < token_stream.length
         && (token_stream.current_token_kind() == &TokenKind::Bang
             || token_stream.current_token_kind() == &TokenKind::Catch
             || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
                 && token_stream.peek_next_token() == Some(&TokenKind::Bang)))
     {
-        let handled = parse_fallible_handling_suffix_for_expression(
+        let value_required = expression_after_postfix.type_id != builtin_type_ids::NONE;
+        parse_fallible_handling_suffix_for_expression(
             token_stream,
             context,
             type_interner,
-            node_after_postfix.get_expr_with_type_environment(type_interner.environment())?,
-            true,
+            expression_after_postfix,
+            value_required,
             allow_boundary_catch
                 && expression.is_empty()
                 && fallible_catch_allowed_in_context(context),
             string_table,
-        )?;
-        AstNode {
-            kind: NodeKind::Rvalue(handled),
-            location: token_stream.current_location(),
-            scope: context.scope.clone(),
-        }
+        )?
     } else {
-        node_after_postfix
+        expression_after_postfix
     };
 
     // ----------------------------
     //  Option propagation suffix
     // ----------------------------
-    let node_after_option_propagation = if token_stream.index < token_stream.length
+    let expression_after_option_propagation = if token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::QuestionMark
     {
-        let propagated = parse_option_propagation_suffix_for_expression(
+        parse_option_propagation_suffix_for_expression(
             token_stream,
             context,
             type_interner,
-            node_after_fallible.get_expr_with_type_environment(type_interner.environment())?,
-        )?;
-        AstNode {
-            kind: NodeKind::Rvalue(propagated),
-            location: token_stream.current_location(),
-            scope: context.scope.clone(),
-        }
+            expression_after_fallible,
+        )?
     } else {
-        node_after_fallible
+        expression_after_fallible
     };
 
     // ----------------------------
     //  Const record validation
     // ----------------------------
     // Const records are field-access-only. After postfix parsing and fallible
-    // handling, reject any node that resolves to a const-record value in a
-    // runtime context. The identifier-level check already caught bare names;
-    // this catches field-access chains whose final step is itself a const record.
+    // handling, reject any expression that resolves to a const-record value in a
+    // runtime context. Identifier-level parsing already catches bare names; this
+    // catches field chains whose final step is itself a const record.
     if !context.kind.is_constant_context()
-        && node_after_option_propagation
-            .expression_is_const_record_value()
-            .map_err(ExpressionParseError::from)?
+        && expression_after_option_propagation.is_const_record_value()
     {
-        let record_name = const_record_node_name(&node_after_option_propagation, string_table);
+        let record_name =
+            const_record_expression_name(&expression_after_option_propagation, string_table);
         return Err(CompilerDiagnostic::const_record_used_as_value(
             record_name,
-            node_after_option_propagation.location.clone(),
+            expression_after_option_propagation.location.clone(),
         )
         .into());
     }
 
-    expression.push(node_after_option_propagation);
+    expression.push(ExpressionRpnItem::Operand(
+        expression_after_option_propagation,
+    ));
     Ok(())
 }
 
-/// Extracts a display name for a const-record diagnostic from an AST node.
+pub(super) fn push_expression_operand(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    expression: &mut Vec<ExpressionRpnItem>,
+    allow_boundary_catch: bool,
+    operand: Expression,
+) -> Result<(), ExpressionParseError> {
+    let wrapper_location = operand.location.clone();
+    push_expression_operand_at_location(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        expression,
+        allow_boundary_catch,
+        ExpressionOperandInput {
+            operand,
+            wrapper_location,
+        },
+    )
+}
+
+/// Push an expression operand while preserving a distinct wrapper location for suffix parsing.
+///
+/// WHAT: keeps postfix/fallible/option handling on the existing dispatch path without requiring
+/// callers to construct `NodeKind::ExpressionStatement` themselves.
+/// WHY: constant references may carry declaration-origin expression locations, but diagnostics
+/// for suffixes and const-record misuse should still point at the source use site.
+pub(super) fn push_expression_operand_at_location(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    expression: &mut Vec<ExpressionRpnItem>,
+    allow_boundary_catch: bool,
+    operand_input: ExpressionOperandInput,
+) -> Result<(), ExpressionParseError> {
+    let expression_after_postfix = if token_stream.index < token_stream.length
+        && token_stream.current_token_kind() == &TokenKind::Dot
+    {
+        parse_postfix_chain_expression(
+            token_stream,
+            operand_input.operand,
+            operand_input.wrapper_location,
+            ReceiverAccessMode::Shared,
+            context,
+            type_interner,
+            string_table,
+        )?
+    } else {
+        operand_input.operand
+    };
+
+    push_expression_after_suffixes(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        expression,
+        allow_boundary_catch,
+        expression_after_postfix,
+    )
+}
+
+/// Extracts a display name for a const-record diagnostic from an expression.
 ///
 /// WHAT: walks field-access chains back to the root identifier so the
 /// diagnostic example points at the record, not an intermediate field.
-fn const_record_node_name(node: &AstNode, string_table: &mut StringTable) -> StringId {
-    match &node.kind {
-        NodeKind::FieldAccess { base, .. } => const_record_node_name(base, string_table),
+fn const_record_expression_name(
+    expression: &Expression,
+    string_table: &mut StringTable,
+) -> StringId {
+    match &expression.kind {
+        ExpressionKind::FieldAccess { base, .. } => {
+            const_record_expression_name(base, string_table)
+        }
 
-        NodeKind::VariableDeclaration(decl) => decl
-            .id
-            .name()
-            .unwrap_or_else(|| string_table.intern("record")),
-
-        NodeKind::Rvalue(expr) => match &expr.kind {
-            ExpressionKind::Reference(path) => {
-                path.name().unwrap_or_else(|| string_table.intern("record"))
-            }
-            _ => string_table.intern("record"),
-        },
+        ExpressionKind::Reference(path) => {
+            path.name().unwrap_or_else(|| string_table.intern("record"))
+        }
 
         _ => string_table.intern("record"),
     }
 }
 
-/// Pushes a unary operator node onto the expression stack when the current token
+/// Pushes a unary operator item onto the expression stack when the current token
 /// is `Negative` or `Not`. Returns `true` when an operator was consumed.
 fn parse_unary_operator(
     token_stream: &FileTokens,
-    context: &ScopeContext,
-    expression: &mut Vec<AstNode>,
+    _context: &ScopeContext,
+    expression: &mut Vec<ExpressionRpnItem>,
     next_number_negative: &mut bool,
 ) -> bool {
     match token_stream.current_token_kind() {
         TokenKind::Negative => {
-            *next_number_negative = true;
+            if matches!(
+                token_stream.peek_next_token(),
+                Some(TokenKind::NumericLiteral(_))
+            ) {
+                *next_number_negative = true;
+            } else {
+                expression.push(ExpressionRpnItem::Operator {
+                    operator: Operator::Negate,
+                    location: token_stream.current_location(),
+                });
+            }
             true
         }
         TokenKind::Not => {
-            expression.push(AstNode {
-                kind: NodeKind::Operator(Operator::Not),
+            expression.push(ExpressionRpnItem::Operator {
+                operator: Operator::Not,
                 location: token_stream.current_location(),
-                scope: context.scope.clone(),
             });
             true
         }
@@ -239,27 +291,23 @@ fn parse_unary_operator(
     }
 }
 
-fn push_operator_node(
-    expression: &mut Vec<AstNode>,
-    context: &ScopeContext,
+fn push_operator_item(
+    expression: &mut Vec<ExpressionRpnItem>,
+    _context: &ScopeContext,
     location: SourceLocation,
     operator: Operator,
 ) {
-    expression.push(AstNode {
-        kind: NodeKind::Operator(operator),
-        location,
-        scope: context.scope.clone(),
-    });
+    expression.push(ExpressionRpnItem::Operator { operator, location });
 }
 
 /// Convenience for the common match arm that pushes an operator and advances.
 fn advance_with_operator(
-    expression: &mut Vec<AstNode>,
+    expression: &mut Vec<ExpressionRpnItem>,
     context: &ScopeContext,
     location: SourceLocation,
     operator: Operator,
 ) -> Result<ExpressionTokenStep, ExpressionParseError> {
-    push_operator_node(expression, context, location, operator);
+    push_operator_item(expression, context, location, operator);
     Ok(ExpressionTokenStep::Advance)
 }
 
@@ -310,17 +358,16 @@ pub(super) fn dispatch_expression_token(
                 });
             let value = create_expression_with_trailing_newline_policy(grouped_input)?;
 
-            push_expression_node(
+            push_expression_operand_at_location(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(value),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
+                ExpressionOperandInput {
+                    operand: value,
+                    wrapper_location: token_stream.current_location(),
                 },
             )?;
 
@@ -401,8 +448,7 @@ pub(super) fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Continue)
         }
 
-        TokenKind::FloatLiteral(_)
-        | TokenKind::IntLiteral(_)
+        TokenKind::NumericLiteral(_)
         | TokenKind::StringSliceLiteral(_)
         | TokenKind::BoolLiteral(_)
         | TokenKind::CharLiteral(_)
@@ -445,26 +491,19 @@ pub(super) fn dispatch_expression_token(
 
             let copied_place =
                 parse_copy_place_expression(token_stream, context, type_interner, string_table)?;
-            let copied_expression =
-                copied_place.get_expr_with_type_environment(type_interner.environment())?;
-            let copied_type = copied_expression.diagnostic_type.to_owned();
-            let copied_type_id = copied_expression.type_id;
-            let copied_value_shape = copied_expression.value_shape;
 
             let mut copy_expression = Expression::copy_with_type_id(
-                copied_place,
-                copied_type,
-                copied_type_id,
+                copied_place.place,
+                copied_place.diagnostic_type,
+                copied_place.type_id,
                 copy_location.clone(),
                 state.value_mode.to_owned(),
             );
-            copy_expression.value_shape = copied_value_shape;
+            copy_expression.value_shape = copied_place.value_shape;
 
-            state.expression.push(AstNode {
-                kind: NodeKind::Rvalue(copy_expression),
-                location: copy_location,
-                scope: context.scope.clone(),
-            });
+            state
+                .expression
+                .push(ExpressionRpnItem::Operand(copy_expression));
 
             Ok(ExpressionTokenStep::Continue)
         }
@@ -937,12 +976,13 @@ fn parse_cast_expression(
 
     // Determine the handling form. Catch handlers need the cast failure error type, which
     // is always the builtin `Error` type for the supported cast evidence catalogue.
+    let mut catch_handler = None;
     let handling = if propagate {
         CastHandling::Propagate
     } else if token_stream.current_token_kind() == &TokenKind::Catch {
         let error_type_id =
             resolve_builtin_error_type_typed(context, &operand.location, string_table)?.type_id;
-        CastHandling::Recover(parse_cast_catch_handling_suffix(
+        catch_handler = Some(parse_cast_catch_handling_suffix(
             token_stream,
             context,
             type_interner,
@@ -953,7 +993,8 @@ fn parse_cast_expression(
                 allow_boundary_catch: state.allow_boundary_catch,
             },
             string_table,
-        )?)
+        )?);
+        CastHandling::Recover
     } else {
         CastHandling::Infallible
     };
@@ -987,7 +1028,7 @@ fn parse_cast_expression(
         }
     }
 
-    let cast_expression = resolve_cast_expression(CastResolutionInput {
+    let mut cast_expression = resolve_cast_expression(CastResolutionInput {
         source: operand,
         target_type_id,
         target,
@@ -1001,11 +1042,13 @@ fn parse_cast_expression(
         location: cast_location,
     })?;
 
-    state.expression.push(AstNode {
-        kind: NodeKind::Rvalue(cast_expression),
-        location: token_stream.current_location(),
-        scope: context.scope.clone(),
-    });
+    if let Some(handler) = catch_handler {
+        cast_expression = wrap_catch_expression(cast_expression, handler, vec![target_type_id]);
+    }
+
+    state
+        .expression
+        .push(ExpressionRpnItem::Operand(cast_expression));
 
     Ok(ExpressionTokenStep::Continue)
 }

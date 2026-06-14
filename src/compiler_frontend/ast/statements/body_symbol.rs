@@ -6,16 +6,20 @@
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::function_calls::{
-    ExternalFunctionCallParseInput, parse_external_function_call,
+    ExternalFunctionCallParseInput, parse_external_function_call_expression,
 };
 use crate::compiler_frontend::ast::expressions::mutation::{
     handle_mutation, handle_mutation_target,
 };
+use crate::compiler_frontend::ast::expressions::parse_expression_places::place_expression_from_expression;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
-use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_symbol_expression_statement_candidate;
+use crate::compiler_frontend::ast::statements::body_expr_stmt::{
+    is_expression_statement, parse_symbol_expression_statement_candidate,
+};
+use crate::compiler_frontend::ast::statements::declarations::ResolvedDeclarationStatementKind;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::multi_bind::parse_multi_bind_statement;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -34,39 +38,36 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 
 #[allow(clippy::result_large_err)]
 fn push_accessed_symbol_statement(
-    accessed_node: AstNode,
+    accessed_expression: Expression,
     ast: &mut Vec<AstNode>,
     context: &ScopeContext,
     token_stream: &FileTokens,
     _symbol_id: StringId,
     _string_table: &StringTable,
 ) -> Result<(), CompilerDiagnostic> {
-    match accessed_node.kind {
-        // Method calls and collection builtins are valid as standalone statements
-        // because they may have side effects.
-        NodeKind::MethodCall { .. }
-        | NodeKind::CollectionBuiltinCall { .. }
-        | NodeKind::MapBuiltinCall { .. } => {
-            ast.push(AstNode {
-                kind: NodeKind::Rvalue(accessed_node.get_expr()?),
-                location: accessed_node.location,
-                scope: context.scope.clone(),
-            });
-            Ok(())
-        }
+    if is_expression_statement(&accessed_expression) {
+        let location = accessed_expression.location.clone();
+        ast.push(AstNode {
+            kind: NodeKind::ExpressionStatement(accessed_expression),
+            location,
+            scope: context.scope.clone(),
+        });
+        return Ok(());
+    }
 
-        // A bare field read (e.g., `obj.field`) does nothing, so it is rejected.
-        NodeKind::FieldAccess { .. } => Err(CompilerDiagnostic::invalid_standalone_statement(
+    // A bare field read (e.g., `obj.field`) does nothing, so it is rejected.
+    if matches!(accessed_expression.kind, ExpressionKind::FieldAccess { .. }) {
+        return Err(CompilerDiagnostic::invalid_standalone_statement(
             InvalidStandaloneStatementReason::FieldRead,
             token_stream.current_location(),
-        )),
-
-        // Any other accessed expression is also not a valid standalone statement.
-        _ => Err(CompilerDiagnostic::invalid_standalone_statement(
-            InvalidStandaloneStatementReason::Expression,
-            token_stream.current_location(),
-        )),
+        ));
     }
+
+    // Any other accessed expression is also not a valid standalone statement.
+    Err(CompilerDiagnostic::invalid_standalone_statement(
+        InvalidStandaloneStatementReason::Expression,
+        token_stream.current_location(),
+    ))
 }
 
 // --------------------------
@@ -123,10 +124,19 @@ pub(crate) fn parse_this_statement(
             .map_err(CompilerDiagnostic::from)?;
 
             if token_stream.current_token_kind().is_assignment_operator() {
+                let Some(target) = place_expression_from_expression(&accessed_node) else {
+                    return Err(CompilerDiagnostic::invalid_assignment_target(
+                        InvalidAssignmentTargetReason::NotMutablePlace,
+                        None,
+                        Some(accessed_node.type_id),
+                        token_stream.current_location(),
+                    ));
+                };
+
                 ast.push(handle_mutation_target(
                     token_stream,
                     this_reference,
-                    accessed_node,
+                    target,
                     context,
                     type_interner,
                     string_table,
@@ -156,7 +166,7 @@ pub(crate) fn parse_this_statement(
             )?;
 
             ast.push(AstNode {
-                kind: NodeKind::Rvalue(expression),
+                kind: NodeKind::ExpressionStatement(expression),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
             });
@@ -246,10 +256,19 @@ pub(crate) fn parse_symbol_statement(
                 .map_err(CompilerDiagnostic::from)?;
 
                 if token_stream.current_token_kind().is_assignment_operator() {
+                    let Some(target) = place_expression_from_expression(&accessed_node) else {
+                        return Err(CompilerDiagnostic::invalid_assignment_target(
+                            InvalidAssignmentTargetReason::NotMutablePlace,
+                            None,
+                            Some(accessed_node.type_id),
+                            token_stream.current_location(),
+                        ));
+                    };
+
                     ast.push(handle_mutation_target(
                         token_stream,
                         existing_reference,
-                        accessed_node,
+                        target,
                         context,
                         type_interner,
                         string_table,
@@ -294,7 +313,7 @@ pub(crate) fn parse_symbol_statement(
                 )?;
 
                 ast.push(AstNode {
-                    kind: NodeKind::Rvalue(expression),
+                    kind: NodeKind::ExpressionStatement(expression),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
@@ -319,19 +338,24 @@ pub(crate) fn parse_symbol_statement(
         }
 
         token_stream.advance();
-        let external_call_node = parse_external_function_call(ExternalFunctionCallParseInput {
-            token_stream,
-            external_function_id,
-            external_function: external_function_def,
-            context,
-            value_required: false,
-            allow_boundary_catch: true,
-            warnings: Some(warnings),
-            type_interner,
-            string_table,
-        })
-        .map_err(CompilerDiagnostic::from)?;
-        ast.push(external_call_node);
+        let external_call_expression =
+            parse_external_function_call_expression(ExternalFunctionCallParseInput {
+                token_stream,
+                external_function_id,
+                external_function: external_function_def,
+                context,
+                value_required: false,
+                allow_boundary_catch: true,
+                warnings: Some(warnings),
+                type_interner,
+                string_table,
+            })
+            .map_err(CompilerDiagnostic::from)?;
+        ast.push(AstNode {
+            kind: NodeKind::ExpressionStatement(external_call_expression),
+            location: token_stream.current_location(),
+            scope: context.scope.clone(),
+        });
         return Ok(());
     }
 
@@ -377,7 +401,7 @@ pub(crate) fn parse_symbol_statement(
         )?;
 
         ast.push(AstNode {
-            kind: NodeKind::Rvalue(expression),
+            kind: NodeKind::ExpressionStatement(expression),
             location: token_stream.current_location(),
             scope: context.scope.clone(),
         });
@@ -394,12 +418,13 @@ pub(crate) fn parse_symbol_statement(
         string_table,
     )?;
     let declaration = resolved_declaration.declaration;
+    let statement_kind = resolved_declaration.statement_kind;
     let is_compile_time_binding = resolved_declaration.is_compile_time_binding;
 
     // Lift struct definitions and functions to the AST statement level;
     // everything else becomes a local variable declaration.
-    match declaration.value.kind {
-        ExpressionKind::StructDefinition(ref params) => {
+    match &statement_kind {
+        ResolvedDeclarationStatementKind::StructDefinition(params) => {
             ast.push(AstNode {
                 kind: NodeKind::StructDefinition(declaration.id.to_owned(), params.to_owned()),
                 location: token_stream.current_location(),
@@ -407,7 +432,7 @@ pub(crate) fn parse_symbol_statement(
             });
         }
 
-        ExpressionKind::Function(ref signature, ref body) => {
+        ResolvedDeclarationStatementKind::Function { signature, body } => {
             ast.push(AstNode {
                 kind: NodeKind::Function(
                     declaration.id.to_owned(),
@@ -419,7 +444,7 @@ pub(crate) fn parse_symbol_statement(
             });
         }
 
-        _ => {
+        ResolvedDeclarationStatementKind::Variable => {
             ast.push(AstNode {
                 kind: NodeKind::VariableDeclaration(declaration.to_owned()),
                 location: token_stream.current_location(),

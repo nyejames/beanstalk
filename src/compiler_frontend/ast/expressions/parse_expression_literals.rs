@@ -5,15 +5,17 @@
 
 use super::error::ExpressionParseError;
 use super::expression::Expression;
-use super::parse_expression_dispatch::push_expression_node;
+use super::expression_rpn::ExpressionRpnItem;
+use super::parse_expression_dispatch::push_expression_operand;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
+use crate::compiler_frontend::numeric_text::parse::{materialize_f64, materialize_i32_with_sign};
+use crate::compiler_frontend::numeric_text::token::{NumericLiteralKind, NumericLiteralSign};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
@@ -22,7 +24,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 pub(super) struct LiteralParseState<'a> {
     pub(super) expected_type: &'a ExpectedType,
     pub(super) value_mode: &'a ValueMode,
-    pub(super) expression: &'a mut Vec<AstNode>,
+    pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
     pub(super) next_number_negative: &'a mut bool,
     pub(super) allow_boundary_catch: bool,
 }
@@ -33,9 +35,9 @@ pub(super) struct LiteralParseState<'a> {
 /// WHY: literals are self-contained tokens that do not need identifier resolution or
 /// postfix chaining, so they can be validated and emitted in one step.
 ///
-/// `next_number_negative` is set by the dispatch layer when a unary `-` operator precedes
-/// a number literal. We fold the sign into the literal value here so that `-42` becomes a
-/// single constant rather than a unary-minus expression node.
+/// Signed numeric tokens are materialized directly from their token metadata. The
+/// `next_number_negative` fallback keeps parser-owned unary negation and hand-built test streams
+/// on the same signed-i32 boundary policy as tokenizer-signed literals.
 pub(super) fn parse_literal_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -44,66 +46,56 @@ pub(super) fn parse_literal_expression(
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
     match token_stream.current_token_kind().to_owned() {
-        TokenKind::FloatLiteral(mut float) => {
-            if *state.next_number_negative {
-                float = -float;
-                *state.next_number_negative = false;
-            }
-
+        TokenKind::NumericLiteral(token) => {
             let location = token_stream.current_location();
-            let float_expr =
-                Expression::float(float, location.to_owned(), state.value_mode.to_owned());
-            token_stream.advance();
-            push_expression_node(
-                token_stream,
-                context,
-                type_interner,
-                string_table,
-                state.expression,
-                state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(float_expr),
-                    location,
-                    scope: context.scope.clone(),
-                },
-            )?;
-            Ok(())
-        }
 
-        TokenKind::IntLiteral(mut int) => {
-            if *state.next_number_negative {
+            let expression = if token.kind == NumericLiteralKind::WholeNumber {
+                let effective_sign =
+                    if *state.next_number_negative && token.sign == NumericLiteralSign::Positive {
+                        NumericLiteralSign::Negative
+                    } else {
+                        token.sign
+                    };
                 *state.next_number_negative = false;
 
-                // Fold the unary minus into the literal, but reject i64::MIN overflow
-                // since the positive value cannot be represented.
-                int = match int.checked_neg() {
-                    Some(value) => value,
-                    None => {
-                        return Err(CompilerDiagnostic::compile_time_evaluation_error(
-                            CompileTimeEvaluationErrorReason::IntegerOverflow,
-                            None,
-                            token_stream.current_location(),
+                let value_i32 = materialize_i32_with_sign(&token, effective_sign, string_table)
+                    .map_err(|reason| {
+                        CompilerDiagnostic::invalid_number_literal(
+                            token.normalized_text,
+                            reason,
+                            location.clone(),
                         )
-                        .into());
-                    }
-                };
-            }
+                    })?;
 
-            let location = token_stream.current_location();
-            let int_expr = Expression::int(int, location.to_owned(), state.value_mode.to_owned());
+                Expression::int(value_i32, location.to_owned(), state.value_mode.to_owned())
+            } else {
+                let mut value = materialize_f64(&token, string_table).map_err(|reason| {
+                    CompilerDiagnostic::invalid_number_literal(
+                        token.normalized_text,
+                        reason,
+                        location.clone(),
+                    )
+                })?;
+
+                if *state.next_number_negative {
+                    *state.next_number_negative = false;
+                    if token.sign == NumericLiteralSign::Positive {
+                        value = -value;
+                    }
+                }
+
+                Expression::float(value, location.to_owned(), state.value_mode.to_owned())
+            };
+
             token_stream.advance();
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(int_expr),
-                    scope: context.scope.clone(),
-                    location,
-                },
+                expression,
             )?;
             Ok(())
         }
@@ -113,18 +105,14 @@ pub(super) fn parse_literal_expression(
             let string_expr =
                 Expression::string_slice(string, location.to_owned(), state.value_mode.to_owned());
             token_stream.advance();
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(string_expr),
-                    scope: context.scope.clone(),
-                    location,
-                },
+                string_expr,
             )?;
             Ok(())
         }
@@ -134,18 +122,14 @@ pub(super) fn parse_literal_expression(
             let bool_expr =
                 Expression::bool(value, location.to_owned(), state.value_mode.to_owned());
             token_stream.advance();
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(bool_expr),
-                    location,
-                    scope: context.scope.clone(),
-                },
+                bool_expr,
             )?;
             Ok(())
         }
@@ -155,18 +139,14 @@ pub(super) fn parse_literal_expression(
             let char_expr =
                 Expression::char(value, location.to_owned(), state.value_mode.to_owned());
             token_stream.advance();
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(char_expr),
-                    location,
-                    scope: context.scope.clone(),
-                },
+                char_expr,
             )?;
             Ok(())
         }
@@ -211,18 +191,14 @@ pub(super) fn parse_literal_expression(
             );
             none_expr.value_mode = state.value_mode.to_owned();
             token_stream.advance();
-            push_expression_node(
+            push_expression_operand(
                 token_stream,
                 context,
                 type_interner,
                 string_table,
                 state.expression,
                 state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(none_expr),
-                    location,
-                    scope: context.scope.clone(),
-                },
+                none_expr,
             )?;
             Ok(())
         }

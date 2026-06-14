@@ -21,7 +21,6 @@ pub enum HirTypeClass {
     Char,
     Int,
     Float,
-    Decimal,
     Function,
     HeapAllocated,
 }
@@ -44,7 +43,9 @@ pub fn classify_hir_type(type_id: TypeId, type_environment: &TypeEnvironment) ->
             BuiltinTypeKey::Bool => HirTypeClass::Bool,
             BuiltinTypeKey::Int => HirTypeClass::Int,
             BuiltinTypeKey::Float => HirTypeClass::Float,
-            BuiltinTypeKey::Decimal => HirTypeClass::Decimal,
+            // Decimal is intentionally inactive in the Alpha surface. Classify it as
+            // heap-allocated so no backend lowers it as a numeric scalar.
+            BuiltinTypeKey::Decimal => HirTypeClass::HeapAllocated,
             BuiltinTypeKey::Char => HirTypeClass::Char,
             BuiltinTypeKey::None => HirTypeClass::Unit,
             BuiltinTypeKey::String | BuiltinTypeKey::Range => HirTypeClass::HeapAllocated,

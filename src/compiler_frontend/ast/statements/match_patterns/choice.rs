@@ -357,8 +357,7 @@ fn parse_variant_name(
         }
 
         // Literal tokens are not valid as choice variant names.
-        TokenKind::IntLiteral(_)
-        | TokenKind::FloatLiteral(_)
+        TokenKind::NumericLiteral(_)
         | TokenKind::BoolLiteral(_)
         | TokenKind::CharLiteral(_)
         | TokenKind::StringSliceLiteral(_)

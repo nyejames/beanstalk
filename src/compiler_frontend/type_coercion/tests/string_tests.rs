@@ -1,6 +1,7 @@
 //! String coercion policy tests for `type_coercion::string`.
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpn;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::string::{
     FoldedStringPiece, fold_expression_kind_to_string,
@@ -24,6 +25,27 @@ fn float_folds_to_string() {
         panic!("expected Text piece for Float");
     };
     assert!(s.contains("3.125"), "unexpected float string: {s}");
+}
+
+#[test]
+fn float_one_folds_without_trailing_decimal() {
+    let table = StringTable::new();
+    let result = fold_expression_kind_to_string(&ExpressionKind::Float(1.0), &table);
+    assert_eq!(result, Some(FoldedStringPiece::Text("1".to_string())));
+}
+
+#[test]
+fn float_small_value_uses_beanstalk_exponent_form() {
+    let table = StringTable::new();
+    let result = fold_expression_kind_to_string(&ExpressionKind::Float(0.0000001), &table);
+    assert_eq!(result, Some(FoldedStringPiece::Text("1e-7".to_string())));
+}
+
+#[test]
+fn float_large_value_uses_signed_exponent() {
+    let table = StringTable::new();
+    let result = fold_expression_kind_to_string(&ExpressionKind::Float(1e21), &table);
+    assert_eq!(result, Some(FoldedStringPiece::Text("1e+21".to_string())));
 }
 
 #[test]
@@ -57,7 +79,8 @@ fn string_slice_folds_to_text() {
 #[test]
 fn non_renderable_expression_kind_returns_none() {
     let table = StringTable::new();
-    let result = fold_expression_kind_to_string(&ExpressionKind::Runtime(vec![]), &table);
+    let result =
+        fold_expression_kind_to_string(&ExpressionKind::Runtime(ExpressionRpn::empty()), &table);
     assert!(result.is_none());
 }
 

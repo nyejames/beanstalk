@@ -4,6 +4,7 @@
 //! WHY: JS is the stable near-term backend and needs deterministic lowering output.
 
 use crate::backends::js::JsModule;
+use crate::backends::js::runtime::NumericRuntimeHelperUsage;
 use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
@@ -14,6 +15,7 @@ use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKin
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, HirValueId, LocalId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::numeric::HirNumericOperands;
 use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
 use crate::compiler_frontend::hir::reactivity::ReactiveSourceId;
@@ -108,10 +110,13 @@ impl<'hir> JsEmitter<'hir> {
 
         let functions = self.functions_to_emit()?;
         let emitted_code_uses_maps = self.emitted_functions_use_maps(&functions)?;
+        let emitted_code_uses_numeric_helpers =
+            self.emitted_functions_use_numeric_helpers(&functions)?;
         self.emitted_functions_use_reactivity(&functions)?;
         self.collect_used_cast_policies(&functions)?;
         self.emit_runtime_prelude(
             emitted_code_uses_maps,
+            emitted_code_uses_numeric_helpers,
             self.used_reactive_sources,
             self.used_reactive_templates,
         );
@@ -181,6 +186,55 @@ impl<'hir> JsEmitter<'hir> {
         Ok(functions)
     }
 
+    /// Records which checked numeric helper families are needed by emitted reachable JS bodies.
+    ///
+    /// WHAT: scans the same function/block subset that JS lowering will emit and records whether
+    ///      it contains `NumericOp`, `FormatFloat`, or `ValidateFloat` statements.
+    /// WHY: the arithmetic helpers and Float formatting/validation helpers share a trap wrapper
+    ///      but are otherwise independent. Splitting demand keeps existing arithmetic-only bundles
+    ///      from growing unrelated Float helpers.
+    fn emitted_functions_use_numeric_helpers(
+        &self,
+        functions: &[&'hir HirFunction],
+    ) -> Result<NumericRuntimeHelperUsage, CompilerError> {
+        let mut usage = NumericRuntimeHelperUsage::default();
+
+        for function in functions {
+            let reachable_blocks = self.collect_reachable_blocks(function.entry)?;
+            for block_id in reachable_blocks {
+                let block = self.block_by_id(block_id)?;
+                for statement in &block.statements {
+                    match statement.kind {
+                        HirStatementKind::NumericOp { .. } => {
+                            usage.numeric_ops = true;
+                        }
+                        HirStatementKind::FormatFloat { .. } => {
+                            usage.format_float = true;
+                        }
+                        HirStatementKind::ValidateFloat { .. } => {
+                            usage.validate_float = true;
+                        }
+                        _ => {}
+                    }
+
+                    if statement_uses_float_to_string_cast(&statement.kind) {
+                        usage.format_float = true;
+                    }
+
+                    if usage.numeric_ops && usage.format_float && usage.validate_float {
+                        return Ok(usage);
+                    }
+                }
+
+                if terminator_uses_float_to_string_cast(&block.terminator) {
+                    usage.format_float = true;
+                }
+            }
+        }
+
+        Ok(usage)
+    }
+
     /// Returns true when any emitted reachable JS body can construct, store, copy, display, or
     /// operate on a Beanstalk map.
     ///
@@ -234,9 +288,25 @@ impl<'hir> JsEmitter<'hir> {
 
             HirStatementKind::CastOp { source, .. } => self.expression_uses_maps(source),
 
+            HirStatementKind::FormatFloat { source, .. }
+            | HirStatementKind::ValidateFloat { source, .. } => self.expression_uses_maps(source),
+
             HirStatementKind::MapOp { .. } => true,
 
+            HirStatementKind::NumericOp { operands, .. } => {
+                self.numeric_operands_use_maps(operands)
+            }
+
             HirStatementKind::Drop(_) => false,
+        }
+    }
+
+    fn numeric_operands_use_maps(&self, operands: &HirNumericOperands) -> bool {
+        match operands {
+            HirNumericOperands::Unary { operand } => self.expression_uses_maps(operand),
+            HirNumericOperands::Binary { left, right } => {
+                self.expression_uses_maps(left) || self.expression_uses_maps(right)
+            }
         }
     }
 
@@ -346,6 +416,11 @@ impl<'hir> JsEmitter<'hir> {
                 self.record_expression_reactivity(source)?;
             }
 
+            HirStatementKind::FormatFloat { source, .. }
+            | HirStatementKind::ValidateFloat { source, .. } => {
+                self.record_expression_reactivity(source)?;
+            }
+
             HirStatementKind::Expr(value) | HirStatementKind::PushRuntimeFragment { value, .. } => {
                 self.record_expression_reactivity(value)?;
             }
@@ -356,6 +431,16 @@ impl<'hir> JsEmitter<'hir> {
                     self.record_expression_reactivity(argument)?;
                 }
             }
+
+            HirStatementKind::NumericOp { operands, .. } => match operands {
+                HirNumericOperands::Unary { operand } => {
+                    self.record_expression_reactivity(operand)?;
+                }
+                HirNumericOperands::Binary { left, right } => {
+                    self.record_expression_reactivity(left)?;
+                    self.record_expression_reactivity(right)?;
+                }
+            },
 
             HirStatementKind::Drop(_) => {}
         }
@@ -673,6 +758,11 @@ fn collect_statement_cast_policies(
             collect_expression_cast_policies(source, policies);
         }
 
+        HirStatementKind::FormatFloat { source, .. }
+        | HirStatementKind::ValidateFloat { source, .. } => {
+            collect_expression_cast_policies(source, policies);
+        }
+
         HirStatementKind::MapOp { receiver, args, .. } => {
             collect_expression_cast_policies(receiver, policies);
             for argument in args {
@@ -680,8 +770,24 @@ fn collect_statement_cast_policies(
             }
         }
 
+        HirStatementKind::NumericOp { operands, .. } => match operands {
+            HirNumericOperands::Unary { operand } => {
+                collect_expression_cast_policies(operand, policies);
+            }
+            HirNumericOperands::Binary { left, right } => {
+                collect_expression_cast_policies(left, policies);
+                collect_expression_cast_policies(right, policies);
+            }
+        },
+
         HirStatementKind::Drop(_) => {}
     }
+}
+
+fn statement_uses_float_to_string_cast(statement: &HirStatementKind) -> bool {
+    let mut policies = HashSet::new();
+    collect_statement_cast_policies(statement, &mut policies);
+    policies.contains(&BuiltinCastPolicyId::FloatToString)
 }
 
 fn collect_terminator_cast_policies(
@@ -718,6 +824,12 @@ fn collect_terminator_cast_policies(
         | HirTerminator::RuntimeFailure { .. }
         | HirTerminator::AssertFailure { .. } => {}
     }
+}
+
+fn terminator_uses_float_to_string_cast(terminator: &HirTerminator) -> bool {
+    let mut policies = HashSet::new();
+    collect_terminator_cast_policies(terminator, &mut policies);
+    policies.contains(&BuiltinCastPolicyId::FloatToString)
 }
 
 fn collect_pattern_cast_policies(

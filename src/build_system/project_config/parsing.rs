@@ -531,8 +531,7 @@ fn validate_config_hash_assignments(tokens: &[Token]) -> Vec<CompilerDiagnostic>
             TokenKind::StringSliceLiteral(_)
                 | TokenKind::RawStringLiteral(_)
                 | TokenKind::Symbol(_)
-                | TokenKind::IntLiteral(_)
-                | TokenKind::FloatLiteral(_)
+                | TokenKind::NumericLiteral(_)
                 | TokenKind::BoolLiteral(_)
                 | TokenKind::Path(_)
                 | TokenKind::OpenCurly

@@ -15,6 +15,7 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticKind, DiagnosticPayload, SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -124,7 +125,7 @@ fn reject_arguments_fails_when_parens_present() {
 fn optional_slot_target_no_parens_returns_default() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert_eq!(result.unwrap(), SlotKey::Default);
 }
 
@@ -132,7 +133,7 @@ fn optional_slot_target_no_parens_returns_default() {
 fn optional_slot_target_named_string() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(\"style\")]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(matches!(result.unwrap(), SlotKey::Named(_)));
 }
 
@@ -140,7 +141,7 @@ fn optional_slot_target_named_string() {
 fn optional_slot_target_positive_positional() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(1)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert_eq!(result.unwrap(), SlotKey::Positional(1));
 }
 
@@ -148,13 +149,13 @@ fn optional_slot_target_positive_positional() {
 fn optional_slot_target_zero_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(0)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
         DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::IntLiteral(0),
-        }
+            found: TokenKind::NumericLiteral(token),
+        } if token.kind == NumericLiteralKind::WholeNumber
     ));
 }
 
@@ -162,7 +163,7 @@ fn optional_slot_target_zero_errors() {
 fn optional_slot_target_negative_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(-1)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_err());
 }
 
@@ -170,7 +171,7 @@ fn optional_slot_target_negative_errors() {
 fn optional_slot_target_empty_parens_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot()]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
@@ -184,7 +185,7 @@ fn optional_slot_target_empty_parens_errors() {
 fn optional_slot_target_missing_close_paren_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(\"style\"]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens);
+    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
@@ -231,8 +232,8 @@ fn required_slot_name_positional_rejected() {
     assert!(matches!(
         result.unwrap_err().payload,
         DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::IntLiteral(1),
-        }
+            found: TokenKind::NumericLiteral(token),
+        } if token.kind == NumericLiteralKind::WholeNumber
     ));
 }
 

@@ -11,6 +11,9 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, LocalId};
+use crate::compiler_frontend::hir::numeric::{
+    HirNumericOp, HirNumericOperands, NumericFailureMode,
+};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -76,6 +79,48 @@ impl<'hir> JsEmitter<'hir> {
                 // WHY: map ops are not ordinary calls; helper selection and arity validation stay
                 // local to `emit_map_op_statement`.
                 self.emit_map_op_statement(*op, receiver, args, result)?;
+            }
+
+            HirStatementKind::NumericOp {
+                op,
+                failure_mode,
+                operands,
+                result,
+            } => {
+                // WHAT: dispatch a checked numeric operation to the JS runtime helper that mirrors
+                //       AST const-eval semantics, then either wrap the carrier for trap mode or
+                //       assign the carrier directly for builtin-Error recovery mode.
+                // WHY: numeric operations are language builtins with explicit failure modes; the
+                //      backend must map them to the helpers that enforce i32/finite-f64 semantics.
+                self.emit_numeric_op_statement(*op, *failure_mode, operands, *result)?;
+            }
+
+            HirStatementKind::FormatFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                // WHAT: dispatch a finite-Float formatting operation to the JS runtime helper that
+                //       implements Beanstalk's formatting contract, then either wrap the carrier for
+                //       trap mode or assign the carrier directly for builtin-Error recovery mode.
+                // WHY: Float formatting is a language builtin with an explicit failure mode; the
+                //      backend must map it to the helper that normalizes JS number text to the
+                //      Beanstalk contract instead of using target-native stringification directly.
+                self.emit_format_float_statement(*failure_mode, source, *result)?;
+            }
+
+            HirStatementKind::ValidateFloat {
+                source,
+                failure_mode,
+                result,
+            } => {
+                // WHAT: dispatch a finite-Float boundary check to the JS runtime helper, then either
+                //       wrap the carrier for trap mode or assign the carrier directly for
+                //       builtin-Error recovery mode.
+                // WHY: Beanstalk `Float` is finite `f64`; values from external/backend boundaries
+                //      must be validated before use, and the backend must expose that check through
+                //      the same carrier contract as other checked numeric operations.
+                self.emit_validate_float_statement(*failure_mode, source, *result)?;
             }
 
             HirStatementKind::Expr(expression) => {
@@ -164,6 +209,110 @@ impl<'hir> JsEmitter<'hir> {
         } else {
             self.emit_line(&format!("{call};"));
         }
+
+        Ok(())
+    }
+
+    /// Lower a `HirStatementKind::NumericOp` into the appropriate checked runtime helper call.
+    ///
+    /// WHAT: dispatches `Int*` and `Float*` operations to their `__bs_int_*` / `__bs_float_*`
+    ///       helpers, validates operand arity against the HIR contract, and emits the result
+    ///       assignment. Trap mode wraps the helper's fallible carrier in `__bs_numeric_trap` so
+    ///       the result local receives only the scalar success value; ReturnError mode assigns the
+    ///       carrier directly.
+    /// WHY: numeric operations are compiler-owned builtins with explicit failure modes; the backend
+    ///      must map them to the JS helpers that enforce Alpha `Int = i32` and `Float = finite f64`
+    ///      semantics.
+    fn emit_numeric_op_statement(
+        &mut self,
+        op: HirNumericOp,
+        failure_mode: NumericFailureMode,
+        operands: &HirNumericOperands,
+        result: LocalId,
+    ) -> Result<(), CompilerError> {
+        // Guard against arity mismatch between HIR and the backend.
+        let is_unary = op.is_unary();
+        let operands_are_unary = matches!(operands, HirNumericOperands::Unary { .. });
+        if is_unary != operands_are_unary {
+            return Err(CompilerError::compiler_error(format!(
+                "JS backend received NumericOp::{op:?} with operand arity that does not match the operation"
+            )));
+        }
+
+        // Lower each HIR operand to a JS expression.
+        let lowered_args = match operands {
+            HirNumericOperands::Unary { operand } => vec![self.lower_expr(operand)?],
+            HirNumericOperands::Binary { left, right } => {
+                vec![self.lower_expr(left)?, self.lower_expr(right)?]
+            }
+        };
+
+        // Select the JS helper name for this operation.
+        let helper_name = js_numeric_helper_for_op(op);
+
+        // Assemble the helper call.
+        let helper_call = format!("{helper_name}({})", lowered_args.join(", "));
+        self.emit_numeric_carrier_assignment(helper_call, failure_mode, result)
+    }
+
+    /// Lower a `HirStatementKind::FormatFloat` into the Beanstalk Float formatting helper call.
+    ///
+    /// WHAT: emits `__bs_format_float(source)` and assigns either the scalar formatted string
+    ///       (trap mode) or the fallible carrier (return-error mode) to the result local.
+    /// WHY: formatting shares the same result-local carrier contract as `NumericOp`; trap mode
+    ///      extracts the success value or throws, while return-error mode keeps the carrier for
+    ///      later `FallibleBranch` lowering.
+    fn emit_format_float_statement(
+        &mut self,
+        failure_mode: NumericFailureMode,
+        source: &HirExpression,
+        result: LocalId,
+    ) -> Result<(), CompilerError> {
+        let source_expr = self.lower_expr(source)?;
+        let helper_call = format!("__bs_format_float({source_expr})");
+        self.emit_numeric_carrier_assignment(helper_call, failure_mode, result)
+    }
+
+    /// Lower a `HirStatementKind::ValidateFloat` into the finite-Float validation helper call.
+    ///
+    /// WHAT: emits `__bs_float_validate(source)` and assigns either the scalar finite `Float`
+    ///       (trap mode) or the fallible carrier (return-error mode) to the result local.
+    /// WHY: Float boundary validation shares the same result-local carrier contract as
+    ///      `NumericOp`; trap mode extracts the success value or throws, while return-error mode
+    ///      keeps the carrier for later `FallibleBranch` lowering.
+    fn emit_validate_float_statement(
+        &mut self,
+        failure_mode: NumericFailureMode,
+        source: &HirExpression,
+        result: LocalId,
+    ) -> Result<(), CompilerError> {
+        let source_expr = self.lower_expr(source)?;
+        let helper_call = format!("__bs_float_validate({source_expr})");
+        self.emit_numeric_carrier_assignment(helper_call, failure_mode, result)
+    }
+
+    /// Emit the result assignment shared by checked numeric helper calls.
+    ///
+    /// WHAT: wraps `helper_call` in `__bs_numeric_trap` for trap mode or assigns the carrier
+    ///       directly for return-error mode, then assigns the value to `result`.
+    /// WHY: `NumericOp`, `FormatFloat`, and `ValidateFloat` all use the same result-local carrier
+    ///      contract; keeping the assignment logic in one helper prevents near-duplicate lowering
+    ///      code for each statement kind.
+    fn emit_numeric_carrier_assignment(
+        &mut self,
+        helper_call: String,
+        failure_mode: NumericFailureMode,
+        result: LocalId,
+    ) -> Result<(), CompilerError> {
+        let assigned_value = match failure_mode {
+            NumericFailureMode::Trap => format!("__bs_numeric_trap({helper_call})"),
+            NumericFailureMode::ReturnError => helper_call,
+        };
+
+        let result_name = self.local_name(result)?;
+        self.emit_line(&format!(
+            "__bs_assign_value({result_name}, {assigned_value});"
+        ));
 
         Ok(())
     }
@@ -692,5 +841,30 @@ impl<'hir> JsEmitter<'hir> {
         } else {
             Ok(pattern_condition)
         }
+    }
+}
+
+/// Returns the JS runtime helper name for a checked numeric HIR operation.
+///
+/// WHAT: maps each `HirNumericOp` to the `__bs_int_*` or `__bs_float_*` helper emitted by
+///       `emit_runtime_numeric_helpers`.
+/// WHY: keeps the helper name decision in one place so statement lowering and runtime emission
+///      cannot drift.
+fn js_numeric_helper_for_op(op: HirNumericOp) -> &'static str {
+    match op {
+        HirNumericOp::IntAdd => "__bs_int_add",
+        HirNumericOp::IntSub => "__bs_int_sub",
+        HirNumericOp::IntMul => "__bs_int_mul",
+        HirNumericOp::IntDiv => "__bs_int_div",
+        HirNumericOp::IntMod => "__bs_int_mod",
+        HirNumericOp::IntPow => "__bs_int_pow",
+        HirNumericOp::IntNeg => "__bs_int_neg",
+        HirNumericOp::FloatAdd => "__bs_float_add",
+        HirNumericOp::FloatSub => "__bs_float_sub",
+        HirNumericOp::FloatMul => "__bs_float_mul",
+        HirNumericOp::FloatDiv => "__bs_float_div",
+        HirNumericOp::FloatMod => "__bs_float_mod",
+        HirNumericOp::FloatPow => "__bs_float_pow",
+        HirNumericOp::FloatNeg => "__bs_float_neg",
     }
 }

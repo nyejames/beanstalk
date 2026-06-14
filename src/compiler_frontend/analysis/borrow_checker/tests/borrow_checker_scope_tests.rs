@@ -65,7 +65,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, BOOL, test_location(4))),
+                    target: assignment_target(x, DataType::Int, BOOL, test_location(4)),
                     value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
@@ -129,7 +129,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, BOOL, test_location(5))),
+                    target: assignment_target(x, DataType::Int, BOOL, test_location(5)),
                     value: Expression::int(2, test_location(5), ValueMode::ImmutableOwned),
                 },
                 test_location(5),
@@ -181,7 +181,7 @@ fn while_body_local_alias_does_not_escape_exit() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, BOOL, test_location(4))),
+                    target: assignment_target(x, DataType::Int, BOOL, test_location(4)),
                     value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
@@ -234,7 +234,7 @@ fn dead_local_access_reports_borrow_error() {
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, BOOL, test_location(4))),
+                    target: assignment_target(x, DataType::Int, BOOL, test_location(4)),
                     value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),

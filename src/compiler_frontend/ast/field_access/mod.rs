@@ -13,7 +13,10 @@ mod receiver_access;
 mod receiver_calls;
 
 pub use parse_chain::parse_field_access;
-pub(crate) use parse_chain::{parse_field_access_with_receiver_access, parse_postfix_chain};
+pub(crate) use parse_chain::{
+    parse_field_access_expression_with_receiver_access, parse_postfix_chain_expression,
+    reference_expression_from_declaration,
+};
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;

@@ -21,11 +21,11 @@ use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_runtime_map_helpers(&mut self) {
         let invalid_map = BuiltinErrorCode::MapExpectedOrderedMap;
-        let invalid_map_code = invalid_map.as_i64();
+        let invalid_map_code = invalid_map.as_i32();
         let invalid_map_message = invalid_map.default_message();
 
         let key_not_found = BuiltinErrorCode::MapKeyNotFound;
-        let key_not_found_code = key_not_found.as_i64();
+        let key_not_found_code = key_not_found.as_i32();
         let key_not_found_message = key_not_found.default_message();
 
         // Branded wrapper so runtime helpers can distinguish maps from arbitrary objects.

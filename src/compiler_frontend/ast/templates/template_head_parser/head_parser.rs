@@ -356,9 +356,8 @@ pub fn parse_template_head(
 
             // Constants can be inserted directly into head content.
             // Literal values
-            TokenKind::FloatLiteral(_)
+            TokenKind::NumericLiteral(_)
             | TokenKind::BoolLiteral(_)
-            | TokenKind::IntLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_) => {
                 enforce_head_compatibility(
@@ -464,6 +463,7 @@ pub fn parse_template_head(
                     &spec.kind,
                     token_stream,
                     template,
+                    string_table,
                 )?;
 
                 if handled_slot_insert {

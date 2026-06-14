@@ -38,6 +38,8 @@ pub enum BuiltinTypeKey {
     Bool,
     Int,
     Float,
+    // Decimal is intentionally inactive in the Alpha surface. The key is kept only
+    // to preserve the stable builtin TypeId layout and diagnostic bridge spelling.
     Decimal,
     String,
     Char,
@@ -160,6 +162,7 @@ fn display_type_identity_key(key: &TypeIdentityKey, string_table: &StringTable) 
             BuiltinTypeKey::Bool => "Bool".to_owned(),
             BuiltinTypeKey::Int => "Int".to_owned(),
             BuiltinTypeKey::Float => "Float".to_owned(),
+            // Decimal is intentionally inactive in the Alpha surface.
             BuiltinTypeKey::Decimal => "Decimal".to_owned(),
             BuiltinTypeKey::String => "String".to_owned(),
             BuiltinTypeKey::Char => "Char".to_owned(),
@@ -217,6 +220,8 @@ pub fn data_type_to_type_identity_key(data_type: &DataType) -> Option<TypeIdenti
         DataType::Bool => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Bool)),
         DataType::Int => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Int)),
         DataType::Float => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Float)),
+        // Decimal is intentionally inactive in the Alpha surface. Keep the bridge
+        // spelling for diagnostics, but no parser or operator path may produce it.
         DataType::Decimal => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Decimal)),
         DataType::StringSlice => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::String)),
         DataType::Char => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Char)),
@@ -314,6 +319,8 @@ pub(crate) fn type_identity_key_to_type_id(
             BuiltinTypeKey::Bool => type_environment.builtins().bool,
             BuiltinTypeKey::Int => type_environment.builtins().int,
             BuiltinTypeKey::Float => type_environment.builtins().float,
+            // Decimal is intentionally inactive in the Alpha surface. The reverse
+            // lookup is preserved only for diagnostic/HID bridge round-tripping.
             BuiltinTypeKey::Decimal => type_environment.builtins().decimal,
             BuiltinTypeKey::String => type_environment.builtins().string,
             BuiltinTypeKey::Char => type_environment.builtins().char,

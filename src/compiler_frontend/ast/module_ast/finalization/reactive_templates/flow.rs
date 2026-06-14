@@ -10,7 +10,7 @@
 use super::collector::metadata_for_expression;
 use super::types::{
     FunctionTemplateFlow, ReactiveTemplateValueEnvironment, merge_optional_metadata,
-    reference_path_for_node,
+    reference_path_for_place_expression,
 };
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -89,21 +89,12 @@ fn collect_initial_function_flows_from_node(
         | NodeKind::ReturnError(_)
         | NodeKind::Assert { .. }
         | NodeKind::PushStartRuntimeFragment(_)
-        | NodeKind::FieldAccess { .. }
-        | NodeKind::MethodCall { .. }
-        | NodeKind::CollectionBuiltinCall { .. }
-        | NodeKind::MapBuiltinCall { .. }
-        | NodeKind::FunctionCall { .. }
-        | NodeKind::HandledFallibleFunctionCall { .. }
-        | NodeKind::HandledFallibleHostFunctionCall { .. }
-        | NodeKind::HostFunctionCall { .. }
         | NodeKind::StructDefinition(_, _)
         | NodeKind::Assignment { .. }
         | NodeKind::MultiBind { .. }
-        | NodeKind::Rvalue(_)
+        | NodeKind::ExpressionStatement(_)
         | NodeKind::Break
-        | NodeKind::Continue
-        | NodeKind::Operator(_) => {}
+        | NodeKind::Continue => {}
     }
 }
 
@@ -111,9 +102,8 @@ fn collect_initial_function_flows_from_declaration(
     declaration: &Declaration,
     flows: &mut FxHashMap<InternedPath, FunctionTemplateFlow>,
 ) {
-    if let ExpressionKind::Function(signature, body) = &declaration.value.kind {
+    if let ExpressionKind::Function(signature) = &declaration.value.kind {
         flows.insert(declaration.id.clone(), empty_flow_for_signature(signature));
-        collect_initial_function_flows_from_nodes(body, flows);
     }
 }
 
@@ -144,12 +134,10 @@ fn refresh_function_template_flows_from_node(
         }
 
         NodeKind::VariableDeclaration(declaration) => {
-            if let ExpressionKind::Function(signature, body) = &declaration.value.kind {
-                let returns = collect_return_metadata(body, signature, current_flows);
-                if let Some(flow) = next_flows.get_mut(&declaration.id) {
-                    flow.success_returns = returns;
-                }
-                refresh_function_template_flows(body, current_flows, next_flows);
+            if let ExpressionKind::Function(signature) = &declaration.value.kind {
+                next_flows
+                    .entry(declaration.id.clone())
+                    .or_insert_with(|| empty_flow_for_signature(signature));
             }
         }
 
@@ -236,7 +224,7 @@ fn collect_return_metadata_from_node(
         }
 
         NodeKind::Assignment { target, value } => {
-            if let Some(target_path) = reference_path_for_node(target) {
+            if let Some(target_path) = reference_path_for_place_expression(target) {
                 let mut resolved_value = value.clone();
                 resolved_value.reactive_template =
                     metadata_for_expression(value, flows, value_environment);

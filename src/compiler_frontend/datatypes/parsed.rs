@@ -19,7 +19,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 pub(crate) enum ParsedCollectionCapacity {
     /// A positive integer literal such as `64`.
     Literal {
-        value: i64,
+        value: i32,
         location: SourceLocation,
     },
     /// A bare visible constant name such as `capacity`.
@@ -68,11 +68,6 @@ pub enum ParsedTypeRef {
     },
 
     BuiltinFloat {
-        location: SourceLocation,
-    },
-
-    #[allow(dead_code)] // Planned: explicit Decimal literal/type surface.
-    BuiltinDecimal {
         location: SourceLocation,
     },
 
@@ -165,7 +160,6 @@ impl ParsedTypeRef {
             ParsedTypeRef::BuiltinBool { location }
             | ParsedTypeRef::BuiltinInt { location }
             | ParsedTypeRef::BuiltinFloat { location }
-            | ParsedTypeRef::BuiltinDecimal { location }
             | ParsedTypeRef::BuiltinString { location }
             | ParsedTypeRef::BuiltinChar { location }
             | ParsedTypeRef::BuiltinNone { location }

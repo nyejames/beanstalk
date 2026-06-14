@@ -3,7 +3,7 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["runtime catch codes: 210|241|240|230|250"]
+rendered_output_contains = ["runtime catch codes: 210|241|230|250"]
 
 [backends.html_wasm]
 mode = "failure"

@@ -316,8 +316,7 @@ fn is_expression_start_token(token: &TokenKind) -> bool {
     matches!(
         token,
         TokenKind::Symbol(_)
-            | TokenKind::IntLiteral(_)
-            | TokenKind::FloatLiteral(_)
+            | TokenKind::NumericLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_)
             | TokenKind::CharLiteral(_)

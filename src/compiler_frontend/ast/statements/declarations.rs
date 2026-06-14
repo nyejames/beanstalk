@@ -9,20 +9,14 @@
 #![allow(clippy::result_large_err)]
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
-};
-use crate::compiler_frontend::ast::expressions::function_calls::{
-    FunctionCallParseInput, parse_function_call,
 };
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
-use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::collections::new_collection;
-use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, SignatureTypeFallbackPolicy, signature_member_to_declaration,
 };
@@ -101,43 +95,6 @@ fn apply_reactive_declaration_metadata(
     }
 }
 
-/// Create an AST reference node for an existing declaration.
-///
-/// Dispatches to function-call parsing when the declaration is semantically callable,
-/// otherwise falls through to field access.
-pub fn create_reference(
-    token_stream: &mut FileTokens,
-    declaration: &Declaration,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
-    // Move past the name
-    token_stream.advance();
-
-    if let Some(signature) = context.source_callable_signature(declaration) {
-        return parse_function_call(FunctionCallParseInput {
-            token_stream,
-            id: &declaration.id,
-            context,
-            signature,
-            value_required: true,
-            allow_boundary_catch: fallible_catch_allowed_in_context(context),
-            warnings: None,
-            type_interner,
-            string_table,
-        });
-    }
-
-    parse_field_access(
-        token_stream,
-        declaration,
-        context,
-        type_interner,
-        string_table,
-    )
-}
-
 /// Body-local declaration plus syntax-origin facts that are not stored on `Declaration`.
 ///
 /// WHAT: carries whether the user authored the binding with `#`.
@@ -146,7 +103,21 @@ pub fn create_reference(
 ///      runtime immutable bindings while registering locals.
 pub(crate) struct ResolvedDeclaration {
     pub(crate) declaration: Declaration,
+    pub(crate) statement_kind: ResolvedDeclarationStatementKind,
     pub(crate) is_compile_time_binding: bool,
+}
+
+/// Statement-level shape that declaration parsing discovered alongside the binding value.
+///
+/// WHAT: keeps function bodies owned by statement emission while the declaration value remains a
+/// signature-only callable expression for lookup and type checking.
+pub(crate) enum ResolvedDeclarationStatementKind {
+    Variable,
+    StructDefinition(Vec<Declaration>),
+    Function {
+        signature: FunctionSignature,
+        body: Vec<AstNode>,
+    },
 }
 
 /// Parse a new body-local declaration from the token stream.
@@ -225,11 +196,14 @@ pub(crate) fn new_declaration(
                 id: qualified_name,
                 value: Expression::function(
                     receiver,
-                    function_signature,
-                    function_body,
+                    function_signature.to_owned(),
                     function_type_id,
                     token_stream.current_location(),
                 ),
+            },
+            statement_kind: ResolvedDeclarationStatementKind::Function {
+                signature: function_signature,
+                body: function_body,
             },
             is_compile_time_binding: false,
         });
@@ -275,9 +249,16 @@ pub(crate) fn new_declaration(
         type_interner,
         string_table,
     )?;
+    let statement_kind = match &declaration.value.kind {
+        ExpressionKind::StructDefinition(params) => {
+            ResolvedDeclarationStatementKind::StructDefinition(params.to_owned())
+        }
+        _ => ResolvedDeclarationStatementKind::Variable,
+    };
 
     Ok(ResolvedDeclaration {
         declaration,
+        statement_kind,
         is_compile_time_binding,
     })
 }

@@ -52,10 +52,10 @@ pub(crate) struct ConstRangeCursor {
 
 enum ConstRangeCursorKind {
     Int {
-        current: i64,
-        end: i64,
+        current: i32,
+        end: i32,
         end_kind: RangeEndKind,
-        step: i64,
+        step: i32,
     },
     Float {
         current: f64,
@@ -67,7 +67,7 @@ enum ConstRangeCursorKind {
 
 #[derive(Clone, Copy)]
 pub(crate) enum ConstRangeIterationValue {
-    Int(i64),
+    Int(i32),
     Float(f64),
 }
 
@@ -280,7 +280,7 @@ impl ConstRangeCursor {
     }
 }
 
-fn int_step_magnitude(step: i64, location: SourceLocation) -> Result<i64, TemplateError> {
+fn int_step_magnitude(step: i32, location: SourceLocation) -> Result<i32, TemplateError> {
     step.checked_abs().ok_or_else(|| {
         CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
@@ -292,7 +292,7 @@ fn int_step_magnitude(step: i64, location: SourceLocation) -> Result<i64, Templa
 
 #[derive(Clone, Copy)]
 enum ConstNumericValue {
-    Int(i64),
+    Int(i32),
     Float(f64),
 }
 
@@ -318,7 +318,7 @@ fn const_numeric_expression(expression: &Expression) -> Result<ConstNumericValue
     }
 }
 
-fn int_range_contains(current: i64, end: i64, end_kind: RangeEndKind, ascending: bool) -> bool {
+fn int_range_contains(current: i32, end: i32, end_kind: RangeEndKind, ascending: bool) -> bool {
     match (ascending, end_kind) {
         (true, RangeEndKind::Exclusive) => current < end,
         (true, RangeEndKind::Inclusive) => current <= end,
@@ -388,7 +388,7 @@ pub(crate) fn build_range_iteration_bindings(
         fold_bindings.push(TemplateFoldBinding {
             path: index.id.clone(),
             value: Expression::int(
-                zero_based_index as i64,
+                zero_based_index as i32,
                 index.value.location.clone(),
                 ValueMode::ImmutableOwned,
             ),
@@ -418,7 +418,7 @@ pub(crate) fn build_collection_iteration_bindings(
         fold_bindings.push(TemplateFoldBinding {
             path: index.id.clone(),
             value: Expression::int(
-                zero_based_index as i64,
+                zero_based_index as i32,
                 index.value.location.clone(),
                 ValueMode::ImmutableOwned,
             ),

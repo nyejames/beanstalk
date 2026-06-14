@@ -6,8 +6,9 @@
 
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    PlaceExpression, PlaceExpressionKind,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
@@ -94,26 +95,6 @@ pub(crate) fn fresh_success_returns(result_type_ids: Vec<TypeId>) -> Vec<ReturnS
         .collect()
 }
 
-pub(crate) fn runtime_function_call_node(
-    name: InternedPath,
-    result_type_ids: Vec<TypeId>,
-    location: SourceLocation,
-) -> AstNode {
-    node(
-        NodeKind::FunctionCall {
-            name,
-            args: vec![],
-            result_type_ids,
-            location: location.clone(),
-        },
-        location,
-    )
-}
-
-pub(crate) fn runtime_operator_node(operator: Operator, location: SourceLocation) -> AstNode {
-    node(NodeKind::Operator(operator), location)
-}
-
 pub(crate) fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
 }
@@ -139,18 +120,14 @@ pub(crate) fn assignment_target(
     data_type: DataType,
     id: TypeId,
     location: SourceLocation,
-) -> AstNode {
-    node(
-        NodeKind::Rvalue(Expression::reference_with_type_id(
-            name,
-            data_type,
-            id,
-            location.clone(),
-            ValueMode::MutableReference,
-            crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState::RuntimeValue,
-        )),
+) -> PlaceExpression {
+    PlaceExpression {
+        kind: PlaceExpressionKind::Local(name),
+        type_id: id,
+        diagnostic_type: data_type,
+        value_mode: ValueMode::MutableReference,
         location,
-    )
+    }
 }
 
 pub(crate) fn function_node_by_name<'a>(

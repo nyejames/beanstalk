@@ -7,14 +7,16 @@
 
 use super::collector::metadata_for_expression;
 use super::types::{
-    FunctionTemplateFlow, ReactiveTemplateValueEnvironment, reference_path_for_node,
+    FunctionTemplateFlow, ReactiveTemplateValueEnvironment, reference_path_for_place_expression,
 };
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, LoopBindings, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
-use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
+};
 use crate::compiler_frontend::ast::statements::functions::{FunctionSignature, ReturnChannel};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
@@ -66,7 +68,7 @@ fn annotate_node(
 
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
-        | NodeKind::Rvalue(value) => {
+        | NodeKind::ExpressionStatement(value) => {
             annotate_expression(value, flows, value_environment);
         }
 
@@ -146,25 +148,6 @@ fn annotate_node(
             annotate_expression(condition, flows, value_environment);
         }
 
-        NodeKind::FieldAccess { base, .. } => annotate_node(base, flows, value_environment),
-
-        NodeKind::MethodCall { receiver, args, .. }
-        | NodeKind::CollectionBuiltinCall { receiver, args, .. }
-        | NodeKind::MapBuiltinCall { receiver, args, .. } => {
-            annotate_node(receiver, flows, value_environment);
-            annotate_call_arguments(args, flows, value_environment);
-        }
-
-        NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
-            annotate_call_arguments(args, flows, value_environment);
-        }
-
-        NodeKind::HandledFallibleFunctionCall { args, handling, .. }
-        | NodeKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-            annotate_call_arguments(args, flows, value_environment);
-            annotate_fallible_handling(handling, flows, value_environment);
-        }
-
         NodeKind::StructDefinition(_, fields) => {
             for field in fields {
                 annotate_declaration(field, flows, value_environment);
@@ -172,9 +155,8 @@ fn annotate_node(
         }
 
         NodeKind::Assignment { target, value } => {
-            annotate_node(target, flows, value_environment);
             annotate_expression(value, flows, value_environment);
-            if let Some(target_path) = reference_path_for_node(target) {
+            if let Some(target_path) = reference_path_for_place_expression(target) {
                 value_environment.record_assignment(target_path, value);
             }
         }
@@ -183,7 +165,7 @@ fn annotate_node(
             annotate_expression(value, flows, value_environment);
         }
 
-        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => {}
+        NodeKind::Break | NodeKind::Continue => {}
     }
 }
 
@@ -216,10 +198,7 @@ fn annotate_declaration(
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &mut ReactiveTemplateValueEnvironment,
 ) {
-    if let ExpressionKind::Function(signature, body) = &mut declaration.value.kind {
-        let mut function_environment =
-            ReactiveTemplateValueEnvironment::for_parameters(&signature.parameters);
-        annotate_nodes(body, flows, &mut function_environment);
+    if let ExpressionKind::Function(signature) = &mut declaration.value.kind {
         apply_flow_to_signature(&declaration.id, signature, flows);
         declaration.value.reactive_template =
             metadata_for_expression(&declaration.value, flows, value_environment);
@@ -241,6 +220,13 @@ fn annotate_expressions(
     }
 }
 
+fn annotate_place_expression(place: &mut PlaceExpression) {
+    match &mut place.kind {
+        PlaceExpressionKind::Local(_) => {}
+        PlaceExpressionKind::Field { base, .. } => annotate_place_expression(base),
+    }
+}
+
 fn annotate_expression(
     expression: &mut Expression,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
@@ -251,26 +237,43 @@ fn annotate_expression(
             annotate_template(template, flows, value_environment);
         }
 
-        ExpressionKind::Function(signature, body) => {
-            let mut function_environment =
-                ReactiveTemplateValueEnvironment::for_parameters(&signature.parameters);
-            annotate_nodes(body, flows, &mut function_environment);
-        }
+        ExpressionKind::Function(_) => {}
 
         ExpressionKind::FunctionCall { args, .. }
         | ExpressionKind::HostFunctionCall { args, .. } => {
             annotate_call_arguments(args, flows, value_environment);
         }
 
-        ExpressionKind::HandledFallibleFunctionCall { args, handling, .. }
-        | ExpressionKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-            annotate_call_arguments(args, flows, value_environment);
-            annotate_fallible_handling(handling, flows, value_environment);
+        ExpressionKind::FieldAccess { base, .. } => {
+            annotate_expression(base, flows, value_environment);
         }
 
-        ExpressionKind::Copy(place) => annotate_node(place, flows, value_environment),
+        ExpressionKind::MethodCall { receiver, args, .. }
+        | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+        | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+            annotate_expression(receiver, flows, value_environment);
+            annotate_call_arguments(args, flows, value_environment);
+        }
 
-        ExpressionKind::Runtime(nodes) => annotate_nodes(nodes, flows, value_environment),
+        ExpressionKind::HandledFallibleFunctionCall { args, .. }
+        | ExpressionKind::HandledFallibleHostFunctionCall { args, .. } => {
+            annotate_call_arguments(args, flows, value_environment);
+        }
+
+        ExpressionKind::Copy(place) => {
+            annotate_place_expression(place);
+        }
+
+        ExpressionKind::Runtime(rpn) => {
+            for item in &mut rpn.items {
+                match item {
+                    ExpressionRpnItem::Operand(expression) => {
+                        annotate_expression(expression, flows, value_environment);
+                    }
+                    ExpressionRpnItem::Operator { .. } => {}
+                }
+            }
+        }
 
         ExpressionKind::Collection(items) => annotate_expressions(items, flows, value_environment),
 
@@ -300,16 +303,12 @@ fn annotate_expression(
             annotate_expression(value, flows, value_environment);
         }
 
-        ExpressionKind::HandledFallibleExpression { value, handling } => {
+        ExpressionKind::HandledFallibleExpression { value, .. } => {
             annotate_expression(value, flows, value_environment);
-            annotate_fallible_handling(handling, flows, value_environment);
         }
 
         ExpressionKind::Cast(cast) => {
             annotate_expression(&mut cast.source, flows, value_environment);
-            if let CastHandling::Recover(handling) = &mut cast.handling {
-                annotate_fallible_handling(handling, flows, value_environment);
-            }
         }
 
         ExpressionKind::ValueBlock { block } => {
@@ -634,6 +633,7 @@ fn annotate_value_block(
         }
         ValueBlock::Catch(value_catch) => {
             annotate_expression(&mut value_catch.handled_value, flows, value_environment);
+            annotate_fallible_handling(&mut value_catch.handler, flows, value_environment);
         }
     }
 }

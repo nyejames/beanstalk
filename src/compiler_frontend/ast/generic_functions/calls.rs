@@ -6,7 +6,7 @@
 //! WHY: generic solving belongs in AST before HIR; backends must only see ordinary concrete
 //! function calls.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallArgumentResolutionContext, CallDiagnosticContext, ExpectedParameterType,
@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     resolve_call_arguments, resolve_call_arguments_shape_and_access,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_generic_call_arguments_typed;
 use crate::compiler_frontend::ast::generic_functions::diagnostics::{
     cannot_infer_generic_function_arguments, conflicting_generic_function_argument,
@@ -24,7 +25,7 @@ use crate::compiler_frontend::ast::generic_functions::{
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
 use crate::compiler_frontend::ast::statements::fallible_handling::{
-    FallibleCallSite, HandledFallibleCall, parse_fallible_handling_suffix_for_call,
+    FallibleCallSite, HandledFallibleCall, parse_fallible_handling_suffix_for_call_expression,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -83,9 +84,9 @@ struct GenericFunctionCallFinishInput<'a, 'b> {
     string_table: &'a mut StringTable,
 }
 
-pub(crate) fn parse_generic_function_call(
+fn parse_generic_function_call(
     input: GenericFunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let GenericFunctionCallParseInput {
         token_stream,
         template,
@@ -159,7 +160,7 @@ pub(crate) fn parse_generic_function_call(
         call_location: call_location.clone(),
     };
 
-    let node = finish_generic_function_call(GenericFunctionCallFinishInput {
+    let expression = finish_generic_function_call(GenericFunctionCallFinishInput {
         token_stream,
         context,
         call,
@@ -177,12 +178,18 @@ pub(crate) fn parse_generic_function_call(
         call_location: call_location.clone(),
     });
 
-    Ok(node)
+    Ok(expression)
 }
 
-pub(crate) fn validate_generic_function_template_call(
+pub(crate) fn parse_generic_function_call_expression(
     input: GenericFunctionCallParseInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
+    parse_generic_function_call(input)
+}
+
+fn validate_generic_function_template_call(
+    input: GenericFunctionCallParseInput<'_, '_>,
+) -> Result<Expression, ExpressionParseError> {
     let GenericFunctionCallParseInput {
         token_stream,
         template,
@@ -257,9 +264,15 @@ pub(crate) fn validate_generic_function_template_call(
     })
 }
 
+pub(crate) fn validate_generic_function_template_call_expression(
+    input: GenericFunctionCallParseInput<'_, '_>,
+) -> Result<Expression, ExpressionParseError> {
+    validate_generic_function_template_call(input)
+}
+
 fn finish_generic_function_call(
     input: GenericFunctionCallFinishInput<'_, '_>,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let GenericFunctionCallFinishInput {
         token_stream,
         context,
@@ -284,7 +297,7 @@ fn finish_generic_function_call(
             .into());
         }
 
-        return Ok(call.into_plain_ast_node(token_stream.current_location(), &context.scope));
+        return Ok(call.into_plain_expression(type_interner.environment_mut_for_derived_types()));
     };
 
     if token_stream.current_token_kind() == &TokenKind::Bang
@@ -292,7 +305,7 @@ fn finish_generic_function_call(
         || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
             && token_stream.peek_next_token() == Some(&TokenKind::Bang))
     {
-        return parse_fallible_handling_suffix_for_call(
+        return parse_fallible_handling_suffix_for_call_expression(
             token_stream,
             context,
             FallibleCallSite {

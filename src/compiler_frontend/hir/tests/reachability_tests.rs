@@ -12,10 +12,11 @@ use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId, RegionId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::numeric::NumericFailureMode;
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::reachability::{
-    HirReachability, HirReachabilityInput, ReachableMapUseKind, collect_hir_reachability,
-    collect_reachability_from_start,
+    HirReachability, HirReachabilityInput, ReachableFloatStatementKind, ReachableMapUseKind,
+    collect_hir_reachability, collect_reachability_from_start,
 };
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -439,6 +440,43 @@ fn int_expression(id: u32) -> HirExpression {
     }
 }
 
+fn float_expression(id: u32) -> HirExpression {
+    HirExpression {
+        id: HirValueId(id),
+        kind: HirExpressionKind::Float(1.5),
+        ty: builtin_type_ids::FLOAT,
+        value_kind: ValueKind::Const,
+        region: RegionId(0),
+    }
+}
+
+fn float_statement(
+    id: u32,
+    kind: ReachableFloatStatementKind,
+    location: SourceLocation,
+) -> HirStatement {
+    let failure_mode = NumericFailureMode::Trap;
+    let source = float_expression(id + 100);
+    let result = LocalId(9000);
+
+    HirStatement {
+        id: HirNodeId(id),
+        kind: match kind {
+            ReachableFloatStatementKind::FormatFloat => HirStatementKind::FormatFloat {
+                source,
+                failure_mode,
+                result,
+            },
+            ReachableFloatStatementKind::ValidateFloat => HirStatementKind::ValidateFloat {
+                source,
+                failure_mode,
+                result,
+            },
+        },
+        location,
+    }
+}
+
 fn cast_expression(id: u32) -> HirExpression {
     HirExpression {
         id: HirValueId(id),
@@ -501,6 +539,66 @@ fn reachability_records_reachable_runtime_casts_only() {
     );
     assert_eq!(
         reachability.reachable_runtime_casts[0]
+            .location
+            .start_pos
+            .char_column,
+        2
+    );
+}
+
+#[test]
+fn reachability_records_reachable_float_statements_only() {
+    let reachable_location = location_at(30, 2);
+    let unreachable_location = location_at(50, 4);
+    let module = hir_module(
+        FunctionId(0),
+        vec![
+            function(FunctionId(0), BlockId(0)),
+            function(FunctionId(1), BlockId(1)),
+        ],
+        vec![
+            block(
+                BlockId(0),
+                vec![float_statement(
+                    10,
+                    ReachableFloatStatementKind::FormatFloat,
+                    reachable_location.clone(),
+                )],
+                HirTerminator::Return(unit_expression(0)),
+            ),
+            block(
+                BlockId(1),
+                vec![float_statement(
+                    11,
+                    ReachableFloatStatementKind::ValidateFloat,
+                    unreachable_location.clone(),
+                )],
+                HirTerminator::Return(unit_expression(1)),
+            ),
+        ],
+    );
+
+    let reachability = collect_reachability_from_start(&module)
+        .expect("reachability should collect float statements");
+
+    assert_eq!(
+        reachability.reachable_float_statements.len(),
+        1,
+        "only float statements in reachable blocks should be reported"
+    );
+    assert_eq!(
+        reachability.reachable_float_statements[0].kind,
+        ReachableFloatStatementKind::FormatFloat
+    );
+    assert_eq!(
+        reachability.reachable_float_statements[0]
+            .location
+            .start_pos
+            .line_number,
+        30
+    );
+    assert_eq!(
+        reachability.reachable_float_statements[0]
             .location
             .start_pos
             .char_column,

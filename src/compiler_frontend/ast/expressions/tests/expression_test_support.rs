@@ -2,16 +2,17 @@
 //!
 //! WHAT: keeps unit-test factories close to the expression owner without
 //! mixing them into the production expression data and constructor file.
-//! WHY: HIR, borrow-checker, and optimizer tests build small AST fragments
+//! WHY: HIR, borrow-checker, and const-evaluation tests build small AST fragments
 //! directly; these helpers preserve that ergonomic surface while production
 //! callers use constructors that require canonical `TypeId`s.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ExpressionValueShape, FallibleCarrierVariant, FallibleHandling,
-    Operator, expression_value_shape_for_diagnostic_type, type_id_hint_for_diagnostic_type,
+    Expression, ExpressionKind, ExpressionValueShape, FallibleCarrierVariant,
+    FallibleExpressionHandling, expression_value_shape_for_diagnostic_type,
+    type_id_hint_for_diagnostic_type,
 };
+use crate::compiler_frontend::ast::expressions::expression_rpn::{ExpressionRpn, PlaceExpression};
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
 use crate::compiler_frontend::datatypes::{DataType, PathTypeKind};
@@ -23,7 +24,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 
 impl Expression {
     pub fn runtime(
-        expressions: Vec<AstNode>,
+        rpn: ExpressionRpn,
         data_type: DataType,
         location: SourceLocation,
         value_mode: ValueMode,
@@ -31,11 +32,11 @@ impl Expression {
         // Detects whether any nested node performs regular division so the
         // resulting expression can carry the correct provenance flag.
         let type_id = test_builtin_type_id_for_data_type(&data_type);
-        let contains_regular_division = expressions.iter().any(node_has_regular_division);
+        let contains_regular_division = rpn.contains_regular_division();
         let value_shape = expression_value_shape_for_diagnostic_type(&data_type);
 
         let mut expression = Self::new(
-            ExpressionKind::Runtime(expressions),
+            ExpressionKind::Runtime(rpn),
             location,
             type_id,
             data_type,
@@ -118,7 +119,7 @@ impl Expression {
         name: InternedPath,
         args: Vec<CallArgument>,
         result_type_ids: Vec<TypeId>,
-        handling: FallibleHandling,
+        handling: FallibleExpressionHandling,
         location: SourceLocation,
     ) -> Self {
         call_expression(
@@ -183,7 +184,7 @@ impl Expression {
 
     pub fn handled_result(
         value: Expression,
-        handling: FallibleHandling,
+        handling: FallibleExpressionHandling,
         success_type_id: TypeId,
         location: SourceLocation,
     ) -> Self {
@@ -219,7 +220,7 @@ impl Expression {
     }
 
     pub fn copy(
-        place: AstNode,
+        place: PlaceExpression,
         data_type: DataType,
         location: SourceLocation,
         value_mode: ValueMode,
@@ -310,12 +311,4 @@ fn shared_positional_call_arguments(values: Vec<Expression>) -> Vec<CallArgument
             CallArgument::positional(value, CallAccessMode::Shared, location)
         })
         .collect()
-}
-
-fn node_has_regular_division(node: &AstNode) -> bool {
-    match &node.kind {
-        NodeKind::Operator(Operator::Divide) => true,
-        NodeKind::Rvalue(expression) => expression.contains_regular_division,
-        _ => false,
-    }
 }

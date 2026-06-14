@@ -25,15 +25,15 @@ use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_runtime_collection_helpers(&mut self) {
         let invalid_collection = BuiltinErrorCode::CollectionExpectedOrderedCollection;
-        let invalid_collection_code = invalid_collection.as_i64();
+        let invalid_collection_code = invalid_collection.as_i32();
         let invalid_collection_message = invalid_collection.default_message();
 
         let out_of_bounds = BuiltinErrorCode::CollectionIndexOutOfBounds;
-        let out_of_bounds_code = out_of_bounds.as_i64();
+        let out_of_bounds_code = out_of_bounds.as_i32();
         let out_of_bounds_message = out_of_bounds.default_message();
 
         let capacity_exceeded = BuiltinErrorCode::CollectionFixedCapacityExceeded;
-        let capacity_exceeded_code = capacity_exceeded.as_i64();
+        let capacity_exceeded_code = capacity_exceeded.as_i32();
         let capacity_exceeded_message = capacity_exceeded.default_message();
 
         // Fixed collections use a small branded wrapper so runtime helpers can

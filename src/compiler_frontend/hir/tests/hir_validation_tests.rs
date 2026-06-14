@@ -29,6 +29,10 @@ use crate::compiler_frontend::hir::ids::{
 use crate::compiler_frontend::hir::module::{
     HirChoice, HirChoiceField, HirChoiceVariant, HirModule,
 };
+use crate::compiler_frontend::hir::numeric::{
+    HirNumericOp, HirNumericOperands, NumericFailureMode,
+};
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
@@ -162,6 +166,44 @@ fn inject_collection_expression_statement(
     entry_block.statements.push(statement);
 }
 
+fn int_expression(
+    id: HirValueId,
+    value: i32,
+    type_id: TypeId,
+    region: RegionId,
+    location: &SourceLocation,
+    module: &mut HirModule,
+) -> HirExpression {
+    module.side_table.map_value(location, id, location);
+
+    HirExpression {
+        id,
+        kind: HirExpressionKind::Int(value),
+        ty: type_id,
+        value_kind: ValueKind::RValue,
+        region,
+    }
+}
+
+fn float_expression(
+    id: HirValueId,
+    value: f64,
+    type_id: TypeId,
+    region: RegionId,
+    location: &SourceLocation,
+    module: &mut HirModule,
+) -> HirExpression {
+    module.side_table.map_value(location, id, location);
+
+    HirExpression {
+        id,
+        kind: HirExpressionKind::Float(value),
+        ty: type_id,
+        value_kind: ValueKind::RValue,
+        region,
+    }
+}
+
 #[test]
 fn valid_module_passes_explicit_validation() {
     let mut string_table = StringTable::new();
@@ -182,6 +224,468 @@ fn valid_module_passes_explicit_validation() {
         lower_ast(ast, &mut string_table).expect("lowering should succeed");
     validate_module_for_tests(&module, &string_table, &type_environment)
         .expect("validator should accept a valid lowered module");
+}
+
+#[test]
+fn validator_rejects_numeric_op_operand_shape_mismatch() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(50);
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let int_type = type_environment.builtins().int;
+    let result_local = LocalId(9000);
+
+    module.blocks[entry_block_index].locals.push(HirLocal {
+        id: result_local,
+        ty: int_type,
+        mutable: false,
+        region: entry_region,
+        source_info: Some(location.clone()),
+    });
+
+    let left = int_expression(
+        HirValueId(9000),
+        1,
+        int_type,
+        entry_region,
+        &location,
+        &mut module,
+    );
+    let right = int_expression(
+        HirValueId(9001),
+        2,
+        int_type,
+        entry_region,
+        &location,
+        &mut module,
+    );
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: HirStatementKind::NumericOp {
+            op: HirNumericOp::IntNeg,
+            failure_mode: NumericFailureMode::Trap,
+            operands: HirNumericOperands::Binary { left, right },
+            result: result_local,
+        },
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject mismatched NumericOp arity");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error
+            .msg
+            .contains("operand shape does not match the operation arity")
+    );
+}
+
+#[test]
+fn validator_rejects_plain_numeric_binop() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(51);
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let int_type = type_environment.builtins().int;
+
+    let left = int_expression(
+        HirValueId(9000),
+        1,
+        int_type,
+        entry_region,
+        &location,
+        &mut module,
+    );
+    let right = int_expression(
+        HirValueId(9001),
+        2,
+        int_type,
+        entry_region,
+        &location,
+        &mut module,
+    );
+
+    let expression = HirExpression {
+        id: HirValueId(9002),
+        kind: HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        ty: int_type,
+        value_kind: ValueKind::RValue,
+        region: entry_region,
+    };
+    module
+        .side_table
+        .map_value(&location, expression.id, &location);
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+    module.side_table.map_statement(&location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject plain numeric BinOp");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains(
+        "Plain HirBinOp::Add arithmetic must be lowered through HirStatementKind::NumericOp"
+    ));
+}
+
+#[test]
+fn validator_rejects_plain_numeric_unary_op() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(52);
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let int_type = type_environment.builtins().int;
+
+    let operand = int_expression(
+        HirValueId(9000),
+        1,
+        int_type,
+        entry_region,
+        &location,
+        &mut module,
+    );
+
+    let expression = HirExpression {
+        id: HirValueId(9001),
+        kind: HirExpressionKind::UnaryOp {
+            op: HirUnaryOp::Neg,
+            operand: Box::new(operand),
+        },
+        ty: int_type,
+        value_kind: ValueKind::RValue,
+        region: entry_region,
+    };
+    module
+        .side_table
+        .map_value(&location, expression.id, &location);
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+    module.side_table.map_statement(&location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject plain numeric UnaryOp");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error
+            .msg
+            .contains("Plain HirUnaryOp::Neg must be lowered through HirStatementKind::NumericOp")
+    );
+}
+
+#[test]
+fn validator_accepts_string_concatenation_binop() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(53);
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let string_type = type_environment.builtins().string;
+
+    let left = HirExpression {
+        id: HirValueId(9000),
+        kind: HirExpressionKind::StringLiteral("a".to_owned()),
+        ty: string_type,
+        value_kind: ValueKind::RValue,
+        region: entry_region,
+    };
+    module.side_table.map_value(&location, left.id, &location);
+    let right = HirExpression {
+        id: HirValueId(9001),
+        kind: HirExpressionKind::StringLiteral("b".to_owned()),
+        ty: string_type,
+        value_kind: ValueKind::RValue,
+        region: entry_region,
+    };
+    module.side_table.map_value(&location, right.id, &location);
+
+    let expression = HirExpression {
+        id: HirValueId(9002),
+        kind: HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        ty: string_type,
+        value_kind: ValueKind::RValue,
+        region: entry_region,
+    };
+    module
+        .side_table
+        .map_value(&location, expression.id, &location);
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+    module.side_table.map_statement(&location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept string concatenation as plain BinOp");
+}
+
+fn inject_float_statement(
+    module: &mut HirModule,
+    type_environment: &TypeEnvironment,
+    location: &SourceLocation,
+    kind: HirStatementKind,
+    result_type: TypeId,
+) {
+    let entry_block_index = start_entry_block_index(module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let result_local = LocalId(9000);
+
+    let source = float_expression(
+        HirValueId(9000),
+        1.5,
+        type_environment.builtins().float,
+        entry_region,
+        location,
+        module,
+    );
+
+    {
+        let entry_block = &mut module.blocks[entry_block_index];
+        entry_block.locals.push(HirLocal {
+            id: result_local,
+            ty: result_type,
+            mutable: false,
+            region: entry_region,
+            source_info: Some(location.clone()),
+        });
+    }
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: match kind {
+            HirStatementKind::FormatFloat { failure_mode, .. } => HirStatementKind::FormatFloat {
+                source,
+                failure_mode,
+                result: result_local,
+            },
+            HirStatementKind::ValidateFloat { failure_mode, .. } => {
+                HirStatementKind::ValidateFloat {
+                    source,
+                    failure_mode,
+                    result: result_local,
+                }
+            }
+            _ => panic!("inject_float_statement only supports FormatFloat and ValidateFloat"),
+        },
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+}
+
+#[test]
+fn validator_accepts_format_float_trap() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(54);
+    let string_type = type_environment.builtins().string;
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::FormatFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::Trap,
+            result: LocalId(0),
+        },
+        string_type,
+    );
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept FormatFloat with Trap and String result local");
+}
+
+#[test]
+fn validator_accepts_validate_float_trap() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(55);
+    let float_type = type_environment.builtins().float;
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::ValidateFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::Trap,
+            result: LocalId(0),
+        },
+        float_type,
+    );
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept ValidateFloat with Trap and Float result local");
+}
+
+#[test]
+fn validator_rejects_format_float_trap_with_non_string_result() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(56);
+    let float_type = type_environment.builtins().float;
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::FormatFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::Trap,
+            result: LocalId(0),
+        },
+        float_type,
+    );
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject FormatFloat Trap with non-String result local");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error
+            .msg
+            .contains("FormatFloat Trap result local has the wrong success type")
+    );
+}
+
+#[test]
+fn validator_accepts_format_float_return_error_with_carrier() {
+    let (string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let location = test_location(57);
+    let string_type = type_environment.builtins().string;
+    let int_type = type_environment.builtins().int;
+    let carrier_type = type_environment.intern_fallible_carrier(string_type, int_type);
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::FormatFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::ReturnError,
+            result: LocalId(0),
+        },
+        carrier_type,
+    );
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept FormatFloat with ReturnError and carrier result local");
+}
+
+#[test]
+fn validator_rejects_format_float_return_error_without_carrier() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(58);
+    let string_type = type_environment.builtins().string;
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::FormatFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::ReturnError,
+            result: LocalId(0),
+        },
+        string_type,
+    );
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment).expect_err(
+        "validator should reject FormatFloat with ReturnError and non-carrier result local",
+    );
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains(
+        "FormatFloat ReturnError result local must have an internal fallible carrier type"
+    ));
+}
+
+#[test]
+fn validator_rejects_validate_float_return_error_without_carrier() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let location = test_location(59);
+    let float_type = type_environment.builtins().float;
+
+    inject_float_statement(
+        &mut module,
+        &type_environment,
+        &location,
+        HirStatementKind::ValidateFloat {
+            source: HirExpression {
+                id: HirValueId(0),
+                kind: HirExpressionKind::Float(0.0),
+                ty: type_environment.builtins().float,
+                value_kind: ValueKind::RValue,
+                region: RegionId(0),
+            },
+            failure_mode: NumericFailureMode::ReturnError,
+            result: LocalId(0),
+        },
+        float_type,
+    );
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment).expect_err(
+        "validator should reject ValidateFloat with ReturnError and non-carrier result local",
+    );
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains(
+        "ValidateFloat ReturnError result local must have an internal fallible carrier type"
+    ));
 }
 
 #[test]
@@ -799,7 +1303,7 @@ fn lowering_errors_preserve_string_table_context() {
         },
         vec![
             node(
-                NodeKind::Rvalue(Expression::function_call(
+                NodeKind::ExpressionStatement(Expression::function_call(
                     missing_function,
                     Vec::new(),
                     Vec::new(),

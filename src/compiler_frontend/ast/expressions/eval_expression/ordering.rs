@@ -9,20 +9,21 @@
 //! `CompilerError` in this module means an internal compiler invariant or setup failure only.
 //! Source-authored syntax failures are rejected earlier with `CompilerDiagnostic`.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::{eval_log, return_compiler_error};
 
 /// Order a parsed expression fragment into RPN and return the expression source location anchor.
 pub(super) fn order_expression_nodes(
-    nodes: Vec<AstNode>,
-) -> Result<(Vec<AstNode>, SourceLocation), CompilerError> {
+    nodes: Vec<ExpressionRpnItem>,
+) -> Result<(Vec<ExpressionRpnItem>, SourceLocation), CompilerError> {
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
     }
 
-    let mut output_queue: Vec<AstNode> = Vec::new();
-    let mut operator_stack: Vec<AstNode> = Vec::new();
+    let mut output_queue: Vec<ExpressionRpnItem> = Vec::new();
+    let mut operator_stack: Vec<ExpressionRpnItem> = Vec::new();
     let location = extract_expression_location(&nodes)?;
 
     // The parser already handled parentheses recursively, so this pass only needs to order the
@@ -30,22 +31,12 @@ pub(super) fn order_expression_nodes(
 
     for node in nodes {
         eval_log!("Evaluating node in expression: ", Pretty node);
-        match &node.kind {
-            NodeKind::Rvalue(..)
-            | NodeKind::FieldAccess { .. }
-            | NodeKind::FunctionCall { .. }
-            | NodeKind::HandledFallibleFunctionCall { .. }
-            | NodeKind::HandledFallibleHostFunctionCall { .. }
-            | NodeKind::MethodCall { .. }
-            | NodeKind::CollectionBuiltinCall { .. }
-            | NodeKind::MapBuiltinCall { .. }
-            | NodeKind::HostFunctionCall { .. } => {
-                output_queue.push(node);
-            }
+        match &node {
+            ExpressionRpnItem::Operand(..) => output_queue.push(node),
 
-            NodeKind::Operator(..) => {
-                let current_precedence = node.get_precedence();
-                let left_associative = node.is_left_associative();
+            ExpressionRpnItem::Operator { operator, .. } => {
+                let current_precedence = operator.precedence();
+                let left_associative = operator.is_left_associative();
 
                 pop_higher_precedence(
                     &mut operator_stack,
@@ -55,10 +46,6 @@ pub(super) fn order_expression_nodes(
                 )?;
 
                 operator_stack.push(node);
-            }
-
-            _ => {
-                return_compiler_error!("Unsupported AST node found in expression: {:?}", node.kind);
             }
         }
     }
@@ -74,13 +61,13 @@ pub(super) fn order_expression_nodes(
 // Standard shunting-yard pop rule: earlier operators leave the stack when they bind at least
 // as tightly as the new operator, adjusted for right-associative cases like exponentiation.
 fn pop_higher_precedence(
-    operator_stack: &mut Vec<AstNode>,
-    output_queue: &mut Vec<AstNode>,
+    operator_stack: &mut Vec<ExpressionRpnItem>,
+    output_queue: &mut Vec<ExpressionRpnItem>,
     current_precedence: u32,
     left_associative: bool,
 ) -> Result<(), CompilerError> {
     while let Some(top_operator) = operator_stack.last() {
-        let existing_precedence = top_operator.get_precedence();
+        let existing_precedence = operator_from_item(top_operator)?.precedence();
 
         let should_pop = if left_associative {
             existing_precedence >= current_precedence
@@ -103,11 +90,19 @@ fn pop_higher_precedence(
     Ok(())
 }
 
+fn operator_from_item(item: &ExpressionRpnItem) -> Result<&Operator, CompilerError> {
+    let ExpressionRpnItem::Operator { operator, .. } = item else {
+        return_compiler_error!("Expression ordering stored an operand on the operator stack.");
+    };
+
+    Ok(operator)
+}
+
 /// Returns the source location of the first non-operator node in the fragment.
 ///
 /// Falls back to the first node's location if every node is an operator.
 pub(super) fn extract_expression_location(
-    nodes: &[AstNode],
+    nodes: &[ExpressionRpnItem],
 ) -> Result<SourceLocation, CompilerError> {
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
@@ -115,11 +110,11 @@ pub(super) fn extract_expression_location(
 
     // Skip operator nodes and return the location of the first expression node.
     for node in nodes {
-        if !matches!(node.kind, NodeKind::Operator(_)) {
-            return Ok(node.location.to_owned());
+        if matches!(node, ExpressionRpnItem::Operand(_)) {
+            return Ok(node.source_location());
         }
     }
 
     // Fallback to first node if all nodes are operators (should not happen).
-    Ok(nodes[0].location.to_owned())
+    Ok(nodes[0].source_location())
 }

@@ -42,26 +42,67 @@ pub(super) struct TypeIds {
     pub(super) string: TypeId,
     pub(super) float: TypeId,
     pub(super) option_int: TypeId,
+    pub(super) fallible_int_string: TypeId,
     pub(super) choice_unit: TypeId,
     pub(super) collection_int: TypeId,
     pub(super) map_string_int: TypeId,
 }
 
-/// Returns the source text of a single JS helper function, bounded by the next
-/// `function ` declaration or end of file. This keeps assertions focused on one
-/// helper at a time instead of the whole prelude.
+/// Returns the source text of a single top-level JS helper function.
+///
+/// WHAT: locates the helper by name and returns everything from its `function name(` declaration
+///      through the matching closing brace of its body.
+/// WHY: assertions focus on one helper at a time instead of the whole prelude. A simple
+///      "next `function `" bound stops at nested function expressions such as the callback inside
+///      `__bs_format_float`, so this helper balances braces to find the real end of the outer
+///      function body.
 pub(super) fn helper_source<'a>(source: &'a str, name: &str) -> &'a str {
     let prefix = format!("function {name}(");
     let start = source
         .find(&prefix)
         .unwrap_or_else(|| panic!("helper {name} must be present in emitted JS"));
     let rest = &source[start..];
-    // Find the next top-level function declaration after this one.
-    let end = rest[1..]
-        .find("function ")
-        .map(|i| i + 1)
-        .unwrap_or(rest.len());
-    &rest[..end]
+
+    // Locate the opening brace of the helper body.
+    let body_start = rest
+        .find('{')
+        .unwrap_or_else(|| panic!("helper {name} must have a body"));
+
+    // Balance braces, treating `"` and `'` as simple string delimiters so literal braces inside
+    // strings do not throw off the count. This is sufficient for the prelude helpers, which do not
+    // contain nested template literals or escaped quote edge cases.
+    let mut depth = 1usize;
+    let mut in_string: Option<char> = None;
+    let bytes = rest.as_bytes();
+
+    for index in (body_start + 1)..bytes.len() {
+        let byte = bytes[index] as char;
+
+        if let Some(quote) = in_string {
+            if byte == quote {
+                in_string = None;
+            }
+            continue;
+        }
+
+        if byte == '"' || byte == '\'' {
+            in_string = Some(byte);
+            continue;
+        }
+
+        match byte {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &rest[..=index];
+                }
+            }
+            _ => {}
+        }
+    }
+
+    panic!("helper {name} body is not closed");
 }
 
 pub(super) fn loc(start: i32) -> SourceLocation {
@@ -104,6 +145,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
 
     let collection_int = env.intern_collection(int, None);
     let map_string_int = env.intern_map(string, int);
+    let fallible_int_string = env.intern_fallible_carrier(int, string);
 
     (
         env,
@@ -114,6 +156,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
             string,
             float,
             option_int,
+            fallible_int_string,
             choice_unit,
             collection_int,
             map_string_int,
@@ -147,10 +190,20 @@ pub(super) fn unit_expression(id: u32, ty: TypeId, region: RegionId) -> HirExpre
     )
 }
 
-pub(super) fn int_expression(id: u32, value: i64, ty: TypeId, region: RegionId) -> HirExpression {
+pub(super) fn int_expression(id: u32, value: i32, ty: TypeId, region: RegionId) -> HirExpression {
     expression(
         id,
         HirExpressionKind::Int(value),
+        ty,
+        region,
+        ValueKind::Const,
+    )
+}
+
+pub(super) fn float_expression(id: u32, value: f64, ty: TypeId, region: RegionId) -> HirExpression {
+    expression(
+        id,
+        HirExpressionKind::Float(value),
         ty,
         region,
         ValueKind::Const,
@@ -416,5 +469,18 @@ pub(super) fn lower_minimal_module_with_string_float_cast(function_name: &str) -
         BuiltinCastPolicyId::StringToFloat,
         |types, region| string_expression(1, "0.5", types.string, region),
         |types| types.float,
+    )
+}
+
+/// Builds and lowers a minimal module that performs a `Float -> String` expression cast.
+///
+/// WHY: reactive Float template subscriptions use this lazy expression shape so their snapshot
+/// function can re-read and format the current source value on every rerender.
+pub(super) fn lower_minimal_module_with_float_string_cast(function_name: &str) -> String {
+    lower_minimal_module_with_cast(
+        function_name,
+        BuiltinCastPolicyId::FloatToString,
+        |types, region| float_expression(1, 1.5, types.float, region),
+        |types| types.string,
     )
 }

@@ -36,6 +36,7 @@
 // implement the AST pipeline. The rest of the AST surface is split by concern
 // (expressions, statements, templates, field access, etc.).
 pub(crate) mod ast_nodes;
+pub(crate) mod const_eval;
 pub(crate) mod const_values;
 pub(crate) mod generic_bounds;
 pub(crate) mod generic_functions;
@@ -45,6 +46,12 @@ pub(crate) mod type_interner;
 pub(crate) mod type_resolution;
 
 pub(crate) mod expressions {
+    //! Expression parsing, evaluation, and AST-owned value contracts.
+    //!
+    //! Runtime expressions and copy targets use the narrowed expression-owned
+    //! `ExpressionRpn` and `PlaceExpression` payloads. Broad `AstNode` fragments
+    //! must not be stored inside expression variants that survive AST evaluation.
+
     pub(crate) mod call_argument;
     pub(crate) mod call_validation;
     pub(crate) mod choice_constructor;
@@ -53,6 +60,7 @@ pub(crate) mod expressions {
     pub(crate) mod eval_expression;
     pub(crate) mod expression;
     pub(crate) mod expression_kind;
+    pub(crate) mod expression_rpn;
     #[cfg(test)]
     #[path = "tests/expression_test_support.rs"]
     pub(crate) mod expression_test_support;

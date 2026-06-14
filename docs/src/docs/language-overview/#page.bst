@@ -235,9 +235,9 @@ page_head #= theme_head
     inner `T`; `then none` is invalid because recovery handles the cast result before optional
     wrapping.
 
-    In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize only
-    JavaScript-safe integers from `-9007199254740991` through `9007199254740991`. Values outside
-    that range fail the cast so compile-time folding and runtime behavior agree.
+    In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize signed
+    32-bit integer values from `-2147483648` through `2147483647`. Values outside that range fail
+    the cast so compile-time folding and runtime behavior agree.
 
     These forms are invalid because they do not provide an immediate builtin target:
 
@@ -263,14 +263,14 @@ page_head #= theme_head
 
         [data: [: Float ] [: 64-bit floating point number] ]
 
-        [data: [: Int ] [:  64-bit signed integer ] ]
+        [data: [: Int ] [:  32-bit signed integer ] ]
 
         [data: [: String ] [: UTF-8 string slice or string template] ]
     ]
 
     ## Numerical Types
-    These will be extended to smaller sized and unsigned variants in the future.
-    By default, `"Float"` and `"Int"` will become 64 bit signed types.
+    These may be extended to smaller sized and unsigned variants in the future.
+    By default, `"Float"` is a finite 64-bit floating point type and `"Int"` is a signed 32-bit integer type.
 
     The language currently supports a small set of core types but may be extended in the future.
 

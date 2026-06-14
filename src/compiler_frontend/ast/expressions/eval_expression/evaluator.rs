@@ -5,24 +5,23 @@
 //!      whether an expression can stay compile-time or must survive as runtime RPN.
 
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::const_eval::{constant_fold, fold_compile_time_expression};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
-use crate::compiler_frontend::optimizers::constant_folding::{
-    ConstantFoldResult, constant_fold, fold_compile_time_expression,
-};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
-use crate::{eval_log, return_compiler_error};
+use crate::eval_log;
 
 use super::ordering;
 use super::result_type::resolve_expression_result_type;
@@ -36,18 +35,25 @@ use super::typing_error::ExpressionTypingError;
 ///      compile-time value or must be preserved as runtime RPN for HIR lowering.
 pub fn evaluate_expression(
     context: &ScopeContext,
-    nodes: Vec<AstNode>,
+    nodes: Vec<ExpressionRpnItem>,
     type_interner: &mut AstTypeInterner<'_>,
     expected_type: &mut ExpectedType,
     value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionTypingError> {
-    let (output_queue, location) = ordering::order_expression_nodes(nodes)?;
+    let (rpn_items, location) = ordering::order_expression_nodes(nodes)?;
 
     // Fast path: a single R-value needs no operator resolution or RPN assembly.
-    if output_queue.len() == 1 {
+    if rpn_items.len() == 1 {
+        let ExpressionRpnItem::Operand(expression) = &rpn_items[0] else {
+            return Err(CompilerError::compiler_error(
+                "Expression ordering produced a single operator without an operand.",
+            )
+            .into());
+        };
+
         let only_expression = fold_compile_time_expression(
-            &output_queue[0].get_expr_with_type_environment(type_interner.environment())?,
+            expression,
             string_table,
             context.kind.is_constant_context(),
         )?;
@@ -55,7 +61,7 @@ pub fn evaluate_expression(
         validate_expression_result_type(
             expected_type,
             only_expression.type_id,
-            &output_queue[0].location,
+            &rpn_items[0].source_location(),
             type_interner.environment_mut_for_derived_types(),
         )?;
 
@@ -72,7 +78,7 @@ pub fn evaluate_expression(
 
     // General path: resolve operator types across the full RPN shape, then attempt folding.
     let resolved_type = resolve_expression_result_type(
-        &output_queue,
+        &rpn_items,
         &location,
         string_table,
         type_interner.environment(),
@@ -91,76 +97,56 @@ pub fn evaluate_expression(
 
     // Runtime RPN needs an owned value mode for the final expression node.
     let value_mode = value_mode.as_owned();
-    eval_log!("Attempting to Fold: ", Pretty output_queue);
+    eval_log!("Attempting to Fold: ", Pretty rpn_items);
     increment_frontend_counter(FrontendCounter::ConstantFoldAttemptCount);
 
-    match constant_fold(&output_queue, string_table)? {
-        ConstantFoldResult::Unchanged => {
-            increment_ast_counter(AstCounter::RuntimeRpnUnchangedFolds);
-            eval_log!("Fold unchanged — reusing owned RPN");
+    let stack = constant_fold(&rpn_items, string_table)?;
+    increment_frontend_counter(FrontendCounter::ConstantFoldSuccessCount);
+    eval_log!("Stack after folding: ", Pretty stack);
 
-            Ok(runtime_expression_from_nodes(
-                output_queue,
-                resolved_type.diagnostic_type,
-                resolved_type.type_id,
-                context,
-                value_mode,
-            )?)
-        }
-
-        ConstantFoldResult::Folded(stack) => {
-            increment_frontend_counter(FrontendCounter::ConstantFoldSuccessCount);
-            eval_log!("Stack after folding: ", Pretty stack);
-
-            // Fully folded to a single compile-time value.
-            if stack.len() == 1 {
-                return Ok(stack[0].get_expr_with_type_environment(type_interner.environment())?);
-            }
-
-            // Folding consumed every node but produced no result (e.g. empty input).
-            if stack.is_empty() {
-                return Err(CompilerDiagnostic::invalid_expression(location).into());
-            }
-
-            // Partial fold: assemble the reduced stack into runtime RPN.
-            Ok(runtime_expression_from_nodes(
-                stack,
-                resolved_type.diagnostic_type,
-                resolved_type.type_id,
-                context,
-                value_mode,
-            )?)
-        }
+    // Fully folded to a single compile-time value.
+    if stack.len() == 1 {
+        let ExpressionRpnItem::Operand(expression) = &stack[0] else {
+            return Err(CompilerError::compiler_error(
+                "Constant folding produced a non-operand item as the single result.",
+            )
+            .into());
+        };
+        return Ok(expression.clone());
     }
+
+    // Folding consumed every node but produced no result (e.g. empty input).
+    if stack.is_empty() {
+        return Err(CompilerDiagnostic::invalid_expression(location).into());
+    }
+
+    // Partial fold: assemble the reduced stack into runtime RPN.
+    Ok(runtime_expression_from_items(
+        stack,
+        resolved_type.diagnostic_type,
+        resolved_type.type_id,
+        value_mode,
+        location.clone(),
+    )?)
 }
 
-/// Assemble a runtime RPN `Expression` from an ordered node stack.
+/// Assemble a runtime RPN `Expression` from an ordered expression-owned stack.
 ///
-/// WHAT: computes the span source location from the first and last nodes, then wraps the stack
-///       in an `Expression::runtime_with_type_id`.
-/// WHY: every runtime expression needs a single bounding `SourceLocation` for diagnostics.
-fn runtime_expression_from_nodes(
-    nodes: Vec<AstNode>,
+/// WHAT: wraps the narrowed RPN stack in `Expression::runtime_with_type_id`.
+/// WHY: `evaluate_expression` is the boundary where broad parser nodes are
+///      replaced by expression-owned runtime payloads.
+fn runtime_expression_from_items(
+    items: Vec<ExpressionRpnItem>,
     diagnostic_type: DataType,
     type_id: TypeId,
-    context: &ScopeContext,
     value_mode: ValueMode,
+    location: SourceLocation,
 ) -> Result<Expression, CompilerError> {
-    let Some(first_node) = nodes.first() else {
-        return_compiler_error!("Runtime expression assembly received an empty node stack.");
-    };
-    let Some(last_node) = nodes.last() else {
-        return_compiler_error!("Runtime expression assembly lost its trailing node.");
-    };
-
-    let first_node_start = first_node.location.start_pos;
-    let last_node_end = last_node.location.end_pos;
-
     Ok(Expression::runtime_with_type_id(
-        nodes,
+        ExpressionRpn { items },
         diagnostic_type,
         type_id,
-        SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
+        location,
         value_mode,
     ))
 }

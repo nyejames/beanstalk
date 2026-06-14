@@ -17,17 +17,19 @@
 //! HIR transformation or lowering invariant failure only. Normal user-facing source failures
 //! must be emitted as `CompilerDiagnostic` from AST or earlier stages.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleCarrierVariant as AstFallibleCarrierVariant,
-    FallibleHandling, Operator,
+    FallibleExpressionHandling, FallibleHandling,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::expressions::expression_types::{
     CastHandling, ResolvedCastEvidence,
 };
-use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
+use crate::compiler_frontend::ast::statements::value_production::types::{
+    ValueBlock, ValueCatchBlock,
+};
 use crate::compiler_frontend::builtins::casts::evidence::type_id_for_builtin_target;
 use crate::compiler_frontend::builtins::casts::targets::{BuiltinCastPolicyId, BuiltinCastTarget};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
@@ -54,6 +56,7 @@ use crate::return_hir_transformation_error;
 mod calls;
 mod fallible;
 mod literals;
+mod numeric;
 mod operators;
 mod option_propagation;
 mod places;
@@ -61,10 +64,8 @@ mod runtime;
 mod templates;
 mod types;
 
-pub(crate) use self::fallible::ExternalFallibleCallLoweringInput;
-use self::fallible::{
-    EmittedFallibleCarrier, FallibleBranchingContext, FallibleCarrierBranchingContext,
-};
+use self::fallible::{EmittedFallibleCarrier, FallibleCarrierBranchingContext};
+pub(crate) use self::fallible::{ExternalFallibleCallLoweringInput, FallibleBranchingContext};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LoweredExpression {
@@ -202,7 +203,7 @@ impl<'a> HirBuilder<'a> {
 
             ExpressionKind::Copy(place) => {
                 let region = self.current_region_or_error(&expr.location)?;
-                let (prelude, place) = self.lower_ast_node_to_place(place)?;
+                let (prelude, place) = self.lower_place_expression_to_hir_place(place)?;
                 let ty = self.lower_type_id(expr.type_id, &expr.location)?;
 
                 Ok(LoweredExpression {
@@ -220,6 +221,57 @@ impl<'a> HirBuilder<'a> {
             ExpressionKind::Runtime(nodes) => {
                 self.lower_runtime_rpn_expression(nodes, &expr.location, expr.type_id)
             }
+
+            ExpressionKind::FieldAccess { base, field } => {
+                self.lower_field_access_expression(base, *field, expr.type_id, &expr.location)
+            }
+
+            ExpressionKind::MethodCall {
+                receiver,
+                method_path,
+                method: _,
+                args,
+                result_type_ids,
+                location,
+            } => self.lower_receiver_method_call_expression(
+                method_path,
+                receiver,
+                args,
+                result_type_ids,
+                location,
+            ),
+
+            ExpressionKind::CollectionBuiltinCall {
+                receiver,
+                op,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+            } => self.lower_collection_builtin_call_expression(
+                *op,
+                receiver,
+                *receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+            ),
+
+            ExpressionKind::MapBuiltinCall {
+                receiver,
+                op,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+            } => self.lower_map_builtin_call_expression(
+                *op,
+                receiver,
+                *receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+            ),
 
             ExpressionKind::FunctionCall {
                 name,
@@ -265,7 +317,6 @@ impl<'a> HirBuilder<'a> {
                     result_type_ids,
                     error_type_id: *error_type_id,
                     handling,
-                    value_required: true,
                     location: &expr.location,
                 },
             ),
@@ -311,12 +362,23 @@ impl<'a> HirBuilder<'a> {
                 id: host_id,
                 args,
                 result_type_ids,
-            } => self.lower_call_expression(
-                CallTarget::ExternalFunction(*host_id),
-                args,
-                result_type_ids,
-                &expr.location,
-            ),
+            } => {
+                if self.result_type_ids_are_single_float(result_type_ids) {
+                    self.lower_validated_external_call_expression(
+                        *host_id,
+                        args,
+                        result_type_ids,
+                        &expr.location,
+                    )
+                } else {
+                    self.lower_call_expression(
+                        CallTarget::ExternalFunction(*host_id),
+                        args,
+                        result_type_ids,
+                        &expr.location,
+                    )
+                }
+            }
 
             ExpressionKind::Collection(items) => {
                 let mut prelude = Vec::new();
@@ -489,7 +551,7 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            ExpressionKind::Function(_, _) => {
+            ExpressionKind::Function(_) => {
                 return_hir_transformation_error!(
                     "Function expressions are not lowered in this phase",
                     self.hir_error_location(&expr.location)
@@ -595,27 +657,47 @@ impl<'a> HirBuilder<'a> {
         match &expr.kind {
             ExpressionKind::HandledFallibleFunctionCall { args, handling, .. }
             | ExpressionKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-                matches!(handling, FallibleHandling::Propagate)
+                matches!(handling, FallibleExpressionHandling::Propagate)
                     || args
                         .iter()
                         .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
             }
             ExpressionKind::HandledFallibleExpression { value, handling } => {
-                matches!(handling, FallibleHandling::Propagate)
+                matches!(handling, FallibleExpressionHandling::Propagate)
                     || self.expression_needs_current_block_lowering(value)
             }
             ExpressionKind::Cast(_) => true,
 
             ExpressionKind::OptionPropagation { .. } => true,
-            ExpressionKind::FunctionCall { args, .. }
-            | ExpressionKind::HostFunctionCall { args, .. } => args
+            ExpressionKind::FunctionCall { args, .. } => args
                 .iter()
                 .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
+            ExpressionKind::HostFunctionCall {
+                args,
+                result_type_ids,
+                ..
+            } => {
+                self.result_type_ids_are_single_float(result_type_ids)
+                    || args
+                        .iter()
+                        .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
+            }
+            ExpressionKind::FieldAccess { base, .. } => {
+                self.expression_needs_current_block_lowering(base)
+            }
+            ExpressionKind::MethodCall { receiver, args, .. }
+            | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
+            | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
+                self.expression_needs_current_block_lowering(receiver)
+                    || args
+                        .iter()
+                        .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
+            }
             ExpressionKind::FallibleCarrierConstruct { value, .. }
             | ExpressionKind::Coerced { value, .. } => {
                 self.expression_needs_current_block_lowering(value)
             }
-            ExpressionKind::Copy(value) => self.ast_node_needs_current_block_lowering(value),
+            ExpressionKind::Copy(_) => false,
             ExpressionKind::Collection(items) => items
                 .iter()
                 .any(|item| self.expression_needs_current_block_lowering(item)),
@@ -631,9 +713,12 @@ impl<'a> HirBuilder<'a> {
             | ExpressionKind::ChoiceConstruct { fields, .. } => fields
                 .iter()
                 .any(|field| self.expression_needs_current_block_lowering(&field.value)),
-            ExpressionKind::Runtime(nodes) => nodes
-                .iter()
-                .any(|node| self.ast_node_needs_current_block_lowering(node)),
+            ExpressionKind::Runtime(nodes) => nodes.items.iter().any(|item| match item {
+                ExpressionRpnItem::Operand(expression) => {
+                    self.expression_needs_current_block_lowering(expression)
+                }
+                ExpressionRpnItem::Operator { .. } => false,
+            }),
             ExpressionKind::Template(template) => {
                 template.render_plan.is_some() || template.control_flow.is_some()
             }
@@ -646,11 +731,24 @@ impl<'a> HirBuilder<'a> {
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Path(_)
             | ExpressionKind::Reference(_)
-            | ExpressionKind::Function(_, _)
+            | ExpressionKind::Function(_)
             | ExpressionKind::StructDefinition(_)
             | ExpressionKind::NoValue
             | ExpressionKind::OptionNone => false,
         }
+    }
+
+    /// Returns true when an external call returns exactly one `Float` success value.
+    ///
+    /// WHAT: checks that the resolved success return list has one slot and that slot is the
+    ///       builtin `Float` type.
+    /// WHY: external/backend boundaries must validate a scalar `Float` before ordinary Beanstalk
+    ///      code observes it; multi-success or non-Float returns are handled elsewhere.
+    fn result_type_ids_are_single_float(&self, result_type_ids: &[FrontendTypeId]) -> bool {
+        let [single] = result_type_ids else {
+            return false;
+        };
+        *single == self.type_environment.builtins().float
     }
 
     // -------------------------
@@ -676,39 +774,108 @@ impl<'a> HirBuilder<'a> {
             ValueBlock::Match(value_match) => {
                 self.lower_value_block_match(value_match, location, result_type_id)
             }
-            ValueBlock::Catch(value_catch) => self
-                .lower_expression_value_to_current_block(&value_catch.handled_value)
-                .map(|value| LoweredExpression {
-                    prelude: vec![],
-                    value,
-                }),
+            ValueBlock::Catch(value_catch) => {
+                self.lower_value_block_catch(value_catch, location, result_type_id)
+            }
         }
     }
 
-    pub(crate) fn ast_node_needs_current_block_lowering(&self, node: &AstNode) -> bool {
-        match &node.kind {
-            NodeKind::Rvalue(expr) => self.expression_needs_current_block_lowering(expr),
-            NodeKind::Operator(Operator::And | Operator::Or) => true,
-            NodeKind::HandledFallibleFunctionCall { args, handling, .. }
-            | NodeKind::HandledFallibleHostFunctionCall { args, handling, .. } => {
-                matches!(handling, FallibleHandling::Propagate)
-                    || args
-                        .iter()
-                        .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
+    /// Lowers a catch recovery block whose handler body is owned by `ValueCatchBlock`.
+    ///
+    /// WHAT: dispatches to the same carrier-branching helpers used by statement catch lowering,
+    /// but supplies the handler body from the value block instead of from an expression variant.
+    fn lower_value_block_catch(
+        &mut self,
+        value_catch: &ValueCatchBlock,
+        location: &SourceLocation,
+        result_type_id: TypeId,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let result_type_ids = &value_catch.result_type_ids;
+        let value_required = !result_type_ids.is_empty();
+
+        match &value_catch.handled_value.kind {
+            ExpressionKind::HandledFallibleFunctionCall {
+                name,
+                args,
+                result_type_ids: call_result_type_ids,
+                ..
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
+                let (carrier_type, ok_type, err_type) = self
+                    .result_call_carrier_slots(&CallTarget::UserFunction(function_id), location)?;
+                let requested_ok_type =
+                    self.lower_call_result_type(call_result_type_ids, location)?;
+                if requested_ok_type != ok_type {
+                    return_hir_transformation_error!(
+                        "Value catch call lowered with mismatched success type",
+                        self.hir_error_location(location)
+                    );
+                }
+
+                self.lower_handled_fallible_call_with_branching(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    FallibleBranchingContext {
+                        result_type_ids,
+                        handling: &value_catch.handler,
+                        carrier_type,
+                        ok_type,
+                        err_type,
+                        value_required,
+                        location,
+                        validate_float_success: false,
+                    },
+                )
             }
-            NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => args
-                .iter()
-                .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
-            NodeKind::MethodCall { receiver, args, .. }
-            | NodeKind::CollectionBuiltinCall { receiver, args, .. }
-            | NodeKind::MapBuiltinCall { receiver, args, .. } => {
-                self.ast_node_needs_current_block_lowering(receiver)
-                    || args
-                        .iter()
-                        .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
+
+            ExpressionKind::HandledFallibleHostFunctionCall {
+                id,
+                args,
+                result_type_ids: call_result_type_ids,
+                error_type_id,
+                ..
+            } => {
+                let (carrier_type, ok_type, err_type) = self.fallible_call_carrier_from_slots(
+                    call_result_type_ids,
+                    *error_type_id,
+                    location,
+                )?;
+                self.lower_handled_fallible_call_with_branching(
+                    CallTarget::ExternalFunction(*id),
+                    args,
+                    FallibleBranchingContext {
+                        result_type_ids,
+                        handling: &value_catch.handler,
+                        carrier_type,
+                        ok_type,
+                        err_type,
+                        value_required,
+                        location,
+                        validate_float_success: self.type_id_is_float(ok_type),
+                    },
+                )
             }
-            NodeKind::FieldAccess { base, .. } => self.ast_node_needs_current_block_lowering(base),
-            _ => false,
+
+            ExpressionKind::HandledFallibleExpression { value, .. } => self
+                .lower_recovering_fallible_expression(
+                    value,
+                    &value_catch.handler,
+                    result_type_ids,
+                    value_required,
+                    location,
+                ),
+
+            ExpressionKind::Cast(cast) => self.lower_recovering_cast_expression(
+                cast,
+                &value_catch.handler,
+                result_type_id,
+                location,
+            ),
+
+            _ => return_hir_transformation_error!(
+                "Value catch block did not contain a recoverable expression",
+                self.hir_error_location(location)
+            ),
         }
     }
 
@@ -738,7 +905,7 @@ impl<'a> HirBuilder<'a> {
                     expr_type_id,
                     location,
                 ),
-                CastHandling::Propagate | CastHandling::Recover(_) => self
+                CastHandling::Propagate | CastHandling::Recover => self
                     .lower_fallible_builtin_cast_expression(cast, *policy, expr_type_id, location),
             },
             ResolvedCastEvidence::UserDefined { method_path, .. } => {
@@ -762,6 +929,24 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<LoweredExpression, CompilerError> {
         let mut prelude = Vec::new();
         let source = self.lower_child_expression_for_parent(&mut prelude, &cast.source)?;
+
+        // `Float -> String` is infallible at the source level because valid Beanstalk `Float` is
+        // finite, but it must still lower through the shared `FormatFloat` statement so casts and
+        // templates use the same Beanstalk-owned formatter.
+        if policy == BuiltinCastPolicyId::FloatToString {
+            for prelude_statement in prelude.drain(..) {
+                self.emit_statement_to_current_block(prelude_statement, location)?;
+            }
+
+            let formatted = self.emit_formatted_float_value(source, location)?;
+            let value =
+                self.wrap_cast_result_optional_if_needed(formatted, expr_type_id, location)?;
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value,
+            });
+        }
+
         let target_type = self.lower_type_id(cast.target_type_id, location)?;
         let region = self.current_region_or_error(location)?;
         let value = self.make_expression(
@@ -779,14 +964,13 @@ impl<'a> HirBuilder<'a> {
         Ok(LoweredExpression { prelude, value })
     }
 
-    /// Lowers a fallible builtin cast through an explicit carrier statement and branches.
-    fn lower_fallible_builtin_cast_expression(
+    /// Emits the fallible builtin-cast carrier used by propagation and catch recovery.
+    fn emit_builtin_cast_carrier(
         &mut self,
         cast: &ResolvedCastExpression,
         policy: BuiltinCastPolicyId,
-        expr_type_id: FrontendTypeId,
         location: &SourceLocation,
-    ) -> Result<LoweredExpression, CompilerError> {
+    ) -> Result<EmittedFallibleCarrier, CompilerError> {
         let lowered_source = self.lower_expression(&cast.source)?;
         for prelude_statement in lowered_source.prelude {
             self.emit_statement_to_current_block(prelude_statement, location)?;
@@ -811,12 +995,24 @@ impl<'a> HirBuilder<'a> {
         self.side_table.map_statement(location, &cast_statement);
         self.emit_statement_to_current_block(cast_statement, location)?;
 
-        let carrier = EmittedFallibleCarrier {
+        Ok(EmittedFallibleCarrier {
             result_local,
             carrier_type,
             ok_type,
             err_type,
-        };
+            validate_float_success: false,
+        })
+    }
+
+    /// Lowers a fallible builtin cast through an explicit carrier statement and branches.
+    fn lower_fallible_builtin_cast_expression(
+        &mut self,
+        cast: &ResolvedCastExpression,
+        policy: BuiltinCastPolicyId,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let carrier = self.emit_builtin_cast_carrier(cast, policy, location)?;
 
         match &cast.handling {
             CastHandling::Propagate => {
@@ -832,13 +1028,9 @@ impl<'a> HirBuilder<'a> {
                     value,
                 })
             }
-            CastHandling::Recover(handling) => self.lower_cast_catch_with_optional_wrap(
-                carrier,
-                handling,
-                expr_type_id,
-                cast.target_type_id,
-                cast.requires_optional_wrap_after_cast,
-                location,
+            CastHandling::Recover => return_hir_transformation_error!(
+                "Recovering builtin cast reached HIR outside a value catch block",
+                self.hir_error_location(location)
             ),
             CastHandling::Infallible => Err(CompilerError::new(
                 "Fallible builtin cast reached HIR with Infallible handling",
@@ -900,7 +1092,41 @@ impl<'a> HirBuilder<'a> {
                     value,
                 })
             }
-            CastHandling::Recover(handling) => {
+            CastHandling::Recover => return_hir_transformation_error!(
+                "Recovering user-defined cast reached HIR outside a value catch block",
+                self.hir_error_location(location)
+            ),
+        }
+    }
+
+    /// Lowers `cast ... catch:` using the handler body stored by `ValueCatchBlock`.
+    fn lower_recovering_cast_expression(
+        &mut self,
+        cast: &ResolvedCastExpression,
+        handler: &FallibleHandling,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        match &cast.evidence {
+            ResolvedCastEvidence::Builtin { policy } => {
+                let carrier = self.emit_builtin_cast_carrier(cast, *policy, location)?;
+                self.lower_cast_catch_with_optional_wrap(
+                    carrier,
+                    handler,
+                    expr_type_id,
+                    cast.target_type_id,
+                    cast.requires_optional_wrap_after_cast,
+                    location,
+                )
+            }
+
+            ResolvedCastEvidence::UserDefined { method_path, .. } => {
+                let function_id = self.resolve_function_id_or_error(method_path, location)?;
+                let source_argument = CallArgument::positional(
+                    (*cast.source).clone(),
+                    CallAccessMode::Shared,
+                    location.to_owned(),
+                );
                 let carrier = self.emit_user_defined_cast_call_carrier(
                     function_id,
                     &source_argument,
@@ -908,13 +1134,19 @@ impl<'a> HirBuilder<'a> {
                 )?;
                 self.lower_cast_catch_with_optional_wrap(
                     carrier,
-                    handling,
+                    handler,
                     expr_type_id,
                     cast.target_type_id,
                     cast.requires_optional_wrap_after_cast,
                     location,
                 )
             }
+
+            ResolvedCastEvidence::GenericBound { .. } => Err(CompilerError::new(
+                "Generic-bound cast evidence reached recovering HIR lowering",
+                self.hir_error_location(location),
+                crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            )),
         }
     }
 
@@ -950,6 +1182,7 @@ impl<'a> HirBuilder<'a> {
                     err_type: carrier.err_type,
                     value_required: true,
                     location,
+                    validate_float_success: false,
                 },
             });
         }
@@ -970,6 +1203,7 @@ impl<'a> HirBuilder<'a> {
                     err_type: carrier.err_type,
                     value_required: true,
                     location,
+                    validate_float_success: false,
                 },
             })?;
 
@@ -1016,6 +1250,7 @@ impl<'a> HirBuilder<'a> {
             carrier_type,
             ok_type,
             err_type,
+            validate_float_success: false,
         })
     }
 

@@ -4,7 +4,9 @@
 //! WHY: statement parsing should preserve signature metadata and host/user call dispatch.
 
 use crate::compiler_frontend::ast::ast_nodes::{MatchExhaustiveness, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, FallibleHandling};
+use crate::compiler_frontend::ast::expressions::expression::{
+    ExpressionKind, FallibleExpressionHandling, FallibleHandling,
+};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, ReturnChannel};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
@@ -326,9 +328,13 @@ fn start_function_distinguishes_user_and_host_calls() {
     ));
 
     assert!(
-        body.iter()
-            .any(|node| matches!(node.kind, NodeKind::HostFunctionCall { .. })),
-        "expected io(...) to remain a host-function statement"
+        body.iter().any(|node| match &node.kind {
+            NodeKind::ExpressionStatement(expression) => {
+                matches!(expression.kind, ExpressionKind::HostFunctionCall { .. })
+            }
+            _ => false,
+        }),
+        "expected io(...) to parse as a host-function expression statement"
     );
 
     let function_body = function_body_by_name(&ast, &string_table, "identity");
@@ -552,15 +558,12 @@ fn parses_mutable_receiver_methods_with_explicit_receiver_tilde() {
     );
 
     let body = start_function_body(&ast, &string_table);
-    let NodeKind::Rvalue(call_expr) = &body[1].kind else {
+    let NodeKind::ExpressionStatement(call_expr) = &body[1].kind else {
         panic!("expected receiver method statement");
     };
-    let ExpressionKind::Runtime(nodes) = &call_expr.kind else {
-        panic!("expected runtime receiver call expression");
-    };
     assert!(
-        matches!(nodes[0].kind, NodeKind::MethodCall { .. }),
-        "expected user-defined receiver method call node"
+        matches!(call_expr.kind, ExpressionKind::MethodCall { .. }),
+        "expected user-defined receiver method call expression"
     );
 }
 
@@ -606,7 +609,7 @@ fn parses_result_propagation_call_in_expression_position() {
     assert!(matches!(
         values[0].kind,
         ExpressionKind::HandledFallibleFunctionCall {
-            handling: FallibleHandling::Propagate,
+            handling: FallibleExpressionHandling::Propagate,
             ..
         }
     ));
@@ -659,7 +662,8 @@ fn parses_result_fallback_call_in_expression_position() {
     else {
         panic!("expected handled call expression in catch value block");
     };
-    let FallibleHandling::Handler { body, .. } = handling else {
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
+    let FallibleHandling::Handler { body, .. } = &value_catch.handler else {
         panic!("expected catch-block handling");
     };
     assert_eq!(body.len(), 1);
@@ -773,10 +777,11 @@ fn parses_catch_handler_with_fallback_scope_in_declaration_rhs() {
     else {
         panic!("expected handled call expression in catch value block");
     };
+    assert!(matches!(handling, FallibleExpressionHandling::Recover));
     let FallibleHandling::Handler {
         error: Some(_),
         body,
-    } = handling
+    } = &value_catch.handler
     else {
         panic!("expected catch-handler call handling");
     };
@@ -805,13 +810,13 @@ fn parses_standalone_result_propagation_statement() {
     );
 
     let body = function_body_by_name(&ast, &string_table, "run");
-    let NodeKind::Rvalue(expression) = &body[0].kind else {
-        panic!("expected standalone handled call to parse as rvalue statement");
+    let NodeKind::ExpressionStatement(expression) = &body[0].kind else {
+        panic!("expected standalone handled call to parse as an expression statement");
     };
     assert!(matches!(
         expression.kind,
         ExpressionKind::HandledFallibleFunctionCall {
-            handling: FallibleHandling::Propagate,
+            handling: FallibleExpressionHandling::Propagate,
             ..
         }
     ));

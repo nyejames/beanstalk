@@ -8,6 +8,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::numeric_text::format::format_finite_float;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Attempts to coerce a constant expression kind to its string representation
@@ -26,7 +27,13 @@ pub(crate) fn fold_expression_kind_to_string(
         ExpressionKind::StringSlice(string) => Some(FoldedStringPiece::Text(
             string_table.resolve(*string).to_owned(),
         )),
-        ExpressionKind::Float(value) => Some(FoldedStringPiece::Text(value.to_string())),
+        ExpressionKind::Float(value) => {
+            // Compile-time Float values are finite by language contract, but the
+            // formatter still returns a Result. Fold non-finite values away from
+            // the compile-time path rather than panicking on an internal invariant.
+            let text = format_finite_float(*value).ok()?;
+            Some(FoldedStringPiece::Text(text))
+        }
         ExpressionKind::Int(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Bool(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Char(value) => Some(FoldedStringPiece::Char(*value)),
@@ -45,6 +52,7 @@ pub(crate) fn fold_expression_kind_to_string(
 ///
 /// WHAT: discriminates between the different outcomes of compile-time string
 /// coercion so callers can handle each case appropriately.
+#[derive(Debug, PartialEq)]
 pub(crate) enum FoldedStringPiece {
     /// A plain text fragment that can be appended directly.
     Text(String),

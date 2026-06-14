@@ -470,92 +470,236 @@ body {
         console.log(__bs_value_to_string(value));
     }
 
-    function bst_add_fn1(bst_x_l3, bst_y_l4) {
-        
-        bst_x_l3 = __bs_param_binding(bst_x_l3);
-        bst_y_l4 = __bs_param_binding(bst_y_l4);
-        
-        return (__bs_read(bst_x_l3) + __bs_read(bst_y_l4));
+    const __BS_INT_MIN = -2147483648;
+    const __BS_INT_MAX = 2147483647;
+
+    function __bs_numeric_trap(carrier) {
+        if (carrier && carrier.tag === "ok") {
+            return carrier.value;
+        }
+        if (carrier && carrier.tag === "err") {
+            throw new Error(__bs_error_message(carrier.value));
+        }
+        throw new Error("Expected internal numeric result carrier during trap lowering");
     }
 
-    function bst_multiply_fn2(bst_x_l5, bst_y_l6) {
-        
-        bst_x_l5 = __bs_param_binding(bst_x_l5);
-        bst_y_l6 = __bs_param_binding(bst_y_l6);
-        
-        return (__bs_read(bst_x_l5) * __bs_read(bst_y_l6));
+    function __bs_int_ok(value) {
+        return { tag: "ok", value: Object.is(value, -0) ? 0 : value };
     }
 
-    function bst_greet_fn3(bst_name_l7) {
-        
-        bst_name_l7 = __bs_param_binding(bst_name_l7);
-        
-        return ("Hello, " + __bs_read(bst_name_l7));
+    function __bs_int_check(value) {
+        if (!Number.isInteger(value) || value < __BS_INT_MIN || value > __BS_INT_MAX) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_ok(value);
     }
 
-    function bst_factorial_fn4(bst_n_l8) {
-        let bst___hir_tmp_2_l9 = __bs_binding(undefined);
+    function __bs_int_add(a, b) {
+        const result = a + b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_sub(a, b) {
+        const result = a - b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_mul(a, b) {
+        const result = a * b;
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_div(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        if (a === __BS_INT_MIN && b === -1) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(Math.trunc(a / b));
+    }
+
+    function __bs_int_mod(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        if (a === __BS_INT_MIN && b === -1) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(a % b);
+    }
+
+    function __bs_int_pow(a, b) {
+        if (!Number.isInteger(b) || b < 0) {
+            return __bs_error_result("Invalid exponent", 302);
+        }
+        const result = Math.pow(a, b);
+        return __bs_int_check(result);
+    }
+
+    function __bs_int_neg(a) {
+        if (a === __BS_INT_MIN) {
+            return __bs_error_result("Int operation overflowed", 301);
+        }
+        return __bs_int_check(-a);
+    }
+
+    function __bs_float_add(a, b) {
+        const result = a + b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_sub(a, b) {
+        const result = a - b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_mul(a, b) {
+        const result = a * b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_div(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        const result = a / b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_mod(a, b) {
+        if (b === 0) {
+            return __bs_error_result("Division by zero", 300);
+        }
+        const result = a % b;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_pow(a, b) {
+        const result = Math.pow(a, b);
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function __bs_float_neg(a) {
+        const result = -a;
+        if (!Number.isFinite(result)) {
+            return __bs_error_result("Float operation produced a non-finite value", 303);
+        }
+        return { tag: "ok", value: result };
+    }
+
+    function bst_add_fn6(bst_x_l22, bst_y_l23) {
+        let bst___hir_tmp_3_l24 = __bs_binding(undefined);
         
-        bst_n_l8 = __bs_param_binding(bst_n_l8);
+        bst_x_l22 = __bs_param_binding(bst_x_l22);
+        bst_y_l23 = __bs_param_binding(bst_y_l23);
         
-        if ((__bs_read(bst_n_l8) <= 1)) {
+        __bs_assign_value(bst___hir_tmp_3_l24, __bs_numeric_trap(__bs_int_add(__bs_read(bst_x_l22), __bs_read(bst_y_l23))));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_3_l24));
+    }
+
+    function bst_multiply_fn7(bst_x_l25, bst_y_l26) {
+        let bst___hir_tmp_4_l27 = __bs_binding(undefined);
+        
+        bst_x_l25 = __bs_param_binding(bst_x_l25);
+        bst_y_l26 = __bs_param_binding(bst_y_l26);
+        
+        __bs_assign_value(bst___hir_tmp_4_l27, __bs_numeric_trap(__bs_int_mul(__bs_read(bst_x_l25), __bs_read(bst_y_l26))));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_4_l27));
+    }
+
+    function bst_greet_fn8(bst_name_l28) {
+        
+        bst_name_l28 = __bs_param_binding(bst_name_l28);
+        
+        return ("Hello, " + __bs_read(bst_name_l28));
+    }
+
+    function bst_factorial_fn9(bst_n_l29) {
+        let bst___hir_tmp_5_l30 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l31 = __bs_binding(undefined);
+        let bst___hir_tmp_7_l32 = __bs_binding(undefined);
+        
+        bst_n_l29 = __bs_param_binding(bst_n_l29);
+        
+        if ((__bs_read(bst_n_l29) <= 1)) {
             return 1;
         } else {
         }
-        __bs_assign_value(bst___hir_tmp_2_l9, bst_factorial_fn4(__bs_binding((__bs_read(bst_n_l8) - 1))));
-        return (__bs_read(bst_n_l8) * __bs_read(bst___hir_tmp_2_l9));
+        __bs_assign_value(bst___hir_tmp_5_l30, __bs_numeric_trap(__bs_int_sub(__bs_read(bst_n_l29), 1)));
+        __bs_assign_value(bst___hir_tmp_6_l31, bst_factorial_fn9(bst___hir_tmp_5_l30));
+        __bs_assign_value(bst___hir_tmp_7_l32, __bs_numeric_trap(__bs_int_mul(__bs_read(bst_n_l29), __bs_read(bst___hir_tmp_6_l31))));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_7_l32));
     }
 
-    function bst_start_fn5() {
-        let bst___hir_tmp_3_l10 = __bs_binding(undefined);
-        let bst_sum_l11 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l12 = __bs_binding(undefined);
-        let bst_product_l13 = __bs_binding(undefined);
-        let bst___hir_tmp_5_l14 = __bs_binding(undefined);
-        let bst_message_l15 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l16 = __bs_binding(undefined);
-        let bst_fact5_l17 = __bs_binding(undefined);
-        let bst___hir_tmp_7_l18 = __bs_binding(undefined);
-        let bst___hir_tmp_8_l19 = __bs_binding(undefined);
-        let bst___hir_tmp_9_l20 = __bs_binding(undefined);
-        let bst___hir_tmp_10_l21 = __bs_binding(undefined);
-        let bst___hir_tmp_11_l22 = __bs_binding(undefined);
-        let bst___hir_tmp_12_l23 = __bs_binding(undefined);
+    function bst_start_fn10() {
+        let bst___hir_tmp_8_l33 = __bs_binding(undefined);
+        let bst_sum_l34 = __bs_binding(undefined);
+        let bst___hir_tmp_9_l35 = __bs_binding(undefined);
+        let bst_product_l36 = __bs_binding(undefined);
+        let bst___hir_tmp_10_l37 = __bs_binding(undefined);
+        let bst_message_l38 = __bs_binding(undefined);
+        let bst___hir_tmp_11_l39 = __bs_binding(undefined);
+        let bst_fact5_l40 = __bs_binding(undefined);
+        let bst___hir_tmp_12_l41 = __bs_binding(undefined);
+        let bst___hir_tmp_13_l42 = __bs_binding(undefined);
+        let bst___hir_tmp_14_l43 = __bs_binding(undefined);
+        let bst___hir_tmp_15_l44 = __bs_binding(undefined);
+        let bst___hir_tmp_16_l45 = __bs_binding(undefined);
+        let bst___hir_tmp_17_l46 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_3_l10, []);
-        __bs_assign_value(bst___hir_tmp_4_l12, bst_add_fn1(__bs_binding(5), __bs_binding(3)));
-        __bs_assign_borrow(bst_sum_l11, bst___hir_tmp_4_l12);
-        __bs_assign_value(bst___hir_tmp_5_l14, bst_multiply_fn2(__bs_binding(4), __bs_binding(6)));
-        __bs_assign_borrow(bst_product_l13, bst___hir_tmp_5_l14);
-        __bs_assign_value(bst___hir_tmp_6_l16, bst_greet_fn3(__bs_binding("World")));
-        __bs_assign_borrow(bst_message_l15, bst___hir_tmp_6_l16);
-        __bs_assign_value(bst___hir_tmp_7_l18, bst_factorial_fn4(__bs_binding(5)));
-        __bs_assign_borrow(bst_fact5_l17, bst___hir_tmp_7_l18);
-        __bs_assign_value(bst___hir_tmp_8_l19, "");
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + "functions sum="));
-        __bs_assign_value(bst___hir_tmp_9_l20, "");
-        __bs_assign_value(bst___hir_tmp_9_l20, (__bs_read(bst___hir_tmp_9_l20) + ("" + __bs_read(bst_sum_l11))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + __bs_clone_value(__bs_read(bst___hir_tmp_9_l20))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + " product="));
-        __bs_assign_value(bst___hir_tmp_10_l21, "");
-        __bs_assign_value(bst___hir_tmp_10_l21, (__bs_read(bst___hir_tmp_10_l21) + ("" + __bs_read(bst_product_l13))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l21))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + " message="));
-        __bs_assign_value(bst___hir_tmp_11_l22, "");
-        __bs_assign_value(bst___hir_tmp_11_l22, (__bs_read(bst___hir_tmp_11_l22) + __bs_read(bst_message_l15)));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + __bs_clone_value(__bs_read(bst___hir_tmp_11_l22))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + " fact5="));
-        __bs_assign_value(bst___hir_tmp_12_l23, "");
-        __bs_assign_value(bst___hir_tmp_12_l23, (__bs_read(bst___hir_tmp_12_l23) + ("" + __bs_read(bst_fact5_l17))));
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + __bs_clone_value(__bs_read(bst___hir_tmp_12_l23))));
-        __bs_read(bst___hir_tmp_3_l10).push(__bs_clone_value(__bs_read(bst___hir_tmp_8_l19)));
-        return __bs_read(bst___hir_tmp_3_l10);
+        __bs_assign_value(bst___hir_tmp_8_l33, []);
+        __bs_assign_value(bst___hir_tmp_9_l35, bst_add_fn6(__bs_binding(5), __bs_binding(3)));
+        __bs_assign_borrow(bst_sum_l34, bst___hir_tmp_9_l35);
+        __bs_assign_value(bst___hir_tmp_10_l37, bst_multiply_fn7(__bs_binding(4), __bs_binding(6)));
+        __bs_assign_borrow(bst_product_l36, bst___hir_tmp_10_l37);
+        __bs_assign_value(bst___hir_tmp_11_l39, bst_greet_fn8(__bs_binding("World")));
+        __bs_assign_borrow(bst_message_l38, bst___hir_tmp_11_l39);
+        __bs_assign_value(bst___hir_tmp_12_l41, bst_factorial_fn9(__bs_binding(5)));
+        __bs_assign_borrow(bst_fact5_l40, bst___hir_tmp_12_l41);
+        __bs_assign_value(bst___hir_tmp_13_l42, "");
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + "functions sum="));
+        __bs_assign_value(bst___hir_tmp_14_l43, "");
+        __bs_assign_value(bst___hir_tmp_14_l43, (__bs_read(bst___hir_tmp_14_l43) + ("" + __bs_read(bst_sum_l34))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + __bs_clone_value(__bs_read(bst___hir_tmp_14_l43))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + " product="));
+        __bs_assign_value(bst___hir_tmp_15_l44, "");
+        __bs_assign_value(bst___hir_tmp_15_l44, (__bs_read(bst___hir_tmp_15_l44) + ("" + __bs_read(bst_product_l36))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + __bs_clone_value(__bs_read(bst___hir_tmp_15_l44))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + " message="));
+        __bs_assign_value(bst___hir_tmp_16_l45, "");
+        __bs_assign_value(bst___hir_tmp_16_l45, (__bs_read(bst___hir_tmp_16_l45) + __bs_read(bst_message_l38)));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + __bs_clone_value(__bs_read(bst___hir_tmp_16_l45))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + " fact5="));
+        __bs_assign_value(bst___hir_tmp_17_l46, "");
+        __bs_assign_value(bst___hir_tmp_17_l46, (__bs_read(bst___hir_tmp_17_l46) + ("" + __bs_read(bst_fact5_l40))));
+        __bs_assign_value(bst___hir_tmp_13_l42, (__bs_read(bst___hir_tmp_13_l42) + __bs_clone_value(__bs_read(bst___hir_tmp_17_l46))));
+        __bs_read(bst___hir_tmp_8_l33).push(__bs_clone_value(__bs_read(bst___hir_tmp_13_l42)));
+        return __bs_read(bst___hir_tmp_8_l33);
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn5();
+      var bst_frags = bst_start_fn10();
       var bst_slots = [
         "bst-slot-0",
       ];

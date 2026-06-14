@@ -1,3 +1,4 @@
+use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -25,9 +26,9 @@ fn top_level_comma_detection_ignores_nested_commas() {
     let nested_only = stream_from_kinds(
         vec![
             TokenKind::OpenParenthesis,
-            TokenKind::IntLiteral(1),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("1", &mut string_table)),
             TokenKind::Comma,
-            TokenKind::IntLiteral(2),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("2", &mut string_table)),
             TokenKind::CloseParenthesis,
             TokenKind::Newline,
             TokenKind::Eof,
@@ -42,7 +43,7 @@ fn top_level_comma_detection_ignores_nested_commas() {
             TokenKind::Comma,
             TokenKind::Symbol(string_table.intern("b")),
             TokenKind::Assign,
-            TokenKind::IntLiteral(1),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("1", &mut string_table)),
             TokenKind::Newline,
             TokenKind::Eof,
         ],
@@ -88,7 +89,7 @@ fn declaration_initializer_tokens_include_terminal_catch_then_block() {
             TokenKind::Colon,
             TokenKind::Newline,
             TokenKind::Then,
-            TokenKind::IntLiteral(0),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("0", &mut string_table)),
             TokenKind::Newline,
             TokenKind::End,
             TokenKind::Newline,
@@ -112,7 +113,7 @@ fn declaration_initializer_tokens_include_terminal_catch_then_block() {
             TokenKind::Colon,
             TokenKind::Newline,
             TokenKind::Then,
-            TokenKind::IntLiteral(0),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("0", &mut string_table)),
             TokenKind::Newline,
             TokenKind::End,
         ]
@@ -146,7 +147,7 @@ fn declaration_initializer_tokens_balance_nested_blocks_inside_catch() {
             TokenKind::End,
             TokenKind::Newline,
             TokenKind::Then,
-            TokenKind::IntLiteral(0),
+            TokenKind::NumericLiteral(NumericLiteralToken::test_new("0", &mut string_table)),
             TokenKind::Newline,
             TokenKind::End,
             TokenKind::Newline,

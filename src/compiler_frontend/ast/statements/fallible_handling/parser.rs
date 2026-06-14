@@ -7,16 +7,18 @@
 //! value production, and boundary restrictions) that would make the general expression parser too
 //! large and too coupled to function bodies.
 //!
-//! STAGE BOUNDARY: this is pure AST frontend parsing. Type checking of the resulting
-//! `HandledFallibleFunctionCall` / `HandledFallibleHostFunctionCall` nodes happens later.
+//! STAGE BOUNDARY: this is pure AST frontend parsing. Result handling is attached to
+//! expression-owned call payloads; handler bodies are carried only by `ValueBlock::Catch`.
 
 use crate::compiler_frontend::ast::ContextKind;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallArgument, normalize_call_arguments,
+};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleHandling,
+    Expression, ExpressionKind, FallibleExpressionHandling, FallibleHandling,
+    HandledFallibleHostFunctionCallInput,
 };
 use crate::compiler_frontend::ast::statements::value_production::types::{
     ValueBlock, ValueCatchBlock,
@@ -81,61 +83,81 @@ struct FallibleHandlingSite<'a> {
 }
 
 impl HandledFallibleHostCall {
-    pub(crate) fn into_ast_node(
+    pub(crate) fn into_expression(
         self,
         handling: FallibleHandling,
-        ast_location: SourceLocation,
-        scope: &InternedPath,
-    ) -> AstNode {
-        AstNode {
-            kind: NodeKind::HandledFallibleHostFunctionCall {
-                name: self.name,
-                args: self.args,
-                result_type_ids: self.result_type_ids,
-                error_type_id: self.error_type_id,
-                handling,
-                location: self.call_location,
-            },
-            location: ast_location,
-            scope: scope.clone(),
+        type_environment: &mut TypeEnvironment,
+    ) -> Expression {
+        let normalized_args = normalize_call_arguments(&self.args);
+        let expression_handling = match &handling {
+            FallibleHandling::Propagate => FallibleExpressionHandling::Propagate,
+            FallibleHandling::Handler { .. } => FallibleExpressionHandling::Recover,
+        };
+        let result_type_ids = self.result_type_ids.clone();
+        let function_call_expression =
+            Expression::handled_fallible_host_function_call_with_typed_arguments(
+                HandledFallibleHostFunctionCallInput {
+                    id: self.name,
+                    args: normalized_args,
+                    result_type_ids: self.result_type_ids,
+                    error_type_id: self.error_type_id,
+                    handling: expression_handling,
+                    location: self.call_location,
+                },
+                type_environment,
+            );
+
+        match handling {
+            FallibleHandling::Propagate => function_call_expression,
+            FallibleHandling::Handler { .. } => {
+                wrap_catch_expression(function_call_expression, handling, result_type_ids)
+            }
         }
     }
 }
 
 impl HandledFallibleCall {
-    pub(crate) fn into_plain_ast_node(
+    pub(crate) fn into_plain_expression(
         self,
-        ast_location: SourceLocation,
-        scope: &InternedPath,
-    ) -> AstNode {
-        AstNode {
-            kind: NodeKind::FunctionCall {
-                name: self.name,
-                args: self.args,
-                result_type_ids: self.result_type_ids,
-                location: self.call_location,
-            },
-            location: ast_location,
-            scope: scope.clone(),
-        }
+        type_environment: &mut TypeEnvironment,
+    ) -> Expression {
+        let normalized_args = normalize_call_arguments(&self.args);
+
+        Expression::function_call_with_typed_arguments(
+            self.name,
+            normalized_args,
+            self.result_type_ids,
+            type_environment,
+            self.call_location,
+        )
     }
 
-    pub(crate) fn into_ast_node(
+    pub(crate) fn into_expression(
         self,
         handling: FallibleHandling,
-        ast_location: SourceLocation,
-        scope: &InternedPath,
-    ) -> AstNode {
-        AstNode {
-            kind: NodeKind::HandledFallibleFunctionCall {
-                name: self.name,
-                args: self.args,
-                result_type_ids: self.result_type_ids,
-                handling,
-                location: self.call_location,
-            },
-            location: ast_location,
-            scope: scope.clone(),
+        type_environment: &mut TypeEnvironment,
+    ) -> Expression {
+        let normalized_args = normalize_call_arguments(&self.args);
+        let expression_handling = match &handling {
+            FallibleHandling::Propagate => FallibleExpressionHandling::Propagate,
+            FallibleHandling::Handler { .. } => FallibleExpressionHandling::Recover,
+        };
+        let result_type_ids = self.result_type_ids.clone();
+        let function_call_expression =
+            Expression::handled_fallible_function_call_with_typed_arguments(
+                self.name,
+                normalized_args,
+                self.result_type_ids,
+                expression_handling,
+                type_environment,
+                self.call_location,
+            );
+
+        match handling {
+            FallibleHandling::Propagate => function_call_expression,
+            FallibleHandling::Handler { .. } => {
+                wrap_catch_expression(function_call_expression, handling, result_type_ids)
+            }
         }
     }
 }
@@ -195,20 +217,27 @@ pub(crate) fn parse_fallible_handling_suffix_for_expression(
         None,
         string_table,
     )? {
-        let handled_expression = Expression::handled_result_with_type_id(
-            expression,
-            handling,
-            handled_type_id,
-            success_type_diagnostic_spelling,
-            token_stream.current_location(),
-        );
+        return Ok(match handling {
+            FallibleHandling::Propagate => Expression::handled_result_with_type_id(
+                expression,
+                FallibleExpressionHandling::Propagate,
+                handled_type_id,
+                success_type_diagnostic_spelling,
+                token_stream.current_location(),
+            ),
 
-        return Ok(wrap_value_producing_catch_expression(
-            handled_expression,
-            success_result_type_ids,
-            value_required,
-            type_interner.environment(),
-        ));
+            FallibleHandling::Handler { .. } => {
+                let handled_expression = Expression::handled_result_with_type_id(
+                    expression,
+                    FallibleExpressionHandling::Recover,
+                    handled_type_id,
+                    success_type_diagnostic_spelling,
+                    token_stream.current_location(),
+                );
+
+                wrap_catch_expression(handled_expression, handling, success_result_type_ids)
+            }
+        });
     }
 
     Ok(expression)
@@ -317,39 +346,22 @@ fn parse_postfix_propagation(
 /// handled fallible expression because it leaves the current function instead of recovering.
 /// WHY: this keeps catch recovery on the same AST/HIR model as value `if` and match blocks
 /// without changing statement-only catch behavior.
-fn wrap_value_producing_catch_expression(
+pub(crate) fn wrap_catch_expression(
     handled_expression: Expression,
+    handler: FallibleHandling,
     result_type_ids: Vec<TypeId>,
-    value_required: bool,
-    type_environment: &TypeEnvironment,
 ) -> Expression {
-    if !value_required
-        || result_type_ids.is_empty()
-        || !matches!(
-            handled_expression.kind,
-            ExpressionKind::HandledFallibleExpression {
-                handling: FallibleHandling::Handler { .. },
-                ..
-            } | ExpressionKind::HandledFallibleFunctionCall {
-                handling: FallibleHandling::Handler { .. },
-                ..
-            } | ExpressionKind::HandledFallibleHostFunctionCall {
-                handling: FallibleHandling::Handler { .. },
-                ..
-            }
-        )
-    {
-        return handled_expression;
-    }
+    debug_assert!(matches!(handler, FallibleHandling::Handler { .. }));
 
     let location = handled_expression.location.clone();
     let result_type_id = handled_expression.type_id;
-    let diagnostic_type = diagnostic_type_spelling(result_type_id, type_environment);
+    let diagnostic_type = handled_expression.diagnostic_type.to_owned();
 
     Expression::new(
         ExpressionKind::ValueBlock {
             block: Box::new(ValueBlock::Catch(ValueCatchBlock {
                 handled_value: Box::new(handled_expression),
+                handler,
                 location: location.clone(),
                 result_type_ids,
             })),
@@ -372,8 +384,7 @@ fn token_starts_removed_bang_fallback(token: &TokenKind) -> bool {
         TokenKind::Symbol(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_)
-            | TokenKind::IntLiteral(_)
-            | TokenKind::FloatLiteral(_)
+            | TokenKind::NumericLiteral(_)
             | TokenKind::CharLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::NoneLiteral
@@ -558,14 +569,14 @@ fn next_catch_binding_is_inline(token_stream: &FileTokens) -> bool {
 //  Catch handler call parsing
 // --------------------------
 
-pub(crate) fn parse_fallible_handling_suffix_for_call(
+pub(crate) fn parse_fallible_handling_suffix_for_call_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     handler_call: FallibleCallSite,
     warnings: Option<&mut Vec<CompilerDiagnostic>>,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let FallibleCallSite {
         call,
         error_return_type_id,
@@ -597,42 +608,17 @@ pub(crate) fn parse_fallible_handling_suffix_for_call(
         .into());
     };
 
-    if value_required && matches!(handling, FallibleHandling::Handler { .. }) {
-        let call_location = call.call_location.clone();
-        let result_type_ids = call.result_type_ids.clone();
-        let handled_expression = Expression::handled_fallible_function_call_with_typed_arguments(
-            call.name,
-            call.args,
-            result_type_ids.clone(),
-            handling,
-            type_interner.environment_mut_for_derived_types(),
-            call_location,
-        );
-        let catch_expression = wrap_value_producing_catch_expression(
-            handled_expression,
-            result_type_ids,
-            true,
-            type_interner.environment(),
-        );
-
-        return Ok(AstNode {
-            kind: NodeKind::Rvalue(catch_expression),
-            location: token_stream.current_location(),
-            scope: context.scope.clone(),
-        });
-    }
-
-    Ok(call.into_ast_node(handling, token_stream.current_location(), &context.scope))
+    Ok(call.into_expression(handling, type_interner.environment_mut_for_derived_types()))
 }
 
-pub(crate) fn parse_fallible_handling_suffix_for_host_call(
+pub(crate) fn parse_fallible_handling_suffix_for_host_call_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     handler_call: FallibleHostCallSite,
     warnings: Option<&mut Vec<CompilerDiagnostic>>,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<AstNode, ExpressionParseError> {
+) -> Result<Expression, ExpressionParseError> {
     let FallibleHostCallSite {
         call,
         value_required,
@@ -663,35 +649,7 @@ pub(crate) fn parse_fallible_handling_suffix_for_host_call(
         .into());
     };
 
-    if value_required && matches!(handling, FallibleHandling::Handler { .. }) {
-        let call_location = call.call_location.clone();
-        let result_type_ids = call.result_type_ids.clone();
-        let handled_expression = Expression::handled_fallible_host_function_call_with_typed_arguments(
-            crate::compiler_frontend::ast::expressions::expression::HandledFallibleHostFunctionCallInput {
-                id: call.name,
-                args: call.args,
-                result_type_ids: result_type_ids.clone(),
-                error_type_id: call.error_type_id,
-                handling,
-                location: call_location,
-            },
-            type_interner.environment_mut_for_derived_types(),
-        );
-        let catch_expression = wrap_value_producing_catch_expression(
-            handled_expression,
-            result_type_ids,
-            true,
-            type_interner.environment(),
-        );
-
-        return Ok(AstNode {
-            kind: NodeKind::Rvalue(catch_expression),
-            location: token_stream.current_location(),
-            scope: context.scope.clone(),
-        });
-    }
-
-    Ok(call.into_ast_node(handling, token_stream.current_location(), &context.scope))
+    Ok(call.into_expression(handling, type_interner.environment_mut_for_derived_types()))
 }
 
 /// Input bundle for `parse_cast_catch_handling_suffix`.

@@ -76,7 +76,10 @@ pub enum DataType {
     Bool,
     Int,
     Float,
-    #[allow(dead_code)] // Planned: decimal numeric type support in parser/lowering.
+    // Decimal is intentionally inactive in the Alpha surface. The variant is kept
+    // only as a diagnostic placeholder for the inactive builtin TypeId; no parser,
+    // operator, or HIR path may produce a live Decimal value.
+    #[allow(dead_code)]
     Decimal,
     StringSlice, // UTF-8 read-only string slice
     Char,
@@ -314,10 +317,6 @@ impl DataType {
                 ..
             }
         )
-    }
-
-    pub fn is_numerical(&self) -> bool {
-        matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
     /// Constructs a growable collection type using the canonical generic instance representation.
