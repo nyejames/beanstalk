@@ -4807,6 +4807,16 @@ path = "compound_assignment_int_divide_assign_rejected"
 tags = ["integration", "diagnostics"]
 
 [[case]]
+id = "compound_assignment_spacing_rejected"
+path = "compound_assignment_spacing_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "compound_assignment_modulus_success"
+path = "compound_assignment_modulus_success"
+tags = ["integration", "language", "mutation", "modulus"]
+
+[[case]]
 id = "invalid_integer_division_mixed_numeric_rejected"
 path = "invalid_integer_division_mixed_numeric_rejected"
 tags = ["integration", "diagnostics"]
@@ -7609,8 +7619,23 @@ path = "float_formatting_unreachable_helper_ignored"
 tags = ["integration", "language", "cast", "runtime", "float", "formatting", "html-wasm"]
 
 [[case]]
+id = "float_format_contract"
+path = "float_format_contract"
+tags = ["integration", "language", "cast", "runtime", "float", "formatting", "backend-contract"]
+
+[[case]]
 id = "numeric_literal_uppercase_e_rejected"
 path = "numeric_literal_uppercase_e_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "numeric_literal_signed_uppercase_e_rejected"
+path = "numeric_literal_signed_uppercase_e_rejected"
+tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "numeric_literal_separated_overflow_rejected"
+path = "numeric_literal_separated_overflow_rejected"
 tags = ["integration", "diagnostics", "numeric", "syntax"]
 
 [[case]]

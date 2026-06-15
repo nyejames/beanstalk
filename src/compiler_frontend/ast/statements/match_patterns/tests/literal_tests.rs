@@ -66,10 +66,17 @@ fn parse_whole_number_pattern(
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let text = string_table.intern(normalized_text);
+    // For signed tokens the source_text includes the sign prefix.
+    let source = match sign {
+        NumericLiteralSign::Positive => normalized_text.to_owned(),
+        NumericLiteralSign::Negative => format!("-{normalized_text}"),
+    };
+    let source_text = string_table.intern(&source);
     let tokens = vec![
         Token::new(
             TokenKind::NumericLiteral(NumericLiteralToken::new(
                 sign,
+                source_text,
                 text,
                 NumericLiteralKind::WholeNumber,
                 normalized_text
@@ -99,11 +106,14 @@ fn parse_negative_number_pattern(normalized_text: &str) -> Result<Expression, Co
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let text = string_table.intern(normalized_text);
+    // In this path the Negative token is separate, so the literal is unsigned.
+    let source_text = string_table.intern(normalized_text);
     let tokens = vec![
         Token::new(TokenKind::Negative, SourceLocation::default()),
         Token::new(
             TokenKind::NumericLiteral(NumericLiteralToken::new(
                 NumericLiteralSign::Positive,
+                source_text,
                 text,
                 NumericLiteralKind::WholeNumber,
                 normalized_text

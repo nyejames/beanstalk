@@ -116,10 +116,17 @@ fn parse_whole_number_token(
     );
 
     let min_text = string_table.intern(normalized_text);
+    // For signed tokens the source_text includes the sign prefix.
+    let source = match sign {
+        NumericLiteralSign::Positive => normalized_text.to_owned(),
+        NumericLiteralSign::Negative => format!("-{normalized_text}"),
+    };
+    let source_text = string_table.intern(&source);
     let tokens = vec![
         Token::new(
             TokenKind::NumericLiteral(NumericLiteralToken::new(
                 sign,
+                source_text,
                 min_text,
                 NumericLiteralKind::WholeNumber,
                 digit_count,

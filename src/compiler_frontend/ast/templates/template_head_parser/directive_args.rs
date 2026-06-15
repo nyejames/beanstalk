@@ -206,7 +206,7 @@ pub(crate) fn parse_optional_slot_target_argument(
 
             let index = materialize_i32(token, string_table).map_err(|reason| {
                 CompilerDiagnostic::invalid_number_literal(
-                    token.normalized_text,
+                    token.source_text,
                     reason,
                     token_stream.current_location(),
                 )

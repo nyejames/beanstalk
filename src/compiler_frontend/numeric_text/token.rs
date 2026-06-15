@@ -25,37 +25,70 @@ pub enum NumericLiteralKind {
 /// unsigned so materialization can apply range checks with the sign as explicit metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NumericLiteralSign {
+    /// The literal is positive (no leading `-`).
     Positive,
+    /// The literal has an attached leading `-` sign.
+    ///
+    /// WHY: the tokenizer front-loads the `-` operator into the numeric token so
+    ///      materialization can apply range checks with the sign as explicit metadata.
     Negative,
 }
 
 /// Sign explicitly written on an exponent, if any.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NumericExponentSign {
+    /// No explicit sign marker on the exponent (e.g. `1e6`).
     None,
+    /// Explicit `+` after the exponent marker (e.g. `1e+21`).
+    ///
+    /// WHY: the normalized text preserves explicit exponent signs so materialization
+    ///      can reconstruct the value from text alone.
     Positive,
+    /// Explicit `-` after the exponent marker (e.g. `1e-21`).
     Negative,
 }
 
 /// The tokenizer's numeric-literal payload.
 ///
-/// `normalized_text` is unsigned, underscore-free, and uses lowercase `e` for
-/// exponents. It preserves explicit exponent signs (`1e+21`) so that later
-/// materialization can reconstruct the value from text alone.
+/// `source_text` preserves the authored source text (including underscores,
+/// attached sign, and uppercase `E`) so diagnostics can report exactly what the
+/// author wrote. `normalized_text` is unsigned, underscore-free, and uses
+/// lowercase `e` for exponents; it preserves explicit exponent signs (`1e+21`)
+/// so that materialization can reconstruct the value from text alone.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NumericLiteralToken {
+    /// Whether the literal carries an attached leading `-`.
     pub sign: NumericLiteralSign,
+    /// Authored source text, including sign and original formatting.
+    /// Used by diagnostics so the reported literal matches what the author typed.
+    pub source_text: StringId,
+    /// Unsigned, separator-free, lowercase-exponent text for materialization.
     pub normalized_text: StringId,
+    /// Lexical shape of the literal: whole-number, decimal-point, or exponent.
     pub kind: NumericLiteralKind,
+    /// Total number of significant digits in the integer part.
+    ///
+    /// WHY: digit counts let materialization and diagnostics reason about
+    ///      precision and range without re-parsing the source text.
     pub digit_count: u32,
+    /// Number of digits after the decimal point, if any.
     pub fractional_digit_count: u32,
+    /// Number of digits in the exponent part, if any.
     pub exponent_digit_count: u32,
+    /// Explicit sign on the exponent, if the literal has one.
     pub exponent_sign: NumericExponentSign,
 }
 
 impl NumericLiteralToken {
+    /// Construct a numeric literal token with both source and normalized text.
+    ///
+    /// WHY: the constructor intentionally takes all lexical fields as arguments
+    ///      so callers cannot accidentally omit `source_text` or `normalized_text`.
+    ///      The argument count is stable because the token shape is finalized.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         sign: NumericLiteralSign,
+        source_text: StringId,
         normalized_text: StringId,
         kind: NumericLiteralKind,
         digit_count: u32,
@@ -65,6 +98,7 @@ impl NumericLiteralToken {
     ) -> Self {
         Self {
             sign,
+            source_text,
             normalized_text,
             kind,
             digit_count,
@@ -74,15 +108,23 @@ impl NumericLiteralToken {
         }
     }
 
-    /// Remap the interned normalized text after a string-table merge.
+    /// Remap the interned source and normalized text after a string-table merge.
+    ///
+    /// WHAT: updates both `source_text` and `normalized_text` so diagnostic
+    ///       reporting and materialization remain valid after per-file tables
+    ///       merge into the module table.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.source_text = remap.get(self.source_text);
         self.normalized_text = remap.get(self.normalized_text);
     }
 
     /// Build a test numeric token from a valid source snippet.
     ///
     /// WHY: unit tests across the frontend need a concise way to construct
-    ///      `TokenKind::NumericLiteral` payloads without hand-assembling counts.
+    ///      `TokenKind::NumericLiteral` payloads without hand-assembling digit
+    ///      counts or re-parsing the source. For positive literals, `source_text`
+    ///      and `normalized_text` differ only when the source contains separators
+    ///      or uppercase exponents.
     #[cfg(test)]
     pub fn test_new(
         source: &str,
@@ -93,10 +135,12 @@ impl NumericLiteralToken {
         let parsed = parse_numeric_literal(source).unwrap_or_else(|reason| {
             panic!("test numeric literal '{source}' is invalid: {reason:?}")
         });
+        let source_text = string_table.intern(source);
         let normalized_text = string_table.intern(&parsed.normalized_text);
 
         Self::new(
             NumericLiteralSign::Positive,
+            source_text,
             normalized_text,
             parsed.kind,
             parsed.digit_count,

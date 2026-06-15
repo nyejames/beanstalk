@@ -259,9 +259,9 @@ fn get_token_kind(
             }
         }
 
-        // -----------------------
+        // ------------------------
         //  Raw strings (backticks)
-        // -----------------------
+        // ------------------------
 
         // Raw strings are used for pre-formatted text and raw template outputs.
         if current_char == '`' {
@@ -335,9 +335,9 @@ fn get_token_kind(
             return_token!(TokenKind::Colon, stream);
         }
 
-        // ------------------
+        // -------------------
         //  Style directives
-        // ------------------
+        // -------------------
 
         if current_char == '$' {
             if stream.mode == TokenizeMode::TemplateHead {
@@ -355,9 +355,9 @@ fn get_token_kind(
             return_token!(TokenKind::End, stream);
         }
 
-        // ------------------
+        // ----------------
         //  String literals
-        // ------------------
+        // ----------------
 
         if current_char == '"' {
             return tokenize_string(stream, string_table);
@@ -459,9 +459,9 @@ fn get_token_kind(
             return_token!(TokenKind::QuestionMark, stream);
         }
 
-        // ----------------------------
+        // ------------------------------
         //  Subtraction & Line comments
-        // ----------------------------
+        // ------------------------------
 
         if current_char == '-'
             && let Some(&next_char) = stream.peek()
@@ -484,6 +484,7 @@ fn get_token_kind(
 
             if next_char == '=' {
                 stream.next();
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                 return_token!(TokenKind::SubtractAssign, stream);
             }
 
@@ -534,6 +535,7 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                 return_token!(TokenKind::AddAssign, stream);
             }
 
@@ -553,6 +555,7 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                 return_token!(TokenKind::MultiplyAssign, stream);
             }
 
@@ -570,6 +573,11 @@ fn get_token_kind(
                         && next_next_char == '='
                     {
                         stream.next();
+                        require_symbolic_binary_spacing(
+                            stream,
+                            context,
+                            whitespace_before_current,
+                        )?;
                         return_token!(TokenKind::IntDivideAssign, stream);
                     }
                     require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
@@ -579,6 +587,7 @@ fn get_token_kind(
                 // Divide assign (/=)
                 if next_char == '=' {
                     stream.next();
+                    require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                     return_token!(TokenKind::DivideAssign, stream);
                 }
             }
@@ -592,6 +601,7 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                 return_token!(TokenKind::ModulusAssign, stream);
             }
 
@@ -604,6 +614,7 @@ fn get_token_kind(
                 && next_char == '='
             {
                 stream.next();
+                require_symbolic_binary_spacing(stream, context, whitespace_before_current)?;
                 return_token!(TokenKind::ExponentAssign, stream);
             }
 
@@ -611,9 +622,9 @@ fn get_token_kind(
             return_token!(TokenKind::Exponent, stream);
         }
 
-        // ------------------
+        // -------------------
         //  Logic & Channels
-        // ------------------
+        // -------------------
 
         if current_char == '>' {
             if let Some(&next_char) = stream.peek() {
@@ -678,9 +689,9 @@ fn get_token_kind(
             return_token!(TokenKind::Ampersand, stream);
         }
 
-        // ----------------------
+        // -----------------------
         //  Identifiers & Values
-        // ----------------------
+        // -----------------------
 
         // Paths (@/path)
         if current_char == '@' {
@@ -792,7 +803,8 @@ pub(crate) fn tokenize_identifier_or_keyword(
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerDiagnostic> {
     // WHY: Variable names and keywords can contain alphanumeric characters or underscores.
-    // We consume the entire identifier before deciding if it's a keyword or a symbol.
+    // The loop keeps consuming identifier characters until a non-identifier boundary is
+    // reached, then falls through to keyword and symbol matching.
     loop {
         if let Some(char) = stream.peek()
             && is_identifier_continue(*char)
@@ -826,6 +838,9 @@ pub(crate) fn tokenize_identifier_or_keyword(
     }
 }
 
+/// Consume horizontal whitespace (spaces, tabs) but stop at newlines.
+/// WHY: Newlines are significant tokens; this helper lets callers skip indentation
+/// without consuming line boundaries.
 pub fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
     let mut consumed = false;
 
@@ -840,6 +855,9 @@ pub fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
     consumed
 }
 
+/// Consume all whitespace including newlines.
+/// WHY: Used after a newline token to skip trailing whitespace on the same line,
+/// and before the next meaningful token to normalize inter-token spacing.
 pub fn consume_all_whitespace(stream: &mut TokenStream) -> bool {
     let mut consumed = false;
 

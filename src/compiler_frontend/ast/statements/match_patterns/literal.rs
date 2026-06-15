@@ -1,6 +1,6 @@
 //! Literal pattern parsing.
 //!
-//! WHAT: parses int, float, bool, char, string, and negative numeric literals
+//! WHAT: parses int, float, bool, char, string, and negative-numeric literals
 //! and dispatches to relational pattern parsing when the lead token is a comparator.
 //! WHY: separating literal parsing from relational and choice parsing keeps each
 //! submodule focused on one pattern category.
@@ -12,15 +12,61 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::numeric_text::parse::{materialize_f64, materialize_i32_with_sign};
-use crate::compiler_frontend::numeric_text::token::{NumericLiteralKind, NumericLiteralSign};
+use crate::compiler_frontend::numeric_text::token::{
+    NumericLiteralKind, NumericLiteralSign, NumericLiteralToken,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use super::diagnostics::reject_deferred_pattern_lead_token;
 use super::relational::parse_relational_pattern;
 use super::types::MatchPattern;
+
+/// Materialize a `NumericLiteralToken` into an `Expression` with an explicit sign and location.
+///
+/// WHAT: handles both whole-number (`i32`) and decimal/exponent (`f64`) materialization
+/// from a single token, applying the provided sign for range checks (whole numbers)
+/// and float-value negation (decimal/exponent literals).
+/// WHY: the positive and negative numeric arms in `parse_literal_pattern` share identical
+/// materialization logic; this helper avoids duplicating the branch on `NumericLiteralKind`
+/// and the two error-construction paths.
+fn materialize_numeric_literal(
+    token: &NumericLiteralToken,
+    sign: NumericLiteralSign,
+    location: SourceLocation,
+    string_table: &StringTable,
+) -> Result<Expression, CompilerDiagnostic> {
+    if token.kind == NumericLiteralKind::WholeNumber {
+        let value_i32 = materialize_i32_with_sign(token, sign, string_table).map_err(|reason| {
+            CompilerDiagnostic::invalid_number_literal(token.source_text, reason, location.clone())
+        })?;
+
+        Ok(Expression::int(
+            value_i32,
+            location,
+            ValueMode::ImmutableOwned,
+        ))
+    } else {
+        let value = materialize_f64(token, string_table).map_err(|reason| {
+            CompilerDiagnostic::invalid_number_literal(token.source_text, reason, location.clone())
+        })?;
+
+        // Negate the float when the sign is negative; the normalised text is unsigned
+        // and always carries the positive magnitude.
+        let float_value = match sign {
+            NumericLiteralSign::Negative => -value,
+            NumericLiteralSign::Positive => value,
+        };
+
+        Ok(Expression::float(
+            float_value,
+            location,
+            ValueMode::ImmutableOwned,
+        ))
+    }
+}
 
 /// Parse a non-choice match pattern, dispatching to relational or literal parsers.
 #[allow(clippy::result_large_err)]
@@ -69,37 +115,18 @@ pub(super) fn parse_literal_pattern(
     reject_deferred_pattern_lead_token(token_stream)?;
 
     let pattern = match token_stream.current_token_kind() {
-        // Simple scalar and string literals.
+        // Numeric literal — use the shared materialization helper.
         TokenKind::NumericLiteral(token) => {
             let location = token_stream.current_location();
             let token = token.to_owned();
 
-            let expression = if token.kind == NumericLiteralKind::WholeNumber {
-                let value_i32 = materialize_i32_with_sign(&token, token.sign, string_table)
-                    .map_err(|reason| {
-                        CompilerDiagnostic::invalid_number_literal(
-                            token.normalized_text,
-                            reason,
-                            location.clone(),
-                        )
-                    })?;
-
-                Expression::int(value_i32, location, ValueMode::ImmutableOwned)
-            } else {
-                let value = materialize_f64(&token, string_table).map_err(|reason| {
-                    CompilerDiagnostic::invalid_number_literal(
-                        token.normalized_text,
-                        reason,
-                        location.clone(),
-                    )
-                })?;
-
-                Expression::float(value, location, ValueMode::ImmutableOwned)
-            };
-
+            let expression =
+                materialize_numeric_literal(&token, token.sign, location, string_table)?;
             token_stream.advance();
             expression
         }
+
+        // Bool, char, and string literals.
         TokenKind::BoolLiteral(value) => {
             let location = token_stream.current_location();
             let expression = Expression::bool(*value, location, ValueMode::ImmutableOwned);
@@ -119,7 +146,7 @@ pub(super) fn parse_literal_pattern(
             expression
         }
 
-        // Negative numeric literals (e.g. `-42`, `-3.14`).
+        // Negative numeric literal — consume the leading `-` then materialize via the helper.
         TokenKind::Negative => {
             let minus_sign_location = token_stream.current_location();
             token_stream.advance();
@@ -127,31 +154,12 @@ pub(super) fn parse_literal_pattern(
             match token_stream.current_token_kind() {
                 TokenKind::NumericLiteral(token) => {
                     let token = token.to_owned();
-                    let expression = if token.kind == NumericLiteralKind::WholeNumber {
-                        let value_i32 = materialize_i32_with_sign(
-                            &token,
-                            NumericLiteralSign::Negative,
-                            string_table,
-                        )
-                        .map_err(|reason| {
-                            CompilerDiagnostic::invalid_number_literal(
-                                token.normalized_text,
-                                reason,
-                                minus_sign_location.clone(),
-                            )
-                        })?;
-
-                        Expression::int(value_i32, minus_sign_location, ValueMode::ImmutableOwned)
-                    } else {
-                        let value = materialize_f64(&token, string_table).map_err(|reason| {
-                            CompilerDiagnostic::invalid_number_literal(
-                                token.normalized_text,
-                                reason,
-                                minus_sign_location.clone(),
-                            )
-                        })?;
-                        Expression::float(-value, minus_sign_location, ValueMode::ImmutableOwned)
-                    };
+                    let expression = materialize_numeric_literal(
+                        &token,
+                        NumericLiteralSign::Negative,
+                        minus_sign_location,
+                        string_table,
+                    )?;
                     token_stream.advance();
                     expression
                 }
@@ -185,7 +193,12 @@ pub(super) fn parse_literal_pattern(
         }
     };
 
-    // Verify the literal type is compatible with the scrutinee.
+    // -------------------------------
+    //  Type-check the literal pattern
+    // -------------------------------
+    //
+    // Reject literal patterns whose type is incompatible with the scrutinee type
+    // at parse time so the user gets a source-located error immediately.
     if !is_type_compatible(subject_type_id, pattern.type_id, type_environment) {
         return Err(CompilerDiagnostic::type_mismatch(
             subject_type_id,

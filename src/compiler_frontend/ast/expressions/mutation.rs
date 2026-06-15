@@ -1,11 +1,29 @@
 //! Mutation expression parsing for assignment and compound assignment.
 //!
-//! WHAT: parses `=`, `+=`, `-=`, `*=`, `/=`, and `//=` after a place expression
-//!       has been resolved, validating mutability and type compatibility.
-//! WHY: mutation is a distinct expression kind in the AST; centralising the
-//!      parsing, validation, and compound-operator expansion here keeps the
-//!      main expression dispatch logic free of assignment-specific rules.
-
+//! WHAT:
+//!   - Parses simple assignment (`=`) and compound assignment
+//!     (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `^=`) after a place
+//!     expression has been resolved.
+//!   - Validates mutability and type compatibility for the target.
+//!   - Desugars compound operators into `target = target op rhs` for
+//!     uniform type checking and constant folding.
+//!
+//! WHY:  Mutation is a distinct expression kind in the AST; centralising
+//!       the parsing, validation, and compound-operator expansion here
+//!       keeps the main expression dispatch logic free of assignment-
+//!       specific rules.
+//!
+//! Use `handle_mutation` when the statement parser has only a variable
+//! reference, or `handle_mutation_target` when the caller has already
+//! resolved the place target (e.g. after field-access parsing).
+//!
+//! DOES NOT OWN:
+//!   - Value-block / receiver-block mutation. Those live in
+//!     `statements/value_production/`.
+//!   - Field-access chain parsing. That lives in
+//!     `expressions/parse_expression_places.rs` and `field_access/`.
+//!   - Statement-level mutation orchestration. That lives in
+//!     `statements/`.
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
@@ -68,7 +86,7 @@ fn validate_assignment_value_type(
 
 /// Map a compound-assignment token to its arithmetic operator and diagnostic label.
 ///
-/// WHAT: converts `+=`, `-=`, `*=`, `/=`, `//=` into the corresponding
+/// WHAT: converts `+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `^=` into the corresponding
 ///       `Operator` variant and a human-readable label used in diagnostics.
 /// WHY: compound assignments are desugared into `target = target op rhs`;
 ///      this mapping is needed both for the desugaring and for error messages.
@@ -79,6 +97,8 @@ fn compound_assignment_operator(token_kind: &TokenKind) -> Option<(Operator, &'s
         TokenKind::MultiplyAssign => Some((Operator::Multiply, "Compound assignment '*='")),
         TokenKind::DivideAssign => Some((Operator::Divide, "Compound assignment '/='")),
         TokenKind::IntDivideAssign => Some((Operator::IntDivide, "Compound assignment '//='")),
+        TokenKind::ModulusAssign => Some((Operator::Modulus, "Compound assignment '%='")),
+        TokenKind::ExponentAssign => Some((Operator::Exponent, "Compound assignment '^='")),
         _ => None,
     }
 }
@@ -90,6 +110,7 @@ fn compound_assignment_operator(token_kind: &TokenKind) -> Option<(Operator, &'s
 /// WHY: compound assignment evaluation needs the same state as simple
 ///      assignment plus the operator; bundling keeps the signature readable.
 struct CompoundAssignmentInput<'a> {
+    /// Declaration of the variable being assigned to.
     variable_declaration: &'a Declaration,
     target: &'a PlaceExpression,
     target_type_id: TypeId,
@@ -118,6 +139,11 @@ fn evaluate_compound_assignment_value(
     } = input;
     let location = target.location.clone();
     let mut expr_type = ExpectedType::Infer;
+
+    // -----------------------
+    //  Parse the RHS operand
+    // -----------------------
+
     let rhs_context = variable_declaration
         .id
         .name()
@@ -132,6 +158,11 @@ fn evaluate_compound_assignment_value(
         false,
         string_table,
     )?;
+
+    // -------------------------------------------
+    //  Build `target op rhs` and validate the
+    //  result type against the declared type
+    // -------------------------------------------
 
     let target_expression = expression_from_place_expression(target);
     let operator_item = ExpressionRpnItem::Operator { operator, location };
@@ -179,6 +210,10 @@ fn build_mutation_from_target(
         Blue variable_declaration.id.to_string(string_table)
     );
 
+    // -----------------------
+    //  Validate mutability
+    // -----------------------
+
     if !place_expression_is_mutable(&target) {
         return Err(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::ImmutableVariable,
@@ -188,6 +223,10 @@ fn build_mutation_from_target(
         )
         .into());
     }
+
+    // -----------------------
+    //  Determine mutation kind
+    // -----------------------
 
     let value = match token_stream.current_token_kind() {
         TokenKind::Assign => {
@@ -340,6 +379,10 @@ pub fn handle_mutation(
     let Some(target) = place_expression_from_expression(&target_expression) else {
         return Err(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::NotMutablePlace,
+            // Field-access may not produce a named place expression
+            // (e.g. a computed index).  Passing `None` tells the
+            // diagnostic this is a structural error, not about a
+            // specific variable.
             None,
             Some(target_expression.type_id),
             token_stream.current_location(),

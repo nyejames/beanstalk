@@ -158,6 +158,7 @@ fn materialize_f64_rejects_non_finite_values() {
     let token = NumericLiteralToken::new(
         NumericLiteralSign::Positive,
         string_table.intern("1e309"),
+        string_table.intern("1e309"),
         NumericLiteralKind::Exponent,
         2,
         0,
@@ -177,6 +178,7 @@ fn materialize_f64_applies_negative_sign() {
 
     let token = NumericLiteralToken::new(
         NumericLiteralSign::Negative,
+        string_table.intern("-1.5e2"),
         string_table.intern("1.5e2"),
         NumericLiteralKind::Exponent,
         3,
@@ -245,9 +247,16 @@ fn whole_number_token(
     string_table: &mut StringTable,
 ) -> NumericLiteralToken {
     let normalized_text = string_table.intern(text);
+    // For signed tokens the source_text includes the sign prefix.
+    let source = match sign {
+        NumericLiteralSign::Positive => text.to_owned(),
+        NumericLiteralSign::Negative => format!("-{text}"),
+    };
+    let source_text = string_table.intern(&source);
 
     NumericLiteralToken::new(
         sign,
+        source_text,
         normalized_text,
         NumericLiteralKind::WholeNumber,
         text.chars().filter(|c| c.is_ascii_digit()).count() as u32,

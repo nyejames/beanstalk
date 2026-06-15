@@ -11,8 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- field-access-only records and nested path traversal through namespace fields
-- Build out core IO library
+- large io core library refactor (and the timely death of `io()`): `docs/roadmap/plans/core_io_v1_namespace_input_implementation_plan.md`
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
 

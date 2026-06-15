@@ -45,6 +45,10 @@ impl<'hir> JsEmitter<'hir> {
         self.lower_expr_without_reactive_snapshot(expression)
     }
 
+    // ----------------------
+    //  Expression dispatch
+    // ----------------------
+
     fn lower_expr_without_reactive_snapshot(
         &mut self,
         expression: &HirExpression,
@@ -59,18 +63,16 @@ impl<'hir> JsEmitter<'hir> {
                 variant_index,
                 fields,
             } => self.lower_variant_construct(carrier, *variant_index, fields),
+            // Beanstalk `Float` is finite f64. HIR validation rejects non-finite literals, so
+            // reaching here with NaN/Infinity indicates a compiler invariant breach.
             HirExpressionKind::Float(value) => {
-                if value.is_nan() {
-                    Ok("NaN".to_owned())
-                } else if value.is_infinite() {
-                    if value.is_sign_positive() {
-                        Ok("Infinity".to_owned())
-                    } else {
-                        Ok("-Infinity".to_owned())
-                    }
-                } else {
-                    Ok(value.to_string())
+                if !value.is_finite() {
+                    return Err(CompilerError::compiler_error(
+                        "JavaScript backend received non-finite HIR Float literal",
+                    ));
                 }
+
+                Ok(value.to_string())
             }
 
             HirExpressionKind::Bool(value) => Ok(value.to_string()),
@@ -175,6 +177,16 @@ impl<'hir> JsEmitter<'hir> {
         }
     }
 
+    // ------------------
+    //  Place lowering
+    // ------------------
+
+    /// Lower an HIR place expression to a JS runtime field/index access expression.
+    ///
+    /// WHAT: maps `HirPlace` variants (local, field, index) to the corresponding JS runtime
+    /// helper calls (`__bs_field`, `__bs_index`) or a direct local name.
+    /// WHY: the JS backend uses runtime helpers for field and index access to support the
+    /// reactive binding model.
     pub(crate) fn lower_place(&mut self, place: &HirPlace) -> Result<String, CompilerError> {
         match place {
             HirPlace::Local(local_id) => Ok(self.local_name(*local_id)?.to_owned()),
@@ -193,12 +205,22 @@ impl<'hir> JsEmitter<'hir> {
         }
     }
 
+    /// Lower an expression as a return value.
+    ///
+    /// WHAT: delegates to `lower_expression_for_use` with `JsValueUse::ReturnValue` to
+    /// ensure the expression is wrapped in a return-value binding when needed.
+    /// WHY: return values may need special handling (e.g. temporary binding) that differs
+    /// from plain expression contexts.
     pub(crate) fn lower_return_value_expression(
         &mut self,
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
         self.lower_expression_for_use(expression, JsValueUse::ReturnValue)
     }
+
+    // ------------------------
+    //  Variant construction
+    // ------------------------
 
     // WHAT: lowers a variant construction into a JS object literal.
     // WHY: centralises tag policy and field-key escaping in one place.
@@ -292,6 +314,10 @@ impl<'hir> JsEmitter<'hir> {
     fn is_choice_type_id(&self, type_id: TypeId) -> bool {
         self.type_environment.variants_for(type_id).is_some()
     }
+
+    // ----------------------------
+    //  Binary operator lowering
+    // ----------------------------
 
     fn lower_bin_op(
         &mut self,
@@ -445,6 +471,12 @@ impl<'hir> JsEmitter<'hir> {
         }
     }
 
+    /// Lower the inner-value equality check for option comparison.
+    ///
+    /// WHAT: when both sides of an option comparison are `some`, this produces the
+    /// inner equality expression. For choice-typed inner values, it uses the runtime
+    /// `__bs_choice_eq` helper; for other types, it uses JS `===`.
+    /// WHY: choice types need structural equality rather than reference equality.
     pub(crate) fn lower_option_inner_equality(
         &mut self,
         left: String,
@@ -459,6 +491,15 @@ impl<'hir> JsEmitter<'hir> {
         format!("({left} === {right})")
     }
 
+    // ---------------------------
+    //  Unary operator lowering
+    // ---------------------------
+
+    /// Lower a unary operator expression to JS.
+    ///
+    /// WHAT: maps `HirUnaryOp::Neg` to `-` and `HirUnaryOp::Not` to `!`, wrapping the
+    /// operand in parentheses for correct precedence.
+    /// WHY: JS unary operators have the same semantics as Beanstalk for these cases.
     fn lower_unary_op(
         &mut self,
         operator: HirUnaryOp,
@@ -472,6 +513,10 @@ impl<'hir> JsEmitter<'hir> {
 
         Ok(format!("({js_operator}{operand})"))
     }
+
+    // -----------------------
+    //  Map literal lowering
+    // -----------------------
 
     /// Lower a map literal expression into a `__bs_map_new` call.
     ///
@@ -499,6 +544,9 @@ impl<'hir> JsEmitter<'hir> {
 
         Ok(format!("__bs_map_new([{}])", lowered_entries.join(", ")))
     }
+    // -----------------------------
+    //  Reactive template lowering
+    // -----------------------------
 
     /// Lower a reactive template value to the backend-owned template-string runtime representation.
     ///
@@ -587,6 +635,10 @@ impl<'hir> JsEmitter<'hir> {
         Ok(format!("[{}]", values.join(", ")))
     }
 }
+
+// -----------------
+//  Escape helpers
+// -----------------
 
 pub(crate) fn escape_js_string(value: &str) -> String {
     let mut escaped = String::from("\"");

@@ -42,6 +42,7 @@ pub fn start_repl_session() {
             Ok(_) => {
                 if new_code.trim() == "exit" {
                     println!("Closing REPL session.");
+                    break;
                 }
 
                 if new_code.trim() == "clear" {

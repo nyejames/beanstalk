@@ -1725,3 +1725,76 @@ fn validator_accepts_collection_expression_with_fixed_collection_type() {
     validate_module_for_tests(&module, &string_table, &type_environment)
         .expect("validator should accept Collection expression with fixed collection type");
 }
+
+// ---------------------------------------------------------------------------
+// Non-finite Float literal invariant
+// ---------------------------------------------------------------------------
+
+/// WHAT: injects a `HirExpressionKind::Float(value)` expression into the start entry block and
+///       runs HIR validation.
+/// WHY: non-finite HIR Float literals violate the `Float = finite f64` language contract. The
+///      validator must reject them as internal invariant breaches before any backend lowers them.
+fn inject_nonfinite_float_expression(
+    module: &mut HirModule,
+    float_type: TypeId,
+    value: f64,
+    location: &SourceLocation,
+) {
+    let entry_block_index = start_entry_block_index(module);
+    let entry_region = module.blocks[entry_block_index].region;
+    let expression = float_expression(
+        HirValueId(9000),
+        value,
+        float_type,
+        entry_region,
+        location,
+        module,
+    );
+
+    let statement = HirStatement {
+        id: HirNodeId(9000),
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(location, &statement);
+    module.blocks[entry_block_index].statements.push(statement);
+}
+
+#[test]
+fn validator_rejects_nonfinite_float_literal_infinity() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let float_type = type_environment.builtins().float;
+    let location = test_location(60);
+
+    inject_nonfinite_float_expression(&mut module, float_type, f64::INFINITY, &location);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject HIR Float literal with INFINITY");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("must be finite"),
+        "expected 'must be finite' in error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn validator_rejects_nonfinite_float_literal_nan() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let float_type = type_environment.builtins().float;
+    let location = test_location(61);
+
+    inject_nonfinite_float_expression(&mut module, float_type, f64::NAN, &location);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject HIR Float literal with NaN");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("must be finite"),
+        "expected 'must be finite' in error, got: {}",
+        error.msg
+    );
+}

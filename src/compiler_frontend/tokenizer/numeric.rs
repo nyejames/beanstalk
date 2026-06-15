@@ -28,8 +28,14 @@ pub(super) fn tokenize_numeric_literal(
     let mut literal_text = String::new();
     literal_text.push(first_digit);
 
+    // ------------------------
+    //  Consume integer part
+    // ------------------------
     consume_digit_run(&mut literal_text, stream);
 
+    // ------------------------
+    //  Consume decimal part
+    // ------------------------
     if stream.peek() == Some(&'.') {
         let decimal_point =
             stream.advance_after_peek("Tokenizer peeked a decimal point but could not advance.");
@@ -37,24 +43,29 @@ pub(super) fn tokenize_numeric_literal(
         let fractional_digits = consume_digit_run(&mut literal_text, stream);
 
         if fractional_digits > 0 && stream.peek() == Some(&'.') {
-            let literal_text_id = string_table.intern(&literal_text);
+            // Report the authored source text so diagnostics preserve underscores and sign.
+            let authored = authored_numeric_text(sign, &literal_text);
+            let authored_id = string_table.intern(&authored);
             return Err(CompilerDiagnostic::invalid_number_literal(
-                literal_text_id,
+                authored_id,
                 NumberLiteralErrorReason::MultipleDecimalPoints,
                 stream.new_location(),
             ));
         }
     }
 
-    if let Some(&character) = stream.peek()
-        && (character == 'e' || character == 'E')
+    // ------------------------
+    //  Consume exponent part
+    // ------------------------
+    if let Some(&next_char) = stream.peek()
+        && (next_char == 'e' || next_char == 'E')
     {
         let exponent_marker =
             stream.advance_after_peek("Tokenizer peeked an exponent marker but could not advance.");
         literal_text.push(exponent_marker);
 
-        if let Some(&sign_character) = stream.peek()
-            && (sign_character == '+' || sign_character == '-')
+        if let Some(&exponent_sign_char) = stream.peek()
+            && (exponent_sign_char == '+' || exponent_sign_char == '-')
         {
             let exponent_sign = stream
                 .advance_after_peek("Tokenizer peeked an exponent sign but could not advance.");
@@ -64,11 +75,20 @@ pub(super) fn tokenize_numeric_literal(
         consume_digit_run(&mut literal_text, stream);
     }
 
+    // ------------------------
+    //  Validate and build token
+    // ------------------------
+    let authored = authored_numeric_text(sign, &literal_text);
+
     match parse_numeric_literal(&literal_text) {
         Ok(parsed) => {
+            // `source_text` preserves the authored form (separators, uppercase E);
+            // `normalized_text` is unsigned, separator-free, lowercase `e`.
+            let source_text = string_table.intern(&authored);
             let normalized_text = string_table.intern(&parsed.normalized_text);
             let token = NumericLiteralToken::new(
                 sign,
+                source_text,
                 normalized_text,
                 parsed.kind,
                 parsed.digit_count,
@@ -80,9 +100,10 @@ pub(super) fn tokenize_numeric_literal(
         }
 
         Err(reason) => {
-            let literal_text_id = string_table.intern(&literal_text);
+            // Report the authored source text so diagnostics preserve underscores and sign.
+            let authored_id = string_table.intern(&authored);
             Err(CompilerDiagnostic::invalid_number_literal(
-                literal_text_id,
+                authored_id,
                 reason,
                 stream.new_location(),
             ))
@@ -90,10 +111,27 @@ pub(super) fn tokenize_numeric_literal(
     }
 }
 
+/// Build the authored source text for a numeric literal, including the attached sign.
+///
+/// WHAT: prepends `-` for negative literals and returns the unsigned text as-is for
+///       positive literals. This preserves the exact form the author typed for diagnostics.
+/// WHY: `source_text` should match the author's source so range errors, uppercase-exponent
+///      rejections, and separator diagnostics show the original literal, not a normalized form.
+fn authored_numeric_text(sign: NumericLiteralSign, unsigned_literal_text: &str) -> String {
+    match sign {
+        NumericLiteralSign::Positive => unsigned_literal_text.to_owned(),
+        NumericLiteralSign::Negative => format!("-{unsigned_literal_text}"),
+    }
+}
+
 /// Consume a run of digits and digit separators from the stream.
 ///
+/// WHAT: advances the stream past all consecutive digits and `_` separators,
+///       appending each to `literal_text`. Returns the count of actual digits
+///       consumed (excluding separators).
 /// WHY: the scanner needs to know how far the literal extends before the grammar
 ///      validates separator placement; this helper centralizes that simple loop.
+///      The digit count lets callers detect empty fractional parts or exponents.
 fn consume_digit_run(literal_text: &mut String, stream: &mut TokenStream<'_>) -> u32 {
     let mut digit_count = 0;
 

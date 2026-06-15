@@ -1,7 +1,14 @@
 //! Literal expression parsing helpers.
 //!
-//! WHAT: parses literal tokens and option-none literal rules.
-//! WHY: literal semantics are independent from identifier/call logic and easier to validate in isolation.
+//! WHAT: parses literal tokens (numeric, string, boolean, char, none) and
+//!       option-none literal rules.
+//! WHY: literal semantics are independent from identifier/call logic and easier
+//!      to validate in isolation.
+//!
+//! The main entry point is [`parse_literal_expression`], which dispatches on
+//! token kind. The helper [`none_literal_has_option_equality_context`] detects
+//! bare `none` in equality-comparison position so type inference can proceed
+//! without an explicit `ExpectedType`.
 
 use super::error::ExpressionParseError;
 use super::expression::Expression;
@@ -22,10 +29,27 @@ use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 pub(super) struct LiteralParseState<'a> {
+    /// The expected type from surrounding context, if known.
+    /// Used by `none` literal resolution to determine the option inner type.
     pub(super) expected_type: &'a ExpectedType,
+
+    /// The current value mode (e.g. compile-time, runtime).
+    /// Propagated to every literal expression so downstream stages know how to
+    /// evaluate the value.
     pub(super) value_mode: &'a ValueMode,
+
+    /// The RPN expression stack being built.
+    /// Literal expressions are pushed as operands for later operator resolution.
     pub(super) expression: &'a mut Vec<ExpressionRpnItem>,
+
+    /// Whether the next numeric literal should be negated.
+    /// Set by the parser when a unary `-` precedes a numeric token, bridging
+    /// the gap between tokenizer-signed literals and parser-owned negation.
     pub(super) next_number_negative: &'a mut bool,
+
+    /// Whether to allow boundary-catch expressions during operand push.
+    /// When true, the operand push may wrap the expression in a boundary check
+    /// instead of failing on out-of-range values.
     pub(super) allow_boundary_catch: bool,
 }
 
@@ -60,8 +84,9 @@ pub(super) fn parse_literal_expression(
 
                 let value_i32 = materialize_i32_with_sign(&token, effective_sign, string_table)
                     .map_err(|reason| {
+                        // Use authored source text so diagnostics report the original literal.
                         CompilerDiagnostic::invalid_number_literal(
-                            token.normalized_text,
+                            token.source_text,
                             reason,
                             location.clone(),
                         )
@@ -70,8 +95,9 @@ pub(super) fn parse_literal_expression(
                 Expression::int(value_i32, location.to_owned(), state.value_mode.to_owned())
             } else {
                 let mut value = materialize_f64(&token, string_table).map_err(|reason| {
+                    // Use authored source text so diagnostics report the original literal.
                     CompilerDiagnostic::invalid_number_literal(
-                        token.normalized_text,
+                        token.source_text,
                         reason,
                         location.clone(),
                     )

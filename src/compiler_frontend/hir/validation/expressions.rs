@@ -1,4 +1,4 @@
-//! HIR expression, pattern, and place validation.
+//! HIR expression, pattern, and place validation for the HIR validator.
 //!
 //! WHAT: validates recursive value trees, pattern payloads, variant indexing, and place type
 //! resolution after HIR lowering.
@@ -9,7 +9,9 @@ use super::HirValidator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpression, HirExpressionKind, HirVariantCarrier, ValueKind,
+};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
@@ -39,7 +41,7 @@ impl<'a> HirValidator<'a> {
     }
 
     /// WHAT: returns `true` for arithmetic operators that must now be represented as
-    ///       `HirStatementKind::NumericOp` rather than plain `HirExpressionKind::BinOp`.
+    ///       `HirStatementKind::NumericOp` rather than a plain `HirExpressionKind::BinOp`.
     /// WHY: validation guards against regressions where numeric arithmetic bypasses the checked
     ///      lowering path.
     fn is_arithmetic_binop(&self, op: HirBinOp) -> bool {
@@ -93,7 +95,7 @@ impl<'a> HirValidator<'a> {
             }
 
             HirPattern::Capture => {
-                // Capture patterns have no extra invariants beyond the local
+                // Capture patterns have no extra invariants beyond the
                 // registration performed during lowering.
             }
 
@@ -105,6 +107,10 @@ impl<'a> HirValidator<'a> {
         Ok(())
     }
 
+    /// WHAT: checks that a relational pattern's inner expression is a literal
+    ///       (int, float, char, or string).
+    /// WHY: relational patterns compare against compile-time constant values;
+    ///      only these literal kinds are valid comparison targets.
     pub(super) fn validate_relational_pattern_expression(
         &self,
         expression: &HirExpression,
@@ -126,6 +132,10 @@ impl<'a> HirValidator<'a> {
         Ok(())
     }
 
+    /// WHAT: checks that a literal pattern's inner expression is const-valued
+    ///       and is one of the allowed literal kinds (int, float, bool, char, string).
+    /// WHY: match arms destructure against compile-time constants; non-const or
+    ///      structurally complex expressions are not valid pattern targets.
     pub(super) fn validate_literal_pattern_expression(
         &self,
         expression: &HirExpression,
@@ -156,6 +166,10 @@ impl<'a> HirValidator<'a> {
         Ok(())
     }
 
+    /// WHAT: recursively validates an expression tree, its side-table mappings,
+    ///       type/region invariants, reactive template constraints, and all
+    ///       expression-kind-specific invariants.
+    /// WHY: every backend and later analysis pass depends on well-formed HIR expressions.
     pub(super) fn validate_expression(
         &self,
         expression: &HirExpression,
@@ -224,21 +238,29 @@ impl<'a> HirValidator<'a> {
         }
 
         match &expression.kind {
+            // Leaf literals carry no sub-expressions; no further validation needed.
             HirExpressionKind::Int(_)
-            | HirExpressionKind::Float(_)
             | HirExpressionKind::Bool(_)
             | HirExpressionKind::Char(_)
             | HirExpressionKind::StringLiteral(_) => {}
+
+            // Beanstalk `Float` is finite f64. Non-finite values (NaN, Infinity) must never
+            // survive HIR lowering — rejecting them here catches backend-invariant breaches
+            // before any backend sees a literal it cannot represent faithfully.
+            HirExpressionKind::Float(value) => {
+                if !value.is_finite() {
+                    return Err(self.error_with_hir("HIR Float literal must be finite", anchor));
+                }
+            }
 
             HirExpressionKind::VariantConstruct {
                 carrier,
                 variant_index,
                 fields,
             } => {
+                // Validate variant-index bounds and field arity per carrier kind.
                 match carrier {
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        choice_id,
-                    } => {
+                    HirVariantCarrier::Choice { choice_id } => {
                         let Some(choice) = self.module.choices.get(choice_id.0 as usize) else {
                             return Err(self.error_with_hir(
                                 format!("Invalid ChoiceId {choice_id:?} in VariantConstruct"),
@@ -286,7 +308,7 @@ impl<'a> HirValidator<'a> {
                             }
                         }
                     }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                    HirVariantCarrier::Option => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
@@ -322,7 +344,7 @@ impl<'a> HirValidator<'a> {
                             }
                         }
                     }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
+                    HirVariantCarrier::Fallible => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
@@ -342,6 +364,7 @@ impl<'a> HirValidator<'a> {
                         }
                     }
                 }
+                // Validate sub-expressions for every field after carrier-specific checks pass.
                 for field in fields {
                     self.validate_expression(&field.value, anchor)?;
                 }
@@ -356,6 +379,8 @@ impl<'a> HirValidator<'a> {
             }
 
             HirExpressionKind::BinOp { op, left, right } => {
+                // String concatenation uses plain BinOp; all other arithmetic must go through
+                // the checked NumericOp path.
                 let string_type = self.type_environment.builtins().string;
                 let is_string_concat =
                     *op == HirBinOp::Add && (left.ty == string_type || right.ty == string_type);
@@ -382,6 +407,7 @@ impl<'a> HirValidator<'a> {
             }
 
             HirExpressionKind::StructConstruct { struct_id, fields } => {
+                // Validate struct existence, field ownership, and field sub-expressions.
                 self.require_struct_id(*struct_id, anchor)?;
                 for (field_id, field_expression) in fields {
                     self.require_field_owned_by(*field_id, *struct_id, anchor)?;
@@ -389,6 +415,7 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            // Collection literals: validate type is a collection and validate each element.
             HirExpressionKind::Collection(elements) => {
                 if self
                     .type_environment
@@ -405,6 +432,7 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            // Map literals: validate type is a map and validate key/value sub-expressions.
             HirExpressionKind::MapLiteral(entries) => {
                 if self.type_environment.map_shape(expression.ty).is_none() {
                     return Err(self.error_with_hir(
@@ -418,6 +446,7 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            // Tuple construction: validate each element sub-expression.
             HirExpressionKind::TupleConstruct { elements } => {
                 for element in elements {
                     self.validate_expression(element, anchor)?;
@@ -425,6 +454,7 @@ impl<'a> HirValidator<'a> {
             }
 
             HirExpressionKind::TupleGet { tuple, .. } => {
+                // Tuple field access: validate the tuple sub-expression.
                 self.validate_expression(tuple, anchor)?;
             }
 
@@ -433,6 +463,7 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(end, anchor)?;
             }
 
+            // Variant payload extraction: validate source expression and carrier-specific bounds.
             HirExpressionKind::VariantPayloadGet {
                 carrier,
                 source,
@@ -441,9 +472,7 @@ impl<'a> HirValidator<'a> {
             } => {
                 self.validate_expression(source, anchor)?;
                 match carrier {
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
-                        choice_id,
-                    } => {
+                    HirVariantCarrier::Choice { choice_id } => {
                         let Some(choice) = self.module.choices.get(choice_id.0 as usize) else {
                             return Err(self.error_with_hir(
                                 format!("Invalid ChoiceId {choice_id:?} in VariantPayloadGet"),
@@ -470,7 +499,7 @@ impl<'a> HirValidator<'a> {
                             ));
                         }
                     }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                    HirVariantCarrier::Option => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
@@ -489,7 +518,7 @@ impl<'a> HirValidator<'a> {
                             ));
                         }
                     }
-                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
+                    HirVariantCarrier::Fallible => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
@@ -510,6 +539,7 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            // Unwrap and cast: validate the source sub-expression.
             HirExpressionKind::FallibleUnwrapSuccess { result }
             | HirExpressionKind::FallibleUnwrapError { result }
             | HirExpressionKind::Cast { source: result, .. } => {
@@ -530,6 +560,8 @@ impl<'a> HirValidator<'a> {
         anchor: Option<HirLocation>,
     ) -> Result<TypeId, CompilerError> {
         match place {
+            // Local place: look up the type from the local-types table.
+            // Returns an error if the local is unknown.
             HirPlace::Local(local_id) => self.local_types.get(local_id).copied().ok_or_else(|| {
                 self.error_with_hir(format!("Unknown local id {local_id:?}"), anchor)
             }),
@@ -555,6 +587,7 @@ impl<'a> HirValidator<'a> {
                 })
             }
 
+            // Index place: validate the index expression and resolve the element type.
             HirPlace::Index { base, index } => {
                 self.validate_expression(index, anchor)?;
                 let base_type = self.validate_place(base, anchor)?;
@@ -571,6 +604,8 @@ impl<'a> HirValidator<'a> {
         }
     }
 
+    /// WHAT: returns `true` when `type_id` resolves to a struct type (concrete or generic instance).
+    /// WHY: field-place validation needs to distinguish struct types from other compound types.
     pub(super) fn is_struct_type(&self, type_id: TypeId) -> bool {
         match self.type_environment.get(type_id) {
             Some(TypeDefinition::Struct(..)) => true,

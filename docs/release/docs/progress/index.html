@@ -549,6 +549,14 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Checked numerics and Float formatting follow-up</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Compound symbolic assignment spacing is enforced consistently with ordinary symbolic binary-operator spacing. Numeric literal tokens now carry both authored source text for diagnostics and normalized text for materialization. HIR validation rejects non-finite `Float` literals before backend lowering. Backend-stable `Float -> String` formatting is covered by an integration contract test.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Numeric check elision / range analysis, explicit opt-in unchecked or narrower numeric types, and high-precision numeric types such as `BigInt` or `Decimal` remain deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Type checking and coercion</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>

@@ -415,7 +415,7 @@ fn parsed_capacity(
 
                 let value = materialize_i32(token, string_table).map_err(|reason| {
                     CompilerDiagnostic::invalid_number_literal(
-                        token.normalized_text,
+                        token.source_text,
                         reason,
                         tokens[0].location.clone(),
                     )

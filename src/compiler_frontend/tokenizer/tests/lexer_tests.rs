@@ -542,6 +542,212 @@ fn rejects_missing_symbolic_binary_operator_spacing() {
     }
 }
 
+/// Compound symbolic assignments (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `^=`)
+/// must enforce the same spacing rule as ordinary symbolic binary operators.
+#[test]
+fn accepts_valid_compound_assignment_spacing() {
+    for source in [
+        "count += 1\n",
+        "count -= 1\n",
+        "count *= 2\n",
+        "count /= 4\n",
+        "count //= 3\n",
+        "count %= 5\n",
+        "count ^= 2\n",
+        "count ~= 1\n",
+    ] {
+        let (file_tokens, _string_table) = tokenize_source(source);
+        assert!(
+            file_tokens.tokens.iter().any(|token| {
+                matches!(
+                    token.kind,
+                    TokenKind::AddAssign
+                        | TokenKind::SubtractAssign
+                        | TokenKind::MultiplyAssign
+                        | TokenKind::DivideAssign
+                        | TokenKind::IntDivideAssign
+                        | TokenKind::ModulusAssign
+                        | TokenKind::ExponentAssign
+                        | TokenKind::Mutable
+                )
+            }),
+            "expected a compound assignment or mutable token in: {source}"
+        );
+    }
+}
+
+/// All compound assignment forms with no spacing at all (`count+=1` etc.) must fail.
+#[test]
+fn rejects_compound_assignment_missing_all_spacing() {
+    for source in [
+        "count+=1\n",
+        "count-=1\n",
+        "count*=2\n",
+        "count/=4\n",
+        "count//=3\n",
+        "count%=5\n",
+        "count^=2\n",
+    ] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        );
+    }
+}
+
+/// Compound assignments with left spacing but missing right spacing (`count +=1`) must fail.
+#[test]
+fn rejects_compound_assignment_missing_right_spacing() {
+    for source in [
+        "count +=1\n",
+        "count -=1\n",
+        "count *=2\n",
+        "count /=4\n",
+        "count //=3\n",
+        "count %=5\n",
+        "count ^=2\n",
+    ] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        );
+    }
+}
+
+/// Compound assignments with right spacing but missing left spacing (`count+= 1`) must fail.
+#[test]
+fn rejects_compound_assignment_missing_left_spacing() {
+    for source in [
+        "count+= 1\n",
+        "count-= 1\n",
+        "count*= 2\n",
+        "count/= 4\n",
+        "count//= 3\n",
+        "count%= 5\n",
+        "count^= 2\n",
+    ] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        );
+    }
+}
+
+/// `~=` is tokenized as `Mutable` + `Assign` and must also enforce spacing.
+/// The mutable marker rejects `count~= 1` (missing left space before `~`),
+/// and the assign token rejects `count ~=1` (missing right space after `=`).
+#[test]
+fn rejects_mutable_assignment_missing_spacing() {
+    for source in ["count~= 1\n", "count ~=1\n"] {
+        let (diagnostic, _string_table) = tokenize_source_error(source);
+        assert_common_syntax_mistake(
+            &diagnostic,
+            CommonSyntaxMistakeReason::InvalidSymbolicBinaryOperatorSpacing,
+        );
+    }
+}
+
+/// Numeric tokens preserve both `source_text` and `normalized_text`.
+///
+/// WHAT: verifies that authored source text (with separators and attached sign)
+///       is stored alongside normalized text for diagnostics and materialization.
+/// WHY: diagnostics should report what the author typed; materialization should
+///      use separator-free, lowercase text.
+#[test]
+fn numeric_token_preserves_source_and_normalized_text() {
+    for (source, expected_source, expected_normalized) in [
+        ("value = 1_000.50e-10\n", "1_000.50e-10", "1000.50e-10"),
+        ("value = -1_000\n", "-1_000", "1000"),
+        ("value = -1.0e+21\n", "-1.0e+21", "1.0e+21"),
+    ] {
+        let (file_tokens, string_table) = tokenize_source(source);
+        let numeric_token = file_tokens
+            .tokens
+            .iter()
+            .find_map(|token| match &token.kind {
+                TokenKind::NumericLiteral(t) => Some(t),
+                _ => None,
+            })
+            .expect("expected a numeric literal token");
+
+        let resolved_source = string_table.resolve(numeric_token.source_text);
+        let resolved_normalized = string_table.resolve(numeric_token.normalized_text);
+
+        assert_eq!(
+            resolved_source, expected_source,
+            "source_text mismatch for: {source}"
+        );
+        assert_eq!(
+            resolved_normalized, expected_normalized,
+            "normalized_text mismatch for: {source}"
+        );
+    }
+}
+
+/// Signed numeric tokens store the attached sign in `source_text` but
+/// `normalized_text` remains unsigned.
+#[test]
+fn signed_numeric_token_source_text_includes_sign() {
+    let (file_tokens, string_table) = tokenize_source("value = -42\n");
+    let numeric_token = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match &token.kind {
+            TokenKind::NumericLiteral(t) => Some(t),
+            _ => None,
+        })
+        .expect("expected a numeric literal token");
+
+    assert_eq!(numeric_token.sign, NumericLiteralSign::Negative);
+    assert_eq!(string_table.resolve(numeric_token.source_text), "-42");
+    assert_eq!(string_table.resolve(numeric_token.normalized_text), "42");
+}
+
+/// Out-of-range literal with separators is accepted by the tokenizer
+/// and the source_text preserves the authored form for the materialization
+/// diagnostic.
+#[test]
+fn out_of_range_literal_with_separators_preserves_authored_text() {
+    let (file_tokens, string_table) = tokenize_source("value = 9_999_999_999\n");
+
+    let numeric_token = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match &token.kind {
+            TokenKind::NumericLiteral(t) => Some(t),
+            _ => None,
+        })
+        .expect("expected a numeric literal token");
+
+    // The tokenizer accepts it; source_text preserves separators for later
+    // materialization diagnostics.
+    assert_eq!(
+        string_table.resolve(numeric_token.source_text),
+        "9_999_999_999"
+    );
+    assert_eq!(
+        string_table.resolve(numeric_token.normalized_text),
+        "9999999999"
+    );
+}
+
+/// Diagnostic for an uppercase exponent on a negative signed literal
+/// preserves the full authored text including the sign.
+#[test]
+fn uppercase_exponent_on_signed_literal_preserves_authored_text() {
+    let (error, string_table) = tokenize_source_error("value = -1E6\n");
+
+    assert_invalid_number_literal(
+        &error,
+        &string_table,
+        "-1E6",
+        NumberLiteralErrorReason::UppercaseExponentMarker,
+    );
+}
+
 #[test]
 fn tokenizer_does_not_steal_parser_owned_punctuation_diagnostics() {
     tokenize_source("value = identity<Int>(42)\n");

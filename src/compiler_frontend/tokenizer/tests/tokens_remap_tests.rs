@@ -87,8 +87,8 @@ fn flat_token_kinds_remap_correctly() {
     let mut non_string_kind = TokenKind::NumericLiteral(numeric_token);
     non_string_kind.remap_string_ids(&remap);
     assert!(
-        matches!(non_string_kind, TokenKind::NumericLiteral(_)),
-        "non-string-bearing numeric token kind should remain numeric after remap"
+        matches!(non_string_kind, TokenKind::NumericLiteral(ref token) if global_table.resolve(token.source_text) == "42" && global_table.resolve(token.normalized_text) == "42"),
+        "non-string-bearing numeric token kind should remap both source_text and normalized_text"
     );
 }
 

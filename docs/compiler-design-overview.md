@@ -685,6 +685,23 @@ HIR does not:
 * decide final runtime ownership
 * model exact lifetimes
 
+### HIR validation
+
+[`src/compiler_frontend/hir/validation/`](../src/compiler_frontend/hir/validation/)
+opens the completed HIR and rejects invariant breaches before any backend sees it.
+It guards the stage boundary between HIR generation and backend lowering:
+
+* plain arithmetic `HirBinOp` / `HirUnaryOp::Neg` that should have been lowered to
+  checked `NumericOp` statements are rejected as HIR shape errors;
+* `HirExpressionKind::Float` values must be finite `f64`; `NaN` and `Infinity`
+  literals are rejected as internal invariant breaches;
+* control-flow structure, block terminators, local references, and expression
+  shapes are validated for backend consumption.
+
+Validation failures are `CompilerError` / `ErrorType::HirTransformation`, not
+user-facing `CompilerDiagnostic`, because they represent compiler-internal
+lowering invariants.
+
 ### Reachable backend features
 
 [`src/compiler_frontend/hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs)

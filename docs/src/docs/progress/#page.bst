@@ -264,6 +264,14 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
+            [: Checked numerics and Float formatting follow-up]
+            [: Supported]
+            [: Compound symbolic assignment spacing is enforced consistently with ordinary symbolic binary-operator spacing. Numeric literal tokens now carry both authored source text for diagnostics and normalized text for materialization. HIR validation rejects non-finite `Float` literals before backend lowering. Backend-stable `Float -> String` formatting is covered by an integration contract test.]
+            [: JS / HTML]
+            [: Numeric check elision / range analysis, explicit opt-in unchecked or narrower numeric types, and high-precision numeric types such as `BigInt` or `Decimal` remain deferred.]
+        ]
+
+        [data:
             [: Type checking and coercion]
             [: Supported]
             [: Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.]

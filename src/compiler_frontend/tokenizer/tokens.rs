@@ -699,6 +699,7 @@ impl TokenKind {
                 | TokenKind::SubtractAssign
                 | TokenKind::MultiplyAssign
                 | TokenKind::DivideAssign
+                | TokenKind::ModulusAssign
                 | TokenKind::ExponentAssign
                 | TokenKind::IntDivideAssign
         )
@@ -719,6 +720,7 @@ impl TokenKind {
                 | TokenKind::SubtractAssign
                 | TokenKind::MultiplyAssign
                 | TokenKind::DivideAssign
+                | TokenKind::ModulusAssign
                 | TokenKind::ExponentAssign
                 | TokenKind::IntDivideAssign
                 | TokenKind::Add

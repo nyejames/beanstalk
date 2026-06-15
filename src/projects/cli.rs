@@ -48,7 +48,7 @@ pub fn start_cli() {
     let cli_args = &compiler_args[1..];
 
     if cli_args.is_empty() {
-        print_help(true);
+        print_help();
         return;
     }
 
@@ -61,13 +61,13 @@ pub fn start_cli() {
             if standalone_flags.contains(&Flag::Version) {
                 println!("bean {}", env!("CARGO_PKG_VERSION"));
             } else {
-                print_help(true);
+                print_help();
             }
             return;
         }
 
         say!("Flags must come after a command, unless used on their own.");
-        print_help(true);
+        print_help();
         return;
     }
 
@@ -75,7 +75,7 @@ pub fn start_cli() {
         Ok(command) => command,
         Err(e) => {
             say!(e);
-            print_help(true);
+            print_help();
             return;
         }
     };
@@ -84,7 +84,7 @@ pub fn start_cli() {
 
     match command {
         Command::Help => {
-            print_help(true);
+            print_help();
         }
 
         Command::NewHTMLProject(options) => {
@@ -461,13 +461,7 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
     Ok(Command::Dev { path, options })
 }
 
-fn print_help(commands_only: bool) {
-    if !commands_only {
-        say!(Bright Black "------------------------------------");
-        say!(Green Bold "The Beanstalk compiler and build system");
-        say!("Usage: ", Bold "<command>",  Italic "<args>");
-    }
-
+fn print_help() {
     say!(Green Bold "Beanstalk", Reset " is version ", Blue Bold env!("CARGO_PKG_VERSION"));
 
     say!(Green Bold "\nCommands:");

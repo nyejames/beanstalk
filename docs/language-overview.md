@@ -193,6 +193,11 @@ for example `-1` or `-1e6`; unary negation for non-literals must also be attache
 Symbolic binary operators must have spaces around them, such as `a + b` and `count = 1`.
 Forms like `a+b`, `a-1`, and `count=1` are syntax errors.
 
+Compound symbolic assignments (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `^=`) follow the same
+spacing rule: `count += 1` is valid, while `count+=1`, `count +=1`, and `count+= 1` are
+syntax errors. `~=` is tokenized as the separate mutable marker `~` and assignment `=`,
+so both sides of each token require spacing (e.g. `count ~= 1`).
+
 Runtime numeric operations are checked. Integer overflow, divide/modulo by zero, invalid integer
 exponents, and non-finite Float results are failures. When the enclosing function has builtin
 `Error!` as its error return slot, numeric failures recover through that builtin `Error` channel.
