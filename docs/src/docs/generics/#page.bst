@@ -324,7 +324,7 @@ page_head #= theme_head
         value = identity(42)
     ]
 
-    Namespace imports can call generic free functions through the shallow namespace record:
+    Namespace imports can call generic free functions through the source namespace record:
 
     [codeblock, $code("bst"):
         -- #page.bst

@@ -10,7 +10,7 @@
 //! Constants and choices are handled in earlier passes; they do not emit nodes here.
 //! Struct node emission reads the resolved field table produced by environment construction.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionBodyValidationInput, GenericFunctionInstance, GenericFunctionInstanceKey,
@@ -27,11 +27,14 @@ use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, Scop
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
 };
+use crate::compiler_frontend::ast::statements::terminality::{
+    terminality_policy_for_signature, validate_function_body_terminality,
+};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, GenericSubstitutionDiagnostic, InvalidTemplateStructureReason,
 };
@@ -623,6 +626,25 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             }
         };
 
+        // Template validation already proved terminality, so a failure during concrete instance
+        // reparse is an internal compiler invariant failure rather than a user-facing diagnostic.
+        let policy = terminality_policy_for_signature(&signature, false);
+        if let Some(diagnostic) =
+            validate_function_body_terminality(&body, policy, template.declaration_location.clone())
+        {
+            return Err(self.error_messages(
+                CompilerError::new(
+                    format!(
+                        "Generic function instance {} failed terminality validation after template validation succeeded",
+                        request.instance_path.to_string(string_table)
+                    ),
+                    diagnostic.primary_location,
+                    ErrorType::Compiler,
+                ),
+                string_table,
+            ));
+        }
+
         // Materialize nested instances before marking this one complete so direct or indirect
         // recursive generic instantiation is diagnosed while the active stack is still visible.
         self.emit_requested_generic_function_instances(active_instance_stack, string_table)?;
@@ -800,6 +822,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
 
         let body = body_result.map_err(|error| self.diagnostic_messages(error, string_table))?;
 
+        self.validate_body_terminality(
+            &body,
+            &resolved_signature.signature,
+            false,
+            header.name_location.clone(),
+            string_table,
+        )?;
+
         // AST symbol IDs are stored as full InternedPath values and are unique
         // module-wide, not only within a local scope.
         self.ast.push(AstNode {
@@ -879,6 +909,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 channel: ReturnChannel::Success,
             }],
         };
+
+        self.validate_body_terminality(
+            &body,
+            &start_signature,
+            true,
+            header.name_location.clone(),
+            string_table,
+        )?;
 
         self.ast.push(AstNode {
             kind: NodeKind::Function(full_name, start_signature, body),
@@ -1033,5 +1071,27 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             }
             TemplateError::Infrastructure(error) => self.error_messages(*error, string_table),
         }
+    }
+
+    /// Runs AST-owned terminality validation for a parsed function body.
+    ///
+    /// WHAT: converts the optional `FunctionMayFallThrough` diagnostic into the standard
+    /// `CompilerMessages` wrapper used by this emitter.
+    /// WHY: body parsing is complete at this point; missing-return diagnostics belong to AST,
+    /// not to HIR lowering.
+    fn validate_body_terminality(
+        &self,
+        body: &[AstNode],
+        signature: &FunctionSignature,
+        is_entry_start: bool,
+        location: SourceLocation,
+        string_table: &StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let policy = terminality_policy_for_signature(signature, is_entry_start);
+        if let Some(diagnostic) = validate_function_body_terminality(body, policy, location) {
+            return Err(self.diagnostic_messages(diagnostic, string_table));
+        }
+
+        Ok(())
     }
 }

@@ -6,8 +6,8 @@
 //! ## Diagnostic boundary
 //!
 //! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
-//! HIR transformation or lowering invariant failure only. Normal user-facing source failures
-//! must be emitted as `CompilerDiagnostic` from AST or earlier stages.
+//! HIR transformation or lowering invariant failure only. Function-body terminality is owned by
+//! AST; a fallthrough that reaches HIR lowering indicates a compiler invariant failure.
 
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, LoopBindings, MultiBindTarget, MultiBindTargetKind, NodeKind, RangeLoopSpec,
@@ -17,9 +17,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::expression_rpn::PlaceExpression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReturnShapeReason};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
-use crate::compiler_frontend::hir::hir_builder::{HirBuilder, HirLoweringError};
+use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -45,7 +44,7 @@ impl<'a> HirBuilder<'a> {
     // WHAT: routes one top-level AST node into the HIR lowering path that owns it.
     // WHY: declaration registration already built the symbol tables, so top-level lowering should
     //      only accept nodes that materially contribute module/runtime semantics.
-    pub(super) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), HirLoweringError> {
+    pub(super) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         match &node.kind {
             NodeKind::Function(name, signature, body) => {
                 self.lower_function_body(name, signature, body, &node.location)
@@ -57,8 +56,7 @@ impl<'a> HirBuilder<'a> {
                 "HIR invariant: Top-level return reached HIR lowering. Returns must appear inside function bodies in well-formed AST.",
                 self.hir_error_location(&node.location),
                 ErrorType::HirTransformation,
-            )
-            .into()),
+            )),
 
             _ => Err(CompilerError::new(
                 format!(
@@ -67,8 +65,7 @@ impl<'a> HirBuilder<'a> {
                 ),
                 self.hir_error_location(&node.location),
                 ErrorType::HirTransformation,
-            )
-            .into()),
+            )),
         }
     }
 
@@ -85,7 +82,7 @@ impl<'a> HirBuilder<'a> {
         signature: &FunctionSignature,
         body: &[AstNode],
         location: &SourceLocation,
-    ) -> Result<(), HirLoweringError> {
+    ) -> Result<(), CompilerError> {
         let function_id = self.resolve_function_id_or_error(function_name, location)?;
 
         self.enter_function(function_id, location)?;
@@ -107,7 +104,7 @@ impl<'a> HirBuilder<'a> {
         signature: &FunctionSignature,
         body: &[AstNode],
         location: &SourceLocation,
-    ) -> Result<(), HirLoweringError> {
+    ) -> Result<(), CompilerError> {
         let return_type = self
             .function_by_id_or_error(function_id, location)?
             .return_type;
@@ -137,8 +134,7 @@ impl<'a> HirBuilder<'a> {
                     "Result function with empty success returns has non-unit ok type",
                     self.hir_error_location(location),
                     ErrorType::HirTransformation,
-                )
-                .into());
+                ));
             }
 
             self.emit_terminator(current_block, HirTerminator::ReturnSuccess(unit), location)?;
@@ -152,11 +148,13 @@ impl<'a> HirBuilder<'a> {
             return Ok(());
         }
 
-        Err(HirLoweringError::Diagnostic(
-            CompilerDiagnostic::invalid_return_shape(
-                InvalidReturnShapeReason::FunctionMayFallThrough,
-                location.clone(),
-            ),
+        // AST terminality validation should have rejected any function that can reach this point.
+        // A fallthrough here is therefore an internal compiler invariant failure, not a user
+        // diagnostic.
+        Err(CompilerError::new(
+            "HIR lowering reached a non-terminal function body after AST terminality validation",
+            self.hir_error_location(location),
+            ErrorType::HirTransformation,
         ))
     }
 

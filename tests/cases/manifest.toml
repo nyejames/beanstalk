@@ -1805,9 +1805,19 @@ path = "config_unknown_key_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_plain_immutable_success"
-path = "config_plain_immutable_success"
+id = "config_constant_key_success"
+path = "config_constant_key_success"
 tags = ["integration","config"]
+
+[[case]]
+id = "config_plain_project_rejected"
+path = "config_plain_project_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_plain_library_folders_rejected"
+path = "config_plain_library_folders_rejected"
+tags = ["integration","config","diagnostics"]
 
 [[case]]
 id = "config_hash_key_constant_folds_success"
@@ -1845,6 +1855,21 @@ path = "config_function_declaration_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
+id = "config_trait_declaration_rejected"
+path = "config_trait_declaration_rejected"
+tags = ["integration","config","traits","diagnostics"]
+
+[[case]]
+id = "config_trait_conformance_rejected"
+path = "config_trait_conformance_rejected"
+tags = ["integration","config","traits","diagnostics"]
+
+[[case]]
+id = "config_trait_incompatibility_rejected"
+path = "config_trait_incompatibility_rejected"
+tags = ["integration","config","traits","diagnostics"]
+
+[[case]]
 id = "config_function_call_rejected"
 path = "config_function_call_rejected"
 tags = ["integration","config","diagnostics"]
@@ -1857,11 +1882,6 @@ tags = ["integration","config","diagnostics"]
 [[case]]
 id = "config_runtime_expression_rejected"
 path = "config_runtime_expression_rejected"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
-id = "config_non_key_private_helper_rejected"
-path = "config_non_key_private_helper_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -5101,6 +5121,31 @@ tags = ["integration", "language", "assert", "control-flow"]
 id = "assert_dynamic_not_terminal"
 path = "assert_dynamic_not_terminal"
 tags = ["integration", "language", "assert", "control-flow"]
+
+[[case]]
+id = "function_fallthrough_rejected"
+path = "function_fallthrough_rejected"
+tags = ["integration", "language", "control-flow", "diagnostics"]
+
+[[case]]
+id = "function_partial_if_return_rejected"
+path = "function_partial_if_return_rejected"
+tags = ["integration", "language", "control-flow", "diagnostics"]
+
+[[case]]
+id = "function_assert_false_terminal"
+path = "function_assert_false_terminal"
+tags = ["integration", "language", "assert", "control-flow"]
+
+[[case]]
+id = "generic_function_fallthrough_rejected"
+path = "generic_function_fallthrough_rejected"
+tags = ["integration", "language", "generics", "control-flow", "diagnostics"]
+
+[[case]]
+id = "error_only_function_implicit_unit"
+path = "error_only_function_implicit_unit"
+tags = ["integration", "language", "control-flow", "error-handling"]
 
 [[case]]
 id = "assert_condition_not_bool"

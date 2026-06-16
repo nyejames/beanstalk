@@ -161,9 +161,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Functions and calls]
             [: Supported]
-            [: Broad declaration, call validation, named and positional arguments, defaults, parameter passing, external calls, and return coverage.]
-            [: JS / HTML]
-            [: Named calls and defaulted parameters are supported. External and compiler-owned builtin calls remain positional-only.]
+            [: Broad declaration, terminality, call validation, named and positional arguments, defaults, parameter passing, external calls, and return coverage.]
+            [: Frontend / JS / HTML]
+            [: Named calls and defaulted parameters are supported. Non-unit success-return functions are validated for all-path terminality before HIR. External and compiler-owned builtin calls remain positional-only.]
         ]
 
         [data:
@@ -427,7 +427,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share visibility and facade rules. Current config loading accepts folded known config declarations authored in [$html:<code>#config.bst</code>], including plain immutable config bindings and explicit [$html:<code>#</code>] constants. Config imports may target core/builder libraries only.]
+            [: Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>#config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
         ]
 
         [data:

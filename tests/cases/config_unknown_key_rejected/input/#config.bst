@@ -1,1 +1,1 @@
-helper = "not a supported config key"
+helper #= "not a supported config key"

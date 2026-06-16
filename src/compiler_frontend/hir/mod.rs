@@ -12,9 +12,9 @@
 //!   parse-era type syntax values as executable semantic state.
 //! - HIR validation uses `CompilerError` with `ErrorType::HirTransformation` for invariant
 //!   failures only. It must not construct `CompilerDiagnostic`.
-//! - HIR lowering uses `CompilerError` for transformation invariants. The one documented
-//!   exception is `HirLoweringError::Diagnostic` for CFG-level fall-through detection;
-//!   see `hir_builder.rs`.
+//! - HIR lowering uses `CompilerError` with `ErrorType::HirTransformation` for transformation
+//!   invariants. Function-body terminality is validated by AST; fallthrough reaching HIR lowering
+//!   is an internal compiler invariant failure.
 //! - Borrow analysis facts are side-table metadata keyed by HIR IDs. HIR is not mutated to
 //!   encode borrow or ownership state.
 //!

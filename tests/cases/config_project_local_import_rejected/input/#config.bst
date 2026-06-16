@@ -1,2 +1,2 @@
 import @settings { value }
-entry_root = value
+entry_root #= value

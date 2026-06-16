@@ -63,31 +63,31 @@ page_head #= theme_head
     # Project root and #config.bst
 
     A normal HTML project has a `#config.bst` file at the project root.
-    Config files use ordinary Beanstalk top-level binding syntax.
+    Config entries are known top-level `#` constants whose values fold at compile time.
 
     [codeblock, $code("bst"):
-        project = "html"
-        entry_root = "src"
-        dev_folder = "dev"
-        output_folder = "release"
-        page_url_style = "trailing_slash"
-        redirect_index_html = true
-        name = "html_project"
-        version = "0.1.0"
-        author = ""
-        license = "MIT"
+        project #= "html"
+        entry_root #= "src"
+        dev_folder #= "dev"
+        output_folder #= "release"
+        page_url_style #= "trailing_slash"
+        redirect_index_html #= true
+        name #= "html_project"
+        version #= "0.1.0"
+        author #= ""
+        license #= "MIT"
 
-        origin = "/beanstalk"
-        html_lang = "en"
-        html_title_postfix = " | Beanstalk"
-        library_folders = {
+        origin #= "/beanstalk"
+        html_lang #= "en"
+        html_title_postfix #= " | Beanstalk"
+        library_folders #= {
             "lib",
         }
     ]
 
     Config keys are strict about value shape. String settings accept string literals and folded templates, `project` currently accepts only `"html"`, `library_folders` accepts one string or a collection of strings, `template_const_loop_iteration_limit` requires a positive folded `Int` no greater than `1_000_000`, and boolean HTML settings such as `redirect_index_html` require real `true` / `false` values rather than strings.
 
-    Config values must resolve to compile-time constants. Plain immutable key declarations and explicit `#=` key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. `#config.bst` may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and `["#[...]"]` page fragments are rejected. Const-record field projection is supported for explicit `#=` config keys and deferred for plain `=` keys.
+    Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. `#config.bst` may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and `["#[...]"]` page fragments are rejected. Const-record field projection is supported when the `#=` config expression fully folds.
 
     Important settings:
 

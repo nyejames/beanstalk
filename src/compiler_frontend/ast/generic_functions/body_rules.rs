@@ -9,6 +9,9 @@
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
+use crate::compiler_frontend::ast::statements::terminality::{
+    terminality_policy_for_signature, validate_function_body_terminality,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -45,13 +48,22 @@ pub(crate) fn validate_generic_function_body(
 
     context.generic_template_validation = true;
     let mut token_stream = template.body_tokens.to_owned();
-    let _validated_nodes = function_body_to_ast(
+    let validated_nodes = function_body_to_ast(
         &mut token_stream,
         context,
         type_interner,
         warnings,
         string_table,
     )?;
+
+    let policy = terminality_policy_for_signature(&template.signature, false);
+    if let Some(diagnostic) = validate_function_body_terminality(
+        &validated_nodes,
+        policy,
+        template.declaration_location.clone(),
+    ) {
+        return Err(diagnostic);
+    }
 
     Ok(())
 }

@@ -342,7 +342,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <code>#config.bst</code> file at the project root. Config files use ordinary Beanstalk top-level binding syntax.</p><pre style="
+    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <code>#config.bst</code> file at the project root. Config entries are known top-level <code>#</code> constants whose values fold at compile time.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -350,24 +350,24 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    project <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html&quot;</span>
-    entry_root <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;src&quot;</span>
-    dev_folder <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;dev&quot;</span>
-    output_folder <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;release&quot;</span>
-    page_url_style <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;trailing_slash&quot;</span>
-    redirect_index_html <span class='bst-code-operator'>=</span> true
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html_project&quot;</span>
-    version <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;0.1.0&quot;</span>
-    author <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&quot;</span>
-    license <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;MIT&quot;</span>
+    project <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html&quot;</span>
+    entry_root <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;src&quot;</span>
+    dev_folder <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;dev&quot;</span>
+    output_folder <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;release&quot;</span>
+    page_url_style <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;trailing_slash&quot;</span>
+    redirect_index_html <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> true
+    name <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html_project&quot;</span>
+    version <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;0.1.0&quot;</span>
+    author <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&quot;</span>
+    license <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;MIT&quot;</span>
 
-    origin <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;/beanstalk&quot;</span>
-    html_lang <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;en&quot;</span>
-    html_title_postfix <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot; | Beanstalk&quot;</span>
-    library_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
+    origin <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;/beanstalk&quot;</span>
+    html_lang <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;en&quot;</span>
+    html_title_postfix <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot; | Beanstalk&quot;</span>
+    library_folders <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-string'>&quot;lib&quot;</span>,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Plain immutable key declarations and explicit <code>#=</code> key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>#config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported for explicit <code>#=</code> config keys and deferred for plain <code>=</code> keys.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>#config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported when the <code>#=</code> config expression fully folds.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 

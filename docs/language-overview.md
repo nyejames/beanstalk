@@ -1246,12 +1246,12 @@ A module is a directory-scoped set of Beanstalk source files compiled into one o
 `#config.bst`:
 - lives at the project root;
 - uses normal declaration syntax;
-- accepts only known config-key value declarations;
+- accepts only known top-level `#` constants as config entries;
 - requires values to fold at compile time;
-- allows plain immutable key declarations and explicit `#` key constants;
 - may reference earlier compile-time config keys or constants imported from core/builder source libraries;
 - may contain core/builder imports, type aliases, structs, and choices as support declarations;
-- rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, standalone templates, and `#[...]` page fragments.
+- rejects plain top-level bindings because they are runtime/start-body syntax;
+- rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, traits, conformance metadata, standalone templates, and `#[...]` page fragments.
 
 Known config key shapes include:
 - string settings: string literals or folded templates;
@@ -1261,14 +1261,14 @@ Known config key shapes include:
 - `template_const_loop_iteration_limit`: positive folded `Int`, default `10_000`, max `1_000_000`.
 
 ```beanstalk
-project = "html"
-entry_root = "src"
-dev_folder = "dev"
-output_folder = "release"
-library_folders = {"lib", "packages"}
+project #= "html"
+entry_root #= "src"
+dev_folder #= "dev"
+output_folder #= "release"
+library_folders #= {"lib", "packages"}
 ```
 
-Explicit `#` config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`. The same projection in a plain `=` config key is deferred. Structured typed config values such as `project = Project::Html(...)` remain deferred.
+Config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`. Structured typed config values such as `project #= Project::Html(...)` remain deferred.
 
 ### Import syntax and rules
 
@@ -1294,9 +1294,10 @@ import @docs {
 
 Rules:
 - Imports target exported symbols, not file-level start functions.
-- Namespace imports create shallow, field-access-only import records.
+- Source and facade namespace imports create shallow, field-access-only import records.
+- External package namespace imports can expose nested package-local symbol paths such as `io.input.*`.
 - Import records are not first-class values.
-- Import child paths directly; do not traverse nested path segments through namespace fields.
+- Import source child paths directly; do not traverse source or facade path segments through namespace fields.
 - Aliases are file-local, not re-exported, and must not collide with visible names.
 - Alias leading-case mismatches warn.
 - Grouped imports cannot use a trailing group-level alias.

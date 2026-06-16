@@ -1367,7 +1367,7 @@ fn html_js_provider_repeated_imports_reuse_cache() {
 fn html_js_provider_js_import_from_source_library_resolves() {
     let dir = temp_dir("html_js_provider_source_library");
     fs::create_dir_all(dir.join("lib").join("ui")).expect("should create lib/ui dir");
-    fs::write(dir.join("#config.bst"), "library_folders = {\"lib\"}\n")
+    fs::write(dir.join("#config.bst"), "library_folders #= {\"lib\"}\n")
         .expect("should write config");
     fs::write(dir.join("#page.bst"), "import @ui { run }\nvalue = run()\n")
         .expect("should write page");

@@ -10,15 +10,12 @@
 //! ## Diagnostic boundary
 //!
 //! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
-//! HIR transformation or lowering invariant failure only. `HirLoweringError::Diagnostic`
-//! carries the rare source-level diagnostic that is discovered during CFG construction.
-//! Normal user-facing source failures must be emitted as `CompilerDiagnostic` from AST
-//! or earlier stages.
+//! HIR transformation or lowering invariant failure only. Normal user-facing source failures
+//! must be emitted as `CompilerDiagnostic` from AST or earlier stages.
 
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::blocks::HirBlock;
@@ -172,27 +169,6 @@ pub(super) struct ValueBlockTarget {
     pub merge_block: BlockId,
 }
 
-/// Stage-local error boundary for HIR lowering.
-///
-/// WHAT: lets HIR report source-level diagnostics discovered during CFG construction while still
-/// carrying true lowering invariant failures as infrastructure errors.
-/// WHY: most HIR failures are compiler bugs, but checks such as non-unit function fallthrough are
-/// normal user-facing rule diagnostics and must not be forced through `CompilerError`.
-///
-/// ## Usage rule
-/// - `Diagnostic` — for normal user-facing rule diagnostics discovered during lowering.
-/// - `Infrastructure` — for compiler bugs, broken invariants, and impossible AST states.
-pub(super) enum HirLoweringError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
-}
-
-impl From<CompilerError> for HirLoweringError {
-    fn from(error: CompilerError) -> Self {
-        Self::Infrastructure(error)
-    }
-}
-
 // WHAT: generates a typed `allocate_*_id` method for each HIR entity kind.
 // WHY: all nine allocators share identical logic — bump a u32 counter, wrap in a newtype, return.
 //      A module-level macro eliminates the repetition without changing the public API.
@@ -295,20 +271,6 @@ impl<'a> HirBuilder<'a> {
         result
     }
 
-    fn hir_lowering_error_messages(&self, error: HirLoweringError) -> CompilerMessages {
-        match error {
-            HirLoweringError::Diagnostic(diagnostic) => {
-                CompilerMessages::from_diagnostic_with_warnings(
-                    diagnostic,
-                    self.module.warnings.to_owned(),
-                    self.string_table,
-                )
-                .with_type_context_for_all_diagnostics(self.type_environment.clone())
-            }
-            HirLoweringError::Infrastructure(error) => self.lower_error_messages(error),
-        }
-    }
-
     // -------------------------
     //  Main Build Pipeline
     // -------------------------
@@ -341,7 +303,7 @@ impl<'a> HirBuilder<'a> {
         // 4. Lower AST nodes to HIR expressions/statements
         for node in &ast.nodes {
             if let Err(error) = self.process_ast_node(node) {
-                return Err(self.hir_lowering_error_messages(error));
+                return Err(self.lower_error_messages(error));
             }
         }
 
@@ -368,7 +330,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Processes a single AST node and generates corresponding HIR.
-    fn process_ast_node(&mut self, node: &AstNode) -> Result<(), HirLoweringError> {
+    fn process_ast_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         self.lower_top_level_node(node)
     }
 

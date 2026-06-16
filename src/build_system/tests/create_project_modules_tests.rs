@@ -5,8 +5,9 @@ use crate::build_system::project_config::{ProjectConfigParseServices, parse_proj
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticCategory, DiagnosticPayload, InvalidAssignmentTargetReason,
-    InvalidConfigReason, InvalidImportClauseReason, InvalidLibraryFolderReason,
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic, DiagnosticCategory, DiagnosticPayload,
+    InvalidAssignmentTargetReason, InvalidConfigReason, InvalidImportClauseReason,
+    InvalidLibraryFolderReason,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -229,7 +230,7 @@ fn rejects_unknown_config_key() {
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "custom_key = \"custom_value\"\n").expect("should write config");
+    fs::write(&config_path, "custom_key #= \"custom_value\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -253,7 +254,7 @@ fn rejects_unknown_config_key() {
 }
 
 #[test]
-fn parses_config_plain_immutable_bindings() {
+fn rejects_config_plain_immutable_bindings() {
     let root = temp_dir("config_plain_immutable");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -266,12 +267,21 @@ fn parses_config_plain_immutable_bindings() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect("config should parse");
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should reject plain immutable bindings");
 
-    assert_eq!(config.entry_root, PathBuf::from("src"));
-    assert_eq!(config.dev_folder, PathBuf::from("dev"));
-    assert_eq!(config.release_folder, PathBuf::from("release"));
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::PlainBindingUnsupported,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -335,12 +345,12 @@ fn accepts_config_type_declarations() {
     let cases = [
         (
             "struct",
-            "Config = |\n    value String,\n|\nentry_root = \"src\"\n",
+            "Config = |\n    value String,\n|\nentry_root #= \"src\"\n",
         ),
-        ("choice", "Mode ::\n    Ready,\n;\nentry_root = \"src\"\n"),
+        ("choice", "Mode ::\n    Ready,\n;\nentry_root #= \"src\"\n"),
         (
             "alias",
-            "EntryRoot as String\nentry_root EntryRoot = \"src\"\n",
+            "EntryRoot as String\nentry_root #EntryRoot = \"src\"\n",
         ),
     ];
 
@@ -384,7 +394,7 @@ fn rejects_config_mutable_bindings() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::MutableBindingUnsupported,
+                reason: InvalidConfigReason::PlainBindingUnsupported,
                 ..
             }
         ),
@@ -559,7 +569,7 @@ fn accepts_config_imported_builder_source_library_constant() {
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+        "import @defaults { default_entry_root }\nentry_root #= default_entry_root\n",
     )
     .expect("should write config");
 
@@ -596,7 +606,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+        "import @defaults { default_entry_root }\nentry_root #= default_entry_root\n",
     )
     .expect("should write config");
 
@@ -635,7 +645,7 @@ fn accepts_config_imported_constant_reexported_from_builder_source_library_file(
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+        "import @defaults { default_entry_root }\nentry_root #= default_entry_root\n",
     )
     .expect("should write config");
 
@@ -672,7 +682,7 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { EntryRoot, Config, Mode, default_entry_root }\nentry_root EntryRoot = default_entry_root\n",
+        "import @defaults { EntryRoot, Config, Mode, default_entry_root }\nentry_root #EntryRoot = default_entry_root\n",
     )
     .expect("should write config");
 
@@ -709,7 +719,7 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+        "import @defaults { default_entry_root }\nentry_root #= default_entry_root\n",
     )
     .expect("should write config");
 
@@ -754,7 +764,7 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
-        "import @defaults { default_entry_root }\nentry_root = default_entry_root()\n",
+        "import @defaults { default_entry_root }\nentry_root #= default_entry_root()\n",
     )
     .expect("should write config");
 
@@ -777,12 +787,12 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
     assert!(
         matches!(
             &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::NotCompileTimeConstant,
+            DiagnosticPayload::CompileTimeEvaluationError {
+                reason: CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
                 ..
             }
         ),
-        "expected not-compile-time-constant diagnostic for imported function call, got: {:?}",
+        "expected non-constant-reference-in-constant diagnostic for imported function call, got: {:?}",
         diagnostic.payload
     );
 
@@ -1498,7 +1508,7 @@ fn accepts_config_local_reference_to_earlier_private_const() {
 
     fs::write(
         &config_path,
-        "output_folder = \"release\"\ndev_folder = output_folder\n",
+        "output_folder #= \"release\"\ndev_folder #= output_folder\n",
     )
     .expect("should write config");
 
@@ -1522,14 +1532,14 @@ fn accepts_config_local_reference_to_earlier_private_const() {
 }
 
 #[test]
-fn rejects_config_template_with_unresolved_local_reference() {
-    let root = temp_dir("config_template_local_reference");
+fn rejects_config_unresolved_local_reference() {
+    let root = temp_dir("config_unresolved_local_reference");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
     fs::write(
         &config_path,
-        "entry_root = \"src\"\nproject = [: [entry_root]]\n",
+        "entry_root #= \"src\"\nproject #= missing_value\n",
     )
     .expect("should write config");
 
@@ -1540,13 +1550,7 @@ fn rejects_config_template_with_unresolved_local_reference() {
 
     let diagnostic = first_error_diagnostic(&messages);
     assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::NotCompileTimeConstant,
-                ..
-            }
-        ),
+        matches!(&diagnostic.payload, DiagnosticPayload::UnknownName { .. }),
         "unexpected diagnostic payload: {:?}",
         diagnostic.payload
     );
@@ -1560,7 +1564,7 @@ fn rejects_config_non_compile_time_constant_value() {
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "project = Error(\"bad\").message\n").expect("should write config");
+    fs::write(&config_path, "project #= Error(\"bad\").message\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1571,8 +1575,8 @@ fn rejects_config_non_compile_time_constant_value() {
     assert!(
         matches!(
             &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::NotCompileTimeConstant,
+            DiagnosticPayload::CompileTimeEvaluationError {
+                reason: CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
                 ..
             }
         ),
@@ -1591,7 +1595,7 @@ fn accepts_config_private_key_referencing_explicit_const() {
 
     fs::write(
         &config_path,
-        "output_folder #= \"release\"\ndev_folder = output_folder\n",
+        "output_folder #= \"release\"\ndev_folder #= output_folder\n",
     )
     .expect("should write config");
 
@@ -1615,7 +1619,7 @@ fn accepts_config_private_key_referencing_explicit_const() {
 }
 
 #[test]
-fn rejects_config_duplicate_private_keys() {
+fn rejects_duplicate_plain_config_bindings_before_config_validation() {
     let root = temp_dir("config_duplicate_private");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -1655,7 +1659,7 @@ fn rejects_config_non_key_private_helper() {
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "helper = \"src\"\nentry_root = helper\n")
+    fs::write(&config_path, "helper #= \"src\"\nentry_root #= helper\n")
         .expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -1680,42 +1684,12 @@ fn rejects_config_non_key_private_helper() {
 }
 
 #[test]
-fn rejects_config_non_key_explicit_helper() {
-    let root = temp_dir("config_non_key_explicit_helper");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "helper #= \"src\"\nentry_root = helper\n")
-        .expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::UnknownKey { .. },
-                ..
-            }
-        ),
-        "expected unknown key diagnostic for explicit non-key helper, got: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
 fn rejects_config_runtime_call_in_value() {
     let root = temp_dir("config_runtime_call");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "project = io.line([: [\"hello\"]])\n").expect("should write config");
+    fs::write(&config_path, "project #= io.line([: [\"hello\"]])\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1726,12 +1700,12 @@ fn rejects_config_runtime_call_in_value() {
     assert!(
         matches!(
             &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::NotCompileTimeConstant,
+            DiagnosticPayload::CompileTimeEvaluationError {
+                reason: CompileTimeEvaluationErrorReason::ExternalFunctionCallInConstantContext,
                 ..
             }
         ),
-        "expected not-compile-time-constant diagnostic for runtime call, got: {:?}",
+        "expected external-function-call-in-constant-context diagnostic for runtime call, got: {:?}",
         diagnostic.payload
     );
 
@@ -2098,7 +2072,7 @@ fn accepts_config_local_reference_after_shape_enforcement() {
 
     fs::write(
         &config_path,
-        "entry_root = \"src\"\ndev_folder = entry_root\n",
+        "entry_root #= \"src\"\ndev_folder #= entry_root\n",
     )
     .expect("should write config");
 
@@ -2122,14 +2096,14 @@ fn accepts_config_local_reference_after_shape_enforcement() {
 }
 
 #[test]
-fn detects_duplicate_config_keys_across_top_level_and_start_body() {
-    let root = temp_dir("config_duplicate_cross_surface");
+fn detects_duplicate_top_level_config_constants() {
+    let root = temp_dir("config_duplicate_top_level_constants");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
     fs::write(
         &config_path,
-        "entry_root #= \"other\"\nentry_root = \"src\"\n",
+        "entry_root #= \"other\"\nentry_root #= \"src\"\n",
     )
     .expect("should write config");
 
@@ -2142,19 +2116,17 @@ fn detects_duplicate_config_keys_across_top_level_and_start_body() {
     assert!(
         matches!(
             &diagnostic.payload,
-            DiagnosticPayload::InvalidAssignmentTarget {
-                reason: InvalidAssignmentTargetReason::ImmutableVariable,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DuplicateKey,
                 ..
             }
         ),
-        "expected assignment-to-immutable diagnostic for duplicate config key across surfaces, got: {:?}",
+        "unexpected diagnostic payload: {:?}",
         diagnostic.payload
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
-
-// ── Source library root tests ─────────────────────────────────────────────────
 
 #[test]
 fn project_local_lib_directory_is_discovered_as_source_library_root() {

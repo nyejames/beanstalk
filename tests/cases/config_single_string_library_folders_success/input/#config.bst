@@ -1,1 +1,1 @@
-library_folders = "lib"
+library_folders #= "lib"

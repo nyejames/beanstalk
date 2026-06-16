@@ -1,2 +1,2 @@
 entry_root #= "other"
-entry_root = "src"
+entry_root #= "src"

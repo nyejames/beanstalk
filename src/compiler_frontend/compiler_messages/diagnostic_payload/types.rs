@@ -104,7 +104,11 @@ pub enum InvalidConfigReason {
     ReplacedLibrariesKey,
     ReplacedRootFoldersKey,
     FunctionUnsupported,
+    TraitDeclarationUnsupported,
+    TraitConformanceUnsupported,
+    TraitIncompatibilityUnsupported,
     MutableBindingUnsupported,
+    PlainBindingUnsupported,
     UnsupportedStatement,
     StandaloneTemplateUnsupported,
     MissingValue,
@@ -300,7 +304,11 @@ impl InvalidConfigReason {
             | Self::ReplacedLibrariesKey
             | Self::ReplacedRootFoldersKey
             | Self::FunctionUnsupported
+            | Self::TraitDeclarationUnsupported
+            | Self::TraitConformanceUnsupported
+            | Self::TraitIncompatibilityUnsupported
             | Self::MutableBindingUnsupported
+            | Self::PlainBindingUnsupported
             | Self::UnsupportedStatement
             | Self::StandaloneTemplateUnsupported
             | Self::MissingValue

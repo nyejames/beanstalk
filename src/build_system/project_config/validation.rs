@@ -44,14 +44,22 @@ pub(super) fn validate_and_apply_config_ast(
     let mut errors = Vec::new();
     let mut seen_config_keys = HashSet::new();
 
-    // Only declarations authored in `#config.bst` are config keys.
+    // Only top-level `#` constant declarations authored in `#config.bst` are config keys.
     // Imported library constants and types are support surface, not entries.
     let authored_scope = parsed_config.authored_config_path.as_path();
 
     // 1. Extract from module_constants (top-level # bindings).
     for declaration in &parsed_config.ast.module_constants {
-        let declaration_scope = declaration.value.location.scope.to_path_buf(string_table);
-        if declaration_scope != authored_scope {
+        // A module constant's source file is the parent of its symbol path.
+        // WHY: the value expression's location scope may be normalized to an imported
+        // file when the initializer references an imported constant, so the declaration id
+        // is the reliable source-of-authority for which file owns the constant.
+        let declaration_source = declaration
+            .id
+            .parent()
+            .map(|parent| parent.to_path_buf(string_table))
+            .unwrap_or_default();
+        if declaration_source != authored_scope {
             continue;
         }
 
@@ -80,7 +88,8 @@ pub(super) fn validate_and_apply_config_ast(
         }
     }
 
-    // 2. Extract from the implicit start function body (plain immutable bindings).
+    // 2. Reject authored start-body statements in `#config.bst`.
+    // Only top-level `#` constants are config entries; plain bindings and runtime statements are not.
     for node in &parsed_config.ast.nodes {
         let NodeKind::Function(path, _, body) = &node.kind else {
             continue;
@@ -104,24 +113,11 @@ pub(super) fn validate_and_apply_config_ast(
                         .name_str(string_table)
                         .unwrap_or("")
                         .to_string();
-                    if !seen_config_keys.insert(key.clone()) {
-                        errors.push(config_diagnostic(
-                            Some(string_table.intern(&key)),
-                            InvalidConfigReason::DuplicateKey,
-                            declaration.value.location.clone(),
-                        ));
-                        continue;
-                    }
-
-                    if let Err(mut decl_errors) = extract_config_declaration(
-                        config,
-                        declaration,
-                        config_keys,
-                        &parsed_config.ast.const_facts,
-                        string_table,
-                    ) {
-                        errors.append(&mut decl_errors);
-                    }
+                    errors.push(config_diagnostic(
+                        Some(string_table.intern(&key)),
+                        InvalidConfigReason::PlainBindingUnsupported,
+                        declaration.value.location.clone(),
+                    ));
                 }
                 NodeKind::PushStartRuntimeFragment(_) => errors.push(config_diagnostic(
                     None,
@@ -148,10 +144,9 @@ pub(super) fn validate_and_apply_config_ast(
 //  AST Declaration Extraction
 // -------------------------
 
-/// Extract one config key-value pair from a folded AST declaration.
+/// Extract one config key-value pair from a folded top-level `#` constant declaration.
 ///
-/// WHY: both `module_constants` and start-body `VariableDeclaration` nodes carry the same
-/// `Declaration` shape after AST construction, so one extractor works for both sources.
+/// WHY: top-level `#` constants in the authored config file are the only source of config entries.
 fn extract_config_declaration(
     config: &mut Config,
     declaration: &Declaration,

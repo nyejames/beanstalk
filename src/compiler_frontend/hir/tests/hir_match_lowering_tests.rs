@@ -12,7 +12,6 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidReturnShapeReason};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
@@ -620,10 +619,9 @@ fn top_level_return_reports_hir_transformation_error() {
 }
 
 #[test]
-fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
+fn unit_implicit_return_lowers_to_return_terminator() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
-    let non_unit_name = super::symbol("non_unit", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -635,31 +633,9 @@ fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
         test_location(1),
     );
 
-    let non_unit_fn = function_node(
-        non_unit_name,
-        FunctionSignature {
-            parameters: vec![],
-            returns: fresh_success_returns(vec![builtin_type_ids::INT]),
-        },
-        vec![],
-        test_location(2),
-    );
-
-    let ast_err = build_ast(vec![start_fn.clone(), non_unit_fn], entry_path.clone());
-    let err = lower_ast(ast_err, &mut string_table).expect_err("non-unit fallthrough should fail");
-    let diagnostic = err
-        .first_error()
-        .expect("fallthrough should produce a typed diagnostic");
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidReturnShape {
-            reason: InvalidReturnShapeReason::FunctionMayFallThrough,
-        }
-    ));
-
-    let ast_ok = build_ast(vec![start_fn], entry_path);
+    let ast = build_ast(vec![start_fn], entry_path);
     let (module, _type_environment) =
-        lower_ast(ast_ok, &mut string_table).expect("unit fallthrough should succeed");
+        lower_ast(ast, &mut string_table).expect("unit fallthrough should succeed");
     let start = &module.functions[module.start_function.0 as usize];
     let entry_block = &module.blocks[start.entry.0 as usize];
     assert!(matches!(entry_block.terminator, HirTerminator::Return(_)));

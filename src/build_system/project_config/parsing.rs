@@ -409,7 +409,8 @@ fn prepare_one_config_file(
 /// WHY: Stage 0 config uses frontend parsing for expression semantics, but config is not a normal
 /// module. It is compile-time-only, so runtime declarations such as functions and standalone
 /// templates are rejected before AST. Type aliases, structs, and choices are allowed as support
-/// declarations because they can be referenced by compile-time constant expressions.
+/// declarations because they can be referenced by compile-time constant expressions. Trait
+/// surfaces are source-module metadata and are deliberately kept out of config.
 /// Imports are allowed when they pass the config import-root policy, so they are not rejected
 /// here. Start-body validation happens later through `validation.rs` and AST const facts.
 fn validate_authored_config_surface(headers: &[Header]) -> Vec<CompilerDiagnostic> {
@@ -421,14 +422,18 @@ fn validate_authored_config_surface(headers: &[Header]) -> Vec<CompilerDiagnosti
             HeaderKind::ConstTemplate { .. } => {
                 Some(InvalidConfigReason::StandaloneTemplateUnsupported)
             }
+            HeaderKind::Trait { .. } => Some(InvalidConfigReason::TraitDeclarationUnsupported),
+            HeaderKind::TraitConformance { .. } => {
+                Some(InvalidConfigReason::TraitConformanceUnsupported)
+            }
+            HeaderKind::TraitIncompatibility { .. } => {
+                Some(InvalidConfigReason::TraitIncompatibilityUnsupported)
+            }
             HeaderKind::Constant { .. }
             | HeaderKind::StartFunction
             | HeaderKind::Struct { .. }
             | HeaderKind::Choice { .. }
-            | HeaderKind::TypeAlias { .. }
-            | HeaderKind::Trait { .. }
-            | HeaderKind::TraitConformance { .. }
-            | HeaderKind::TraitIncompatibility { .. } => None,
+            | HeaderKind::TypeAlias { .. } => None,
         };
 
         if let Some(reason) = reason {

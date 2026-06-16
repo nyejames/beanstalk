@@ -104,7 +104,8 @@ page_head #= theme_head
     - direct imports of special files such as `#mod.bst`, `#page.bst`, and `#config.bst` are rejected.
     - folder imports across module boundaries require a `#mod.bst` facade. Import concrete same-module files directly when no facade is intended.
 
-    Namespace imports create a shallow namespace for ordinary fields.
+    Source and facade namespace imports are shallow.
+    External package namespaces can expose nested package-local symbols such as `io.input.new`.
     Use `math.sin(1.0)` or `canvas.fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)` for values and `canvas.Canvas2d` in type position, but do not pass the namespace record itself as a value.
     Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.
 ]
@@ -130,8 +131,8 @@ page_head #= theme_head
     In config:
 
     [codeblock, $code("bst"):
-        project = "html"
-        library_folders = {
+        project #= "html"
+        library_folders #= {
             "lib",
         }
     ]

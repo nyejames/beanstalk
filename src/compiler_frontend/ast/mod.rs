@@ -104,6 +104,7 @@ pub(crate) mod statements {
     pub(crate) mod match_patterns;
     pub(crate) mod multi_bind;
     pub(crate) mod scoped_blocks;
+    pub(crate) mod terminality;
     pub(crate) mod value_production;
 }
 

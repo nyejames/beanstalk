@@ -436,9 +436,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Functions and calls</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad declaration, call validation, named and positional arguments, defaults, parameter passing, external calls, and return coverage.</td>
-     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Named calls and defaulted parameters are supported. External and compiler-owned builtin calls remain positional-only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration, terminality, call validation, named and positional arguments, defaults, parameter passing, external calls, and return coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Named calls and defaulted parameters are supported. Non-unit success-return functions are validated for all-path terminality before HIR. External and compiler-owned builtin calls remain positional-only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -703,7 +703,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share visibility and facade rules. Current config loading accepts folded known config declarations authored in <code>#config.bst</code>, including plain immutable config bindings and explicit <code>#</code> constants. Config imports may target core/builder libraries only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level <code>#</code> constants in <code>#config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

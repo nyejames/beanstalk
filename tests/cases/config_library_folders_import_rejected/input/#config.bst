@@ -1,3 +1,3 @@
-library_folders = { "packages" }
+library_folders #= { "packages" }
 import @helper { value }
-entry_root = value
+entry_root #= value

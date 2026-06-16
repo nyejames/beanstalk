@@ -42,8 +42,22 @@ pub(crate) fn invalid_config_message(
         InvalidConfigReason::FunctionUnsupported => {
             "`#config.bst` does not support user-defined functions. Use known setting declarations plus import/type support declarations only.".to_owned()
         }
+        InvalidConfigReason::TraitDeclarationUnsupported => {
+            "`#config.bst` does not support trait declarations. Use ordinary source files for trait contracts.".to_owned()
+        }
+        InvalidConfigReason::TraitConformanceUnsupported => {
+            "`#config.bst` does not support trait conformance declarations. Use ordinary source files for reusable trait evidence.".to_owned()
+        }
+        InvalidConfigReason::TraitIncompatibilityUnsupported => {
+            "`#config.bst` does not support trait incompatibility declarations. Use ordinary source files for trait metadata.".to_owned()
+        }
         InvalidConfigReason::MutableBindingUnsupported => {
-            "`#config.bst` settings must be immutable declarations. Use `name = value` or `name #= value`.".to_owned()
+            "`#config.bst` settings must be immutable constant declarations. Use `name #= value`.".to_owned()
+        }
+        InvalidConfigReason::PlainBindingUnsupported => {
+            format!(
+                "Config key '{key_label}' must be a top-level `#` constant. Use `{key_label} #= value` instead of a plain binding."
+            )
         }
         InvalidConfigReason::UnsupportedStatement => {
             "`#config.bst` supports known setting declarations plus import/type support declarations only.".to_owned()

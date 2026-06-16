@@ -8,7 +8,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [drift corrections](docs/roadmap/plans/compiler-drift-implementation-plan.md)
 
 # Follow up notes and possible TODOs for future plans
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.

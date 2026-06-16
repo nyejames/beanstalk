@@ -1,2 +1,2 @@
 helper #= "src"
-entry_root = helper
+entry_root #= helper

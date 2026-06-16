@@ -204,7 +204,7 @@ fn end_to_end_force_overwrites_scaffold_owned_files_only() {
     assert!(result.is_ok(), "expected success, got: {result:?}");
 
     let config_content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
-    assert!(config_content.contains("name = "));
+    assert!(config_content.contains("name #= "));
 
     let user_content = fs::read_to_string(project_dir.join("user-file.txt")).unwrap();
     assert_eq!(user_content, "keep me");
@@ -425,7 +425,7 @@ fn project_name_is_escaped_in_config() {
     write_scaffold(&target, false, &mut prompt).unwrap();
 
     let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
-    assert!(content.contains(r#"name = "Say \"hello\"\\back""#));
+    assert!(content.contains(r#"name #= "Say \"hello\"\\back""#));
 }
 
 #[test]

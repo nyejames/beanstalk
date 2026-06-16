@@ -1,1 +1,1 @@
-entry_root = io.line("src")
+entry_root #= io.line("src")

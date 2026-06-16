@@ -1,0 +1,1 @@
+[:config_trait_incompatibility_rejected]

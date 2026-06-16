@@ -1,1 +1,1 @@
-entry_root = Error("bad").message
+entry_root #= Error("bad").message
