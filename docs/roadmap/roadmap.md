@@ -1,70 +1,31 @@
 # Beanstalk Roadmap
-This is the main todo list for the language and compiler.
+This is the main todo list and future design / implementation roadmap for Beanstalk.
 
-The current major goal is getting to a healthy alpha stage.
-Each plan or PR that is needed will be linked here.
+The next major plans are kept inside [plans](docs/roadmap/plans) and linked here in top to bottom order under the `Plans` heading.
 
-Use the language surface integration matrix as a reference for what is currently implemented: `docs/src/docs/progress/#page.bst`
-
-AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
+Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for what is currently implemented, partially complete or deferred.
 
 ---
 
-# Plans / TODOS
+# Plans
+- [drift corrections](docs/roadmap/plans/compiler-drift-implementation-plan.md)
+
+# Follow up notes and possible TODOs for future plans
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
+
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
 
 - Decide when dispatcher-loop CFG is acceptable permanently and when to add structured CFG lowering as an optimization pass.
+
 - Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
+
 - incremental builds at the module boundary. `dev` when first launched performs a full dev build of the project, then any rebuilds only incrementally build from there based on which modules are actually changed.
-
-
-# Outside Language Design Scope
-
-These surfaces are intentionally not roadmap items unless the language philosophy is explicitly
-changed first:
-
-- Dynamic trait values / trait objects, dynamic trait runtime lowering, trait aliases/composition,
-  downcasting/reflection, associated types/constants, inheritance, generic traits/methods, and
-  blanket/conditional/negative/specialized conformance.
-- `HASHABLE`, generic builtin map keys, user-defined builtin map keys, custom hashers/comparers,
-  `Float` map keys, language-level map equality, mutable entry APIs, fixed/capacity maps, and
-  language hashsets.
-- First-class public `Result` values, exceptions, reflection/runtime type IDs, broad type-level
-  programming, higher-kinded types, parameterized aliases, partial type application, and general
-  macro systems.
-- User-defined cast targets, generic cast targets, external opaque cast targets, generic cast
-  traits, and broad return-type-directed conversion.
-- General closures, anonymous function values, generic function values, and higher-order
-  polymorphism. Reactivity is the constrained UI-oriented mechanism intended to cover many
-  closure-heavy UI patterns without adding general function-value semantics.
-
-# Notes
-- Reactivity V1 is complete in `docs/roadmap/plans/reactivity-v1-implementation-plan.md`:
-  explicit reactive sources, `$(source)` template subscriptions, frontend/HIR/borrow metadata,
-  HTML-JS top-level runtime-fragment rerendering, unsupported sink diagnostics, and HTML-Wasm
-  rejection.
 
 - Reactivity follow-ups after V1: reactive template control flow, field/path subscriptions,
   collection item subscriptions, expression dependency tracking, derived reactive values,
   template-owned event/action/effect syntax, `$bind(...)`, typed component messages, IO sink
   design, fine-grained DOM updates, nested reactive regions, keyed loop diffing, and HTML-Wasm
   support.
-
-- Core IO V1 is complete in
-  `docs/roadmap/plans/core_io_v1_namespace_input_implementation_plan.md`: the implemented slice
-  covers the lowercase `io` namespace, `io.line(...)` console helpers, nested external namespace
-  traversal, HTML-JS keyboard/pointer polling, and reachable unsupported-backend diagnostics for
-  HTML-Wasm. Deferred follow-ups include filesystem/path IO, fetch/network IO, timers, sleep,
-  intervals, frame APIs, targeted input sources, physical key-code APIs, typed key/button choices,
-  text entry and IME/composition, touch gestures, gamepads, drag/drop, clipboard, wheel scrolling,
-  file picker, full ordered event queues, pressed/released key/button collections,
-  canvas-local/element-relative/DPI-scaled/world coordinates, configurable event capture/default
-  suppression, source/facade namespace re-export support, and Wasm/native lowerings.
-
-- Initial explicit `cast` operator implementation is complete: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and the initial docs/progress matrix/final audit validation passed. Follow-up cleanup and policy parity are tracked in `docs/roadmap/plans/cast_followup_cleanup_plan.md`.
-
-- Cast operator cleanup is complete in `docs/roadmap/plans/cast_followup_cleanup_plan.md`: `String -> Int` and `Float -> Int` now share the Alpha i32 cast policy across folding and JS runtime lowering, optional target recovery wraps only after inner-value recovery, expression parsing uses named input structs instead of cast-target wrapper entrypoints, core cast trait metadata has one authoritative row table, JS cast helpers emit on demand, redundant scalar-constructor fixtures were pruned, docs/progress/generated docs were updated, and final audit plus validation passed.
 
 - Checked numeric follow-ups after `docs/roadmap/plans/expression_refactor_checked_numeric_plan.md`:
   explicit Decimal / BigInt / high-precision numeric type design, numeric check elision and range
@@ -74,8 +35,6 @@ changed first:
   validation.
 
 - Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
-
-- Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.
 
 - Hash map follow-ups after V1: Wasm runtime/lowering for the existing scalar-keyed builtin map
   surface and possible read-only map iteration only if it does not introduce `HASHABLE`, custom
@@ -110,14 +69,38 @@ changed first:
 
 - `bean new` follow-ups: non-interactive `--default`, template selection, project type aliases, richer scaffold presets, and optional package/dev tooling setup.
 
-- In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.
-
 - Benchmarking/profiling deferred tooling: CI performance gates, public dashboards,
   source-library HIR caching, ownership/drop/ABI specialization, JS minification/tree-shaking,
   package-manager caching, broad Criterion benchmark suites, tracing/allocation profiler
   integrations, and tracked-summary counter expansion remain outside the current benchmarking
   implementation. These tools should be added only when they answer a specific optimization
   question and should not become part of the default validation path.
+
+---
+
+# Outside Language Design Scope
+
+These surfaces are intentionally not roadmap items unless the language philosophy is explicitly
+changed first:
+
+- Dynamic trait values / trait objects, dynamic trait runtime lowering, trait aliases/composition,
+  downcasting/reflection, associated types/constants, inheritance, generic traits/methods, and
+  blanket/conditional/negative/specialized conformance.
+- `HASHABLE`, generic builtin map keys, user-defined builtin map keys, custom hashers/comparers,
+  `Float` map keys, language-level map equality, mutable entry APIs, fixed/capacity maps, and
+  language hashsets.
+- First-class public `Result` values, exceptions, reflection/runtime type IDs, broad type-level
+  programming, higher-kinded types, parameterized aliases, partial type application, and general
+  macro systems.
+- User-defined cast targets, generic cast targets, external opaque cast targets, generic cast
+  traits, and broad return-type-directed conversion.
+- General closures, anonymous function values, generic function values, and higher-order
+  polymorphism. Reactivity is the constrained UI-oriented mechanism intended to cover many
+  closure-heavy UI patterns without adding general function-value semantics.
+
+---
+
+# Future Design Notes
 
 ## Wasm
 - Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
@@ -132,6 +115,7 @@ changed first:
 - Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching, and generic choices.
 - Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?`, and error payload propagation.
 - Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
+- rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
 
 ## Package manager ideas
 - Should try to prevent dependency explosion as much as possible, make adding dependencies with lots of dependencies harder / discouraged
@@ -145,7 +129,4 @@ Lead dependencies maybe won't even be allowed to be uploaded to the official Bea
 The package manager should be extremely strict about security and other things before something can become an official "package".
 Maybe the source code must pass a series of quality checks and be ran through various bits of compiler tooling before it can be added.
 
-### Notes and limitations from previous investigations
-- The WASM backend can't handle Choice/Union types yet (maps to Handle but produces i32/i64 mismatches). 
-- Exponents (requires explicit imported core math support)
-- rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
+In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.

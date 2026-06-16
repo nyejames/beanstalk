@@ -1,5 +1,5 @@
 # Contributing to this project
-This project is at a very early stage with long-term goals.
+This project is at a very early stage with long-term high-difficulty goals.
 
 If you are interested in compilers/programming languages or the goals of this language 
 and want to contribute or make suggestions, please get in touch or open a discussion on GitHub.
@@ -7,28 +7,65 @@ and want to contribute or make suggestions, please get in touch or open a discus
 Any questions about the future / design of this language are welcome.
 Open a discussion on GitHub if you're curious.
 
-## The Current Goal
+This is still an undisclosed project (its open sourced but no one knows about it), so getting it touch prior to contributing is preferred at this stage over yeeting a random PR at the repo.
 
-To see the progress and current priority goals of the compiler and language, see `docs/roadmap/roadmap.md`.
+## Learning about this project
 
-See [the language overview](docs/language-overview.md) and
-[the compiler overview](docs/compiler-design-overview.md) for more details about the language
-itself.
+The [user facing docs](docs/src/docs/**) contain examples, and beginner-oriented explanations for the language and using the tooling.
+
+To see the current plans and priority goals of the compiler and language, see the [roadmap](docs/roadmap/roadmap.md).
+
+The [progress matrix](docs/src/docs/progress/#page.bst) tracks current support, partial support, clean rejection, experimental backend status and coverage status.
+
+See [the language overview](docs/language-overview.md), 
+[the compiler overview](docs/compiler-design-overview.md) and [the memory management strategy](docs/memory-management-design.md) for more technical details about the language, compiler and build system.
 
 New code contributions must follow the [codebase style guide](docs/codebase-style-guide.md).
+
+## Validation command guide
+
+| Command | Use when | Writes tracked output? |
+|---|---|---|
+| `just validate` | Before submitting any compiler/docs change | No, except normal build artifacts |
+| `cargo run -- tests` | Fast integration-suite iteration | No |
+| `just bench-check` | Performance sanity check without recording history | No |
+| `just bench` | Intentional benchmark recording after meaningful performance work | Yes, tracked summaries may change |
+| `just bench-report` | Local investigation of benchmark history | No tracked output |
+| `just profile-build` | Building a profiling binary after a benchmark report identifies a target | No tracked output |
+
+---
 
 ## Testing
 
 Run the compiler integration suite with `cargo run -- tests`.
-Alternatively, run `just validate` to execute the full validation suite (clippy, unit tests, integration tests, docs build, and speed test). 
+Alternatively, run `just validate` to execute the full validation suite. 
 You must have `just` installed to run this.
 
 New integration fixtures should use the canonical `tests/cases/<case>/input + expect.toml` layout.
 An optional `tests/cases/manifest.toml` can define case ordering and tags during fixture migrations.
 
+## Benchmark contribution policy
+
+Benchmarks are rough compiler-development evidence, not a correctness gate by themselves.
+
+Use `just bench-check` for validation and PR confidence. Use `just bench` only when you intentionally want to record benchmark history or update tracked monthly summaries.
+
+Do not add benchmark cases for negative diagnostics. Those belong in `tests/cases`. Benchmark cases should be valid programs or projects that exercise real compiler work.
+
+When adding or changing benchmarks:
+
+- keep source fixtures committed
+- do not commit generated `dev/` or `release/` outputs
+- prefer end-to-end compiler workloads over tiny microbenchmarks
+- add focused stress cases only when they represent a real compiler subsystem
+- use `just bench-report` to inspect local history before claiming a performance improvement
+- do not turn timing noise into a CI blocker without a dedicated benchmark-infrastructure change
+
 ## Benchmarking
 
-The project includes a Rust-only benchmark system for rough compiler performance sanity checks. The system executes the release `bean` binary against defined benchmark cases, records local timing data, and writes terse public summaries.
+Since the benchmarking system isn't introduced or mentioned anywhere else, here is a quick summary of it:
+
+The project includes a Rust-only (crappy and imprecise) benchmark system for rough compiler performance sanity checks. The system executes the release `bean` binary against defined benchmark cases, records local timing data, and writes terse public summaries tied to the local hardware that ran it.
 
 ### Quick Start
 
@@ -122,26 +159,3 @@ Benchmark project fixtures should commit only source inputs. Generated `dev/` an
 - **Optimization validation**: Verify that compiler changes improve targeted areas
 - **CI integration**: Use `just bench-check` for fast automated performance checks
 - **Bottleneck identification**: Stress tests reveal which subsystems need optimization
-
-## New contributions
-If you are thinking of contributing, start with something small that is easy to read and review and follow the style guide closely. Reliability and modularity are *TOP PRIORITY* in this codebase. 
-90% of the time I use a simple subset of Rust that avoids complexity as the primary goal.
-
-Only as things really solidify will that code get reviewed for performance and noisier syntax and more 'clever' patterns.
-
-`cargo clippy`, `cargo test` and `cargo run tests` must be fully green before making a new commit (or run `just validate`).
-
-A final commit must run `just ship` which validates, runs `cargo fmt` and writes a new benchmark log.
-
-## Agents
-Minimising redundant code and reading and validating EVERYTHING an agent produces is really important for maintaining a manageable and clean codebase. 
-
-You usually have to end up removing or refactoring agent-generated code to reduce LOC and complexity, ask it to add more helpful, descriptive comments.
-
-**Tests**
-
-Agents should avoid updating or changing existing tests unless you understand exactly why a test might need to be updated and describe exactly how it should be updated.
-
-Otherwise, the tests provide a useful baseline to prevent regressions and provide the agents with a useful way to make progress without breaking stuff.
-
-There is an AGENTS.md file in the root directory that can be used as a baseline for improving LLM output when working with this codebase.

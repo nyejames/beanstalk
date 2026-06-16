@@ -1368,7 +1368,7 @@ aliased = sine(1.0)
 ```
 
 Rules:
-- The implementation matrix is the source of truth for supported external packages and backend targets.
+- The progress matrix is the source of truth for supported external packages and backend targets.
 - For normal builds, the `io` namespace alias and compiler-owned `Error` are available without explicit imports.
 - Prelude external symbols do not override source declarations or explicit imports.
 - Explicit external imports must not collide with visible source symbols.

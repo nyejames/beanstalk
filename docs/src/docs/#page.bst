@@ -20,7 +20,7 @@ page_head #= theme_head
 
     ## Documentation
     These pages document the current language surface.
-    See the @./progress (implementation matrix) for the current implementation and coverage status.
+    See the @./progress (progress matrix) for the current implementation and coverage status.
 
     ### Introduction
     - @./language-overview (Language Basics)

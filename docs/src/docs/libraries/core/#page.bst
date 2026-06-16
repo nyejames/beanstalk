@@ -16,7 +16,7 @@ page_head #= theme_head
     The prelude keeps only the smallest always-available surface bare, such as `io`.
 
     Builder support can vary.
-    The @../../progress (implementation matrix) is the source of truth for current package and backend support.
+    The @../../progress (progress matrix) is the source of truth for current package and backend support.
     The HTML builder currently supports optional core packages on the JavaScript path.
 ]
 
