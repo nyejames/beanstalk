@@ -15,4 +15,4 @@ second_values {Int} = single(2)
 values_without_capacity {Int} = second_values
 boxed_values Box of {String} = wrap_collection("leaf")
 
-io([: generic_constructed_types_success [values.length()] [values_without_capacity.length()]])
+io.line([: generic_constructed_types_success [values.length()] [values_without_capacity.length()]])

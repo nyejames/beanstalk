@@ -6,4 +6,4 @@ first = exported_read_or_raise(7, Error("bad"), false) catch:
 second = exported_read_or_raise(7, Error("bad"), true) catch:
     then -1
 ;
-io([: [first] [second]])
+io.line([: [first] [second]])

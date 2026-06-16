@@ -1,1 +1,1 @@
-io(value = "hello")
+io.line(value = "hello")

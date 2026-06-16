@@ -39,8 +39,13 @@ pub enum DataType {
     // AST-only placeholder for namespace-qualified types (e.g. `canvas.Canvas2d`).
     // Resolved during type checking against visible namespace records.
     NamespacedType {
-        namespace: StringId,
-        name: StringId,
+        /// Unresolved dotted path components such as `["canvas", "Canvas2d"]`.
+        ///
+        /// WHAT: carries the full namespace path before resolution so type checking can
+        ///      walk child namespace records for multi-segment paths.
+        /// WHY: external package surfaces support nested namespaces; a single namespace
+        ///      plus name pair is no longer enough for `io.input.Input`-style paths.
+        path: Vec<StringId>,
     },
     TypeParameter {
         id: TypeParameterId,
@@ -93,7 +98,7 @@ pub enum DataType {
         type_id: TypeId,
         generic_instance_key: Option<GenericInstantiationKey>,
     }, // Choice declaration identity + variant list
-    /// Opaque external type provided by a platform package (e.g. `IO`, `Canvas`).
+    /// Opaque external type provided by a platform package (e.g. `Canvas`).
     /// Cannot be constructed with struct literals or field-accessed.
     External {
         type_id: ExternalTypeId,
@@ -440,9 +445,10 @@ impl DataType {
                 *name = remap.get(*name);
             }
 
-            DataType::NamespacedType { namespace, name } => {
-                *namespace = remap.get(*namespace);
-                *name = remap.get(*name);
+            DataType::NamespacedType { path } => {
+                for component in path {
+                    *component = remap.get(*component);
+                }
             }
 
             DataType::TypeParameter { name, .. } => {
@@ -544,13 +550,11 @@ impl DataType {
             }
             DataType::Inferred => "Inferred".to_string(),
             DataType::NamedType(name) => string_table.resolve(*name).to_string(),
-            DataType::NamespacedType { namespace, name } => {
-                format!(
-                    "{}.{}",
-                    string_table.resolve(*namespace),
-                    string_table.resolve(*name)
-                )
-            }
+            DataType::NamespacedType { path } => path
+                .iter()
+                .map(|component| string_table.resolve(*component))
+                .collect::<Vec<_>>()
+                .join("."),
             DataType::TypeParameter { name, .. } => string_table.resolve(*name).to_string(),
             DataType::GenericInstance { base, arguments } => {
                 display_generic_instance(base, arguments, string_table)
@@ -726,15 +730,9 @@ impl PartialEq for DataType {
             (DataType::Inferred, DataType::Inferred) => true,
             (DataType::NamedType(a), DataType::NamedType(b)) => a == b,
             (
-                DataType::NamespacedType {
-                    namespace: ns_a,
-                    name: name_a,
-                },
-                DataType::NamespacedType {
-                    namespace: ns_b,
-                    name: name_b,
-                },
-            ) => ns_a == ns_b && name_a == name_b,
+                DataType::NamespacedType { path: path_a },
+                DataType::NamespacedType { path: path_b },
+            ) => path_a == path_b,
             (
                 DataType::TypeParameter {
                     id: id_a,

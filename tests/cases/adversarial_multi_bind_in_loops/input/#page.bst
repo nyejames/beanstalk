@@ -11,4 +11,4 @@ loop idx < 4:
     idx = idx + 1
 ;
 
-io(total)
+io.line([: [total]])

@@ -3,4 +3,4 @@ value = if true then
 else
     0
 
-io(value)
+io.line([: [value]])

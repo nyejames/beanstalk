@@ -5,8 +5,8 @@ can_error || -> String, Error!:
 recover || -> String:
     value = can_error() catch |err|:
         if 1 is:
-            1 => io("one")
-            else => io("other")
+            1 => io.line("one")
+            else => io.line("other")
         ;
         then "fallback"
     ;
@@ -15,4 +15,4 @@ recover || -> String:
 ;
 
 output = recover()
-io(output)
+io.line([: [output]])

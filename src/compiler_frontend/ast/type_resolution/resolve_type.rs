@@ -195,11 +195,14 @@ pub(crate) fn resolve_parsed_type_annotation(
             }
         }
 
-        ParsedTypeRef::Namespaced {
-            namespace, name, ..
-        } => {
+        ParsedTypeRef::Qualified { path, .. } if path.len() == 2 => {
+            // Source type aliases are visible only through shallow namespace records,
+            // so a qualified alias reference is always exactly two segments:
+            // `namespace.Alias`. Longer paths cannot name a source alias.
+            let namespace = path[0];
+            let name = path[1];
             if let Some((alias_path, annotation)) =
-                aliases::visible_namespaced_type_alias_annotation(*namespace, *name, context)
+                aliases::visible_namespaced_type_alias_annotation(namespace, name, context)
             {
                 return aliases::resolve_alias_annotation(
                     alias_path,
@@ -292,8 +295,18 @@ fn unresolved_type_id_diagnostic(
         DataType::NamedType(name) => {
             CompilerDiagnostic::unknown_type_name(*name, location.to_owned())
         }
-        DataType::NamespacedType { name, .. } => {
-            CompilerDiagnostic::unknown_type_name(*name, location.to_owned())
+        DataType::NamespacedType { path } => {
+            if let Some(name) = path.last().copied() {
+                CompilerDiagnostic::unknown_type_name(name, location.to_owned())
+            } else {
+                CompilerDiagnostic::invalid_type_annotation(
+                    TypeAnnotationContext::DeclarationTarget,
+                    InvalidTypeAnnotationReason::ExpectedTypeAnnotation {
+                        found: TokenKind::Eof,
+                    },
+                    location.to_owned(),
+                )
+            }
         }
         DataType::GenericInstance {
             base: GenericBaseType::Named(name),
@@ -576,8 +589,8 @@ pub(crate) fn resolve_type(
                 resolved_signature,
             ))
         }
-        DataType::NamespacedType { namespace, name } => {
-            resolve_namespaced_type_from_context(*namespace, *name, location, context)
+        DataType::NamespacedType { path } => {
+            resolve_namespaced_type_from_context(path, location, context)
         }
 
         DataType::Struct { .. } | DataType::Choices { .. } => {

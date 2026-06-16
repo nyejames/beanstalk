@@ -10,4 +10,4 @@ Outer = |
 |
 
 wrapper = Outer(Inner(42))
-io(wrapper.inner.value)
+io.line([: [wrapper.inner.value]])

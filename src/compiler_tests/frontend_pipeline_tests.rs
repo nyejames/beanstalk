@@ -233,7 +233,7 @@ fn compiles_single_file_program_through_borrow_check() {
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "Point = |\n    value Int,\n|\npoint = Point(1)\nloop 0 to 2 |i|:\n    io(point.value)\n;\n",
+            "Point = |\n    value Int,\n|\npoint = Point(1)\nloop 0 to 2 |i|:\n    io.line([: [point.value]])\n;\n",
         )],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
@@ -251,7 +251,7 @@ fn compiles_multi_file_import_program_through_borrow_check() {
         &[
             (
                 "src/#page.bst",
-                "import @helper { add }\nresult = add(1, 2)\nio(result)\n",
+                "import @helper { add }\nresult = add(1, 2)\nio.line([: [result]])\n",
             ),
             (
                 "src/helper.bst",
@@ -271,7 +271,7 @@ fn compiles_multi_file_import_program_through_borrow_check() {
 #[test]
 fn frontend_diagnostics_preserve_string_table_context() {
     let mut project = FrontendProject::new(
-        &[("src/#page.bst", "bad #= io(\"runtime host call\")\n")],
+        &[("src/#page.bst", "bad #= io.line(\"runtime host call\")\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );

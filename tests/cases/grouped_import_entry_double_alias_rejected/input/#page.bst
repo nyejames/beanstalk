@@ -1,3 +1,3 @@
 import @core/math { sin as sine as trig }
 
-io(sine(1.0))
+io.line([: [sine(1.0)]])

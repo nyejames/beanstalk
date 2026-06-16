@@ -466,28 +466,28 @@ body {
         return String(value);
     }
 
-    function __bs_io(value) {
-        console.log(__bs_value_to_string(value));
-    }
-
-    function bst_called_helper_fn1() {
+    function bst_called_helper_fn6() {
         
-        __bs_io("called helper start");
+        __bs_io_line("called helper start");
         return;
     }
 
-    function bst_start_fn3() {
-        let bst___hir_tmp_2_l3 = __bs_binding(undefined);
+    function bst_start_fn8() {
+        let bst___hir_tmp_3_l22 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_2_l3, []);
-        bst_called_helper_fn1();
-        return __bs_read(bst___hir_tmp_2_l3);
+        __bs_assign_value(bst___hir_tmp_3_l22, []);
+        bst_called_helper_fn6();
+        return __bs_read(bst___hir_tmp_3_l22);
     }
+    function __bs_io_write(writer, value) {
+        writer.call(console, __bs_value_to_string(value));
+    }
+    function __bs_io_line(value) { __bs_io_write(console.log, value); }
 
     </script>
     <script>
     (function () {
-      if (typeof bst_start_fn3 === "function") bst_start_fn3();
+      if (typeof bst_start_fn8 === "function") bst_start_fn8();
     })();
     </script>
   </body>

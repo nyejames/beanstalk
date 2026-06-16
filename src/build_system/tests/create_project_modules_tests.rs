@@ -1272,15 +1272,19 @@ fn discover_modules_resolves_relative_child_imports() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @./components/widget\nio(\"page\")\n",
+        "import @./components/widget\nio.line([: [\"page\"]])\n",
     )
     .expect("should write page");
     fs::write(
         src.join("components/widget.bst"),
-        "import @./common\nio(\"widget\")\n",
+        "import @./common\nio.line([: [\"widget\"]])\n",
     )
     .expect("should write widget file");
-    fs::write(src.join("components/common.bst"), "io(\"common\")\n").expect("should write common");
+    fs::write(
+        src.join("components/common.bst"),
+        "io.line([: [\"common\"]])\n",
+    )
+    .expect("should write common");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1330,12 +1334,16 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @helpers/theme\nio(\"page\")\n",
+        "import @helpers/theme\nio.line([: [\"page\"]])\n",
     )
     .expect("should write page");
-    fs::write(src.join("helpers/theme.bst"), "io(\"source\")\n").expect("should write source");
-    fs::write(lib.join("helpers/theme.bst"), "io(\"library\")\n")
-        .expect("should write root-folder helper");
+    fs::write(src.join("helpers/theme.bst"), "io.line([: [\"source\"]])\n")
+        .expect("should write source");
+    fs::write(
+        lib.join("helpers/theme.bst"),
+        "io.line([: [\"library\"]])\n",
+    )
+    .expect("should write root-folder helper");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1379,10 +1387,13 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
         "entry_root #= \"src\"\n",
     )
     .expect("should write config");
-    fs::write(src.join("#page.bst"), "io(\"page\")\n").expect("should write #page");
-    fs::write(src.join("#layout.bst"), "io(\"layout\")\n").expect("should write #layout");
-    fs::write(src.join("nested/#lib.bst"), "io(\"lib\")\n").expect("should write nested #lib");
-    fs::write(src.join("nested/file.bst"), "io(\"regular\")\n").expect("should write regular");
+    fs::write(src.join("#page.bst"), "io.line([: [\"page\"]])\n").expect("should write #page");
+    fs::write(src.join("#layout.bst"), "io.line([: [\"layout\"]])\n")
+        .expect("should write #layout");
+    fs::write(src.join("nested/#lib.bst"), "io.line([: [\"lib\"]])\n")
+        .expect("should write nested #lib");
+    fs::write(src.join("nested/file.bst"), "io.line([: [\"regular\"]])\n")
+        .expect("should write regular");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1704,7 +1715,7 @@ fn rejects_config_runtime_call_in_value() {
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "project = io(\"hello\")\n").expect("should write config");
+    fs::write(&config_path, "project = io.line([: [\"hello\"]])\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -3044,7 +3055,7 @@ fn extensionless_bst_import_and_virtual_package_import_still_work() {
     // imports continue to stay out of Stage 0 filesystem traversal.
     fs::write(
         src.join("#page.bst"),
-        "import @./helper\nimport @core/io { IO }\n#[:ok]\n",
+        "import @./helper\nimport @core/io { line }\n#[:ok]\n",
     )
     .expect("should write entry");
 

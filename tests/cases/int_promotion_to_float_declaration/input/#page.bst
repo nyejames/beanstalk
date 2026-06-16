@@ -10,4 +10,4 @@ expr Float = 1 + 1
 -- Negated int literal should promote
 neg Float = -5
 
-io("float declarations from int passed")
+io.line("float declarations from int passed")

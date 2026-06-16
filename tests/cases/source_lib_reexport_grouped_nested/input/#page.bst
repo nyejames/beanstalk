@@ -1,3 +1,3 @@
 import @helper { seconds }
 
-io(seconds)
+io.line([: [seconds]])

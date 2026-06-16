@@ -11,4 +11,4 @@ rendered = [slot_wrapper:
     [$insert("b"): [:B-[runtime_value]]]
 ]
 
-io(rendered)
+io.line([: [rendered]])

@@ -385,7 +385,7 @@ name = if maybe_name is |name| then name else "guest"
 fallback = parse_number(text) catch then 0
 
 name, score = load_user(id) catch |err|:
-    io(err.message)
+    io.line(err.message)
     then "guest", 0.0
 ;
 ```
@@ -492,7 +492,7 @@ removed = ~scores.remove("Grace") catch:
 ;
 
 if scores.contains("Ada"):
-    io("found")
+    io.line("found")
 ;
 
 count = scores.length
@@ -528,16 +528,77 @@ variants. More sophisticated maps should be ordinary standard-library or user-de
 Wasm hashmap runtime/lowering remains deferred backend work for the existing scalar-keyed builtin map
 surface.
 
-### Standard Output
+### Core IO
 
-`io(...)` writes to stdout and accepts strings or templates.
+`io` is a preluded namespace alias to `@core/io`.
+Console output functions accept string-compatible content only: escaped string slices, owned
+strings, and templates. They reject non-string values directly; wrap values in a template when you
+want debug-style interpolation.
 
 ```beanstalk
-io("Hello, World!")
+io.line("Hello, World!")
+io.print("loading...")
+io.debug("checking state")
+io.warn("slow path")
+io.error("failed path")
 
 name = "Alice"
-io([: Hello, [name]])
+io.line([: Hello, [name]])
 ```
+
+`import @core/io` binds the same namespace explicitly, and `import @core/io as output` creates a
+file-local namespace alias such as `output.line("Hello")`.
+
+Input polling is available under `io.input.*` on HTML-JS. The handle type
+`io.input.Input` is an opaque external type: Beanstalk code can pass it to the core IO functions
+but cannot construct it with struct syntax or inspect fields.
+
+```beanstalk
+input ~= io.input.new()!
+
+io.input.update(~input)
+
+if io.input.key_pressed(input, "d"):
+    io.line("pressed d")
+;
+
+if io.input.pointer_down(input, "left"):
+    x = io.input.pointer_x(input)
+    y = io.input.pointer_y(input)
+
+    io.line([: pointer [x], [y]])
+;
+
+last_key = io.input.last_key_pressed(input)
+
+if last_key is |key|:
+    io.line([: last key: [key]])
+;
+
+io.input.close(~input)
+```
+
+`io.input.new() -> io.input.Input, Error!` is fallible because the active backend/runtime may not
+provide input support. `io.input.update(~input)` drains pending browser events into edge state, and
+`io.input.close(~input)` releases the listeners and resets the handle. `update` and `close`
+require mutable access; polling reads use shared access.
+
+Keyboard polling supports `key_down`, `key_pressed`, `key_released`, `last_key_pressed`, and
+`last_key_released`. Single alphabetic key strings normalize to lowercase, space is `"Space"`, and
+special keys use browser logical names such as `"ArrowLeft"`, `"Enter"`, `"Escape"`,
+`"Backspace"`, and `"Shift"`. Pointer polling supports `"left"`, `"middle"`, and `"right"`
+buttons, current `pointer_x` / `pointer_y` coordinates as `Float`, edge-state helpers, and
+`last_pointer_pressed` / `last_pointer_released`. Unknown key or button strings return `false`;
+missing `last_*` values return `none`; closed handles return neutral values.
+
+HTML-JS maps console helpers to the browser console and input helpers to window/document-level
+keyboard and pointer polling. HTML-Wasm and other targets reject reachable Core IO calls before
+backend lowering until they implement equivalent lowerings. Browser event delivery still depends
+on returning to the host event loop, so a synchronous infinite Beanstalk loop can prevent new
+input events from being observed. V1 does not add callbacks, promises, async tasks, frame/tick
+APIs, targeted DOM/canvas input sources, event queues, filesystem/path IO, fetch/network IO,
+timers, text entry/IME, touch gestures, gamepads, drag/drop, clipboard, wheel scrolling, or file
+picker APIs.
 
 ## String Template System
 
@@ -810,9 +871,9 @@ Statement `if` is non-exhaustive. It has no statement-level `else if`; use neste
 
 ```beanstalk
 if value is true:
-    io("then")
+    io.line("then")
 else
-    io("else")
+    io.line("else")
 ;
 ```
 
@@ -820,10 +881,10 @@ Full pattern matching uses `if <value> is:` and is exhaustive.
 
 ```beanstalk
 if value is:
-    < 0 => io("negative")
-    0 => io("zero")
-    <= 10 => io("small")
-    else => io("large")
+    < 0 => io.line("negative")
+    0 => io.line("zero")
+    <= 10 => io.line("small")
+    else => io.line("large")
 ;
 ```
 
@@ -844,7 +905,7 @@ A statement match can use an empty fallback arm to explicitly ignore all remaini
 
 ```beanstalk
 if value is:
-    0 => io("zero")
+    0 => io.line("zero")
     else =>
 ;
 ```
@@ -899,7 +960,7 @@ Range rules:
 
 ```beanstalk
 loop 0.0 to 1.0 by 0.1 |t|:
-    io([t])
+    io.line([t])
 ;
 ```
 
@@ -1308,7 +1369,7 @@ aliased = sine(1.0)
 
 Rules:
 - The implementation matrix is the source of truth for supported external packages and backend targets.
-- For normal builds, `io()`, `IO`, and compiler-owned `Error` are available without explicit imports.
+- For normal builds, the `io` namespace alias and compiler-owned `Error` are available without explicit imports.
 - Prelude external symbols do not override source declarations or explicit imports.
 - Explicit external imports must not collide with visible source symbols.
 - External aliases follow normal file-local collision and case-convention rules.
@@ -1384,5 +1445,5 @@ Basic = | defaults String |
 values #= Basic("Only allowed const values here")
 
 label = values.defaults -- valid
-io(values)              -- invalid: use a field
+io.line(values.defaults)     -- valid: use a field
 ```

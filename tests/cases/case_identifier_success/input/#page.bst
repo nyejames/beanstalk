@@ -1,3 +1,3 @@
 case = 42
 
-io([:case identifier [case]])
+io.line([:case identifier [case]])

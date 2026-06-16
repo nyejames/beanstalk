@@ -329,7 +329,7 @@ body {
 
     import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
 
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Aliases are useful when a name has a domain-specific meaning, when a type annotation is long, or when two imported libraries export symbols with the same name.</p><p>They are not a general shadowing feature. An alias introduces a visible file-local name and must not collide with any other visible name in that file.</p></section>
     <section class="container"><h2>Type Aliases</h2><p>Type aliases give another name to an existing type.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -399,7 +399,7 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>)</span>      <span class='bst-code-comment'>-- Error: UserId is a type alias, not a value</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>)</span>      <span class='bst-code-comment'>-- Error: UserId is a type alias, not a value</span>
     id <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error: UserId is not a constructor</span>
     copy_id <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-comment'>-- Error: aliases cannot be copied</span>
     </code></pre><p>If the alias targets a constructible type, construct the real target type instead.</p><pre style="
@@ -477,7 +477,7 @@ body {
     name <span class='bst-code-struct'>Username</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Bean&quot;</span>
 
     label <span class='bst-code-operator'>=</span> format_user<span class='bst-code-parenthesis'>(</span>id, name<span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>label<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span>label<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Because aliases are transparent, passing an <code>Int</code> where <code>UserId</code> is expected is valid.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -489,7 +489,7 @@ body {
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
     print_id <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>UserId</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>
+        io.line<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>
     ;
 
     raw_id <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
@@ -713,8 +713,8 @@ body {
     response <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing title&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span>value <span class='bst-code-keyword'>as</span> body<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>body<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span>value <span class='bst-code-keyword'>as</span> body<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>body<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>The name before <code>as</code> is the declared payload field name. The name after <code>as</code> is the local capture name visible inside that arm.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -724,7 +724,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.</p><p>Without <code>as</code>, the capture name is the field name.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -733,7 +733,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Capture aliases are useful when a field name would collide with an existing variable or when the local meaning is clearer than the generic payload field name.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -745,8 +745,8 @@ body {
     message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;outer message&quot;</span>
 
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Choice payload capture aliases are arm-local. They do not rename the variant field itself and they do not leak into other arms.</p></section>
     <section class="container"><h2>What as Does Not Do</h2><p><code>as</code> is not a cast operator and it is not a general renaming expression.</p><p>These forms are invalid:</p><pre style="
@@ -791,7 +791,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> failure_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>failure_message<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> failure_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>failure_message<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>A good rule:</p><ul><li>Type alias: better name for an existing type.</li><li>Import alias: better local name for an imported symbol.</li><li>Choice payload capture alias: better arm-local name for an extracted field.</li><li>Struct: new domain type with its own identity.</li><li>Choice: one of several named variants.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
@@ -1082,10 +1082,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

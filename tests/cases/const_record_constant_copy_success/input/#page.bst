@@ -6,4 +6,4 @@ Palette = |
 palette #= Palette()
 other #= palette
 
-io(other.red)
+io.line([: [other.red]])

@@ -4,7 +4,7 @@ a = Response::Success
 b = Response::Err("bad")
 
 if a is b:
-    io("same")
+    io.line("same")
 else
-    io("different")
+    io.line("different")
 ;

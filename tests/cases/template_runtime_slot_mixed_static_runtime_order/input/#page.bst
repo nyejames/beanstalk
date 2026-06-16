@@ -13,4 +13,4 @@ rendered = [box:
     after
 ]
 
-io(rendered)
+io.line(rendered)

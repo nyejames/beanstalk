@@ -13,4 +13,4 @@ loop counter < 5:
     counter = counter + 1
 ;
 
-io(sum)
+io.line([: [sum]])

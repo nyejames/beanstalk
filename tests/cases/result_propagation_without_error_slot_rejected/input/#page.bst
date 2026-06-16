@@ -7,4 +7,4 @@ recover || -> String:
     return value
 ;
 
-io(recover())
+io.line([: [recover()]])

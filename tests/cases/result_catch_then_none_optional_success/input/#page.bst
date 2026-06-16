@@ -10,5 +10,5 @@ recover || -> String?:
 
 value = recover()
 if value is none:
-    io("then_none_ok")
+    io.line("then_none_ok")
 ;

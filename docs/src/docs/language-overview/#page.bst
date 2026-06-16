@@ -175,12 +175,12 @@ page_head #= theme_head
         ~a_reference.push(5) catch:
             assert(false, "This should never fail for this growable collection in this example")
         ;
-        io(a_collection) -- {1, 2, 3, 4, 5, 5}
+        io.line(a_collection) -- {1, 2, 3, 4, 5, 5}
 
         ~a_collection.remove(a_collection.length() - 1) catch:
             then 0
         ;
-        io(a_collection) -- {1, 2, 3, 4, 5}
+        io.line(a_collection) -- {1, 2, 3, 4, 5}
     ]
 
     Expressions can span over multiple lines.
@@ -244,7 +244,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         value = cast source
         if cast value:
-            io("bad")
+            io.line("bad")
         ;
         [: [cast value]]
     ]

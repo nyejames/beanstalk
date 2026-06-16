@@ -1,6 +1,6 @@
 name String? = "Ana"
 
 if name is:
-    n => io(n)
-    else => io("other")
+    n => io.line([: [n]])
+    else => io.line("other")
 ;

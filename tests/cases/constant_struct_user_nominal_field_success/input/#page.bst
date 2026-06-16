@@ -12,4 +12,4 @@ Outer = |
 
 outer #= Outer(Inner(42))
 
-io(outer.inner.value)
+io.line([: [outer.inner.value]])

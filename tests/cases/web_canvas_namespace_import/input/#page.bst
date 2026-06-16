@@ -11,4 +11,4 @@ run |id String| -> String, Error!:
 result = run("game") catch:
     then "error"
 ;
-io(result)
+io.line([: [result]])

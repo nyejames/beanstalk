@@ -330,7 +330,7 @@ body {
     value <span class='bst-code-operator'>=</span> random_float<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     die_roll <span class='bst-code-operator'>=</span> random_int<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>6</span><span class='bst-code-parenthesis'>)</span>
 
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>roll<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>die_roll<span class='bst-code-parenthesis'>]</span> value<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>roll<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>die_roll<span class='bst-code-parenthesis'>]</span> value<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Seeded random is deferred.</p></section>
     <script>
     function __bs_is_ref(value) {
@@ -621,10 +621,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

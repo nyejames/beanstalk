@@ -10,6 +10,7 @@ use super::super::definitions::{
 use super::super::ids::ExternalPackageOrigin;
 use super::super::ids::{ExternalConstantId, ExternalFunctionId, ExternalTypeId};
 use super::super::registry::ExternalPackageRegistry;
+use super::super::symbol_path::ExternalSymbolPath;
 
 /// Registers test packages `@test/pkg-a` and `@test/pkg-b` with a duplicate
 /// symbol name for integration-test coverage of package-scoped resolution.
@@ -153,4 +154,129 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
             },
         )
         .expect("test constant registration should not collide");
+
+    let nested_id = registry
+        .register_package("@test/nested", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test nested package registration should not collide");
+
+    registry
+        .register_type_at_path(
+            nested_id,
+            ExternalSymbolPath::from_components(vec!["tools".to_owned(), "Opaque".to_owned()]),
+            ExternalTypeId(1010),
+            ExternalTypeDef {
+                name: "Opaque".to_owned(),
+                package_id: nested_id,
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .expect("test nested type registration should not collide");
+
+    registry
+        .register_constant_at_path(
+            nested_id,
+            ExternalSymbolPath::from_components(vec!["tools".to_owned(), "PI".to_owned()]),
+            ExternalConstantId(1011),
+            ExternalConstantDef {
+                name: "PI".to_owned(),
+                data_type: ExternalAbiType::F64,
+                value: ExternalConstantValue::Float(3.15),
+            },
+        )
+        .expect("test nested constant registration should not collide");
+
+    registry
+        .register_function_at_path(
+            nested_id,
+            ExternalSymbolPath::from_components(vec!["tools".to_owned(), "greet".to_owned()]),
+            ExternalFunctionId::Synthetic(1012),
+            ExternalFunctionDef {
+                name: "greet".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str)],
+                error_return_type: None,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::InlineExpression(
+                        "\"hello nested\"".to_owned(),
+                    )),
+                    wasm: None,
+                },
+            },
+        )
+        .expect("test nested function registration should not collide");
+
+    let string_content_id = registry
+        .register_package(
+            "@test/string_content",
+            ExternalPackageOrigin::BuilderRuntime,
+        )
+        .expect("test string-content package registration should not collide");
+
+    registry
+        .register_function_in_package(
+            string_content_id,
+            ExternalFunctionId::Synthetic(1100),
+            ExternalFunctionDef {
+                name: "echo".to_owned(),
+                parameters: vec![super::super::abi::ExternalParameter {
+                    language_type: ExternalSignatureType::StringContent,
+                    access_kind: ExternalAccessKind::Shared,
+                }],
+                returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str)],
+                error_return_type: None,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::InlineExpression("#0".to_owned())),
+                    wasm: None,
+                },
+            },
+        )
+        .expect("test string-content function registration should not collide");
+
+    let optional_id = registry
+        .register_package("@test/optional", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test optional package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            optional_id,
+            ExternalSymbolPath::from_single("present_text"),
+            ExternalFunctionId::Synthetic(1200),
+            ExternalFunctionDef {
+                name: "present_text".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalSignatureType::Optional(
+                    Box::new(ExternalSignatureType::Abi(ExternalAbiType::Utf8Str)),
+                ))],
+                error_return_type: None,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::InlineExpression(
+                        "({ tag: \"some\", value: \"present\" })".to_owned(),
+                    )),
+                    wasm: None,
+                },
+            },
+        )
+        .expect("test optional present function registration should not collide");
+
+    registry
+        .register_function_at_path(
+            optional_id,
+            ExternalSymbolPath::from_single("absent_text"),
+            ExternalFunctionId::Synthetic(1201),
+            ExternalFunctionDef {
+                name: "absent_text".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalSignatureType::Optional(
+                    Box::new(ExternalSignatureType::Abi(ExternalAbiType::Utf8Str)),
+                ))],
+                error_return_type: None,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::InlineExpression(
+                        "({ tag: \"none\" })".to_owned(),
+                    )),
+                    wasm: None,
+                },
+            },
+        )
+        .expect("test optional absent function registration should not collide");
 }

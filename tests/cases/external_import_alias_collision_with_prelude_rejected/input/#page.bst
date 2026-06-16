@@ -1,2 +1,2 @@
 import @core/math { sin as io }
-io(1.0)
+io.line([: [1.0]])

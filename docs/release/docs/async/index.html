@@ -411,7 +411,7 @@ body {
     consumer <span class='bst-code-operator'>|</span>reader <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>loop</span><span class='bst-code-operator'>:</span>
             value <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>&lt;</span> reader
-            io<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
         ;
     ;
     </code></pre><p>In this example:</p><ul><li><code>producer</code> sends integers into the channel</li><li><code>consumer</code> receives and prints them</li><li>neither coroutine shares mutable memory directly</li><li>all interaction happens through the channel</li></ul></section>
@@ -490,7 +490,7 @@ body {
     consumer <span class='bst-code-operator'>|</span>reader <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Channel</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>loop</span><span class='bst-code-operator'>:</span>
             value <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>&lt;</span> reader
-            io<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
         ;
     ;
 
@@ -799,10 +799,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

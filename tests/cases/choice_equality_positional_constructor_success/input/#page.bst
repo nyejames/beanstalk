@@ -1,11 +1,11 @@
 Response :: Success, Err | message String |;
 
 if Response::Err("bad") is Response::Err("bad"):
-    io("equal")
+    io.line("equal")
 ;
 
 if Response::Err("bad") is Response::Err("good"):
-    io("different")
+    io.line("different")
 else
-    io("not equal")
+    io.line("not equal")
 ;

@@ -3,4 +3,4 @@ even_more_complex #= [: BEFORE [: another scene inside [$slot("first")] [$slot] 
 
 using_slots = [even_more_complex:[$insert("first"): first] in between [$insert("second"): second]]
 
-io(using_slots)
+io.line([: [using_slots]])

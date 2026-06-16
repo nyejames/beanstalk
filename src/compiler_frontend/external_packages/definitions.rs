@@ -5,7 +5,11 @@
 //! and lowering metadata without re-parsing binding files.
 
 use super::abi::{ExternalAbiType, ExternalParameter, ExternalReturnAlias, ExternalSignatureType};
-use super::ids::{ExternalPackageId, ExternalPackageOrigin};
+use super::ids::{
+    ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalPackageOrigin,
+    ExternalTypeId,
+};
+use super::symbol_path::ExternalSymbolPath;
 use crate::compiler_frontend::datatypes::DataType;
 use std::collections::HashMap;
 
@@ -37,6 +41,11 @@ pub enum ExternalWasmLowering {
 /// Full definition of a single external function.
 #[derive(Debug, Clone)]
 pub struct ExternalFunctionDef {
+    /// Leaf symbol name within its package.
+    ///
+    /// WHAT: the final path component, used for diagnostics and lowering.
+    /// WHY: the full path is owned by the registry's package path-to-ID maps; the definition
+    /// only needs its leaf identity.
     pub name: String,
     pub parameters: Vec<ExternalParameter>,
     /// Success-channel return slots exposed to Beanstalk callers.
@@ -149,6 +158,7 @@ pub fn external_success_returns(
 /// Definition of a single opaque external type exposed by a virtual package.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalTypeDef {
+    /// Leaf symbol name within its package.
     pub name: String,
     /// Stable package ID rather than a static string so dynamic and built-in packages
     /// share the same identity model.
@@ -175,6 +185,7 @@ impl ExternalConstantValue {
 /// Definition of a single external constant exposed by a virtual package.
 #[derive(Debug, Clone)]
 pub struct ExternalConstantDef {
+    /// Leaf symbol name within its package.
     pub name: String,
     pub data_type: ExternalAbiType,
     pub value: ExternalConstantValue,
@@ -186,9 +197,16 @@ pub struct ExternalPackage {
     pub id: ExternalPackageId,
     pub path: String,
     pub origin: ExternalPackageOrigin,
-    pub functions: HashMap<String, ExternalFunctionDef>,
-    pub types: HashMap<String, ExternalTypeDef>,
-    pub constants: HashMap<String, ExternalConstantDef>,
+    /// Path-to-ID surface map for registered functions.
+    ///
+    /// WHAT: maps the full symbol path inside this package to its stable function ID.
+    /// WHY: this is the canonical package surface; full definitions live in the registry's
+    /// `functions_by_id` map so the package does not store duplicate clones.
+    pub function_ids: HashMap<ExternalSymbolPath, ExternalFunctionId>,
+    /// Path-to-ID surface map for registered types.
+    pub type_ids: HashMap<ExternalSymbolPath, ExternalTypeId>,
+    /// Path-to-ID surface map for registered constants.
+    pub constant_ids: HashMap<ExternalSymbolPath, ExternalConstantId>,
 }
 
 impl ExternalPackage {
@@ -201,10 +219,32 @@ impl ExternalPackage {
             id,
             path: path.into(),
             origin,
-            functions: HashMap::new(),
-            types: HashMap::new(),
-            constants: HashMap::new(),
+            function_ids: HashMap::new(),
+            type_ids: HashMap::new(),
+            constant_ids: HashMap::new(),
         }
+    }
+
+    /// Iterates over function symbol paths and their IDs.
+    ///
+    /// WHAT: exposes the package function surface for namespace-record construction.
+    /// WHY: callers should not depend on the internal HashMap representation.
+    pub fn function_symbol_ids(
+        &self,
+    ) -> impl Iterator<Item = (&ExternalSymbolPath, &ExternalFunctionId)> {
+        self.function_ids.iter()
+    }
+
+    /// Iterates over type symbol paths and their IDs.
+    pub fn type_symbol_ids(&self) -> impl Iterator<Item = (&ExternalSymbolPath, &ExternalTypeId)> {
+        self.type_ids.iter()
+    }
+
+    /// Iterates over constant symbol paths and their IDs.
+    pub fn constant_symbol_ids(
+        &self,
+    ) -> impl Iterator<Item = (&ExternalSymbolPath, &ExternalConstantId)> {
+        self.constant_ids.iter()
     }
 }
 
@@ -215,6 +255,7 @@ impl ExternalPackage {
 /// WHY: builder packages should not need to hardcode `ExternalFunctionId` enum variants.
 #[derive(Debug, Clone)]
 pub struct ExternalFunctionSpec {
+    /// Leaf symbol name within its package.
     pub name: String,
     pub parameters: Vec<ExternalParameter>,
     pub returns: Vec<ExternalReturnSlot>,
@@ -237,6 +278,7 @@ impl From<ExternalFunctionSpec> for ExternalFunctionDef {
 /// Builder-friendly spec for registering an external type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExternalTypeSpec {
+    /// Leaf symbol name within its package.
     pub name: String,
     pub abi_type: ExternalAbiType,
 }

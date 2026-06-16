@@ -5,4 +5,4 @@ choose |condition Bool| -> Int:
 ;
 
 value = choose(false)
-io("value if assignment rhs test")
+io.line("value if assignment rhs test")

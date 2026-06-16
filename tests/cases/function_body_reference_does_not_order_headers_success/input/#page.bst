@@ -1,5 +1,5 @@
 value = first()
-io(value)
+io.line([: [value]])
 
 first || -> String:
     return second()

@@ -1,2 +1,2 @@
-import @core/io { IO }
-StdIO as IO
+import @test/pkg-a { PkgError }
+ExternalAlias as PkgError

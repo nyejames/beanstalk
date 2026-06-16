@@ -3,4 +3,4 @@ render |x Int| -> Int:
 ;
 
 import @utils/render { render as render }
-io(render(1))
+io.line([: [render(1)]])

@@ -7,19 +7,10 @@
 //! such as `@core/io`.
 
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-use crate::compiler_frontend::external_packages::{
-    ExternalFunctionId, ExternalSymbolId, ExternalTypeId, IO_FUNC_NAME, IO_TYPE_NAME,
-};
+use crate::compiler_frontend::external_packages::{CORE_IO_PACKAGE_PATH, IO_NAMESPACE_NAME};
 
 pub fn register_core_prelude(registry: &mut ExternalPackageRegistry) {
     registry
-        .register_prelude_symbol(
-            IO_FUNC_NAME,
-            ExternalSymbolId::Function(ExternalFunctionId::Io),
-        )
-        .expect("prelude registration should not collide");
-
-    registry
-        .register_prelude_symbol(IO_TYPE_NAME, ExternalSymbolId::Type(ExternalTypeId(0)))
-        .expect("prelude registration should not collide");
+        .register_prelude_namespace_alias(IO_NAMESPACE_NAME, CORE_IO_PACKAGE_PATH)
+        .expect("prelude namespace alias registration should not collide");
 }

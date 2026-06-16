@@ -1,4 +1,4 @@
 import @core/random {random_int}
 
 bad = random_int("low", 3)
-io(bad)
+io.line([: [bad]])

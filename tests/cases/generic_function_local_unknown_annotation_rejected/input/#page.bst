@@ -5,4 +5,4 @@ identity_copy type T |value T| -> T:
 
 value Int = identity_copy(41)
 
-io("generic_function_local_unknown_annotation_rejected")
+io.line("generic_function_local_unknown_annotation_rejected")

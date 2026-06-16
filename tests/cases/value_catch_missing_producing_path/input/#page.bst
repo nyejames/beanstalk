@@ -5,7 +5,7 @@ parse_number || -> Int, Error!:
 recover |log_error Bool| -> Int:
     return parse_number() catch:
         if log_error:
-            io("bad")
+            io.line("bad")
         ;
     ;
 ;

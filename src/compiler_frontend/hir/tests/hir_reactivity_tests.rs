@@ -243,7 +243,7 @@ fn reachability_records_reactive_runtime_fragment_and_external_sinks() {
             ),
             node(
                 NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
-                    ExternalFunctionId::Io,
+                    ExternalFunctionId::IoLine,
                     vec![CallArgument::positional(
                         reactive_view_reference(),
                         CallAccessMode::Shared,
@@ -283,7 +283,7 @@ fn reachability_records_reactive_runtime_fragment_and_external_sinks() {
             .any(|sink| matches!(
                 sink.kind,
                 ReachableReactiveSinkKind::ExternalCallArgument {
-                    function_id: ExternalFunctionId::Io,
+                    function_id: ExternalFunctionId::IoLine,
                     argument_index: 0
                 }
             )),

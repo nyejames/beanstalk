@@ -563,7 +563,7 @@ fn start_function_local_references_do_not_create_module_dependencies() {
     let headers = parse_single_file_headers(
         "value = 1\n\
          another = value + 1\n\
-         io(another)\n",
+         io.line([: [another]])\n",
     );
 
     let start_header = headers
@@ -584,7 +584,7 @@ fn loop_binding_symbols_remain_in_start_function_body() {
         "items = {1, 2, 3}\n\
          \n\
          loop items |item, index|:\n\
-             io(item)\n\
+             io.line([: [item]])\n\
          ;\n",
     );
 
@@ -629,7 +629,7 @@ fn top_level_expression_symbols_stay_in_implicit_start_body() {
         "func basic()\n\
          items = {1, 2, 3}\n\
          loop items |item, index|:\n\
-             io(item)\n\
+             io.line([: [item]])\n\
          ;\n\
          [basic]\n\
          basic()\n\
@@ -678,7 +678,7 @@ fn compile_time_declarations_parse_as_headers_without_elevating_body_symbols() {
         "theme #= \"dark\"\n\
          items = {theme}\n\
          loop items |item, index|:\n\
-             io(item)\n\
+             io.line([: [item]])\n\
          ;\n\
          [theme]\n\
          theme\n",
@@ -2046,7 +2046,10 @@ fn multi_file_parsing_preserves_warnings_before_later_parse_error() {
     // The helper file emits naming warnings, then fails on a later duplicate declaration.
     // Those file-local warnings must still be merged even though the file contributes no output.
     let sources = vec![
-        ("io(\"hello\")\n".to_owned(), "src/#page.bst".to_owned()),
+        (
+            "io.line([: [\"hello\"]])\n".to_owned(),
+            "src/#page.bst".to_owned(),
+        ),
         (
             "Status_type :: bad_variant;\ndup ||:\n;\ndup ||:\n;\n".to_owned(),
             "src/helper.bst".to_owned(),
@@ -2545,7 +2548,7 @@ fn export_before_trait_conformance_is_rejected() {
 #[test]
 fn export_before_unsupported_runtime_statement_is_rejected() {
     let result = parse_single_file_headers_with_entry(
-        "export io(\"hello\")\n",
+        "export io.line([: [\"hello\"]])\n",
         "src/#mod.bst",
         "src/#page.bst",
     );

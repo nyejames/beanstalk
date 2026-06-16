@@ -3,5 +3,5 @@ MyType = |
 |
 
 MyType ||:
-    io("duplicate")
+    io.line("duplicate")
 ;

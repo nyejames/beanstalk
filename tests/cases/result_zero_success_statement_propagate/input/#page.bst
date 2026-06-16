@@ -7,5 +7,5 @@ outer || -> Error!:
 ;
 
 outer() catch |err|:
-    io(err.message)
+    io.line([: [err.message]])
 ;

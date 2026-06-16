@@ -1,2 +1,2 @@
-import @core/io { io as log }
-import @core/io { IO as log }
+import @core/math { log as x }
+import @core/text { length as x }

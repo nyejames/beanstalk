@@ -8,4 +8,4 @@ show_red || -> String:
     return palette.red
 ;
 
-io(show_red())
+io.line([: [show_red()]])

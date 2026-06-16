@@ -10,4 +10,4 @@ self_ref |this Point| -> this:
 p ~= Point(1, 2)
 q ~= p.self_ref()
 q.x = 99
-io(q.x)
+io.line([: [q.x]])

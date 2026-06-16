@@ -12,7 +12,7 @@ a = Outer::Wrap(Inner::A(1))
 b = Outer::Wrap(Inner::A(1))
 
 if a is b:
-    io("same")
+    io.line("same")
 else
-    io("different")
+    io.line("different")
 ;

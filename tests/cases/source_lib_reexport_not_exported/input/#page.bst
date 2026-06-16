@@ -1,2 +1,2 @@
 import @helper { greet }
-io(greet("World"))
+io.line([: [greet("World")]])

@@ -1,9 +1,11 @@
 //! Namespace import registration and namespace record construction.
 //!
 //! WHAT: resolves bare imports into namespace records, validates facade boundaries for namespace
-//! imports, and builds shallow field-access-only records from source files and external packages.
+//! imports, and builds field-access-only records from source files, facades, and external packages.
 //! WHY: namespace imports are structurally different from grouped imports: they expose a record
 //! surface rather than individual symbols, so their registration and record building is separate.
+//! External package records are recursive so multi-component symbol paths such as `io.input.new`
+//! are represented in header/import visibility.
 //! MUST NOT: register grouped imports or perform AST semantic validation.
 
 use super::{
@@ -12,7 +14,7 @@ use super::{
     VisibleNameBinding, VisibleNameRegistry,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
-use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::external_packages::{ExternalSymbolId, ExternalSymbolPath};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind,
@@ -21,7 +23,7 @@ use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::keywords::is_valid_identifier;
 use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -29,6 +31,110 @@ use rustc_hash::{FxHashMap, FxHashSet};
 enum SymbolKind {
     Value,
     Type,
+}
+
+/// Helper that walks an `ExternalSymbolPath` and inserts symbols into a `NamespaceRecord`
+/// tree, creating child namespace records for intermediate components.
+///
+/// WHAT: turns a flat list of package surface paths into a nested namespace record tree.
+/// WHY: the registry stores symbols by full path, but namespace records are trees keyed by
+/// component name. A dedicated inserter keeps the descent, child creation, and duplicate
+/// detection in one place.
+struct ExternalNamespaceRecordInserter<'a> {
+    string_table: &'a mut StringTable,
+    location: &'a SourceLocation,
+}
+
+impl<'a> ExternalNamespaceRecordInserter<'a> {
+    fn insert(
+        &mut self,
+        record: &mut NamespaceRecord,
+        symbol_path: &ExternalSymbolPath,
+        symbol_id: ExternalSymbolId,
+        surface_path: &InternedPath,
+    ) -> Result<(), CompilerDiagnostic> {
+        self.insert_at(record, symbol_path.components(), 0, symbol_id, surface_path)
+    }
+
+    fn insert_at(
+        &mut self,
+        record: &mut NamespaceRecord,
+        components: &[String],
+        index: usize,
+        symbol_id: ExternalSymbolId,
+        surface_path: &InternedPath,
+    ) -> Result<(), CompilerDiagnostic> {
+        let component = &components[index];
+        let name_id = self.string_table.intern(component);
+        let child_surface_path = surface_path.join_str(component, self.string_table);
+        let is_leaf = index == components.len() - 1;
+
+        if is_leaf {
+            // A namespace slot is exclusive: a leaf cannot share its name with
+            // either a child namespace or the other leaf kind at this level.
+            if record.child_namespaces.contains_key(&name_id)
+                || record.value_members.contains_key(&name_id)
+                || record.type_members.contains_key(&name_id)
+            {
+                return Err(CompilerDiagnostic::duplicate_import_surface_member(
+                    child_surface_path,
+                    name_id,
+                    self.location.clone(),
+                ));
+            }
+
+            match symbol_id {
+                ExternalSymbolId::Function(function_id) => {
+                    record.value_members.insert(
+                        name_id,
+                        NamespaceValueMember::ExternalSymbol(ExternalSymbolId::Function(
+                            function_id,
+                        )),
+                    );
+                }
+                ExternalSymbolId::Constant(constant_id) => {
+                    record.value_members.insert(
+                        name_id,
+                        NamespaceValueMember::ExternalSymbol(ExternalSymbolId::Constant(
+                            constant_id,
+                        )),
+                    );
+                }
+                ExternalSymbolId::Type(type_id) => {
+                    record.type_members.insert(
+                        name_id,
+                        NamespaceTypeMember::ExternalSymbol(ExternalSymbolId::Type(type_id)),
+                    );
+                }
+            }
+            return Ok(());
+        }
+
+        // Intermediate components become child namespaces. They cannot share a name with
+        // a value or type member at the same level.
+        if record.value_members.contains_key(&name_id) || record.type_members.contains_key(&name_id)
+        {
+            return Err(CompilerDiagnostic::duplicate_import_surface_member(
+                child_surface_path.clone(),
+                name_id,
+                self.location.clone(),
+            ));
+        }
+
+        let child_source = record.record_source.clone();
+        let child_record = record
+            .child_namespaces
+            .entry(name_id)
+            .or_insert_with(|| NamespaceRecord::empty(child_source));
+
+        self.insert_at(
+            child_record,
+            components,
+            index + 1,
+            symbol_id,
+            &child_surface_path,
+        )
+    }
 }
 
 impl<'a> ImportEnvironmentBuilder<'a> {
@@ -485,6 +591,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         Ok(NamespaceRecord {
             value_members,
             type_members,
+            child_namespaces: FxHashMap::default(),
+            record_source: NamespaceRecordSource::SourceFile(file_path.clone()),
         })
     }
 
@@ -557,83 +665,71 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         Ok(NamespaceRecord {
             value_members,
             type_members,
+            child_namespaces: FxHashMap::default(),
+            record_source: NamespaceRecordSource::SourceFile(facade_file.clone()),
         })
     }
 
     /// Build a namespace record from an external package's symbols.
+    ///
+    /// WHAT: turns the package's path-to-ID surface maps into a recursive namespace record.
+    ///   One-component paths become direct value/type members; multi-component paths create
+    ///   child namespace records down to the leaf.
+    /// WHY: external packages are the first surface that needs nested namespace visibility
+    ///   (`io.input.new`). Keeping the tree in the import environment lets later phases walk
+    ///   dotted paths without rebuilding the surface.
+    /// BOUNDARY: source and facade namespace records remain shallow; this recursive build is
+    ///   only for external package surfaces.
     pub(super) fn build_external_namespace_record(
         &mut self,
         package_path: StringId,
         location: &SourceLocation,
     ) -> Result<NamespaceRecord, CompilerDiagnostic> {
-        let mut value_members = FxHashMap::default();
-        let mut type_members = FxHashMap::default();
+        let mut record =
+            NamespaceRecord::empty(NamespaceRecordSource::ExternalPackage(package_path));
 
         let package_path_str = self.string_table.resolve(package_path).to_owned();
         let Some(package) = self
             .external_package_registry
             .get_package(&package_path_str)
         else {
-            return Ok(NamespaceRecord {
-                value_members,
-                type_members,
-            });
+            return Ok(record);
         };
 
-        // Collect function names first to avoid borrowing `string_table` twice.
-        let function_names: Vec<String> = package.functions.keys().cloned().collect();
-        for name in function_names {
-            let name_id = self.string_table.intern(&name);
-            if let Some((function_id, _def)) = self
-                .external_package_registry
-                .resolve_package_function(&package_path_str, &name)
-            {
-                value_members.insert(
-                    name_id,
-                    NamespaceValueMember::ExternalSymbol(ExternalSymbolId::Function(function_id)),
-                );
-            }
-        }
-
-        let type_names: Vec<String> = package.types.keys().cloned().collect();
-        for name in type_names {
-            let name_id = self.string_table.intern(&name);
-            if let Some((type_id, _)) = self
-                .external_package_registry
-                .resolve_package_type(&package_path_str, &name)
-            {
-                type_members.insert(
-                    name_id,
-                    NamespaceTypeMember::ExternalSymbol(ExternalSymbolId::Type(type_id)),
-                );
-            }
-        }
-
-        let constant_names: Vec<String> = package.constants.keys().cloned().collect();
-        for name in constant_names {
-            let name_id = self.string_table.intern(&name);
-            if let Some((constant_id, _)) = self
-                .external_package_registry
-                .resolve_package_constant(&package_path_str, &name)
-            {
-                value_members.insert(
-                    name_id,
-                    NamespaceValueMember::ExternalSymbol(ExternalSymbolId::Constant(constant_id)),
-                );
-            }
-        }
-
-        self.check_duplicate_namespace_members(
-            &InternedPath::from_components(vec![package_path]),
-            &value_members,
-            &type_members,
+        let surface_path = InternedPath::from_components(vec![package_path]);
+        let mut inserter = ExternalNamespaceRecordInserter {
+            string_table: self.string_table,
             location,
-        )?;
+        };
 
-        Ok(NamespaceRecord {
-            value_members,
-            type_members,
-        })
+        for (path, function_id) in package.function_symbol_ids() {
+            inserter.insert(
+                &mut record,
+                path,
+                ExternalSymbolId::Function(*function_id),
+                &surface_path,
+            )?;
+        }
+
+        for (path, type_id) in package.type_symbol_ids() {
+            inserter.insert(
+                &mut record,
+                path,
+                ExternalSymbolId::Type(*type_id),
+                &surface_path,
+            )?;
+        }
+
+        for (path, constant_id) in package.constant_symbol_ids() {
+            inserter.insert(
+                &mut record,
+                path,
+                ExternalSymbolId::Constant(*constant_id),
+                &surface_path,
+            )?;
+        }
+
+        Ok(record)
     }
 
     /// Classify a symbol path as a type or value member for namespace records.
@@ -661,6 +757,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     }
 
     /// Check for same-spelling value/type collisions within one namespace surface.
+    ///
+    /// WHAT: source and facade namespace records are shallow, so this only needs to detect
+    /// a value member and a type member with the same name. External package records use
+    /// `ExternalNamespaceRecordInserter`, which already rejects namespace/value/type slot
+    /// collisions while building the tree.
     fn check_duplicate_namespace_members(
         &self,
         surface_path: &InternedPath,
@@ -680,3 +781,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "tests/namespace_imports_tests.rs"]
+mod tests;

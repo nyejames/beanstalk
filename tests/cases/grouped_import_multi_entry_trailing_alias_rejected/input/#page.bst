@@ -1,3 +1,3 @@
 import @core/math { sin, cos } as trig
 
-io(trig(1.0))
+io.line([: [trig(1.0)]])

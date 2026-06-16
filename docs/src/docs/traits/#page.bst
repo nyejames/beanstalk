@@ -226,7 +226,7 @@ page_head #= theme_head
 
     `DISPLAYABLE` exists as compiler-owned trait metadata for conformance and generic-bound tests.
 
-    It does not change `io(...)`, template interpolation, string coercion, equality, or operators. Implement `display |This| -> String` yourself and call it explicitly.
+    It does not change `io.line(...)`, template interpolation, string coercion, equality, or operators. Implement `display |This| -> String` yourself and call it explicitly.
 ]
 
 #[section, $markdown:

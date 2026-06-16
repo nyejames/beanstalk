@@ -1,3 +1,3 @@
 import @core/math { sin as 123render }
 
-io(render(1.0))
+io.line([: [render(1.0)]])

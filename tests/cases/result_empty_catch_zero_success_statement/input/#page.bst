@@ -8,4 +8,4 @@ outer ||:
 ;
 
 outer()
-io("empty_catch_zero_ok")
+io.line("empty_catch_zero_ok")

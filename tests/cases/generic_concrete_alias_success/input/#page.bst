@@ -19,7 +19,7 @@ raw_text Box of String = item
 
 count NamedCount = Pair("items", 4)
 
-io(raw_text.value)
-io(count.left)
+io.line([: [raw_text.value]])
+io.line([: [count.left]])
 
 [: concrete generic alias]

@@ -422,7 +422,7 @@ process_metric |metric MetricSnapshot| -> String:
 
 -- Stress test entry
 run_type_stress ||:
-    io("Type system stress test starting")
+    io.line("Type system stress test starting")
     
     -- Create instances
     rect ~= Rectangle(10.0, 20.0)
@@ -436,21 +436,21 @@ run_type_stress ||:
     area = rect.get_area()
     perim = rect.get_perimeter()
     is_sq = rect.is_square()
-    io([: Rectangle: area=[area], perimeter=[perim], square=[is_sq]])
+    io.line([: Rectangle: area=[area], perimeter=[perim], square=[is_sq]])
     
     name = person.get_full_name()
     bucket = person.get_age_bucket()
-    io([: Person: [name], bucket=[bucket]])
+    io.line([: Person: [name], bucket=[bucket]])
     
     -- Call mutable methods
     ~counter.bump()
     ~counter.add(5)
     ~counter.bump()
-    io([: Counter: [counter.value]])
+    io.line([: Counter: [counter.value]])
     
     ~rect.scale(2.0)
     new_area = rect.get_area()
-    io([: Scaled rectangle: [new_area]])
+    io.line([: Scaled rectangle: [new_area]])
     
     -- Collection of structs
     container ~= Container({0}, 0)
@@ -459,7 +459,7 @@ run_type_stress ||:
     ~container.add_item(30)
     sum = container.get_sum()
     avg = container.get_average()
-    io([: Container: sum=[sum], avg=[avg]])
+    io.line([: Container: sum=[sum], avg=[avg]])
     
     -- Choice construction
     ready = Status::Ready
@@ -474,7 +474,7 @@ run_type_stress ||:
     event_click = Event::Click(100, 200)
     event_key = Event::KeyPress("Enter", "ctrl")
     
-    io("Type system stress test complete")
+    io.line("Type system stress test complete")
 ;
 
 -- Run the stress test

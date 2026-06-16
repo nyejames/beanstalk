@@ -24,4 +24,4 @@ template4 = [:[number] is new]
 -- Original data should still be borrowable after template usage
 final_ref = data
 
-io([:template_copying result=[result1] number=[result2] final=[final_ref] [template1] [template2] [template3] [template4]])
+io.line([:template_copying result=[result1] number=[result2] final=[final_ref] [template1] [template2] [template3] [template4]])

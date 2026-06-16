@@ -5,4 +5,4 @@ if current is:
     Ready => result = "ready"
     Busy => result = "busy"
 ;
-io(result)
+io.line([: [result]])

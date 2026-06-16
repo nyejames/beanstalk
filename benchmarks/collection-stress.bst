@@ -21,7 +21,7 @@ Record = |
 
 -- Basic collection operations
 basic_mutations ||:
-    io("Basic collection mutations")
+    io.line("Basic collection mutations")
     
     -- Create empty collection
     numbers ~{Int} = {}
@@ -31,7 +31,7 @@ basic_mutations ||:
         ~numbers.push(i * 3)
     ;
     
-    io([: Pushed [numbers.length()] items])
+    io.line([: Pushed [numbers.length()] items])
     
     -- Set operations
     ~numbers.set(0, 999) catch:
@@ -49,12 +49,12 @@ basic_mutations ||:
         then 0
     ;
     
-    io([: After mutations: [numbers.length()] items])
+    io.line([: After mutations: [numbers.length()] items])
 ;
 
 -- Get with fallback patterns
 get_with_fallback ||:
-    io("Get with fallback patterns")
+    io.line("Get with fallback patterns")
     
     items ~= {10, 20, 30, 40, 50}
     
@@ -69,7 +69,7 @@ get_with_fallback ||:
         then 0
     ;
     
-    io([: Valid: first=[first], middle=[middle], last=[last]])
+    io.line([: Valid: first=[first], middle=[middle], last=[last]])
     
     -- Invalid gets with fallbacks
     out_of_bounds = items.get(100) catch:
@@ -79,12 +79,12 @@ get_with_fallback ||:
         then -1
     ;
     
-    io([: Invalid: out_of_bounds=[out_of_bounds], negative=[negative]])
+    io.line([: Invalid: out_of_bounds=[out_of_bounds], negative=[negative]])
 ;
 
 -- Nested loops over collections
 nested_collection_loops ||:
-    io("Nested collection loops")
+    io.line("Nested collection loops")
     
     outer ~{Int} = {}
     loop 0 to 5 |i|:
@@ -104,12 +104,12 @@ nested_collection_loops ||:
         ;
     ;
     
-    io([: Generated [result.length()] combinations])
+    io.line([: Generated [result.length()] combinations])
 ;
 
 -- Index binding in loops
 index_binding ||:
-    io("Index binding in loops")
+    io.line("Index binding in loops")
     
     items ~= {"alpha", "beta", "gamma", "delta", "epsilon"}
     
@@ -121,69 +121,69 @@ index_binding ||:
         output = [: [output][index]:[item]]
     ;
     
-    io([: Items: [output]])
+    io.line([: Items: [output]])
 ;
 
 -- Range loops - ascending
 ascending_ranges ||:
-    io("Ascending range loops")
+    io.line("Ascending range loops")
     
     result_1 ~= ""
     loop 0 to 5 |i|:
         result_1 = [: [result_1][i] ]
     ;
-    io([: 0 to 5: [result_1]])
+    io.line([: 0 to 5: [result_1]])
     
     result_2 ~= ""
     loop 0 to & 5 |i|:
         result_2 = [: [result_2][i] ]
     ;
-    io([: 0 to & 5: [result_2]])
+    io.line([: 0 to & 5: [result_2]])
     
     result_3 ~= ""
     loop 10 to 20 by 2 |i|:
         result_3 = [: [result_3][i] ]
     ;
-    io([: 10 to 20 by 2: [result_3]])
+    io.line([: 10 to 20 by 2: [result_3]])
 ;
 
 -- Range loops - descending
 descending_ranges ||:
-    io("Descending range loops")
+    io.line("Descending range loops")
     
     result_1 ~= ""
     loop 10 to 0 |i|:
         result_1 = [: [result_1][i] ]
     ;
-    io([: 10 to 0: [result_1]])
+    io.line([: 10 to 0: [result_1]])
     
     result_2 ~= ""
     loop 10 to & 0 by 2 |i|:
         result_2 = [: [result_2][i] ]
     ;
-    io([: 10 to & 0 by 2: [result_2]])
+    io.line([: 10 to & 0 by 2: [result_2]])
     
     result_3 ~= ""
     loop 50 to 10 by 5 |i|:
         result_3 = [: [result_3][i] ]
     ;
-    io([: 50 to 10 by 5: [result_3]])
+    io.line([: 50 to 10 by 5: [result_3]])
 ;
 
 -- Float ranges
 float_ranges ||:
-    io("Float range loops")
+    io.line("Float range loops")
     
     result ~= ""
     loop 0.0 to 1.0 by 0.25 |f|:
         result = [: [result][f] ]
     ;
-    io([: 0.0 to 1.0 by 0.25: [result]])
+    io.line([: 0.0 to 1.0 by 0.25: [result]])
 ;
 
 -- Mixed collection and range nesting
 mixed_nesting ||:
-    io("Mixed collection and range nesting")
+    io.line("Mixed collection and range nesting")
     
     matrix ~{{Int}} = {}
     
@@ -204,12 +204,12 @@ mixed_nesting ||:
         ;
     ;
     
-    io([: Matrix sum: [sum]])
+    io.line([: Matrix sum: [sum]])
 ;
 
 -- Collection of structs
 struct_collection ||:
-    io("Collection of structs")
+    io.line("Collection of structs")
     
     items ~{Item} = {}
     
@@ -240,12 +240,12 @@ struct_collection ||:
         total_id = total_id + item.id
     ;
     
-    io([: Total id: [total_id], Count: [items.length()]])
+    io.line([: Total id: [total_id], Count: [items.length()]])
 ;
 
 -- Deep nesting (3+ levels)
 deep_nesting ||:
-    io("Deep nesting (3+ levels)")
+    io.line("Deep nesting (3+ levels)")
     
     outer ~{Int} = {}
     loop 0 to 3 |o|:
@@ -271,12 +271,12 @@ deep_nesting ||:
         ;
     ;
     
-    io([: Deep nesting combinations: [combinations]])
+    io.line([: Deep nesting combinations: [combinations]])
 ;
 
 -- Collection as accumulator
 accumulator_pattern ||:
-    io("Collection as accumulator")
+    io.line("Collection as accumulator")
     
     result ~{String} = {}
     
@@ -292,7 +292,7 @@ accumulator_pattern ||:
         ;
     ;
     
-    io([: Accumulated [result.length()] items])
+    io.line([: Accumulated [result.length()] items])
     
     -- Remove every third item
     index = 0
@@ -310,12 +310,12 @@ accumulator_pattern ||:
         ;
     ;
     
-    io([: After removal: [result.length()] items])
+    io.line([: After removal: [result.length()] items])
 ;
 
 -- Conditional collection building
 conditional_building ||:
-    io("Conditional collection building")
+    io.line("Conditional collection building")
     
     positives ~{Int} = {}
     negatives ~{Int} = {}
@@ -329,12 +329,12 @@ conditional_building ||:
         ;
     ;
     
-    io([: Positives: [positives.length()], Negatives: [negatives.length()]])
+    io.line([: Positives: [positives.length()], Negatives: [negatives.length()]])
 ;
 
 -- Search patterns
 search_patterns ||:
-    io("Search patterns")
+    io.line("Search patterns")
     
     haystack ~= {15, 23, 8, 42, 16, 4, 99, 31, 7, 55}
     
@@ -348,12 +348,12 @@ search_patterns ||:
         ;
     ;
     
-    io([: Found: [found]])
+    io.line([: Found: [found]])
 ;
 
 -- Collection transformation
 transformation ||:
-    io("Collection transformation")
+    io.line("Collection transformation")
     
     source ~= {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
     doubled ~{Int} = {}
@@ -374,12 +374,12 @@ transformation ||:
         sum_squared = sum_squared + s
     ;
     
-    io([: Sum doubled: [sum_doubled], Sum squared: [sum_squared]])
+    io.line([: Sum doubled: [sum_doubled], Sum squared: [sum_squared]])
 ;
 
 -- Record collection operations
 record_collection ||:
-    io("Record collection operations")
+    io.line("Record collection operations")
     
     records ~{Record} = {}
     
@@ -398,12 +398,12 @@ record_collection ||:
         total_score = total_score + rec.score
     ;
     
-    io([: Total count: [total_count], Total score: [total_score]])
+    io.line([: Total count: [total_count], Total score: [total_score]])
 ;
 
 -- Complex collection workflow
 complex_workflow ||:
-    io("Complex collection workflow")
+    io.line("Complex collection workflow")
     
     -- Stage 1: Build initial collection
     stage1 ~{Int} = {}
@@ -431,12 +431,12 @@ complex_workflow ||:
         result = [: [result][s]; ]
     ;
     
-    io([: Pipeline result: [stage3.length()] items])
+    io.line([: Pipeline result: [stage3.length()] items])
 ;
 
 -- Stress test entry
 run_collection_stress ||:
-    io("Collection stress test starting")
+    io.line("Collection stress test starting")
     
     basic_mutations()
     get_with_fallback()
@@ -455,7 +455,7 @@ run_collection_stress ||:
     record_collection()
     complex_workflow()
     
-    io("Collection stress test complete")
+    io.line("Collection stress test complete")
 ;
 
 run_collection_stress()

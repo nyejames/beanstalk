@@ -81,7 +81,9 @@ fn checked_conversion_rejects_unresolved_namespaced_type() {
     let name = string_table.intern("Type");
 
     let error = resolve_diagnostic_type_to_type_id_checked(
-        &DataType::NamespacedType { namespace, name },
+        &DataType::NamespacedType {
+            path: vec![namespace, name],
+        },
         &mut type_environment,
         &location,
     )

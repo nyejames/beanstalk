@@ -10,12 +10,12 @@ condition = true
 if condition:
     -- On this path, data is moved (last use)
     result1 ~= data
-    io(result1)
+    io.line([: [result1]])
     -- No further use of data
 else
     -- On this path, data is also moved (last use)
     result2 ~= data
-    io(result2)
+    io.line([: [result2]])
     -- No further use of data
 ;
 

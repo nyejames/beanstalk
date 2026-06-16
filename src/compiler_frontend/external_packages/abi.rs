@@ -21,7 +21,7 @@ pub enum ExternalAbiType {
     /// Opaque handle to an external type (lowers to `i32` in Wasm, object reference in JS).
     Handle,
     /// Parameter accepts any language type (used for polymorphic external functions
-    /// such as collection helpers and `io()` during the transition to explicit ABI types).
+    /// such as collection helpers during the transition to explicit ABI types.
     Inferred,
 }
 
@@ -63,13 +63,29 @@ impl ExternalAbiType {
 /// Frontend-visible type used by external function signatures.
 ///
 /// WHAT: separates the backend ABI category from the Beanstalk language type expected
-///       at call sites. Builtin scalar parameters use `Abi(...)`, while provider-owned
-///       opaque types use `External(...)` to preserve package-scoped identity.
+///       at call sites. Builtin scalar parameters use `Abi(...)`, provider-owned
+///       opaque types use `External(...)`, and reusable language-level content
+///       policies such as string content use dedicated variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExternalSignatureType {
     Abi(ExternalAbiType),
     BuiltinError,
     External(ExternalTypeId),
+    /// Any string-compatible value: string slices, owned strings, and templates.
+    ///
+    /// WHAT: a reusable language-level parameter policy that accepts every form of string
+    ///       content without duplicating scalar renderable logic per host function.
+    /// WHY: external boundaries such as console output need to accept `"text"`, variables,
+    ///      and `[: templates]` through the normal compatibility path.
+    StringContent,
+    /// Optional value using the canonical built-in option representation.
+    ///
+    /// WHAT: lets external functions declare `T?` returns or parameters without inventing
+    ///       a backend-specific sentinel. The inner type is resolved through the normal
+    ///       signature-type conversion path and then interned as a built-in option.
+    /// WHY: reusable host boundaries such as `last_key_pressed -> String?` must share the
+    ///      same `TypeId` identity as source-authored `String?`.
+    Optional(Box<ExternalSignatureType>),
 }
 
 impl ExternalSignatureType {
@@ -80,6 +96,11 @@ impl ExternalSignatureType {
             // supplies its resolved spelling at the AST boundary.
             Self::BuiltinError => None,
             Self::External(type_id) => Some(DataType::External { type_id: *type_id }),
+            // StringContent resolves to the canonical string datatype for diagnostics.
+            Self::StringContent => Some(DataType::StringSlice),
+            Self::Optional(inner) => inner
+                .to_datatype()
+                .map(|inner_type| DataType::Option(Box::new(inner_type))),
         }
     }
 
@@ -92,6 +113,13 @@ impl ExternalSignatureType {
             Self::Abi(abi_type) => abi_type.to_type_id(type_environment),
             Self::BuiltinError => Some(builtin_error_type_id),
             Self::External(type_id) => Some(type_environment.intern_external(*type_id)),
+            // StringContent resolves to the canonical String TypeId so escaped slices, owned
+            // strings, and templates all pass the normal compatibility check.
+            Self::StringContent => Some(type_environment.builtins().string),
+            Self::Optional(inner) => {
+                let inner_type_id = inner.to_type_id(type_environment, builtin_error_type_id)?;
+                Some(type_environment.intern_option(inner_type_id))
+            }
         }
     }
 
@@ -111,6 +139,12 @@ impl ExternalSignatureType {
             // BuiltinError is not expected in parameter position; treat as unknown.
             Self::BuiltinError => None,
             Self::External(type_id) => Some(type_environment.intern_external(*type_id)),
+            // StringContent accepts any string-compatible value at call sites.
+            Self::StringContent => Some(type_environment.builtins().string),
+            Self::Optional(inner) => {
+                let inner_type_id = inner.to_parameter_type_id(type_environment)?;
+                Some(type_environment.intern_option(inner_type_id))
+            }
         }
     }
 }

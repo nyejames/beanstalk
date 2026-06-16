@@ -2,4 +2,4 @@ runtime ||:
     return [: runtime]
 ;
 
-io(runtime())
+io.line([: [runtime()]])

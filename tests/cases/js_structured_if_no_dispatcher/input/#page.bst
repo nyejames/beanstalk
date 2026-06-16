@@ -20,5 +20,5 @@ else
     label = "y is small"
 ;
 
-io(result)
-io(label)
+io.line([: [result]])
+io.line([: [label]])

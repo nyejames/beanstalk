@@ -9,4 +9,4 @@ value = wrap_external() catch:
     then "fallback"
 ;
 
-io(value)
+io.line([: [value]])

@@ -8,5 +8,5 @@ message = [:
     wasm value [value]
 ]
 
-io(message)
+io.line([: [message]])
 [:<section>[message]</section>]

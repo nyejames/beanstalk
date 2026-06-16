@@ -1,4 +1,4 @@
 import @alpha {two}
 import @beta {five}
 
-io(two + five)
+io.line([: [two + five]])

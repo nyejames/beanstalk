@@ -15,5 +15,5 @@ footer = [:
     done [name] [score]
 ]
 
-io(body)
-io(footer)
+io.line(body)
+io.line(footer)

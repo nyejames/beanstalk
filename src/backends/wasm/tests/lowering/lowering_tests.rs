@@ -3,9 +3,7 @@ use crate::backends::wasm::hir_to_lir::context::lower_type_to_abi;
 use crate::backends::wasm::lir::function::WasmLirFunctionOrigin;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::linkage::{WasmExportKind, WasmFunctionLinkage};
-use crate::backends::wasm::lir::types::{
-    WasmAbiType, WasmImportId, WasmLirFunctionId, WasmLirLocalId,
-};
+use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirFunctionId, WasmLirLocalId};
 use crate::backends::wasm::request::{
     WasmBackendRequest, WasmDebugFlags, WasmExportPolicy, WasmFunctionEmissionPolicy,
 };
@@ -921,84 +919,6 @@ fn rejects_invalid_export_request_with_structured_diagnostic() {
 }
 
 #[test]
-fn resolves_supported_host_call_to_correct_import() {
-    let mut string_table = StringTable::new();
-    let (type_environment, types) = build_type_environment();
-    let start_path = InternedPath::from_single_str("main", &mut string_table);
-
-    // "io" is the supported host function name for LogString.
-    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
-    let start_block = HirBlock {
-        id: BlockId(0),
-        region: RegionId(0),
-        locals: vec![local(0, types.string, RegionId(0))],
-        statements: vec![
-            statement(
-                1,
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(LocalId(0)),
-                    value: string_expression(700, "hello", types.string, RegionId(0)),
-                },
-                1,
-            ),
-            statement(
-                2,
-                HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_id),
-                    args: vec![load_local(710, LocalId(0), types.string, RegionId(0))],
-                    result: None,
-                },
-                2,
-            ),
-        ],
-        terminator: HirTerminator::Return(unit_expression(701, types.unit, RegionId(0))),
-    };
-
-    let start_function = HirFunction {
-        id: FunctionId(0),
-        entry: BlockId(0),
-        params: vec![],
-        return_type: types.unit,
-        return_aliases: vec![],
-    };
-    let module = build_module(
-        &mut string_table,
-        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
-        vec![start_block],
-        FunctionId(0),
-    );
-
-    let result = lower_hir_to_wasm_lir(
-        &module,
-        &default_borrow_facts(),
-        &WasmBackendRequest::default(),
-        &string_table,
-        &type_environment,
-    )
-    .expect("supported host call should lower successfully");
-
-    // Exactly one import should be registered (LogString).
-    assert_eq!(result.lir_module.imports.len(), 1);
-    assert_eq!(result.lir_module.imports[0].item_name, "log_string");
-    assert_eq!(result.lir_module.imports[0].module_name, "host");
-
-    // The call statement should reference import id 0.
-    let start_lir = result
-        .lir_module
-        .functions
-        .iter()
-        .find(|f| f.id == WasmLirFunctionId(0))
-        .expect("start function should be present");
-    assert!(start_lir.blocks[0].statements.iter().any(|stmt| matches!(
-        stmt,
-        WasmLirStmt::Call {
-            callee: WasmCalleeRef::Import(WasmImportId(0)),
-            ..
-        }
-    )));
-}
-
-#[test]
 fn rejects_unsupported_host_call_with_diagnostic() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
@@ -1134,88 +1054,6 @@ fn export_reachable_policy_ignores_unreachable_host_calls() {
         2,
         "only the exported start function and its wrapper should be lowered"
     );
-}
-
-#[test]
-fn deduplicates_host_imports_across_multiple_calls() {
-    let mut string_table = StringTable::new();
-    let (type_environment, types) = build_type_environment();
-    let start_path = InternedPath::from_single_str("main", &mut string_table);
-
-    let io_id_a = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
-    let io_id_b = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
-
-    let start_block = HirBlock {
-        id: BlockId(0),
-        region: RegionId(0),
-        locals: vec![
-            local(0, types.string, RegionId(0)),
-            local(1, types.string, RegionId(0)),
-        ],
-        statements: vec![
-            statement(
-                1,
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(LocalId(0)),
-                    value: string_expression(900, "a", types.string, RegionId(0)),
-                },
-                1,
-            ),
-            statement(
-                2,
-                HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_id_a),
-                    args: vec![load_local(910, LocalId(0), types.string, RegionId(0))],
-                    result: None,
-                },
-                2,
-            ),
-            statement(
-                3,
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(LocalId(1)),
-                    value: string_expression(901, "b", types.string, RegionId(0)),
-                },
-                3,
-            ),
-            statement(
-                4,
-                HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_id_b),
-                    args: vec![load_local(920, LocalId(1), types.string, RegionId(0))],
-                    result: None,
-                },
-                4,
-            ),
-        ],
-        terminator: HirTerminator::Return(unit_expression(902, types.unit, RegionId(0))),
-    };
-
-    let start_function = HirFunction {
-        id: FunctionId(0),
-        entry: BlockId(0),
-        params: vec![],
-        return_type: types.unit,
-        return_aliases: vec![],
-    };
-    let module = build_module(
-        &mut string_table,
-        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
-        vec![start_block],
-        FunctionId(0),
-    );
-
-    let result = lower_hir_to_wasm_lir(
-        &module,
-        &default_borrow_facts(),
-        &WasmBackendRequest::default(),
-        &string_table,
-        &type_environment,
-    )
-    .expect("duplicate host calls should lower successfully");
-
-    // Same host function called twice should result in exactly one import.
-    assert_eq!(result.lir_module.imports.len(), 1);
 }
 
 #[test]
@@ -1435,5 +1273,77 @@ fn debug_name_uses_source_name_when_available() {
         lir_fn.debug_name.contains("my_helper"),
         "debug name should contain source name, got: {}",
         lir_fn.debug_name
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Host function unsupported-in-Wasm tests
+// ---------------------------------------------------------------------------
+
+/// Verifies that V1 console functions are not silently mapped to a Wasm host import.
+/// WHAT: the old callable IO path used to hardcode a Wasm host import.
+/// WHY: new console functions have no Wasm lowering and must fail through the normal
+/// unsupported-external-function validation path.
+#[test]
+fn io_console_functions_are_unsupported_in_wasm() {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let main_path = InternedPath::from_single_str("main", &mut string_table);
+
+    let io_call = statement(
+        1,
+        HirStatementKind::Call {
+            target: CallTarget::ExternalFunction(
+                crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine,
+            ),
+            args: vec![string_expression(2, "hello", types.string, RegionId(0))],
+            result: None,
+        },
+        1,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![io_call],
+        terminator: HirTerminator::Return(unit_expression(3, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        vec![(function, main_path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+        &type_environment,
+    );
+
+    assert!(
+        result.is_err(),
+        "Wasm lowering must reject unsupported V1 IO console functions"
+    );
+    let error_message = format!("{:?}", result.unwrap_err());
+    assert!(
+        error_message.contains("does not yet support host function"),
+        "error should report unsupported host function, got: {error_message}"
+    );
+    assert!(
+        !error_message.contains("host import"),
+        "error must not suggest that a host import lowering exists, got: {error_message}"
     );
 }

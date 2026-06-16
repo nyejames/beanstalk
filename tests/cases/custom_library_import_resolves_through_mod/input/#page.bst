@@ -1,4 +1,4 @@
 import @helper {add}
 
 result = add(3, 4)
-io(result)
+io.line([: [result]])

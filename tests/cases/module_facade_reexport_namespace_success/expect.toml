@@ -6,11 +6,6 @@ warnings = "forbid"
 rendered_output_contains = ["hello"]
 
 [backends.html_wasm]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
-
-[[backends.html_wasm.artifact_assertions]]
-path = "page.wasm"
-kind = "wasm"
-validate_wasm = true
-must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
+diagnostic_codes = ["BST-RULE-0058"]

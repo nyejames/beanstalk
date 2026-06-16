@@ -1,1 +1,1 @@
-io("dotdot")
+io.line("dotdot")

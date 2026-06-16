@@ -3,7 +3,7 @@ ErrorKind = |
 |
 
 log_error |message ErrorKind|:
-    io(message.message)
+    io.line([: [message.message]])
 ;
 
 log_error(ErrorKind("something went wrong"))

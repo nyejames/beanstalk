@@ -206,7 +206,7 @@ fn rejects_alias_error_return_slot() {
 #[test]
 fn parses_generic_function_declaration_without_emitting_executable_function() {
     let (ast, string_table) = parse_single_file_ast(
-        "identity type T |value T| -> T:\n    return value\n;\n\nio(\"ready\")\n",
+        "identity type T |value T| -> T:\n    return value\n;\n\nio.line([: [\"ready\"]])\n",
     );
 
     let generic_function_emitted = ast.nodes.iter().any(|node| match &node.kind {
@@ -314,7 +314,7 @@ fn parses_generic_fallible_function_instances() {
 #[test]
 fn start_function_distinguishes_user_and_host_calls() {
     let (ast, string_table) = parse_single_file_ast(
-        "identity |value Int| -> Int:\n    return value\n;\n\nresult = identity(1)\nio(result)\n",
+        "identity |value Int| -> Int:\n    return value\n;\n\nresult = identity(1)\nio.line([: [result]])\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -334,7 +334,7 @@ fn start_function_distinguishes_user_and_host_calls() {
             }
             _ => false,
         }),
-        "expected io(...) to parse as a host-function expression statement"
+        "expected io.line([: [...]]) to parse as a host-function expression statement"
     );
 
     let function_body = function_body_by_name(&ast, &string_table, "identity");
@@ -391,7 +391,7 @@ fn rejects_struct_constructor_argument_type_with_field_wording() {
 #[test]
 fn resolves_named_struct_type_in_function_parameters() {
     let (ast, string_table) = parse_single_file_ast(
-        "Point = |\n    x Int,\n|\n\nshow |value Point|:\n    io(value.x)\n;\n",
+        "Point = |\n    x Int,\n|\n\nshow |value Point|:\n    io.line([: [value.x]])\n;\n",
     );
 
     let signature = function_signature_by_name(&ast, &string_table, "show");
@@ -758,7 +758,7 @@ fn rejects_bare_removed_err_bang_handler_without_scope() {
 #[test]
 fn parses_catch_handler_with_fallback_scope_in_declaration_rhs() {
     let (ast, string_table) = parse_single_file_ast(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io(err.message)\n        then \"fallback\"\n    ;\n    return output\n;\n",
+        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        then \"fallback\"\n    ;\n    return output\n;\n",
     );
 
     let body = function_body_by_name(&ast, &string_table, "recover");
@@ -792,7 +792,7 @@ fn parses_catch_handler_with_fallback_scope_in_declaration_rhs() {
 #[test]
 fn rejects_fallthrough_catch_handler_without_fallback_when_values_are_required() {
     let payload = parse_function_diagnostic_payload(
-        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch |err|:\n        io(err.message)\n    ;\n;\n",
+        "can_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) catch |err|:\n        io.line([: [err.message]])\n    ;\n;\n",
     );
 
     assert_eq!(

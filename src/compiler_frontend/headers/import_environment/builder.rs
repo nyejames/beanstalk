@@ -24,11 +24,11 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::{
     ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
     FacadeResolutionInput, FileVisibility, HeaderImportEnvironment, ImportTargetResolutionInput,
-    ModuleBoundaryCheckInput, NamespaceTargetResolutionInput, ResolvedImportTarget,
-    SourceImportAccess, SourceLibraryBoundaryCheckInput, VisibleNameBinding, VisibleNameRegistry,
-    check_alias_case_warning, check_module_boundary, check_source_library_boundary,
-    has_explicit_bst_extension, resolve_external_package_symbol, resolve_facade_import,
-    resolve_import_target, resolve_namespace_target,
+    ModuleBoundaryCheckInput, NamespaceRecordSource, NamespaceTargetResolutionInput,
+    ResolvedImportTarget, SourceImportAccess, SourceLibraryBoundaryCheckInput, VisibleNameBinding,
+    VisibleNameRegistry, check_alias_case_warning, check_module_boundary,
+    check_source_library_boundary, has_explicit_bst_extension, resolve_external_package_symbol,
+    resolve_facade_import, resolve_import_target, resolve_namespace_target,
 };
 
 pub(crate) struct ImportEnvironmentBuilder<'a> {
@@ -216,7 +216,26 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             )?;
         }
 
-        // 4. Resolve and register explicit imports.
+        // 4. Register prelude namespace aliases so they participate in collision detection
+        // before explicit imports. The alias name points at an external package path, and the
+        // resulting visible namespace record is built from the same path as an explicit
+        // `import @package`.
+        for (prelude_name, package_path) in self
+            .external_package_registry
+            .prelude_namespace_aliases_by_name()
+        {
+            let prelude_name_id = self.string_table.intern(prelude_name);
+            let package_path_id = self.string_table.intern(package_path);
+            registry.register(
+                prelude_name_id,
+                VisibleNameBinding::NamespaceRecord {
+                    record_source: NamespaceRecordSource::ExternalPackage(package_path_id),
+                },
+                SourceLocation::default(),
+            )?;
+        }
+
+        // 5. Resolve and register explicit imports.
         if let Some(imports) = self.module_symbols.file_imports_by_source.get(source_file) {
             for import in imports {
                 // Reject direct imports of special files (#mod, #page, #config).
@@ -249,7 +268,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         }
 
-        // 5. Inject unshadowed prelude symbols into visible maps.
+        // 6. Inject unshadowed prelude symbols into visible maps.
         // Prelude entries that are still registered as Prelude were not shadowed by imports
         // or declarations with different targets.
         for (prelude_name, symbol_id) in self.external_package_registry.prelude_symbols_by_name() {
@@ -271,7 +290,34 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         }
 
-        // 6. Add Beandown's compiler-integrated implicit constant scope.
+        // 7. Inject unshadowed prelude namespace aliases into visible namespace records.
+        // Aliases that are still registered as a namespace record with the same external
+        // package target were not shadowed by same-file declarations, builtins, or imports
+        // of a different target. Explicit imports of the same package already insert an
+        // equivalent record, so we skip when the local name is already present.
+        for (prelude_name, package_path) in self
+            .external_package_registry
+            .prelude_namespace_aliases_by_name()
+        {
+            let prelude_name_id = self.string_table.intern(prelude_name);
+            let package_path_id = self.string_table.intern(package_path);
+            if let Some(VisibleNameBinding::NamespaceRecord {
+                record_source: NamespaceRecordSource::ExternalPackage(registered_package_path_id),
+            }) = registry.get(prelude_name_id)
+                && registered_package_path_id == &package_path_id
+                && !file_visibility
+                    .visible_namespace_records
+                    .contains_key(&prelude_name_id)
+            {
+                let record = self
+                    .build_external_namespace_record(package_path_id, &SourceLocation::default())?;
+                file_visibility
+                    .visible_namespace_records
+                    .insert(prelude_name_id, record);
+            }
+        }
+
+        // 8. Add Beandown's compiler-integrated implicit constant scope.
         // WHY: `.bd` bodies are synthetic constant initializers, so they need the same
         // file-local visibility maps as authored constants without a user-visible import record.
         self.register_implicit_beandown_constant_scope(&mut file_visibility, source_file);

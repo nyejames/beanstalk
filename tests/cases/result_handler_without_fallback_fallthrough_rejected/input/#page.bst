@@ -4,11 +4,11 @@ can_error |value String| -> String, Int, Error!:
 
 recover |value String| -> String, Int:
     a, b = can_error(value) catch |err|:
-        io(err.message)
+        io.line([: [err.message]])
     ;
     return a, b
 ;
 
 first, count = recover("Ana")
-io(first)
-io(count)
+io.line([: [first]])
+io.line([: [count]])

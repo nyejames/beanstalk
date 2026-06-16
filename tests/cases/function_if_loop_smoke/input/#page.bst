@@ -5,16 +5,16 @@ add |x Int, y Int| -> Int:
 ;
 
 result = add(5, 3)
-io(result)
+io.line([: [result]])
 
 -- Test if-else
 if result > 5:
-    io("Greater than 5")
+    io.line("Greater than 5")
 else
-    io("Not greater than 5")
+    io.line("Not greater than 5")
 ;
 
 -- Test loop
 loop 0 to 3 |i|:
-    io(i)
+    io.line([: [i]])
 ;

@@ -71,9 +71,9 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         if response is:
-            Success => io("done")
-            Err(message) => io(message)
-            Pending(retry_count, message as pending_message) => io(pending_message)
+            Success => io.line("done")
+            Err(message) => io.line(message)
+            Pending(retry_count, message as pending_message) => io.line(pending_message)
         ;
     ]
 

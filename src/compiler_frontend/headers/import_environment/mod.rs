@@ -19,8 +19,9 @@ mod target_resolution;
 mod visible_names;
 
 pub(crate) use bindings::{
-    FileVisibility, HeaderImportEnvironment, NamespaceRecord, NamespaceRecordSource,
-    NamespaceTypeMember, NamespaceValueMember, ReceiverMethodVisibility,
+    FileVisibility, HeaderImportEnvironment, NamespaceMemberLookup, NamespaceRecord,
+    NamespaceRecordSource, NamespaceTypeMember, NamespaceValueMember, ReceiverMethodVisibility,
+    lookup_namespace_member,
 };
 pub(crate) use facade_resolution::{
     FacadeLookupResult, FacadeResolutionInput, FacadeType, ModuleBoundaryCheckInput,

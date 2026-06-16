@@ -5,4 +5,4 @@
 import @greeting { format_greeting }
 
 result = format_greeting("World")
-io(result)
+io.line([: [result]])

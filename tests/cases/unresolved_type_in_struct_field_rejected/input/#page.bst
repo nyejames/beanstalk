@@ -7,4 +7,4 @@ Bad = |
 
 bad #= Bad(1)
 
-io("should not reach")
+io.line("should not reach")

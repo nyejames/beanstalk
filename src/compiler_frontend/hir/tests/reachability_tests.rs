@@ -746,7 +746,34 @@ fn sorted_external_ids(ids: &[ExternalFunctionId]) -> Vec<String> {
 
 fn external_id_sort_key(id: &ExternalFunctionId) -> String {
     match id {
-        ExternalFunctionId::Io => "builtin:io".to_owned(),
+        ExternalFunctionId::IoPrint => "builtin:print".to_owned(),
+        ExternalFunctionId::IoLine => "builtin:line".to_owned(),
+        ExternalFunctionId::IoDebug => "builtin:debug".to_owned(),
+        ExternalFunctionId::IoWarn => "builtin:warn".to_owned(),
+        ExternalFunctionId::IoError => "builtin:error".to_owned(),
+        ExternalFunctionId::IoInputNew => "builtin:io_input_new".to_owned(),
+        ExternalFunctionId::IoInputUpdate => "builtin:io_input_update".to_owned(),
+        ExternalFunctionId::IoInputClose => "builtin:io_input_close".to_owned(),
+        ExternalFunctionId::IoInputKeyDown => "builtin:io_input_key_down".to_owned(),
+        ExternalFunctionId::IoInputKeyPressed => "builtin:io_input_key_pressed".to_owned(),
+        ExternalFunctionId::IoInputKeyReleased => "builtin:io_input_key_released".to_owned(),
+        ExternalFunctionId::IoInputPointerX => "builtin:io_input_pointer_x".to_owned(),
+        ExternalFunctionId::IoInputPointerY => "builtin:io_input_pointer_y".to_owned(),
+        ExternalFunctionId::IoInputPointerDown => "builtin:io_input_pointer_down".to_owned(),
+        ExternalFunctionId::IoInputPointerPressed => "builtin:io_input_pointer_pressed".to_owned(),
+        ExternalFunctionId::IoInputPointerReleased => {
+            "builtin:io_input_pointer_released".to_owned()
+        }
+        ExternalFunctionId::IoInputLastKeyPressed => "builtin:io_input_last_key_pressed".to_owned(),
+        ExternalFunctionId::IoInputLastKeyReleased => {
+            "builtin:io_input_last_key_released".to_owned()
+        }
+        ExternalFunctionId::IoInputLastPointerPressed => {
+            "builtin:io_input_last_pointer_pressed".to_owned()
+        }
+        ExternalFunctionId::IoInputLastPointerReleased => {
+            "builtin:io_input_last_pointer_released".to_owned()
+        }
         ExternalFunctionId::CollectionGet => "builtin:collection_get".to_owned(),
         ExternalFunctionId::CollectionSet => "builtin:collection_set".to_owned(),
         ExternalFunctionId::CollectionPush => "builtin:collection_push".to_owned(),

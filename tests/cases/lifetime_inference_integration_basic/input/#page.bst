@@ -10,4 +10,4 @@ counter ~= 0
 counter = counter + 1
 
 -- Simple print to test basic functionality
-io("Integration test completed")
+io.line("Integration test completed")

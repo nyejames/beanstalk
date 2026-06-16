@@ -405,7 +405,7 @@ body {
     "><code class='codeblock'>
     wrapper <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
             <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
         ;
 
@@ -438,7 +438,7 @@ body {
     "><code class='codeblock'>
     recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
             then <span class='bst-code-number'>0</span>
         ;
 
@@ -455,7 +455,7 @@ body {
     "><code class='codeblock'>
     recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
             <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
         ;
 
@@ -479,7 +479,7 @@ body {
     ;
 
     name, score <span class='bst-code-operator'>=</span> load_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
         then <span class='bst-code-string'>&quot;guest&quot;</span>, <span class='bst-code-number'>0.0</span>
     ;
     </code></pre><p>The <code>then</code> fallback values must match the success return list.</p><p>If the success path returns two values, the recovery path must provide two fallback values.</p></section>
@@ -532,7 +532,7 @@ body {
     ;
 
     value <span class='bst-code-operator'>=</span> my_list.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
         then fallback
     ;
     </code></pre><p>If the index is out of bounds, the error value is an <code>Error</code> with a <code>message</code> field.</p><p>Collection methods should not silently ignore invalid operations.</p><p>They should produce structured errors that can be caught, bubbled, or recovered from.</p></section>
@@ -572,7 +572,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> maybe_name is none<span class='bst-code-operator'>:</span>
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Direct option fallback syntax such as <code>maybe_name else then &quot;guest&quot;</code> is rejected in favour of <code>if option is |value| ... else ...</code>.</p><p>Postfix <code>?</code> propagates absence from functions that return an optional value.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -683,7 +683,7 @@ body {
 
     log_then_rethrow <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
             <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
         ;
 
@@ -692,7 +692,7 @@ body {
 
     recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
             then <span class='bst-code-number'>0</span>
         ;
 
@@ -994,10 +994,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

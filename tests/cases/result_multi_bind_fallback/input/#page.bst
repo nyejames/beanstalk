@@ -10,5 +10,5 @@ recover || -> String, Float:
 ;
 
 name, score = recover()
-io(name)
-io(score)
+io.line([: [name]])
+io.line([: [score]])

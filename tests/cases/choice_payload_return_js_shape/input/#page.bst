@@ -6,6 +6,6 @@ make_err |msg String| -> Response:
 
 result = make_err("bad")
 if result is:
-    Success => io("ok")
-    Err(message) => io("err")
+    Success => io.line("ok")
+    Err(message) => io.line("err")
 ;

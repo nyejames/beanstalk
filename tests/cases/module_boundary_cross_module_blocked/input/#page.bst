@@ -1,3 +1,3 @@
 import @helper { thing }
 
-io(thing())
+io.line([: [thing()]])

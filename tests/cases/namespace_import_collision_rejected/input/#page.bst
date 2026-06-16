@@ -1,4 +1,4 @@
 helper #= "local"
 import @./helper
 
-io(helper)
+io.line([: [helper]])

@@ -4,4 +4,4 @@ returns_int || -> Int:
     assert(false, "unreachable")
 ;
 
-io("assert_false_terminal_function")
+io.line("assert_false_terminal_function")

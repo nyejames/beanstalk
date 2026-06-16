@@ -5,11 +5,11 @@ can_error || -> Int, Error?!:
 recover || -> Int:
     value = can_error() catch |err|:
         if err is not none:
-            io("optional_error_present")
+            io.line("optional_error_present")
         ;
         then 0
     ;
     return value
 ;
 
-io(recover())
+io.line([: [recover()]])

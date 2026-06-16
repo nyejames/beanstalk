@@ -33,19 +33,22 @@ use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionResult, aliases, context::TypeResolutionContext,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericInstantiationReason, NameNamespace,
-    NamespaceTypeValueMisuseKind,
+    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericInstantiationReason,
+    InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
     BuiltinGenericType, GenericBaseType,
 };
 use crate::compiler_frontend::datatypes::{DataType, diagnostic_type_spelling};
+use crate::compiler_frontend::declaration_syntax::type_syntax::TypeAnnotationContext;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
-use crate::compiler_frontend::headers::import_environment::NamespaceTypeMember;
+use crate::compiler_frontend::headers::import_environment::{
+    NamespaceMemberLookup, NamespaceRecordSource, NamespaceTypeMember, lookup_namespace_member,
+};
 use crate::compiler_frontend::headers::module_symbols::GenericDeclarationKind;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
 use rustc_hash::FxHashSet;
 
 /// Resolve a bare named type from the current type-resolution context.
@@ -173,57 +176,123 @@ fn visible_static_trait_name(
 /// Resolve a namespace-qualified type name from the current context.
 ///
 /// WHAT: looks up the namespace record, then resolves the member name to a source declaration,
-///       external type, or namespace type/value misuse diagnostic.
+///       external type, or namespace type/value misuse diagnostic. Supports multi-segment
+///       paths for external package surfaces while keeping source/facade records shallow.
 /// WHY: namespace-qualified type names follow a separate visibility path from bare names and
 ///      need explicit handling for the "value used as type" error shape.
 pub(super) fn resolve_namespaced_type_from_context(
-    namespace: StringId,
-    name: StringId,
+    path: &[StringId],
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
 ) -> TypeResolutionResult<DataType> {
+    let Some(root_name) = path.first().copied() else {
+        return Err(Box::new(CompilerDiagnostic::invalid_type_annotation(
+            TypeAnnotationContext::DeclarationTarget,
+            InvalidTypeAnnotationReason::ExpectedTypeAnnotation {
+                found: TokenKind::Eof,
+            },
+            location.to_owned(),
+        )));
+    };
+    let final_name = path.last().copied().unwrap_or(root_name);
+
     let Some(visible_namespace_records) = context.visible_namespace_records else {
         return Err(Box::new(CompilerDiagnostic::unknown_type_name(
-            name,
+            final_name,
             location.to_owned(),
         )));
     };
 
-    let Some(record) = visible_namespace_records.get(&namespace) else {
+    let Some(record) = visible_namespace_records.get(&root_name) else {
         return Err(Box::new(CompilerDiagnostic::unknown_type_name(
-            name,
+            final_name,
             location.to_owned(),
         )));
     };
 
-    match record.type_members.get(&name) {
+    // Source and facade namespace records remain shallow. Any attempt to traverse deeper
+    // than one member in a source/facade record must keep reporting the existing nested
+    // traversal diagnostic, which integration fixtures already assert.
+    if path.len() > 2 && matches!(record.record_source, NamespaceRecordSource::SourceFile(_)) {
+        return Err(Box::new(CompilerDiagnostic::nested_traversal(
+            root_name,
+            location.to_owned(),
+        )));
+    }
+
+    let mut current_record = record;
+
+    // Walk every segment except the root and the final one. Each intermediate segment must
+    // name a child namespace; any other slot produces a misuse diagnostic.
+    for segment in path.iter().skip(1).take(path.len().saturating_sub(2)) {
+        match lookup_namespace_member(current_record, *segment) {
+            NamespaceMemberLookup::ChildNamespace(child_record) => {
+                current_record = child_record;
+            }
+            NamespaceMemberLookup::Value(_) => {
+                return Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
+                    *segment,
+                    NamespaceTypeValueMisuseKind::Namespace,
+                    NamespaceTypeValueMisuseKind::Value,
+                    location.to_owned(),
+                )));
+            }
+            NamespaceMemberLookup::Type => {
+                return Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
+                    *segment,
+                    NamespaceTypeValueMisuseKind::Namespace,
+                    NamespaceTypeValueMisuseKind::Type,
+                    location.to_owned(),
+                )));
+            }
+            NamespaceMemberLookup::Missing => {
+                return Err(Box::new(CompilerDiagnostic::unknown_type_name(
+                    *segment,
+                    location.to_owned(),
+                )));
+            }
+        }
+    }
+
+    // The final segment must resolve to a type member of the namespace record we reached.
+    match current_record.type_members.get(&final_name) {
         Some(NamespaceTypeMember::SourceDeclaration(canonical_path)) => {
             if let Some(declaration) =
                 resolve_declaration_by_path(context.declaration_table, None, canonical_path)
             {
-                reject_bare_generic_type_name(name, &declaration.id, location, context)?;
+                reject_bare_generic_type_name(final_name, &declaration.id, location, context)?;
                 return Ok(declaration.value.diagnostic_type.to_owned());
             }
             Err(Box::new(CompilerDiagnostic::unknown_type_name(
-                name,
+                final_name,
                 location.to_owned(),
             )))
         }
         Some(NamespaceTypeMember::ExternalSymbol(ExternalSymbolId::Type(type_id))) => {
             Ok(DataType::External { type_id: *type_id })
         }
-        _ if record.value_members.contains_key(&name) => {
-            Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
-                name,
-                NamespaceTypeValueMisuseKind::Type,
-                NamespaceTypeValueMisuseKind::Value,
+        _ => match lookup_namespace_member(current_record, final_name) {
+            NamespaceMemberLookup::Value(_) => {
+                Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
+                    final_name,
+                    NamespaceTypeValueMisuseKind::Type,
+                    NamespaceTypeValueMisuseKind::Value,
+                    location.to_owned(),
+                )))
+            }
+            NamespaceMemberLookup::ChildNamespace(_) => {
+                Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
+                    final_name,
+                    NamespaceTypeValueMisuseKind::Type,
+                    NamespaceTypeValueMisuseKind::Namespace,
+                    location.to_owned(),
+                )))
+            }
+            _ => Err(Box::new(CompilerDiagnostic::unknown_type_name(
+                final_name,
                 location.to_owned(),
-            )))
-        }
-        _ => Err(Box::new(CompilerDiagnostic::unknown_type_name(
-            name,
-            location.to_owned(),
-        ))),
+            ))),
+        },
     }
 }
 

@@ -7,4 +7,4 @@ if value is:
     none => result = "missing"
 ;
 
-io([:option_match_present_after_unguarded_warning result=[result]])
+io.line([:option_match_present_after_unguarded_warning result=[result]])

@@ -4,4 +4,4 @@ Point = |
 |
 
 p = Point(1, 2)
-io(p.z)
+io.line([: [p.z]])

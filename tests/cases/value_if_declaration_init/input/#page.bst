@@ -4,4 +4,4 @@ get_value |condition Bool| -> Int:
 ;
 
 result = get_value(true)
-io([:value if declaration init result=[result]])
+io.line([:value if declaration init result=[result]])

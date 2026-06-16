@@ -11,4 +11,4 @@ label = if current is:
     else => then "other"
 ;
 
-io([:qualified arm label=[label]])
+io.line([:qualified arm label=[label]])

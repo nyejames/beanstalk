@@ -8,6 +8,6 @@ Response ::
 r = Response::Err("bad")
 
 if r is:
-    Response::Err(message) => io(message)
-    Response::Success => io("ok")
+    Response::Err(message) => io.line([: [message]])
+    Response::Success => io.line("ok")
 ;

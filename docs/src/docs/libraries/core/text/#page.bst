@@ -25,7 +25,7 @@ page_head #= theme_head
         count = length(name)
         has_stalk = contains(name, "stalk")
 
-        io([:count=[count] has_stalk=[has_stalk]])
+        io.line([:count=[count] has_stalk=[has_stalk]])
     ]
 
     On the current HTML JavaScript path, text length follows JavaScript string length behavior.

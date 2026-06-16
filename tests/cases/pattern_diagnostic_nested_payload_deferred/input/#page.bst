@@ -10,6 +10,6 @@ Response ::
 r = Response::Err("bad")
 
 if r is:
-    Err(message(nested)) => io(nested)
-    else => io("other")
+    Err(message(nested)) => io.line([: [nested]])
+    else => io.line("other")
 ;

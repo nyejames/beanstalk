@@ -1,2 +1,3 @@
-import @core/io { io as io }
-io("hello")
+import @core/io { line as log }
+
+log("hello")

@@ -9,4 +9,4 @@ keep_values |values {Int}| -> {Int}:
 inner_values {Int} = empty_values()
 values {Int} = keep_values(inner_values)
 
-io(values.length())
+io.line([: [values.length()]])

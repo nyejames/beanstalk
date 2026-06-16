@@ -23,4 +23,4 @@ loop i < 10:
     i = i + 1
 ;
 
-io(count)
+io.line([: [count]])

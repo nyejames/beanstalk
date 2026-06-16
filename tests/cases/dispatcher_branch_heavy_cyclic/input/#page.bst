@@ -29,4 +29,4 @@ loop i < 6:
     i = i + 1
 ;
 
-io(label)
+io.line([: [label]])

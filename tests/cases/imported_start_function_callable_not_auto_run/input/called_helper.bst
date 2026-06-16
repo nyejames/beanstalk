@@ -1,3 +1,3 @@
 called_helper ||:
-    io("called helper start")
+    io.line("called helper start")
 ;

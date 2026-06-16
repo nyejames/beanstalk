@@ -412,7 +412,7 @@ Integration tests are the main regression check for new features and refactors.
 - Failure cases for ordinary source/config/import/type/rule/borrow diagnostics should assert stable `diagnostic_codes`; add rendered message fragments only when the rendered text itself is the behavior under test. Infrastructure-boundary tests may still assert infrastructure `ErrorType` classifications
 - Always add strong output assertions when possible
 - Use strict goldens only when exact emitted text is contractual. Prefer rendered-output assertions for behavior-first cases
-- Avoid using host functions like io() unless they are explicitly what is being tested. Prefer top-level templates to simulate output since this shows up in emitted artifacts
+- Avoid using console host functions such as `io.line(...)` unless they are explicitly what is being tested. Prefer top-level templates to simulate output since this shows up in emitted artifacts
 
 For new type-system syntax, add both:
 - positive end-to-end usage tests

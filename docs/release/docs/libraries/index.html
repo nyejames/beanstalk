@@ -356,7 +356,7 @@ body {
         </tr>
         
     </table><p>The current canvas library is exposed as <code>@web/canvas</code>. This page calls it the canvas library, but examples use the current full import path.</p></section>
-    <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
+    <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">Core IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
     <section class="container"><h1>Import forms</h1><p>Imports target a declaration surface, not a raw folder dump.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -434,7 +434,7 @@ body {
     import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
 
     value <span class='bst-code-operator'>=</span> double<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Facades can also wrap declarations imported from elsewhere. This is how a library exposes a stable public name without exposing the implementation path:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -492,7 +492,7 @@ body {
     wave <span class='bst-code-operator'>=</span> sin<span class='bst-code-parenthesis'>(</span>angle<span class='bst-code-parenthesis'>)</span>
     bounded <span class='bst-code-operator'>=</span> clamp<span class='bst-code-parenthesis'>(</span>wave, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
 
-    io<span class='bst-code-parenthesis'>(</span>bounded<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>bounded<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p><code>@core/math</code> currently exposes functions such as <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>atan2</code>, <code>log</code>, <code>pow</code>, <code>sqrt</code>, <code>min</code>, <code>max</code>, and <code>clamp</code>. It also exposes constants such as <code>PI</code>, <code>TAU</code>, and <code>E</code>.</p><p>In the JavaScript backend, these math functions currently lower to JavaScript <code>Math</code> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul><p>Other builders may expose a different core surface.</p></section>
     <section class="container"><h1>JavaScript libraries</h1><p>The HTML builder can import annotated JavaScript files. A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its <code>@bst.*</code> comments and supported exports.</p><p>Beanstalk source imports the <code>.js</code> file directly:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -507,7 +507,7 @@ body {
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>drawing.js <span class='bst-code-parenthesis'>{</span>draw_number<span class='bst-code-parenthesis'>}</span>
 
     value <span class='bst-code-operator'>=</span> draw_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>The JavaScript file describes its Beanstalk-facing surface with doc comments:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -618,7 +618,7 @@ body {
         then <span class='bst-code-string'>&quot;missing canvas&quot;</span>
     ;
 
-    io<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>JavaScript library files may currently import registered Beanstalk runtime modules with named static imports only. Arbitrary JavaScript imports, dynamic imports, default imports, namespace imports, and npm-style dependency graphs are not supported by the JS provider yet.</p><p>If you are adapting an existing JS library, bundle or flatten its dependencies first, then expose a narrow annotated wrapper file to Beanstalk.</p></section>
     <section class="container"><h1>Mutable JavaScript free functions</h1><p>JavaScript-backed external packages expose free functions only. Put the opaque value in the first parameter when a function acts on that value, and add <code>~</code> when the function mutates it. <code>this</code> receiver-style signatures are rejected for JS imports and builder-owned external packages.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -685,7 +685,7 @@ body {
         then <span class='bst-code-string'>&quot;error&quot;</span>
     ;
 
-    io<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>The higher-level <code>@html</code> source library exposes a source-owned <code>Canvas</code> wrapper and convenience <code>get_canvas()</code> helper for the built-in canvas component:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -1100,10 +1100,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

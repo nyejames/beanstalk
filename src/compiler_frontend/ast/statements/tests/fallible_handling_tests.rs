@@ -25,7 +25,7 @@ use crate::compiler_frontend::tests::parse_support::{
 #[test]
 fn parses_catch_handler_with_fallback() {
     let (ast, string_table) = parse_single_file_ast(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io(err.message)\n        then \"fallback\"\n    ;\n    return output\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        then \"fallback\"\n    ;\n    return output\n;\n",
     );
 
     let body = function_body_by_name(&ast, &string_table, "recover");
@@ -59,7 +59,7 @@ fn parses_catch_handler_with_fallback() {
 #[test]
 fn parses_catch_handler_fallback_that_reads_error_binding() {
     let (ast, string_table) = parse_single_file_ast(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io(err.code)\n        then err.message\n    ;\n    return output\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io.line([: [err.code]])\n        then err.message\n    ;\n    return output\n;\n",
     );
 
     let body = function_body_by_name(&ast, &string_table, "recover");
@@ -192,7 +192,7 @@ fn parses_catch_handler_without_fallback_when_handler_guarantees_return() {
 #[test]
 fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false() {
     let (ast, string_table) = parse_single_file_ast(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io(err.message)\n        assert(false, \"unreachable error path\")\n    ;\n    return output\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        assert(false, \"unreachable error path\")\n    ;\n    return output\n;\n",
     );
 
     let body = function_body_by_name(&ast, &string_table, "recover");
@@ -264,7 +264,7 @@ fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false_no_
 #[test]
 fn rejects_catch_handler_without_fallback_when_handler_can_fall_through() {
     assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, route Bool| -> String:\n    return can_error(value) catch |err|:\n        if route:\n            io(err.message)\n        else\n            io(err.code)\n        ;\n    ;\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, route Bool| -> String:\n    return can_error(value) catch |err|:\n        if route:\n            io.line([: [err.message]])\n        else\n            io.line([: [err.code]])\n        ;\n    ;\n;\n",
         InvalidResultHandlingReason::CatchHandlerCanFallThrough,
     );
 }
@@ -280,7 +280,7 @@ fn rejects_catch_handler_if_without_else_even_when_then_branch_returns() {
 #[test]
 fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert() {
     assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, should_stop Bool| -> String:\n    return can_error(value) catch |err|:\n        io(err.message)\n        assert(should_stop, \"dynamic assertion can pass\")\n    ;\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, should_stop Bool| -> String:\n    return can_error(value) catch |err|:\n        io.line([: [err.message]])\n        assert(should_stop, \"dynamic assertion can pass\")\n    ;\n;\n",
         InvalidResultHandlingReason::CatchHandlerCanFallThrough,
     );
 }
@@ -292,7 +292,7 @@ fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert(
 #[test]
 fn rejects_catch_handler_name_conflict_with_visible_declaration() {
     assert_invalid_fallible_handling(
-        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    err = \"taken\"\n    output = can_error(value) catch |err|:\n        io(err.message)\n        then \"fallback\"\n    ;\n    return output\n;\n",
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    err = \"taken\"\n    output = can_error(value) catch |err|:\n        io.line([: [err.message]])\n        then \"fallback\"\n    ;\n    return output\n;\n",
         InvalidResultHandlingReason::CatchHandlerConflicts,
     );
 }
@@ -595,7 +595,7 @@ fn accepts_then_inside_nested_catch_branch() {
 #[test]
 fn accepts_statement_after_then_as_unreachable_handler_tail() {
     parse_single_file_ast(
-        "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    return can_error() catch:\n        then 0\n        io(\"late\")\n    ;\n;\n",
+        "can_error || -> Int, Error!:\n    return 1\n;\n\nrecover || -> Int:\n    return can_error() catch:\n        then 0\n        io.line([: [\"late\"]])\n    ;\n;\n",
     );
 }
 

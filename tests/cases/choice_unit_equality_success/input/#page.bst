@@ -5,11 +5,11 @@ b Status = Status::Ready
 c Status = Status::Busy
 
 if a is b:
-    io("same=true")
+    io.line("same=true")
 ;
 
 if a is c:
-    io("different=true")
+    io.line("different=true")
 else
-    io("different=false")
+    io.line("different=false")
 ;

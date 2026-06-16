@@ -1,8 +1,9 @@
 //! String helpers for the JS runtime.
 //!
-//! WHAT: string coercion and IO output.
-//! WHY: host IO and user-facing string conversion need uniform value-to-string
-//! semantics that handle `undefined`/`null` gracefully.
+//! WHAT: string coercion and value-to-string conversion.
+//! WHY: user-facing string conversion needs uniform value-to-string semantics that
+//! handle `undefined`/`null` gracefully. Console output now lives in the demand-driven
+//! core IO helper path rather than the unconditional runtime prelude.
 
 use crate::backends::js::JsEmitter;
 
@@ -23,13 +24,6 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             emitter.emit_line("return String(value);");
-        });
-        self.emit_line("}");
-        self.emit_line("");
-
-        self.emit_line("function __bs_io(value) {");
-        self.with_indent(|emitter| {
-            emitter.emit_line("console.log(__bs_value_to_string(value));");
         });
         self.emit_line("}");
         self.emit_line("");

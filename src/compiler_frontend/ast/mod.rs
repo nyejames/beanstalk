@@ -69,7 +69,7 @@ pub(crate) mod expressions {
     pub(crate) mod function_calls;
     pub(crate) mod generic_nominal_inference;
     pub(crate) mod mutation;
-    pub(crate) mod namespace_member_access;
+    pub(crate) mod namespace_access;
     pub(crate) mod option_propagation;
     pub(crate) mod parse_expression;
     pub(crate) mod parse_expression_dispatch;

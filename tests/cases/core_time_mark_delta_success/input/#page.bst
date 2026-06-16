@@ -18,4 +18,4 @@ elapsed = elapsed_since(mark1)
 delta_ok = as_milliseconds(delta) >= 0.0
 elapsed_ok = as_milliseconds(elapsed) >= 0.0
 
-io([:mark_delta delta_ok=[delta_ok] elapsed_ok=[elapsed_ok]])
+io.line([:mark_delta delta_ok=[delta_ok] elapsed_ok=[elapsed_ok]])

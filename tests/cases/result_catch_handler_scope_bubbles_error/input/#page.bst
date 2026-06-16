@@ -14,5 +14,5 @@ first, count = rethrow("Ana") catch:
     then "fallback", 0
 
 ;
-io(first)
-io(count)
+io.line([: [first]])
+io.line([: [count]])

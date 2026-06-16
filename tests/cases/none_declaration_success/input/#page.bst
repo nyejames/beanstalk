@@ -3,4 +3,4 @@
 
 name String? = none
 
-io("ok")
+io.line("ok")

@@ -1,4 +1,4 @@
--- AST rejects Option value passed to io()
+-- AST rejects Option value passed to io.line([: []])
 
 name String? = none
-io(name)
+io.line(name)

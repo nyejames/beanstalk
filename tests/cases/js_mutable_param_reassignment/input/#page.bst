@@ -8,6 +8,6 @@ increment |value ~Int| -> Int:
 
 x ~= 10
 result = increment(~x)
-io(result)
+io.line([: [result]])
 
 [:mutable_param_reassignment result=[result]]

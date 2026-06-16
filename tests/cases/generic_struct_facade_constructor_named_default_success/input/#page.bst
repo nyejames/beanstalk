@@ -5,5 +5,5 @@ import @utils { Wrapper }
 
 wrapper Wrapper of Int = Wrapper(value = 42)
 
-io(wrapper.value)
-io(wrapper.label)
+io.line([: [wrapper.value]])
+io.line([: [wrapper.label]])

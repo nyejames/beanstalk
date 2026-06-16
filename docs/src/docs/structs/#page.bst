@@ -34,8 +34,8 @@ page_head #= theme_head
         person ~= Person("Alice", 30)
 
         -- Access fields using dot notation
-        io(person.name) -- "Alice"
-        io(person.age)  -- 30
+        io.line(person.name) -- "Alice"
+        io.line(person.age)  -- 30
 
         -- Defining a struct, then defining a method for it
         Vector2 = |
@@ -73,7 +73,7 @@ page_head #= theme_head
         ;
 
         rect = Rectangle(10, 5)
-        io(rect.area()) -- 50
+        io.line(rect.area()) -- 50
     ]
 
     `this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.

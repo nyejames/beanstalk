@@ -12,4 +12,4 @@ get_float_expr || -> Float:
 result = get_float()
 result2 = get_float_expr()
 
-io("float returns from int passed")
+io.line("float returns from int passed")

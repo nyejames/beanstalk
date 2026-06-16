@@ -8,4 +8,4 @@ Palette = |
 
 palette #= Palette()
 
-io(palette.primary.label)
+io.line([: [palette.primary.label]])

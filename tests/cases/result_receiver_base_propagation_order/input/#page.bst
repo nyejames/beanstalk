@@ -11,12 +11,12 @@ read_score |this User| -> Int:
 ;
 
 method_left || -> Int:
-    io("method-left")
+    io.line("method-left")
     return 1
 ;
 
 collection_left || -> Int:
-    io("collection-left")
+    io.line("collection-left")
     return 2
 ;
 
@@ -44,4 +44,4 @@ method_value = method_compute() catch:
 collection_value = collection_compute() catch:
     then 0
 ;
-io([:receiver propagation method=[method_value] collection=[collection_value]])
+io.line([:receiver propagation method=[method_value] collection=[collection_value]])

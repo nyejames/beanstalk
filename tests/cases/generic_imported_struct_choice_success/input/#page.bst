@@ -6,6 +6,6 @@ str_box Box of String = Box("hello")
 
 result ResultShape of String, Error = ResultShape::Ok("world")
 
-io(str_box.value)
+io.line([: [str_box.value]])
 
 [: generic imported success]

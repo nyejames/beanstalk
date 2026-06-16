@@ -6,4 +6,4 @@ if current is:
     Busy => result = "busy"
     Offline => result = "offline"
 ;
-io(result)
+io.line([: [result]])

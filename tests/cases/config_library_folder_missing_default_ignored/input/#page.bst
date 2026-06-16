@@ -1,1 +1,1 @@
-io("ok")
+io.line("ok")

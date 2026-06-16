@@ -4,4 +4,4 @@ sine |x Float| -> Float:
 
 import @core/math { sin as sine }
 
-io(sine(1.0))
+io.line([: [sine(1.0)]])

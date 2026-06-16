@@ -1079,7 +1079,7 @@ fn expression_host_call_uses_variant_result_type_ids() {
     let mut builder = setup_builder(&mut string_table);
 
     let call_expr = Expression::host_function_call_with_typed_arguments(
-        ExternalFunctionId::Io,
+        ExternalFunctionId::IoLine,
         vec![],
         vec![builtin_type_ids::INT],
         &mut builder.type_environment,
@@ -1421,7 +1421,7 @@ fn lowers_host_call_expression_with_host_target() {
     let mut builder = setup_builder(&mut string_table);
 
     let host_call = Expression::host_function_call(
-        crate::compiler_frontend::external_packages::ExternalFunctionId::Io,
+        crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine,
         vec![Expression::string_slice(
             literal_x,
             location.clone(),
@@ -1442,7 +1442,7 @@ fn lowers_host_call_expression_with_host_target() {
     assert_eq!(
         target,
         &CallTarget::ExternalFunction(
-            crate::compiler_frontend::external_packages::ExternalFunctionId::Io
+            crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine
         )
     );
 }

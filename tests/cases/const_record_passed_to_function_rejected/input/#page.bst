@@ -5,4 +5,4 @@ Palette = |
 
 palette #= Palette()
 
-io(palette)
+io.line([: [palette]])

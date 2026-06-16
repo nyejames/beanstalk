@@ -25,4 +25,4 @@ if selector is:
         ;
 ;
 
-io(value)
+io.line([: [value]])

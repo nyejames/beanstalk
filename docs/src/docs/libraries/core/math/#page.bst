@@ -20,7 +20,7 @@ page_head #= theme_head
         wave = sin(PI / 2.0)
         bounded = clamp(wave, 0.0, 1.0)
 
-        io([:bounded=[bounded]])
+        io.line([:bounded=[bounded]])
     ]
 
     On the HTML JavaScript path these helpers lower to JavaScript `Math` expressions.

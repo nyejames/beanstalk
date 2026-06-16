@@ -27,4 +27,4 @@ ignored = custom_channel_overflow(false) catch:
     then 0
 ;
 
-io([: trap helpers emitted])
+io.line([: trap helpers emitted])

@@ -20,7 +20,7 @@ fn build_single_file_project_includes_reachable_import_files() {
     .expect("should write main file");
     fs::write(
         root.join("utils/helper.bst"),
-        "greet||:\n    io(\"hello\")\n;\n",
+        "greet||:\n    io.line([: [\"hello\"]])\n;\n",
     )
     .expect("should write helper file");
 
@@ -157,7 +157,7 @@ fn build_html_project_non_fallible_js_with_runtime_helper_emits_runtime_module()
     fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @./drawing.js { get_number }\nvalue = get_number()\nio(value)\n",
+        "import @./drawing.js { get_number }\nvalue = get_number()\nio.line([: [value]])\n",
     )
     .expect("should write page");
     fs::write(
@@ -377,7 +377,7 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
     fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @web/canvas\nrun |id String| -> String, Error!:\n    canvas_ref = canvas.get_canvas(id)!\n    ctx ~= canvas.context_2d(canvas_ref)!\n    canvas.set_line_width(~ctx, 2.0)\n    gradient ~= canvas.create_linear_gradient(ctx, 0.0, 0.0, 10.0, 0.0)!\n    canvas.add_color_stop(~gradient, 0.0, \"red\")!\n    canvas.set_fill_gradient(~ctx, gradient)\n    canvas.fill_rect(~ctx, 0.0, 0.0, 10.0, 10.0)\n    return \"ok\"\n;\nresult = run(\"game\") catch:\n    then \"error\"\n;\nio(result)\n",
+        "import @web/canvas\nrun |id String| -> String, Error!:\n    canvas_ref = canvas.get_canvas(id)!\n    ctx ~= canvas.context_2d(canvas_ref)!\n    canvas.set_line_width(~ctx, 2.0)\n    gradient ~= canvas.create_linear_gradient(ctx, 0.0, 0.0, 10.0, 0.0)!\n    canvas.add_color_stop(~gradient, 0.0, \"red\")!\n    canvas.set_fill_gradient(~ctx, gradient)\n    canvas.fill_rect(~ctx, 0.0, 0.0, 10.0, 10.0)\n    return \"ok\"\n;\nresult = run(\"game\") catch:\n    then \"error\"\n;\nio.line([: [result]])\n",
     )
     .expect("should write page");
 
@@ -480,7 +480,7 @@ fn build_html_project_html_canvas_helper_emits_builtin_js_asset_and_glue() {
     fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @html { get_canvas_context }\ndraw || -> String, Error!:\n    context = get_canvas_context()!\n    return \"ok\"\n;\nresult = draw() catch:\n    then \"error\"\n;\nio(result)\n",
+        "import @html { get_canvas_context }\ndraw || -> String, Error!:\n    context = get_canvas_context()!\n    return \"ok\"\n;\nresult = draw() catch:\n    then \"error\"\n;\nio.line([: [result]])\n",
     )
     .expect("should write page");
 

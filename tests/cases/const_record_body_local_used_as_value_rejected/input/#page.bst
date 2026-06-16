@@ -5,7 +5,7 @@ Palette = |
 
 use_palette ||:
     palette #= Palette()
-    io(palette)
+    io.line([: [palette]])
 ;
 
 use_palette()

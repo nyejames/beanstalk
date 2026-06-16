@@ -13,4 +13,4 @@ Status ::
 
 status #= Status::Loaded(Payload("ok"))
 
-io("ok")
+io.line("ok")

@@ -1,1 +1,1 @@
-const_value #= io("x")
+const_value #= io.line("x")

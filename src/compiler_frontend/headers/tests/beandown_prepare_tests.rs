@@ -1100,7 +1100,7 @@ fn beandown_dynamic_loop_condition_rejected_by_const_folding() {
 
 #[test]
 fn beandown_external_prelude_call_rejected_by_const_folding() {
-    let fixture = BeandownScopeFixture::new(&[("src/intro.bd", "[io(\"test\")]")]);
+    let fixture = BeandownScopeFixture::new(&[("src/intro.bd", "[io.line([: [\"test\"]])]")]);
     let diagnostic =
         fixture.compile_beandown_diagnostic("src/intro.bd", &["@html/#mod.bst", "src/intro.bd"]);
 

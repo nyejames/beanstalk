@@ -1,3 +1,4 @@
 import @./helper as util
 
-io(util.greet())
+greeting = util.greet()
+io.line([: [greeting]])

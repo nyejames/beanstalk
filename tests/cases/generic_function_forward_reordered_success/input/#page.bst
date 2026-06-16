@@ -13,4 +13,4 @@ swap_forward type X, Y |x X, y Y| -> Y:
 left Int = forward(7, "ignored")
 right String = swap_forward(7, "kept")
 
-io([: generic forward [left] [right]])
+io.line([: generic forward [left] [right]])

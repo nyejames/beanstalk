@@ -8,9 +8,9 @@ wrap || -> String, PkgError?!:
 
 value = wrap() catch |err|:
     if err is not none:
-        io("optional_custom_error_present")
+        io.line("optional_custom_error_present")
     ;
     then "fallback"
 ;
 
-io(value)
+io.line([: [value]])

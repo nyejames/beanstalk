@@ -9,4 +9,4 @@ Palette = |
 palette #= Palette()
 
 value = palette.primary
-io(value)
+io.line([: [value]])

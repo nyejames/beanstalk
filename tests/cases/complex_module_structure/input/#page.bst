@@ -6,7 +6,7 @@ import @utils/calculator { init_calculator }
 import @data/storage {save, load}
 import @data/storage { init_storage }
 
-io("Starting complex module test")
+io.line("Starting complex module test")
 init_logger()
 init_calculator()
 init_storage()
@@ -19,6 +19,6 @@ log("Calculation complete")
 -- Test storage operations
 save("result", result)
 saved_value = load("result")
-io([: Saved and loaded value: [saved_value]])
+io.line([: Saved and loaded value: [saved_value]])
 
-io("Complex module test complete")
+io.line("Complex module test complete")

@@ -17,4 +17,4 @@ status = draw() catch:
     then "canvas_context_unavailable"
 ;
 
-io(status)
+io.line([: [status]])

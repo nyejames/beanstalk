@@ -1,1 +1,1 @@
-io("dup")
+io.line("dup")

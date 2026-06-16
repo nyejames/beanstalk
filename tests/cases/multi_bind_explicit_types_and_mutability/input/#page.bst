@@ -4,6 +4,6 @@ triple || -> Int, String, Float:
 
 a, b String, c ~Float = triple()
 c = c + 1.0
-io(a)
-io(b)
-io(c)
+io.line([: [a]])
+io.line([: [b]])
+io.line([: [c]])

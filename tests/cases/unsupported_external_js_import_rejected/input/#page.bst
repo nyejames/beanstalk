@@ -1,3 +1,3 @@
 import @./drawing.js
 
-io("page")
+io.line("page")

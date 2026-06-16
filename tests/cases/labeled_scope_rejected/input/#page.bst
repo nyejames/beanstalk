@@ -1,3 +1,3 @@
 label:
-    io("Hello")
+    io.line("Hello")
 ;

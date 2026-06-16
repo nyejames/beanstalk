@@ -56,19 +56,19 @@ digest_badge_text #= [: digest [grand_digest] ]
 thing = 69
 
 if thing is:
-    0 => io("zero")
-    -1 => io("negative")
-    1 => io(1)
-    2 => io("two")
-    3 => io("three")
-    4 => io("four")
-    5 => io("5")
-    6 => io("six")
-    7 => io("seven")
-    8 => io("eight")
-    9 => io("nine")
-    10 => io("ten")
-    else => io("only one")
+    0 => io.line("zero")
+    -1 => io.line("negative")
+    1 => io.line([: [1]])
+    2 => io.line("two")
+    3 => io.line("three")
+    4 => io.line("four")
+    5 => io.line("5")
+    6 => io.line("six")
+    7 => io.line("seven")
+    8 => io.line("eight")
+    9 => io.line("nine")
+    10 => io.line("ten")
+    else => io.line("only one")
 ;
 
 page_shell #= [:

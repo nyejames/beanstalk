@@ -14,4 +14,4 @@ value = recover() catch:
     then "fallback"
 ;
 
-io(value)
+io.line([: [value]])

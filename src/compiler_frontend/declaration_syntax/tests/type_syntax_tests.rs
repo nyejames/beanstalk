@@ -1226,8 +1226,8 @@ fn parses_namespaced_type_using_member_name_case() {
         fixed_capacity: None,
         element,
         ..
-    } if matches!(*element, ParsedTypeRef::Namespaced { namespace, name, .. }
-        if namespace == namespace_name && name == type_name
+    } if matches!(element.as_ref(), ParsedTypeRef::Qualified { path, .. }
+        if path == &vec![namespace_name, type_name]
     )));
 }
 
@@ -1891,4 +1891,74 @@ fn map_type_walker_visits_named_types_in_key_and_value() {
     );
 
     assert_eq!(found, vec![key_name, value_name]);
+}
+
+#[test]
+fn parses_qualified_type_with_three_segments() {
+    let mut string_table = StringTable::new();
+    let root_name = string_table.intern("io");
+    let child_name = string_table.intern("input");
+    let type_name = string_table.intern("Input");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::Symbol(root_name)),
+            token(TokenKind::Dot),
+            token(TokenKind::Symbol(child_name)),
+            token(TokenKind::Dot),
+            token(TokenKind::Symbol(type_name)),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect("qualified type should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Qualified { path, .. }
+        if path == vec![root_name, child_name, type_name]
+    ));
+}
+
+#[test]
+fn rejects_generic_application_on_qualified_base() {
+    let mut string_table = StringTable::new();
+    let root_name = string_table.intern("io");
+    let child_name = string_table.intern("input");
+    let type_name = string_table.intern("Input");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::Symbol(root_name)),
+            token(TokenKind::Dot),
+            token(TokenKind::Symbol(child_name)),
+            token(TokenKind::Dot),
+            token(TokenKind::Symbol(type_name)),
+            token(TokenKind::Of),
+            token(TokenKind::Symbol(string_table.intern("T"))),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("generic application on qualified base should fail");
+
+    assert!(
+        matches!(
+            error.payload,
+            DiagnosticPayload::InvalidGenericApplication {
+                reason: GenericApplicationErrorReason::OnNonNamedType,
+                ..
+            }
+        ),
+        "expected OnNonNamedType error, got {:?}",
+        error.payload
+    );
 }

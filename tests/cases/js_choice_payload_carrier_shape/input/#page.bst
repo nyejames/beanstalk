@@ -13,4 +13,4 @@ u = Response::Success
 p = Response::Err("bad")
 n = Response::Pending(3, message = "waiting")
 
-io("ok")
+io.line("ok")

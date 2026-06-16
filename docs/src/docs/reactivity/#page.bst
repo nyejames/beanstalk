@@ -168,7 +168,7 @@ page_head #= theme_head
 
     Unsupported or deferred sinks must not silently become live:
 
-    - `io(...)` with direct subscription-bearing reactive templates is rejected until the IO/side-effect model is designed
+    - `io.line(...)` with direct subscription-bearing reactive templates is rejected until the IO/side-effect model is designed
     - `assert(...)` messages are string literals only, so reactive/runtime template messages are rejected
     - HTML-Wasm rejects reachable reactive runtime features before Wasm lowering
 ]

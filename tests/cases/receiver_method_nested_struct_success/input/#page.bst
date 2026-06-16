@@ -13,4 +13,4 @@ bump_inner |this ~Outer|:
 
 o ~= Outer(Inner(10), "test")
 ~o.bump_inner()
-io(o.inner.value)
+io.line([: [o.inner.value]])

@@ -5,10 +5,10 @@ can_error |value String| -> String, Error!:
 recover |value String| -> String:
     err = "taken"
     output = can_error(value) catch |err|:
-        io(err.message)
+        io.line([: [err.message]])
         then "fallback"
     ;
     return output
 ;
 
-io(recover("ok"))
+io.line([: [recover("ok")]])

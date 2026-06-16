@@ -11,4 +11,4 @@ text_value = identity("hello")
 chosen = first(1, 2)
 named = first(value = 3, fallback = 4)
 
-io([: [int_value] [text_value] [chosen] [named]])
+io.line([: [int_value] [text_value] [chosen] [named]])

@@ -4,4 +4,4 @@ value = fallible_text_ok("kept") catch:
     then "fallback"
 ;
 
-io([:external_fallible_catch_success value=[value]])
+io.line([:external_fallible_catch_success value=[value]])

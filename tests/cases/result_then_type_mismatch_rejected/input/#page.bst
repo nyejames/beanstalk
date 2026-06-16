@@ -6,4 +6,4 @@ value = can_error() catch:
     then "fallback"
 ;
 
-io(value)
+io.line([: [value]])

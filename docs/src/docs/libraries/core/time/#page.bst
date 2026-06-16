@@ -66,7 +66,7 @@ page_head #= theme_head
             then timestamp_from_unix_milliseconds(0.0)
         ;
 
-        io(to_iso_string(created))
+        io.line(to_iso_string(created))
     ]
 
     Invalid ISO strings are ordinary fallible calls:

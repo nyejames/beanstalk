@@ -7,9 +7,9 @@ some_condition = true
 first_ref ~= data
 
 if some_condition:
-    io(first_ref)
+    io.line([: [first_ref]])
 else
-    io(first_ref)
+    io.line([: [first_ref]])
     second_ref ~= data
-    io(second_ref)
+    io.line([: [second_ref]])
 ;

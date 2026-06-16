@@ -2,4 +2,4 @@
 
 count $Int = 1
 
-io([:reactive_external_call_sink_rejected [$(count)]])
+io.line([:reactive_external_call_sink_rejected [$(count)]])

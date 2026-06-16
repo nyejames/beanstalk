@@ -1,9 +1,9 @@
 -- Test calling imported config entrypoints explicitly.
 import @config {init_config, get_database_url}
 
-io("Before config initialization")
+io.line("Before config initialization")
 init_config()
-io("After config initialization")
+io.line("After config initialization")
 
 database_url = get_database_url()
-io([: Database URL: [database_url]])
+io.line([: Database URL: [database_url]])

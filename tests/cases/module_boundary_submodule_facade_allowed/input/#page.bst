@@ -1,3 +1,3 @@
 import @./sub { greet }
 
-io(greet())
+io.line([: [greet()]])

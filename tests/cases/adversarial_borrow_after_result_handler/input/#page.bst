@@ -13,4 +13,4 @@ value = load_value(true) catch:
 ;
 alias1 = value
 alias2 = alias1
-io(alias2)
+io.line([: [alias2]])

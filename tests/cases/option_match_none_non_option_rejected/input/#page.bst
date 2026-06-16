@@ -1,6 +1,6 @@
 name = "Ana"
 
 if name is:
-    none => io("missing")
-    else => io("present")
+    none => io.line("missing")
+    else => io.line("present")
 ;

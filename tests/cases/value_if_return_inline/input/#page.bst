@@ -3,4 +3,4 @@ choose |condition Bool| -> Int:
 ;
 
 value = choose(true)
-io("value if return inline test")
+io.line("value if return inline test")

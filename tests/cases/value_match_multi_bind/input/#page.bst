@@ -8,5 +8,5 @@ values_for |flag Bool| -> Int, String:
 ;
 
 number, label = values_for(true)
-io(number)
-io(label)
+io.line([: [number]])
+io.line([: [label]])

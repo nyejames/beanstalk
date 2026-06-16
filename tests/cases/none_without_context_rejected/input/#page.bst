@@ -4,4 +4,4 @@
 
 name = none
 
-io("should not reach here")
+io.line("should not reach here")

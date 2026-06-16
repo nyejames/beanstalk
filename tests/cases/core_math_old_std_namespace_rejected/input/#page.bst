@@ -1,3 +1,3 @@
 import @std/math { sin }
 
-io(sin(1.0))
+io.line([: [sin(1.0)]])

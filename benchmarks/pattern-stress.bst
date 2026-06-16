@@ -339,66 +339,66 @@ match_sequence || -> String:
 
 -- Stress test entry
 run_pattern_stress ||:
-    io("Pattern matching stress test starting")
+    io.line("Pattern matching stress test starting")
 
     -- Exhaustive matches
-    io(handle_status(Status::Running))
-    io(handle_status(Status::Failed))
-    io(handle_priority(Priority::Critical))
-    io(handle_color(Color::Magenta))
+    io.line([: [handle_status(Status::Running)]])
+    io.line([: [handle_status(Status::Failed)]])
+    io.line([: [handle_priority(Priority::Critical)]])
+    io.line([: [handle_color(Color::Magenta)]])
 
     -- Matches with else
-    io(handle_status_else(Status::Pending))
+    io.line([: [handle_status_else(Status::Pending)]])
 
     -- Guards
-    io(classify_number(0))
-    io(classify_number(-5))
-    io(classify_number(50))
-    io(classify_number(500))
-    io(classify_with_guards(0, true))
-    io(classify_with_guards(0, false))
-    io(check_range(25))
+    io.line([: [classify_number(0)]])
+    io.line([: [classify_number(-5)]])
+    io.line([: [classify_number(50)]])
+    io.line([: [classify_number(500)]])
+    io.line([: [classify_with_guards(0, true)]])
+    io.line([: [classify_with_guards(0, false)]])
+    io.line([: [check_range(25)]])
 
     -- Payload captures
-    io(handle_result(Result::Ok))
-    io(handle_result(Result::Err("something went wrong")))
-    io(handle_optional(Optional::None))
-    io(handle_optional(Optional::Some(42)))
-    io(handle_message(Message::Text("hello")))
-    io(handle_message(Message::Pair(10, 20)))
-    io(handle_http(HttpResponse::Success(200, "OK")))
-    io(handle_http(HttpResponse::ClientError(404, "Not Found")))
-    io(handle_event(Event::Click(100, 200)))
-    io(handle_event(Event::KeyPress("Enter", true, false, false)))
+    io.line([: [handle_result(Result::Ok)]])
+    io.line([: [handle_result(Result::Err("something went wrong"))]])
+    io.line([: [handle_optional(Optional::None)]])
+    io.line([: [handle_optional(Optional::Some(42))]])
+    io.line([: [handle_message(Message::Text("hello"))]])
+    io.line([: [handle_message(Message::Pair(10, 20))]])
+    io.line([: [handle_http(HttpResponse::Success(200, "OK"))]])
+    io.line([: [handle_http(HttpResponse::ClientError(404, "Not Found"))]])
+    io.line([: [handle_event(Event::Click(100, 200))]])
+    io.line([: [handle_event(Event::KeyPress("Enter", true, false, false))]])
 
     -- Relational patterns
-    io(compare_to_ten(5))
-    io(compare_to_ten(10))
-    io(compare_to_ten(15))
-    io(grade_score(85))
-    io(categorize_string("hello"))
+    io.line([: [compare_to_ten(5)]])
+    io.line([: [compare_to_ten(10)]])
+    io.line([: [compare_to_ten(15)]])
+    io.line([: [grade_score(85)]])
+    io.line([: [categorize_string("hello")]])
 
     -- Nested match
-    io(nested_match())
+    io.line([: [nested_match()]])
 
     -- Large match
-    io(large_match(15))
-    io(large_match(100))
+    io.line([: [large_match(15)]])
+    io.line([: [large_match(100)]])
 
     -- Guarded payloads
-    io(guarded_payload(Optional::Some(-10)))
-    io(guarded_payload(Optional::Some(50)))
-    io(guarded_http(HttpResponse::Success(200, "OK")))
-    io(guarded_http(HttpResponse::ClientError(404, "Not Found")))
+    io.line([: [guarded_payload(Optional::Some(-10))]])
+    io.line([: [guarded_payload(Optional::Some(50))]])
+    io.line([: [guarded_http(HttpResponse::Success(200, "OK"))]])
+    io.line([: [guarded_http(HttpResponse::ClientError(404, "Not Found"))]])
 
     -- Capture whole
-    io(capture_whole(-10))
-    io(capture_whole(10))
+    io.line([: [capture_whole(-10)]])
+    io.line([: [capture_whole(10)]])
 
     -- Sequence
-    io(match_sequence())
+    io.line([: [match_sequence()]])
 
-    io("Pattern matching stress test complete")
+    io.line("Pattern matching stress test complete")
 ;
 
 run_pattern_stress()

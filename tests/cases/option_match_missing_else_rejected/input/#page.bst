@@ -1,5 +1,5 @@
 name String? = none
 
 if name is:
-    none => io("missing")
+    none => io.line("missing")
 ;

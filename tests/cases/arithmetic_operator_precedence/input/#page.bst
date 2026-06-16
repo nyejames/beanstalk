@@ -23,4 +23,4 @@ result3 = 10 - 2 + 3
 neg = -42
 neg_float = -3.14
 
-io("Arithmetic tests passed")
+io.line("Arithmetic tests passed")

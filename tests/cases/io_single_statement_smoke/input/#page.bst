@@ -1,2 +1,2 @@
 -- Test basic print statement functionality
-io("Hello, World!")
+io.line("Hello, World!")

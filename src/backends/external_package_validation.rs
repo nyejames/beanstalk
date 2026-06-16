@@ -89,16 +89,9 @@ fn has_backend_lowering(
                         | crate::compiler_frontend::external_packages::ExternalJsLowering::ExternalModuleExport { .. }
                 )
             }),
-        BackendTarget::Wasm => {
-            // The Wasm backend hardcodes support for `Io` even though the registry lists
-            // `lowerings.wasm` as `None`. Keep that parity here.
-            if matches!(id, ExternalFunctionId::Io) {
-                return true;
-            }
-            registry
-                .get_function_by_id(id)
-                .is_some_and(|def| def.lowerings.wasm.is_some())
-        }
+        BackendTarget::Wasm => registry
+            .get_function_by_id(id)
+            .is_some_and(|def| def.lowerings.wasm.is_some()),
     }
 }
 
@@ -109,8 +102,13 @@ fn unsupported_external_function_diagnostic(
     string_table: &mut StringTable,
 ) -> CompilerDiagnostic {
     let function_name = registry
-        .get_function_by_id(call.function_id)
-        .map(|def| def.name.clone())
+        .resolve_function_symbol_path(call.function_id)
+        .map(|path| path.display_text())
+        .or_else(|| {
+            registry
+                .get_function_by_id(call.function_id)
+                .map(|def| def.name.clone())
+        })
         .unwrap_or_else(|| call.function_id.name().to_owned());
 
     let package_path = registry.resolve_function_package(call.function_id);

@@ -15,12 +15,12 @@ page_head #= theme_head
         v = 1
 
         if v is not 1:
-            io("nope")
+            io.line("nope")
         else
-            io("yep")
+            io.line("yep")
         ;
 
-        io(msg) -- prints "nope"
+        io.line(msg) -- prints "nope"
     ]
 
     If statements are non-exhaustive and there is no "if else" or "elif" in Beanstalk.
@@ -58,7 +58,7 @@ page_head #= theme_head
         value = 1
 
         if value is:
-            0 => io("zero")
+            0 => io.line("zero")
             else =>
         ;
     ]
@@ -96,9 +96,9 @@ page_head #= theme_head
         ;
 
         if response is:
-            Success => io("done")
-            Err(message) => io(message)
-            Pending(retry_count, message as pending_message) => io(pending_message)
+            Success => io.line("done")
+            Err(message) => io.line(message)
+            Pending(retry_count, message as pending_message) => io.line(pending_message)
         ;
     ]
 

@@ -6,4 +6,4 @@ loop items |iter_value|:
     ;
 ;
 
-io(items.length())
+io.line([: [items.length()]])

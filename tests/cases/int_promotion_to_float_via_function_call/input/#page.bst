@@ -11,4 +11,4 @@ add_one |value Int| -> Int:
 
 result Float = add_one(4)
 
-io("runtime int to float coercion passed")
+io.line("runtime int to float coercion passed")

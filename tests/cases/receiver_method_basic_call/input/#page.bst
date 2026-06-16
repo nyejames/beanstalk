@@ -8,4 +8,4 @@ describe |this Point| -> String:
 ;
 
 p = Point(3, 4)
-io(p.describe())
+io.line([: [p.describe()]])

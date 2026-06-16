@@ -10,5 +10,5 @@ recover || -> Int:
 ;
 
 value = recover()
-io("value catch block recovery")
-io(value)
+io.line("value catch block recovery")
+io.line([: [value]])

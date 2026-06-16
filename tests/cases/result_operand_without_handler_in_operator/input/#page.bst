@@ -3,4 +3,4 @@ can_error || -> Int, Error!:
 ;
 
 value = can_error() + 2
-io(value)
+io.line([: [value]])

@@ -8,4 +8,4 @@ wrap type T |value T| -> Box of T:
 
 boxed Box of String = wrap("x")
 
-io("generic_function_wrapper_success")
+io.line("generic_function_wrapper_success")

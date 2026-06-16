@@ -111,7 +111,7 @@ pub fn validate_hir_backend_feature_support(
         }
         BackendTarget::Js => {
             // JS supports V1 top-level runtime fragment sinks, but not reactive template values
-            // flowing into external/host calls such as `io(...)`.
+            // flowing into external/host calls such as `io.line(...)`.
             validate_js_reactive_sinks(
                 input.hir,
                 &reachability.reachable_reactive_sinks,
@@ -515,7 +515,7 @@ fn first_generic_runtime_expression_location(
 /// Reports the first reachable unsupported reactive sink for the JS target.
 ///
 /// WHAT: JS supports V1 top-level runtime fragment sinks, but reactive template values with
-///       runtime subscriptions passed to external/host calls such as `io(...)` are deferred.
+///       runtime subscriptions passed to external/host calls such as `io.line(...)` are deferred.
 ///       Plain String parameters that merely *could* carry a reactive template are still allowed
 ///       at unsupported sinks until an actual reactive value flows there.
 /// WHY: fail early with a structured diagnostic instead of silently snapshotting a reactive

@@ -6,4 +6,4 @@ outer || -> Int, Error!:
     return can_error()
 ;
 
-io(outer())
+io.line([: [outer()]])

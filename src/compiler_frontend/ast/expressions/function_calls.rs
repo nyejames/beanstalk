@@ -34,8 +34,7 @@ use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_t
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCallShapeReason,
-    InvalidGenericInstantiationReason, InvalidResultHandlingReason, InvalidResultOperandReason,
-    TypeMismatchContext, UnsupportedOperatorCategory,
+    InvalidGenericInstantiationReason, InvalidResultHandlingReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -865,15 +864,6 @@ fn parse_external_function_call_parts(
         },
     )
     .map_err(ExpressionParseError::from)?;
-    validate_host_specific_call_rules(
-        external_function_id,
-        external_function,
-        &args,
-        location.clone(),
-        string_table,
-        type_interner.environment(),
-    )?;
-
     // ------------------------
     //  Validate signature and returns
     // ------------------------
@@ -1057,91 +1047,32 @@ fn validate_external_signature_type_is_registered(
     context: &ScopeContext,
     location: SourceLocation,
 ) -> Result<(), ExpressionParseError> {
-    let ExternalSignatureType::External(type_id) = signature_type else {
-        return Ok(());
-    };
-
-    if context
-        .external_package_registry
-        .get_type_by_id(*type_id)
-        .is_some()
-    {
-        return Ok(());
-    }
-
-    Err(CompilerError::compiler_error(format!(
-        "External function '{}' references unknown external type {:?} at {:?}.",
-        external_function.name, type_id, location
-    ))
-    .into())
-}
-
-/// Validates external-specific semantic rules that sit on top of shared call validation.
-fn validate_host_specific_call_rules(
-    function_id: ExternalFunctionId,
-    _function: &ExternalFunctionDef,
-    args: &[CallArgument],
-    location: SourceLocation,
-    _string_table: &StringTable,
-    type_environment: &TypeEnvironment,
-) -> Result<(), ExpressionParseError> {
-    validate_host_specific_call_rules_typed(
-        function_id,
-        _function,
-        args,
-        location,
-        _string_table,
-        type_environment,
-    )
-}
-
-fn validate_host_specific_call_rules_typed(
-    function_id: ExternalFunctionId,
-    _function: &ExternalFunctionDef,
-    args: &[CallArgument],
-    location: SourceLocation,
-    _string_table: &StringTable,
-    type_environment: &TypeEnvironment,
-) -> Result<(), ExpressionParseError> {
-    if function_id == ExternalFunctionId::Io {
-        for argument in args.iter() {
-            let arg_type_id = argument.value.type_id;
-
-            if type_environment
-                .fallible_carrier_slots(arg_type_id)
+    match signature_type {
+        ExternalSignatureType::Abi(_)
+        | ExternalSignatureType::BuiltinError
+        | ExternalSignatureType::StringContent => Ok(()),
+        ExternalSignatureType::External(type_id) => {
+            if context
+                .external_package_registry
+                .get_type_by_id(*type_id)
                 .is_some()
             {
-                return Err(CompilerDiagnostic::invalid_result_operand(
-                    InvalidResultOperandReason::ResultNotUnwrapped,
-                    UnsupportedOperatorCategory::Other,
-                    arg_type_id,
-                    location.clone(),
-                )
-                .into());
+                return Ok(());
             }
 
-            let builtins = type_environment.builtins();
-            let is_renderable = arg_type_id == builtins.string
-                || arg_type_id == builtins.int
-                || arg_type_id == builtins.float
-                || arg_type_id == builtins.bool
-                || arg_type_id == builtins.char;
-
-            if !is_renderable {
-                return Err(CompilerDiagnostic::type_mismatch(
-                    type_environment.builtins().string,
-                    arg_type_id,
-                    TypeMismatchContext::FunctionArgument,
-                    location.clone(),
-                )
-                .into());
-            }
+            Err(CompilerError::compiler_error(format!(
+                "External function '{}' references unknown external type {:?} at {:?}.",
+                external_function.name, type_id, location
+            ))
+            .into())
         }
-
-        return Ok(());
+        ExternalSignatureType::Optional(inner) => validate_external_signature_type_is_registered(
+            external_function,
+            inner,
+            context,
+            location,
+        ),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]

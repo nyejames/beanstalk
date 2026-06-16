@@ -3,4 +3,4 @@ can_error || -> String, Error!:
 ;
 
 value = can_error()!
-io(value)
+io.line([: [value]])

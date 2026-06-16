@@ -8,7 +8,7 @@ parse_user |name String| -> String, Float, Error!:
 
 render_user |name String| -> String:
     user, score = parse_user(name) catch |err|:
-        io(err.code)
+        io.line([: [err.code]])
         then "guest", 0.0
     ;
 
@@ -16,4 +16,4 @@ render_user |name String| -> String:
 ;
 
 output = render_user("")
-io(output)
+io.line([: [output]])

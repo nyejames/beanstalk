@@ -376,7 +376,7 @@ fn load_and_copy_in_host_call_arguments_emit_raw_values() {
     let (type_environment, types) = build_type_environment();
     let region = RegionId(0);
 
-    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine;
 
     let load_call = statement(
         1,
@@ -452,12 +452,12 @@ fn load_and_copy_in_host_call_arguments_emit_raw_values() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_io(__bs_read({loaded_name}))")),
+            .contains(&format!("__bs_io_line(__bs_read({loaded_name}))")),
         "Load in host call argument must read the raw JS value"
     );
     assert!(
         output.source.contains(&format!(
-            "__bs_io(__bs_clone_value(__bs_read({copied_name})))"
+            "__bs_io_line(__bs_clone_value(__bs_read({copied_name})))"
         )),
         "Copy in host call argument must emit __bs_clone_value(__bs_read(...))"
     );

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Core IO | Beanstalk</title>
-    <meta name="description" content="Standard output basics in Beanstalk.">
+    <meta name="description" content="Console output and input polling helpers in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -317,7 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE IO</h1>
-    <section class="container"><p><code>io(...)</code> writes to standard output. It is part of the prelude, so normal source files can call it without importing <code>@core/io</code>.</p><pre style="
+    <section class="container"><p><code>io</code> is the prelude namespace alias for <code>@core/io</code>. Console helpers write string content to the backend output surface.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -325,11 +325,66 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.print<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;loading...&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.debug<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;debug details&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.warn<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;warning&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.error<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;error&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Strings and templates are accepted at the output boundary. Other values should be converted through the normal language paths that are valid for templates or strings.</p></section>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Strings and templates are accepted at the output boundary. Other values are rejected directly; use template interpolation when you want a debug-style message.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> count <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Importing <code>@core/io</code> explicitly binds the same <code>io</code> namespace. Aliasing creates a file-local namespace name:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>io <span class='bst-code-keyword'>as</span> output
+
+    output.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello from an alias&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Input polling lives under <code>io.input.*</code>. The handle type <code>io.input.Input</code> is opaque: pass it to the input functions, but do not construct it with struct syntax or inspect fields.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    input <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> io.input.new<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+
+    io.input.update<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>input<span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-keyword'>if</span> io.input.key_pressed<span class='bst-code-parenthesis'>(</span>input, <span class='bst-code-string'>&quot;d&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;pressed d&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-keyword'>if</span> io.input.pointer_down<span class='bst-code-parenthesis'>(</span>input, <span class='bst-code-string'>&quot;left&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        x <span class='bst-code-operator'>=</span> io.input.pointer_x<span class='bst-code-parenthesis'>(</span>input<span class='bst-code-parenthesis'>)</span>
+        y <span class='bst-code-operator'>=</span> io.input.pointer_y<span class='bst-code-parenthesis'>(</span>input<span class='bst-code-parenthesis'>)</span>
+
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> pointer <span class='bst-code-parenthesis'>[</span>x<span class='bst-code-parenthesis'>]</span>, <span class='bst-code-parenthesis'>[</span>y<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    last_key <span class='bst-code-operator'>=</span> io.input.last_key_pressed<span class='bst-code-parenthesis'>(</span>input<span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-keyword'>if</span> last_key is <span class='bst-code-operator'>|</span>key<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> last key<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>key<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    io.input.close<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>input<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>io.input.new()</code> is fallible because backend input support can be unavailable. <code>update</code> and <code>close</code> require mutable access. Polling reads use shared access.</p><p>Keyboard helpers track held, pressed, released, and last-edge states. Single alphabetic key strings normalize to lowercase, space is <code>&quot;Space&quot;</code>, and special keys use logical names such as <code>&quot;ArrowLeft&quot;</code>, <code>&quot;Enter&quot;</code>, <code>&quot;Escape&quot;</code>, <code>&quot;Backspace&quot;</code>, and <code>&quot;Shift&quot;</code>. Pointer helpers use <code>&quot;left&quot;</code>, <code>&quot;middle&quot;</code>, and <code>&quot;right&quot;</code> buttons, plus <code>Float</code> pointer coordinates.</p><p>HTML-JS maps console helpers to the browser console and input helpers to window/document-level keyboard and pointer polling. HTML-Wasm rejects reachable Core IO calls before lowering until it has equivalent support. Browser input events are delivered by the host event loop, so a synchronous infinite Beanstalk loop can block new input from being observed.</p><p>Deferred IO surfaces include filesystem/path IO, fetch/network IO, timers, sleep, intervals, frame/tick APIs, targeted DOM/canvas input sources, physical key-code APIs, typed key/button choices, text entry and IME/composition, touch gestures, gamepads, drag/drop, clipboard, wheel scrolling, file picker APIs, full ordered event queues, pressed/released collections, relative or DPI-scaled pointer coordinates, configurable default suppression, and non-JS lowerings.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -619,10 +674,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

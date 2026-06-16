@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- large io core library refactor (and the timely death of `io()`): `docs/roadmap/plans/core_io_v1_namespace_input_implementation_plan.md`
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
 
@@ -51,6 +50,17 @@ changed first:
   template-owned event/action/effect syntax, `$bind(...)`, typed component messages, IO sink
   design, fine-grained DOM updates, nested reactive regions, keyed loop diffing, and HTML-Wasm
   support.
+
+- Core IO V1 is complete in
+  `docs/roadmap/plans/core_io_v1_namespace_input_implementation_plan.md`: the implemented slice
+  covers the lowercase `io` namespace, `io.line(...)` console helpers, nested external namespace
+  traversal, HTML-JS keyboard/pointer polling, and reachable unsupported-backend diagnostics for
+  HTML-Wasm. Deferred follow-ups include filesystem/path IO, fetch/network IO, timers, sleep,
+  intervals, frame APIs, targeted input sources, physical key-code APIs, typed key/button choices,
+  text entry and IME/composition, touch gestures, gamepads, drag/drop, clipboard, wheel scrolling,
+  file picker, full ordered event queues, pressed/released key/button collections,
+  canvas-local/element-relative/DPI-scaled/world coordinates, configurable event capture/default
+  suppression, source/facade namespace re-export support, and Wasm/native lowerings.
 
 - Initial explicit `cast` operator implementation is complete: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and the initial docs/progress matrix/final audit validation passed. Follow-up cleanup and policy parity are tracked in `docs/roadmap/plans/cast_followup_cleanup_plan.md`.
 

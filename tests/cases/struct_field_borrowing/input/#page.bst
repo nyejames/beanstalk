@@ -8,6 +8,6 @@ person ~= Person("Alice", 30)
 name_ref = person.name
 age_ref = person.age
 
-io([: [name_ref] [age_ref]])
+io.line([: [name_ref] [age_ref]])
 person.age = person.age + 1
-io(person.age)
+io.line([: [person.age]])

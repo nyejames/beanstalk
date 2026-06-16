@@ -37,7 +37,7 @@ const SUPPORTED_PROJECT_CONFIG_VALUES: &[&str] = &["html"];
 impl LibrarySet {
     /// Builds a library set with mandatory compiler core packages and no source libraries.
     ///
-    /// WHAT: the minimal default every builder starts from: prelude, IO, compiler-owned
+    /// WHAT: the minimal default every builder starts from: prelude, core IO namespace, compiler-owned
     /// collection helpers, and error helpers.
     /// WHY: user-facing optional core libraries such as `@core/math` and `@core/text`
     /// must be explicit builder opt-ins.

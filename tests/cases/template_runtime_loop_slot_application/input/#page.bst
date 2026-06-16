@@ -17,4 +17,4 @@ rendered = [list:
     [$insert("summary"): done]
 ]
 
-io(rendered)
+io.line(rendered)

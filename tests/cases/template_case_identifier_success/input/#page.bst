@@ -1,3 +1,3 @@
 case = "identifier"
 
-io([:template case [case]])
+io.line([:template case [case]])

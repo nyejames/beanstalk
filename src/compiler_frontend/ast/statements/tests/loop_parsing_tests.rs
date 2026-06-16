@@ -149,7 +149,7 @@ fn range_index_binding_has_int_type() {
 #[test]
 fn parses_collection_loop_with_pipe_item_binding() {
     let (ast, string_table) =
-        parse_loop_fixture("items = {1, 2, 3}\nloop items |item|:\n    io(item)\n;");
+        parse_loop_fixture("items = {1, 2, 3}\nloop items |item|:\n    io.line([: [item]])\n;");
 
     let body = loop_function_body(&ast, &string_table);
 
@@ -180,8 +180,9 @@ fn parses_collection_loop_with_pipe_item_binding() {
 
 #[test]
 fn parses_collection_loop_with_item_and_index_pipe_bindings() {
-    let (ast, string_table) =
-        parse_loop_fixture("items = {1, 2, 3}\nloop items |item, index|:\n    io(item)\n;");
+    let (ast, string_table) = parse_loop_fixture(
+        "items = {1, 2, 3}\nloop items |item, index|:\n    io.line([: [item]])\n;",
+    );
 
     let body = loop_function_body(&ast, &string_table);
 
@@ -207,8 +208,9 @@ fn parses_collection_loop_with_item_and_index_pipe_bindings() {
 
 #[test]
 fn collection_index_binding_has_int_type() {
-    let (ast, string_table) =
-        parse_loop_fixture("items = {1, 2, 3}\nloop items |item, index|:\n    io(item)\n;");
+    let (ast, string_table) = parse_loop_fixture(
+        "items = {1, 2, 3}\nloop items |item, index|:\n    io.line([: [item]])\n;",
+    );
     let body = loop_function_body(&ast, &string_table);
 
     let NodeKind::CollectionLoop { bindings, .. } = &body[1].kind else {
@@ -230,7 +232,7 @@ fn collection_index_binding_has_int_type() {
 
 #[test]
 fn rejects_old_in_loop_syntax_with_migration_error() {
-    let payload = parse_loop_fixture_diagnostic("loop i in 0 to 3:\n    io(i)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop i in 0 to 3:\n    io.line([: [i]])\n;");
 
     assert!(matches!(
         payload,
@@ -246,8 +248,9 @@ fn rejects_old_in_loop_syntax_with_migration_error() {
 
 #[test]
 fn rejects_collection_loop_with_bare_single_binding() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items item:\n    io(item)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items item:\n    io.line([: [item]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -260,7 +263,7 @@ fn rejects_collection_loop_with_bare_single_binding() {
 #[test]
 fn rejects_collection_loop_with_bare_dual_bindings() {
     let payload = parse_loop_fixture_diagnostic(
-        "items = {1, 2, 3}\nloop items item, index:\n    io(item)\n;",
+        "items = {1, 2, 3}\nloop items item, index:\n    io.line([: [item]])\n;",
     );
 
     assert!(matches!(
@@ -273,7 +276,7 @@ fn rejects_collection_loop_with_bare_dual_bindings() {
 
 #[test]
 fn rejects_range_loop_with_bare_single_binding() {
-    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 i:\n    io(i)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 i:\n    io.line([: [i]])\n;");
 
     assert!(matches!(
         payload,
@@ -285,7 +288,7 @@ fn rejects_range_loop_with_bare_single_binding() {
 
 #[test]
 fn rejects_range_loop_with_bare_dual_bindings() {
-    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 i, index:\n    io(i)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 i, index:\n    io.line([: [i]])\n;");
 
     assert!(matches!(
         payload,
@@ -315,7 +318,7 @@ fn parses_collection_loop_without_bindings() {
 
 #[test]
 fn parses_range_loop_without_bindings() {
-    let (ast, string_table) = parse_loop_fixture("loop 0 to 10:\n    io(1)\n;");
+    let (ast, string_table) = parse_loop_fixture("loop 0 to 10:\n    io.line([: [1]])\n;");
     let body = loop_function_body(&ast, &string_table);
 
     let NodeKind::RangeLoop { bindings, .. } = &body[0].kind else {
@@ -332,8 +335,9 @@ fn parses_range_loop_without_bindings() {
 
 #[test]
 fn rejects_empty_loop_binding_list() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items ||:\n    io(items)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items ||:\n    io.line([: [items]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -345,8 +349,9 @@ fn rejects_empty_loop_binding_list() {
 
 #[test]
 fn rejects_more_than_two_loop_bindings() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items |a, b, c|:\n    io(a)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items |a, b, c|:\n    io.line([: [a]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -359,7 +364,7 @@ fn rejects_more_than_two_loop_bindings() {
 #[test]
 fn rejects_duplicate_loop_binding_names() {
     let payload = parse_loop_fixture_diagnostic(
-        "items = {1, 2, 3}\nloop items |item, item|:\n    io(item)\n;",
+        "items = {1, 2, 3}\nloop items |item, item|:\n    io.line([: [item]])\n;",
     );
 
     assert!(matches!(
@@ -373,7 +378,7 @@ fn rejects_duplicate_loop_binding_names() {
 #[test]
 fn rejects_loop_binding_shadowing_existing_name() {
     let payload = parse_loop_fixture_diagnostic(
-        "items = {1, 2, 3}\nitem = 0\nloop items |item|:\n    io(item)\n;",
+        "items = {1, 2, 3}\nitem = 0\nloop items |item|:\n    io.line([: [item]])\n;",
     );
 
     assert!(matches!(
@@ -386,8 +391,9 @@ fn rejects_loop_binding_shadowing_existing_name() {
 
 #[test]
 fn rejects_keyword_shadow_loop_binding_names() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items |_if|:\n    io(items)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items |_if|:\n    io.line([: [items]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -404,7 +410,8 @@ fn rejects_keyword_shadow_loop_binding_names() {
 
 #[test]
 fn rejects_collection_loop_on_non_collection_expression() {
-    let payload = parse_loop_fixture_diagnostic("value = 3\nloop value |item|:\n    io(item)\n;");
+    let payload =
+        parse_loop_fixture_diagnostic("value = 3\nloop value |item|:\n    io.line([: [item]])\n;");
 
     assert!(matches!(
         payload,
@@ -416,7 +423,7 @@ fn rejects_collection_loop_on_non_collection_expression() {
 
 #[test]
 fn rejects_non_boolean_conditional_loop_condition() {
-    let payload = parse_loop_fixture_diagnostic("loop 1 + 2:\n    io(1)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 1 + 2:\n    io.line([: [1]])\n;");
 
     assert!(matches!(
         payload,
@@ -478,27 +485,27 @@ fn parses_omitted_start_inclusive_range_loop() {
 
 #[test]
 fn rejects_range_loop_missing_end_bound() {
-    assert_missing_range_end_bound("loop 0 to |i|:\n    io(i)\n;");
+    assert_missing_range_end_bound("loop 0 to |i|:\n    io.line([: [i]])\n;");
 }
 
 #[test]
 fn rejects_omitted_start_range_loop_missing_end_bound() {
-    assert_missing_range_end_bound("loop to:\n    io(1)\n;");
+    assert_missing_range_end_bound("loop to:\n    io.line([: [1]])\n;");
 }
 
 #[test]
 fn rejects_omitted_start_range_loop_ampersand_without_end_bound() {
-    assert_missing_range_end_bound("loop to &:\n    io(1)\n;");
+    assert_missing_range_end_bound("loop to &:\n    io.line([: [1]])\n;");
 }
 
 #[test]
 fn rejects_explicit_start_range_loop_ampersand_without_end_bound() {
-    assert_missing_range_end_bound("loop 0 to &:\n    io(1)\n;");
+    assert_missing_range_end_bound("loop 0 to &:\n    io.line([: [1]])\n;");
 }
 
 #[test]
 fn rejects_range_loop_by_without_step() {
-    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 by |i|:\n    io(i)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 by |i|:\n    io.line([: [i]])\n;");
 
     assert!(matches!(
         payload,
@@ -510,7 +517,7 @@ fn rejects_range_loop_by_without_step() {
 
 #[test]
 fn rejects_zero_step_literal() {
-    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 by 0 |i|:\n    io(i)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 0 to 10 by 0 |i|:\n    io.line([: [i]])\n;");
 
     assert!(matches!(
         payload,
@@ -522,7 +529,7 @@ fn rejects_zero_step_literal() {
 
 #[test]
 fn rejects_float_range_without_by() {
-    let payload = parse_loop_fixture_diagnostic("loop 0.0 to 1.0 |t|:\n    io(t)\n;");
+    let payload = parse_loop_fixture_diagnostic("loop 0.0 to 1.0 |t|:\n    io.line([: [t]])\n;");
 
     assert!(matches!(
         payload,
@@ -538,8 +545,9 @@ fn rejects_float_range_without_by() {
 
 #[test]
 fn rejects_missing_comma_between_bare_dual_bindings() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items item index:\n    io(item)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items item index:\n    io.line([: [item]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -551,8 +559,9 @@ fn rejects_missing_comma_between_bare_dual_bindings() {
 
 #[test]
 fn rejects_missing_closing_pipe_in_loop_bindings() {
-    let payload =
-        parse_loop_fixture_diagnostic("items = {1, 2, 3}\nloop items |item:\n    io(item)\n;");
+    let payload = parse_loop_fixture_diagnostic(
+        "items = {1, 2, 3}\nloop items |item:\n    io.line([: [item]])\n;",
+    );
 
     assert!(matches!(
         payload,
@@ -578,7 +587,8 @@ fn rejects_range_loop_with_bare_binding_after_complex_step_expression() {
 
 #[test]
 fn operator_tail_does_not_trigger_bare_loop_binding_diagnostic() {
-    let payload = parse_loop_fixture_diagnostic("a = 1\nb = 2\nloop a + b value:\n    io(1)\n;");
+    let payload =
+        parse_loop_fixture_diagnostic("a = 1\nb = 2\nloop a + b value:\n    io.line([: [1]])\n;");
 
     assert!(!matches!(
         payload,

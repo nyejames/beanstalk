@@ -364,7 +364,7 @@ fn sink_operand_expressions_keep_reactive_template_metadata() {
         ),
         node(
             NodeKind::ExpressionStatement(Expression::host_function_call_with_arguments(
-                ExternalFunctionId::Io,
+                ExternalFunctionId::IoLine,
                 vec![CallArgument::positional(
                     host_call_template,
                     CallAccessMode::Shared,

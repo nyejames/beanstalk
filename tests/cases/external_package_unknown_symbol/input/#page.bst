@@ -1,3 +1,3 @@
 import @core/io { missing }
 
-io("hello")
+io.line("hello")

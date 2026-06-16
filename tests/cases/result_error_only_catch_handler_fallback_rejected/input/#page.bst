@@ -4,7 +4,7 @@ fail || -> Error!:
 
 recover ||:
     fail() catch |err|:
-        io(err.message)
+        io.line([: [err.message]])
         then "fallback"
     ;
 ;

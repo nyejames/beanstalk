@@ -4,4 +4,4 @@ uses_grouped_canvas_imports |context Canvas2d| -> String, Error!:
     return "grouped_canvas_ok"
 ;
 
-io("grouped_canvas_imports_resolved")
+io.line("grouped_canvas_imports_resolved")

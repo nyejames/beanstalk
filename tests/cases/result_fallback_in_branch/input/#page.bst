@@ -19,6 +19,6 @@ loop i < 4:
             then "else_fallback"
         ;
     ;
-    io(value)
+    io.line([: [value]])
     i = i + 1
 ;

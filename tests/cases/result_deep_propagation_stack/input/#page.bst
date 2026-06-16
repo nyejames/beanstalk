@@ -22,4 +22,4 @@ result = level_a() catch:
     then "deep_fallback"
 
 ;
-io(result)
+io.line([: [result]])

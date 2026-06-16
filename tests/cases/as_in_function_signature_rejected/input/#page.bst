@@ -1,5 +1,5 @@
 foo |value Int as Alias|:
-    io("ok")
+    io.line("ok")
 ;
 
 foo(1)

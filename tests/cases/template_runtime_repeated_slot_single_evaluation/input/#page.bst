@@ -24,5 +24,5 @@ rendered = [repeater:
     ]
 ]
 
-io(rendered)
-io([:final-count=[values.length()]])
+io.line(rendered)
+io.line([:final-count=[values.length()]])

@@ -14,4 +14,4 @@ wrap type T |value T| -> Box of T:
     return Box(value)
 ;
 
-io("generic_function_body_validation_success")
+io.line("generic_function_body_validation_success")

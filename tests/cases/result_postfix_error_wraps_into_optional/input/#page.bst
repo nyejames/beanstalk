@@ -20,7 +20,7 @@ ok = outer(false) catch:
 ;
 fallback = outer(true) catch |err|:
     if err is not none:
-        io("wrapped optional error")
+        io.line("wrapped optional error")
     ;
     then -1
 ;

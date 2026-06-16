@@ -306,7 +306,7 @@ is_pointer |cursor Cursor| -> Bool:
 
 -- Minimal runtime entry to keep the file valid
 run_environment_stress ||:
-    io("environment stress: declarations only")
+    io.line("environment stress: declarations only")
 ;
 
 run_environment_stress()

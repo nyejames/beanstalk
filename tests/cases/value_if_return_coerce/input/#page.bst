@@ -3,4 +3,4 @@ get_float |condition Bool| -> Float:
 ;
 
 value = get_float(true)
-io("value if return coerce test")
+io.line("value if return coerce test")

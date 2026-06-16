@@ -1,1 +1,1 @@
-io("abs")
+io.line("abs")

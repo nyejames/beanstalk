@@ -4,10 +4,10 @@
 Response :: Ok, Err | message String |;
 
 make_err || -> Response:
-    io("call")
+    io.line("call")
     return Response::Err("test")
 ;
 
 if make_err() is make_err():
-    io("equal")
+    io.line("equal")
 ;

@@ -19,7 +19,9 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::{
     BuiltinTypeConstructor, NominalTypeId, TypeConstructor,
 };
-pub(super) use crate::compiler_frontend::external_packages::CallTarget;
+pub(super) use crate::compiler_frontend::external_packages::{
+    CallTarget, ExternalFunctionId, IO_INPUT_EXTERNAL_TYPE_ID,
+};
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
     HirExpression, HirExpressionKind, HirMapEntry, ValueKind,
@@ -27,6 +29,7 @@ use crate::compiler_frontend::hir::expressions::{
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, ChoiceId, FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::module::{HirChoice, HirModule};
+use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -43,6 +46,7 @@ pub(super) struct TypeIds {
     pub(super) float: TypeId,
     pub(super) option_int: TypeId,
     pub(super) fallible_int_string: TypeId,
+    pub(super) input_handle: TypeId,
     pub(super) choice_unit: TypeId,
     pub(super) collection_int: TypeId,
     pub(super) map_string_int: TypeId,
@@ -146,6 +150,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
     let collection_int = env.intern_collection(int, None);
     let map_string_int = env.intern_map(string, int);
     let fallible_int_string = env.intern_fallible_carrier(int, string);
+    let input_handle = env.intern_external(IO_INPUT_EXTERNAL_TYPE_ID);
 
     (
         env,
@@ -157,6 +162,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
             float,
             option_int,
             fallible_int_string,
+            input_handle,
             choice_unit,
             collection_int,
             map_string_int,
@@ -483,4 +489,135 @@ pub(super) fn lower_minimal_module_with_float_string_cast(function_name: &str) -
         |types, region| float_expression(1, 1.5, types.float, region),
         |types| types.string,
     )
+}
+
+/// Builds and lowers a minimal module that calls one `@core/io` console function.
+///
+/// WHY: demand-driven IO helper tests need a focused fixture per console function without
+/// duplicating HIR construction in every assertion.
+pub(super) fn lower_minimal_module_with_io_call(
+    function_name: &str,
+    io_function_id: crate::compiler_frontend::external_packages::ExternalFunctionId,
+) -> String {
+    use crate::compiler_frontend::external_packages::CallTarget;
+
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let call_statement = statement(
+        1,
+        HirStatementKind::Call {
+            target: CallTarget::ExternalFunction(io_function_id),
+            args: vec![string_expression(2, "hello", types.string, region)],
+            result: None,
+        },
+        1,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![call_statement],
+        terminator: HirTerminator::Return(unit_expression(3, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, function_name, vec![block], function, &[]);
+
+    lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        JsLoweringConfig::direct_js(false),
+        &type_environment,
+    )
+    .expect("JS lowering with IO call should succeed")
+    .source
+}
+
+/// Builds and lowers a minimal module that calls one `@core/io` input function.
+///
+/// WHY: demand-driven input helper tests need a focused fixture per input function without
+/// duplicating HIR construction in every assertion.
+pub(super) fn lower_minimal_module_with_io_input_call(
+    function_name: &str,
+    io_function_id: ExternalFunctionId,
+) -> String {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let input_local = local(0, types.input_handle, region);
+    let input_load = || {
+        expression(
+            2,
+            HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+            types.input_handle,
+            region,
+            ValueKind::RValue,
+        )
+    };
+
+    let args = match io_function_id {
+        ExternalFunctionId::IoInputNew => vec![],
+        ExternalFunctionId::IoInputUpdate | ExternalFunctionId::IoInputClose => vec![input_load()],
+        ExternalFunctionId::IoInputPointerX | ExternalFunctionId::IoInputPointerY => {
+            vec![input_load()]
+        }
+        ExternalFunctionId::IoInputLastKeyPressed
+        | ExternalFunctionId::IoInputLastKeyReleased
+        | ExternalFunctionId::IoInputLastPointerPressed
+        | ExternalFunctionId::IoInputLastPointerReleased => vec![input_load()],
+        _ => vec![
+            input_load(),
+            string_expression(3, "d", types.string, region),
+        ],
+    };
+
+    let call_statement = statement(
+        1,
+        HirStatementKind::Call {
+            target: CallTarget::ExternalFunction(io_function_id),
+            args,
+            result: None,
+        },
+        1,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![input_local],
+        statements: vec![call_statement],
+        terminator: HirTerminator::Return(unit_expression(4, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, function_name, vec![block], function, &[]);
+
+    lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        JsLoweringConfig::direct_js(false),
+        &type_environment,
+    )
+    .expect("JS lowering with input IO call should succeed")
+    .source
 }

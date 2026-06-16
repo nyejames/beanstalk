@@ -9,4 +9,4 @@ bad2 = elapsed_since("mark")
 -- Pass String where the timestamp constructor requires Float input
 bad3 = timestamp_from_unix_seconds("epoch")
 
-io(bad1)
+io.line([: [bad1]])

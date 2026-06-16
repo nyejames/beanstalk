@@ -1,5 +1,5 @@
 helper || -> String:
-    io("from helper")
+    io.line("from helper")
     return [:done]
 ;
 

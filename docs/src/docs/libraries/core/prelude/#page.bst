@@ -12,12 +12,11 @@ page_head #= theme_head
     The prelude is the tiny set of names available without an explicit import.
     It keeps common output and builtin error handling convenient without making every core library global.
 
-    `io(...)` is available in normal source files and writes text to standard output.
-    `IO` is the compiler-owned output surface behind that convenience call.
+    The `io` namespace is available in normal source files and exposes Core IO helpers such as `io.line(...)`.
     Compiler-owned `Error` is also available for `Error!` flows.
 
     [codeblock, $code("bst"):
-        io("Hello from the prelude")
+        io.line("Hello from the prelude")
     ]
 
     Most core libraries still require imports:

@@ -1,5 +1,5 @@
--- Test io() with special characters
-io("Hello\nWorld!")
-io("Tab\tSeparated")
-io("Quote: \"Hello\"")
-io("Backslash: \\")
+-- Test io.line([: []]) with special characters
+io.line("Hello\nWorld!")
+io.line("Tab\tSeparated")
+io.line("Quote: \"Hello\"")
+io.line("Backslash: \\")

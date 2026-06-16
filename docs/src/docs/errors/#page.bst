@@ -153,7 +153,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         wrapper |text String| -> Int, Error!:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 return! err
             ;
 
@@ -202,7 +202,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         recover |text String| -> Int:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 then 0
             ;
 
@@ -231,7 +231,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         recover |text String| -> Int:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 return 0
             ;
 
@@ -261,7 +261,7 @@ page_head #= theme_head
         ;
 
         name, score = load_user(id) catch |err|:
-            io(err.message)
+            io.line(err.message)
             then "guest", 0.0
         ;
     ]
@@ -319,7 +319,7 @@ page_head #= theme_head
         ;
 
         value = my_list.get(5) catch |err|:
-            io(err.message)
+            io.line(err.message)
             then fallback
         ;
     ]
@@ -390,7 +390,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         if maybe_name is none:
-            io("missing")
+            io.line("missing")
         ;
     ]
 
@@ -530,7 +530,7 @@ page_head #= theme_head
 
         log_then_rethrow |text String| -> Int, Error!:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 return! err
             ;
 
@@ -539,7 +539,7 @@ page_head #= theme_head
 
         recover |text String| -> Int:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 then 0
             ;
 

@@ -5,4 +5,4 @@ Group = |
 |
 
 g = Group(owner = Human(name = "Ana"))
-io(g.owner.name)
+io.line([: [g.owner.name]])

@@ -8,4 +8,4 @@ recover |value String| -> String:
     ;
 ;
 
-io(recover("ok"))
+io.line([: [recover("ok")]])

@@ -4,8 +4,8 @@ current Status = Status::Ready
 
 handle |status Status|:
     if status is:
-        Ready |payload| => io("ready")
-        else => io("other")
+        Ready |payload| => io.line("ready")
+        else => io.line("other")
     ;
 ;
 

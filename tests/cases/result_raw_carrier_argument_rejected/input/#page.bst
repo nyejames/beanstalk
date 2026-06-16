@@ -10,4 +10,4 @@ outer || -> Int:
     return accept(can_error())
 ;
 
-io(outer())
+io.line([: [outer()]])

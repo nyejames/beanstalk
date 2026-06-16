@@ -13,4 +13,4 @@ result = render() catch:
     then "template_fallback"
 
 ;
-io(result)
+io.line([: [result]])

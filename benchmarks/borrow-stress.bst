@@ -60,5 +60,5 @@ loop buckets |bucket|:
     ~messages.push(message)
 ;
 
-io(counter_summary)
-io([: messages=[messages.length()] ])
+io.line([: [counter_summary]])
+io.line([: messages=[messages.length()] ])

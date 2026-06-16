@@ -3,4 +3,4 @@ b = 10 % 5
 c = -7 % 3
 d = 7 % -3
 
-io("modulus ok")
+io.line("modulus ok")

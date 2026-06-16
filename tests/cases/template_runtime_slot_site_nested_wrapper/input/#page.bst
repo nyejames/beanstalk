@@ -18,4 +18,4 @@ rendered = [nested:
     ]
 ]
 
-io(rendered)
+io.line(rendered)

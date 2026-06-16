@@ -19,4 +19,4 @@ rendered = [panel:
     ]
 ]
 
-io(rendered)
+io.line(rendered)

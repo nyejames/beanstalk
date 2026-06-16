@@ -14,4 +14,4 @@ code = load_code() catch |err|:
     then err.code
 ;
 
-io([: external float boundary code=[code]])
+io.line([: external float boundary code=[code]])

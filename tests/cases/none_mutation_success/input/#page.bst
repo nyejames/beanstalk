@@ -5,4 +5,4 @@
 name ~String? = none
 name = none
 
-io("ok")
+io.line("ok")

@@ -4,4 +4,4 @@ run || -> String:
     return "should_fail"
 ;
 
-io(run())
+io.line([: [run()]])

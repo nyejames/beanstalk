@@ -28,4 +28,4 @@ rendered = [card:
     ]
 ]
 
-io(rendered)
+io.line(rendered)

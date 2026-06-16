@@ -4,7 +4,7 @@ parse_number |text String| -> Int, Error!:
 
 recover |use_zero Bool| -> Int:
     value = parse_number("bad") catch |err|:
-        io(err.message)
+        io.line([: [err.message]])
         if use_zero:
             then 0
         else
@@ -15,5 +15,5 @@ recover |use_zero Bool| -> Int:
 ;
 
 value = recover(true)
-io("value catch nested then if")
-io(value)
+io.line("value catch nested then if")
+io.line([: [value]])

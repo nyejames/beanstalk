@@ -4,4 +4,4 @@
 original ~= {1, 2, 3}
 cloned = copy(original)
 original = cloned
-io(1)
+io.line([: [1]])

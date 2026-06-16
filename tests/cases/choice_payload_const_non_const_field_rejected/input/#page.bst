@@ -6,4 +6,4 @@ get_message || -> String:
     return "bad"
 ;
 
-io("ok")
+io.line("ok")

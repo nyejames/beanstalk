@@ -27,8 +27,9 @@ use crate::compiler_frontend::tests::parse_support::{
 
 #[test]
 fn parses_if_else_statements() {
-    let (ast, string_table) =
-        parse_single_file_ast("flag = true\nif flag:\n    io(\"yes\")\nelse\n    io(\"no\")\n;\n");
+    let (ast, string_table) = parse_single_file_ast(
+        "flag = true\nif flag:\n    io.line([: [\"yes\"]])\nelse\n    io.line([: [\"no\"]])\n;\n",
+    );
 
     let body = start_function_body(&ast, &string_table);
 
@@ -48,7 +49,7 @@ fn parses_if_else_statements() {
 #[test]
 fn rejects_same_line_else_if_statement() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "if true:\n    io(\"selected\")\nelse if false:\n    io(\"unsupported\")\n;\n",
+        "if true:\n    io.line([: [\"selected\"]])\nelse if false:\n    io.line([: [\"unsupported\"]])\n;\n",
     );
 
     assert!(
@@ -90,7 +91,7 @@ fn runtime_operator_sequence(expression: &Expression) -> Vec<Operator> {
 #[test]
 fn parses_nested_if_else_statements() {
     let (ast, string_table) = parse_single_file_ast(
-        "outer = true\ninner = false\nif outer:\n    if inner:\n        io(\"inner\")\n    else\n        io(\"not inner\")\n    ;\nelse\n    io(\"outer false\")\n;\n",
+        "outer = true\ninner = false\nif outer:\n    if inner:\n        io.line([: [\"inner\"]])\n    else\n        io.line([: [\"not inner\"]])\n    ;\nelse\n    io.line([: [\"outer false\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -112,7 +113,7 @@ fn parses_nested_if_else_statements() {
 
 #[test]
 fn rejects_non_boolean_if_condition_with_type_error_metadata() {
-    let diagnostic = parse_single_file_ast_diagnostic("if 1:\n    io(\"bad\")\n;\n");
+    let diagnostic = parse_single_file_ast_diagnostic("if 1:\n    io.line([: [\"bad\"]])\n;\n");
 
     assert!(
         matches!(
@@ -129,7 +130,8 @@ fn rejects_non_boolean_if_condition_with_type_error_metadata() {
 
 #[test]
 fn rejects_string_if_condition_with_type_error_metadata() {
-    let diagnostic = parse_single_file_ast_diagnostic("if \"text\":\n    io(\"bad\")\n;\n");
+    let diagnostic =
+        parse_single_file_ast_diagnostic("if \"text\":\n    io.line([: [\"bad\"]])\n;\n");
 
     assert!(
         matches!(
@@ -150,8 +152,9 @@ fn rejects_string_if_condition_with_type_error_metadata() {
 
 #[test]
 fn precedence_not_binds_tighter_than_and_in_if_conditions() {
-    let (ast, string_table) =
-        parse_single_file_ast("a = true\nb = false\nif not a and b:\n    io(\"x\")\n;\n");
+    let (ast, string_table) = parse_single_file_ast(
+        "a = true\nb = false\nif not a and b:\n    io.line([: [\"x\"]])\n;\n",
+    );
     let body = start_function_body(&ast, &string_table);
 
     let NodeKind::If(condition, _, _) = &body[2].kind else {
@@ -167,7 +170,7 @@ fn precedence_not_binds_tighter_than_and_in_if_conditions() {
 #[test]
 fn precedence_and_binds_tighter_than_or_in_if_conditions() {
     let (ast, string_table) = parse_single_file_ast(
-        "a = true\nb = false\nc = false\nif a or b and c:\n    io(\"x\")\n;\n",
+        "a = true\nb = false\nc = false\nif a or b and c:\n    io.line([: [\"x\"]])\n;\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -184,7 +187,7 @@ fn precedence_and_binds_tighter_than_or_in_if_conditions() {
 #[test]
 fn parenthesized_grouping_overrides_default_logical_precedence() {
     let (ast, string_table) = parse_single_file_ast(
-        "a = true\nb = false\nc = false\nif (a or b) and c:\n    io(\"x\")\n;\n",
+        "a = true\nb = false\nc = false\nif (a or b) and c:\n    io.line([: [\"x\"]])\n;\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -201,7 +204,7 @@ fn parenthesized_grouping_overrides_default_logical_precedence() {
 #[test]
 fn comparisons_bind_tighter_than_and_in_if_conditions() {
     let (ast, string_table) = parse_single_file_ast(
-        "a = 1\nb = 2\nc = 3\nd = 4\nif a < b and c < d:\n    io(\"x\")\n;\n",
+        "a = 1\nb = 2\nc = 3\nd = 4\nif a < b and c < d:\n    io.line([: [\"x\"]])\n;\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -218,7 +221,7 @@ fn comparisons_bind_tighter_than_and_in_if_conditions() {
 #[test]
 fn parenthesized_comparison_can_be_negated_in_if_conditions() {
     let (ast, string_table) =
-        parse_single_file_ast("a = 1\nb = 2\nif not (a < b):\n    io(\"x\")\n;\n");
+        parse_single_file_ast("a = 1\nb = 2\nif not (a < b):\n    io.line([: [\"x\"]])\n;\n");
     let body = start_function_body(&ast, &string_table);
 
     let NodeKind::If(condition, _, _) = &body[2].kind else {
@@ -234,7 +237,7 @@ fn parenthesized_comparison_can_be_negated_in_if_conditions() {
 #[test]
 fn equality_and_or_precedence_stays_deterministic_in_if_conditions() {
     let (ast, string_table) = parse_single_file_ast(
-        "a = 1\nb = 1\nc = 2\nd = 2\nif a is b or c is d:\n    io(\"x\")\n;\n",
+        "a = 1\nb = 1\nc = 2\nd = 2\nif a is b or c is d:\n    io.line([: [\"x\"]])\n;\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -255,7 +258,7 @@ fn equality_and_or_precedence_stays_deterministic_in_if_conditions() {
 #[test]
 fn parses_match_statements_with_else_arm() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = 42\nif value is:\n    0 => io(\"zero\")\n    42 => io(\"forty-two\")\n    else => io(\"other\")\n;\n",
+        "value = 42\nif value is:\n    0 => io.line([: [\"zero\"]])\n    42 => io.line([: [\"forty-two\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -297,7 +300,7 @@ fn parses_match_statements_with_else_arm() {
 #[test]
 fn parses_match_arm_with_boolean_guard() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = 42\nif value is:\n    42 if true => io(\"forty-two\")\n    else => io(\"other\")\n;\n",
+        "value = 42\nif value is:\n    42 if true => io.line([: [\"forty-two\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -330,7 +333,7 @@ fn parses_match_arm_with_boolean_guard() {
 #[test]
 fn rejects_non_boolean_match_guard_with_type_error_metadata() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    1 if 7 => io(\"one\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    1 if 7 => io.line([: [\"one\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     assert!(
@@ -352,9 +355,9 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
         "Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             Ready => io(\"ready\")\n\
-             Status::Busy => io(\"busy\")\n\
-             else => io(\"other\")\n\
+             Ready => io.line([: [\"ready\"]])\n\
+             Status::Busy => io.line([: [\"busy\"]])\n\
+             else => io.line([: [\"other\"]])\n\
          ;\n",
     );
 
@@ -395,8 +398,8 @@ fn parses_exhaustive_choice_match_without_else_marks_exhaustive_choice() {
         "Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             Ready => io(\"ready\")\n\
-             Busy => io(\"busy\")\n\
+             Ready => io.line([: [\"ready\"]])\n\
+             Busy => io.line([: [\"busy\"]])\n\
          ;\n",
     );
 
@@ -419,7 +422,7 @@ fn parses_exhaustive_choice_match_without_else_marks_exhaustive_choice() {
 #[test]
 fn rejects_legacy_colon_match_arm_syntax() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    1: io(\"one\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    1: io.line([: [\"one\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     assert_eq!(
@@ -441,7 +444,7 @@ fn rejects_choice_match_arm_qualifier_for_other_choice() {
          OtherStatus :: Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             OtherStatus::Busy => io(\"busy\")\n\
+             OtherStatus::Busy => io.line([: [\"busy\"]])\n\
          ;\n",
     );
 
@@ -469,7 +472,7 @@ fn rejects_non_exhaustive_choice_match_without_else() {
         "Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             Ready => io(\"ready\")\n\
+             Ready => io.line([: [\"ready\"]])\n\
          ;\n",
     );
 
@@ -493,8 +496,8 @@ fn rejects_guarded_choice_match_without_else() {
         "Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             Ready if true => io(\"ready\")\n\
-             Busy => io(\"busy\")\n\
+             Ready if true => io.line([: [\"ready\"]])\n\
+             Busy => io.line([: [\"busy\"]])\n\
          ;\n",
     );
 
@@ -513,8 +516,9 @@ fn rejects_guarded_choice_match_without_else() {
 
 #[test]
 fn parses_option_present_capture_statement_condition() {
-    let (ast, string_table) =
-        parse_single_file_ast("value Int? = 42\nif value is |amount|:\n    io(amount)\n;\n");
+    let (ast, string_table) = parse_single_file_ast(
+        "value Int? = 42\nif value is |amount|:\n    io.line([: [amount]])\n;\n",
+    );
 
     let body = start_function_body(&ast, &string_table);
     let NodeKind::Match {
@@ -550,9 +554,9 @@ fn parses_option_match_present_capture_guard_and_none_patterns() {
     let (ast, string_table) = parse_single_file_ast(
         "value Int? = 42\n\
          if value is:\n\
-             |positive| if positive > 0 => io(positive)\n\
-             |fallback| => io(fallback)\n\
-             none => io(\"missing\")\n\
+             |positive| if positive > 0 => io.line([: [positive]])\n\
+             |fallback| => io.line([: [fallback]])\n\
+             none => io.line([: [\"missing\"]])\n\
          ;\n",
     );
 
@@ -585,7 +589,7 @@ fn parses_option_match_present_capture_guard_and_none_patterns() {
 #[test]
 fn parses_relational_match_patterns() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = 1\nif value is:\n    < 0 => io(\"neg\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    < 0 => io.line([: [\"neg\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -603,7 +607,7 @@ fn parses_relational_match_patterns() {
 #[test]
 fn rejects_semicolon_between_match_arms() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    1 => io(\"one\");\n    2 => io(\"two\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    1 => io.line([: [\"one\"]]);\n    2 => io.line([: [\"two\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     assert_eq!(
@@ -625,9 +629,9 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
          if value is:\n\
              1 =>\n\
                  if true:\n\
-                     io(\"nested\")\n\
+                     io.line([: [\"nested\"]])\n\
                  ;\n\
-             else => io(\"other\")\n\
+             else => io.line([: [\"other\"]])\n\
          ;\n",
     );
 
@@ -647,7 +651,7 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
 #[test]
 fn parses_relational_int_patterns() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = 5\nif value is:\n    < 0 => io(\"negative\")\n    >= 0 => io(\"non-negative\")\n    else => io(\"fallback\")\n;\n",
+        "value = 5\nif value is:\n    < 0 => io.line([: [\"negative\"]])\n    >= 0 => io.line([: [\"non-negative\"]])\n    else => io.line([: [\"fallback\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -712,7 +716,7 @@ fn parses_relational_arm_after_single_line_assignment_body() {
 #[test]
 fn relational_patterns_without_default_are_not_exhaustive() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 5\nif value is:\n    < 0 => io(\"negative\")\n    >= 0 => io(\"non-negative\")\n;\n",
+        "value = 5\nif value is:\n    < 0 => io.line([: [\"negative\"]])\n    >= 0 => io.line([: [\"non-negative\"]])\n;\n",
     );
 
     assert_eq!(
@@ -727,7 +731,7 @@ fn relational_patterns_without_default_are_not_exhaustive() {
 #[test]
 fn relational_pattern_rejects_bool() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = true\nif value is:\n    < true => io(\"bad\")\n    else => io(\"fallback\")\n;\n",
+        "value = true\nif value is:\n    < true => io.line([: [\"bad\"]])\n    else => io.line([: [\"fallback\"]])\n;\n",
     );
 
     assert_eq!(
@@ -747,7 +751,7 @@ fn relational_pattern_rejects_bool() {
 #[test]
 fn relational_pattern_accepts_string() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = \"abc\"\nif value is:\n    < \"def\" => io(\"before\")\n    else => io(\"fallback\")\n;\n",
+        "value = \"abc\"\nif value is:\n    < \"def\" => io.line([: [\"before\"]])\n    else => io.line([: [\"fallback\"]])\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -776,7 +780,7 @@ fn parses_multi_statement_match_arm_body_delimited_by_next_arm() {
          if value is:\n\
              1 =>\n\
                  result = \"one\"\n\
-                 io(result)\n\
+                 io.line([: [result]])\n\
              2 =>\n\
                  result = \"two\"\n\
              else => result = \"other\"\n\
@@ -810,7 +814,7 @@ fn parses_multi_statement_match_arm_body_delimited_by_next_arm() {
 #[test]
 fn rejects_same_line_second_match_arm() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    1 => io(\"one\") 2 => io(\"two\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    1 => io.line([: [\"one\"]]) 2 => io.line([: [\"two\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     assert_eq!(
@@ -828,7 +832,7 @@ fn rejects_same_line_second_match_arm() {
 #[test]
 fn rejects_missing_match_arm_header() {
     let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    => io(\"bad\")\n    else => io(\"other\")\n;\n",
+        "value = 1\nif value is:\n    => io.line([: [\"bad\"]])\n    else => io.line([: [\"other\"]])\n;\n",
     );
 
     assert_eq!(
@@ -845,7 +849,7 @@ fn rejects_missing_match_arm_header() {
 
 #[test]
 fn case_is_valid_as_normal_identifier() {
-    let (ast, string_table) = parse_single_file_ast("case = 42\nio(case)\n");
+    let (ast, string_table) = parse_single_file_ast("case = 42\nio.line([: [case]])\n");
 
     let body = start_function_body(&ast, &string_table);
     assert_eq!(

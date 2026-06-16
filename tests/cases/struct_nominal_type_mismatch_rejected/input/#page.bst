@@ -7,7 +7,7 @@ B = |
 |
 
 take |value B|:
-    io(value.x)
+    io.line([: [value.x]])
 ;
 
 take(A(1))

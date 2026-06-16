@@ -7,4 +7,4 @@ recover || -> Int, Error!:
     return value
 ;
 
-io(recover()!)
+io.line([: [recover()!]])

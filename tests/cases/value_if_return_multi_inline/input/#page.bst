@@ -3,4 +3,4 @@ pair |condition Bool| -> Int, String:
 ;
 
 a, b = pair(true)
-io([:value if return multi inline first=[a] second=[b]])
+io.line([:value if return multi inline first=[a] second=[b]])

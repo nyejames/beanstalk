@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+  "function __bs_io_input_last_key_pressed(",
+  "return { tag: \"some\", value: handle.lastKeyPressed };",
+  "return { tag: \"none\" };",
+]

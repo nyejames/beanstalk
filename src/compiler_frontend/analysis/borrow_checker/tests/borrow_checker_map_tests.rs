@@ -100,7 +100,7 @@ scores ~{String = String} = {}
 value String = "hello"
 ~scores.set("key", value) catch:
 ;
-io(value)
+io.line([: [value]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);
@@ -114,7 +114,7 @@ fn map_literal_consumes_inserted_non_copy_values() {
     let source = r#"
 value String = "hello"
 scores ~{String = String} = {"key" = value}
-io(value)
+io.line([: [value]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);
@@ -142,7 +142,7 @@ fn nested_map_literal_consumes_inner_inserted_values() {
     let source = r#"
 value String = "hello"
 scores ~{String = {String = String}} = {"outer" = {"inner" = value}}
-io(value)
+io.line([: [value]])
 "#;
     let (ast, mut string_table) = parse_single_file_ast(source);
     let hir = lower_hir(ast, &mut string_table);

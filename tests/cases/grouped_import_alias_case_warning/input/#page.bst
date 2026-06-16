@@ -1,4 +1,6 @@
 import @core/math { sin as Sine, PI as pi }
 
-io(Sine(0.0))
-io(pi)
+sine_result = Sine(0.0)
+pi_value = pi
+io.line([: [sine_result]])
+io.line([: [pi_value]])

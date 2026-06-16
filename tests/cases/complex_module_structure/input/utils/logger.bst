@@ -1,12 +1,12 @@
 -- Logger utility module
 log |message String|:
-    io([message])
+    io.line([: [message]])
 ;
 
 debug |message String|:
-    io([message])
+    io.line([: [message]])
 ;
 
 init_logger ||:
-    io("Logger module initialized")
+    io.line("Logger module initialized")
 ;

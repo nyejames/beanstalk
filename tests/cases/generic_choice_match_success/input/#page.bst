@@ -6,8 +6,8 @@ ResultShape type T, E ::
 get_value ResultShape of String, Error = ResultShape::Ok("hello")
 
 if get_value is:
-    Ok(value) => io(value)
-    Err(error) => io(error.message)
+    Ok(value) => io.line([: [value]])
+    Err(error) => io.line([: [error.message]])
 ;
 
 [: generic choice match success]

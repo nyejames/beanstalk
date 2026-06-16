@@ -1,3 +1,3 @@
 import @./#config { project }
 
-io(project)
+io.line([: [project]])

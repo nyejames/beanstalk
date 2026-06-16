@@ -1,4 +1,4 @@
 import @./helper
 
 value = helper
-io(value)
+io.line([: [value]])

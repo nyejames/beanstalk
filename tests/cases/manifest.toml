@@ -6479,6 +6479,61 @@ path = "namespace_import_nested_traversal_rejected"
 tags = ["integration", "imports", "namespace-imports", "diagnostics"]
 
 [[case]]
+id = "namespace_import_nested_external_success"
+path = "namespace_import_nested_external_success"
+tags = ["integration", "imports", "namespace-imports", "external-packages"]
+
+[[case]]
+id = "external_string_content_success"
+path = "external_string_content_success"
+tags = ["integration", "external-packages", "string-content"]
+
+[[case]]
+id = "external_string_content_rejected"
+path = "external_string_content_rejected"
+tags = ["integration", "external-packages", "string-content", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_namespace_value_rejected"
+path = "namespace_import_nested_external_namespace_value_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_missing_member_rejected"
+path = "namespace_import_nested_external_missing_member_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_type_as_value_rejected"
+path = "namespace_import_nested_external_type_as_value_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_value_as_namespace_rejected"
+path = "namespace_import_nested_external_value_as_namespace_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_type_success"
+path = "namespace_import_nested_external_type_success"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "types"]
+
+[[case]]
+id = "namespace_import_nested_external_function_as_type_rejected"
+path = "namespace_import_nested_external_function_as_type_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_missing_type_rejected"
+path = "namespace_import_nested_external_missing_type_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_external_namespace_as_type_rejected"
+path = "namespace_import_nested_external_namespace_as_type_rejected"
+tags = ["integration", "imports", "namespace-imports", "external-packages", "diagnostics"]
+
+[[case]]
 id = "namespace_import_direct_symbol_path_rejected"
 path = "namespace_import_direct_symbol_path_rejected"
 tags = ["integration", "imports", "namespace-imports", "diagnostics"]
@@ -7667,3 +7722,108 @@ tags = ["integration", "diagnostics", "numeric", "syntax"]
 id = "float_literal_nonfinite_rejected"
 path = "float_literal_nonfinite_rejected"
 tags = ["integration", "diagnostics", "numeric", "syntax"]
+
+[[case]]
+id = "core_io_console_print_success"
+path = "core_io_console_print_success"
+tags = ["integration", "core_io", "console"]
+
+[[case]]
+id = "core_io_console_debug_success"
+path = "core_io_console_debug_success"
+tags = ["integration", "core_io", "console"]
+
+[[case]]
+id = "core_io_console_warn_success"
+path = "core_io_console_warn_success"
+tags = ["integration", "core_io", "console"]
+
+[[case]]
+id = "core_io_console_error_success"
+path = "core_io_console_error_success"
+tags = ["integration", "core_io", "console"]
+
+[[case]]
+id = "core_io_import_namespace_success"
+path = "core_io_import_namespace_success"
+tags = ["integration", "core_io", "import"]
+
+[[case]]
+id = "core_io_import_alias_success"
+path = "core_io_import_alias_success"
+tags = ["integration", "core_io", "import"]
+
+[[case]]
+id = "io_callable_rejected"
+path = "io_callable_rejected"
+tags = ["integration", "core_io", "diagnostics"]
+
+[[case]]
+id = "core_io_type_import_rejected"
+path = "core_io_type_import_rejected"
+tags = ["integration", "core_io", "diagnostics"]
+
+[[case]]
+id = "external_optional_present_success"
+path = "external_optional_present_success"
+tags = ["integration", "external", "optional"]
+
+[[case]]
+id = "external_optional_absent_success"
+path = "external_optional_absent_success"
+tags = ["integration", "external", "optional"]
+
+[[case]]
+id = "external_optional_type_identity"
+path = "external_optional_type_identity"
+tags = ["integration", "external", "optional"]
+
+[[case]]
+id = "core_io_input_new_success"
+path = "core_io_input_new_success"
+tags = ["integration", "core_io", "input"]
+
+[[case]]
+id = "core_io_input_update_close_success"
+path = "core_io_input_update_close_success"
+tags = ["integration", "core_io", "input"]
+
+[[case]]
+id = "core_io_input_reads_success"
+path = "core_io_input_reads_success"
+tags = ["integration", "core_io", "input"]
+
+[[case]]
+id = "core_io_input_signature_success"
+path = "core_io_input_signature_success"
+tags = ["integration", "core_io", "input"]
+
+[[case]]
+id = "core_io_input_last_key_optional_success"
+path = "core_io_input_last_key_optional_success"
+tags = ["integration", "core_io", "input", "optional"]
+
+[[case]]
+id = "core_io_input_update_missing_mutable_rejected"
+path = "core_io_input_update_missing_mutable_rejected"
+tags = ["integration", "core_io", "input", "diagnostics"]
+
+[[case]]
+id = "core_io_input_non_string_key_rejected"
+path = "core_io_input_non_string_key_rejected"
+tags = ["integration", "core_io", "input", "diagnostics"]
+
+[[case]]
+id = "core_io_input_type_as_value_rejected"
+path = "core_io_input_type_as_value_rejected"
+tags = ["integration", "core_io", "input", "diagnostics"]
+
+[[case]]
+id = "core_io_input_wasm_rejected"
+path = "core_io_input_wasm_rejected"
+tags = ["integration", "core_io", "input", "backend_validation", "diagnostics"]
+
+[[case]]
+id = "core_io_unreachable_io_wrapper_wasm_ignored"
+path = "core_io_unreachable_io_wrapper_wasm_ignored"
+tags = ["integration", "core_io", "backend_validation"]

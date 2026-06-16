@@ -1,6 +1,6 @@
 probe ||:
     loop 0 to |i|:
-        io(i)
+        io.line([: [i]])
     ;
 ;
 

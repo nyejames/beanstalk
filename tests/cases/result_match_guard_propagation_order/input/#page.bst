@@ -1,10 +1,10 @@
 guard_skip || -> Bool, Error!:
-    io("skipped-guard")
+    io.line("skipped-guard")
     return true
 ;
 
 guard_fail || -> Bool, Error!:
-    io("failing-guard")
+    io.line("failing-guard")
     return! Error("guard failed")
 ;
 
@@ -25,4 +25,4 @@ value = compute(2) catch:
     then "caught"
 
 ;
-io([:match guard propagation result=[value]])
+io.line([:match guard propagation result=[value]])

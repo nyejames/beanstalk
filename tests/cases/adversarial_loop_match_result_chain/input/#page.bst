@@ -21,4 +21,4 @@ loop i < 4:
     i = i + 1
 ;
 
-io(sum)
+io.line([: [sum]])

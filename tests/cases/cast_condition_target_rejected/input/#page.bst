@@ -1,3 +1,3 @@
 if cast true:
-    io("yes")
+    io.line("yes")
 ;

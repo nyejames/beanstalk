@@ -1,3 +1,3 @@
 if 1:
-    io("bad")
+    io.line("bad")
 ;

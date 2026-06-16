@@ -19,4 +19,4 @@ abs_sec = as_seconds(abs_d)
 clamped = clamp(d, duration_from_milliseconds(0.0), duration_from_milliseconds(3000.0))
 clamped_sec = as_seconds(clamped)
 
-io([:duration_free_functions sec=[sec] millis=[millis] neg=[neg] abs_sec=[abs_sec] clamped_sec=[clamped_sec]])
+io.line([:duration_free_functions sec=[sec] millis=[millis] neg=[neg] abs_sec=[abs_sec] clamped_sec=[clamped_sec]])

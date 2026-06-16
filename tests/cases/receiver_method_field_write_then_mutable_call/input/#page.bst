@@ -9,4 +9,4 @@ add |this ~Accumulator, amount Int|:
 acc ~= Accumulator(0)
 acc.total = 3
 ~acc.add(4)
-io(acc.total)
+io.line([: [acc.total]])

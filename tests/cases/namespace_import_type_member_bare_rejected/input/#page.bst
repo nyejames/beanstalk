@@ -1,4 +1,4 @@
 import @./models
 
 value User = models.make_user()
-io(value.name)
+io.line([: [value.name]])

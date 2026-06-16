@@ -6,5 +6,5 @@ a = Response::Err(Point(1, 2))
 b = Response::Err(Point(1, 2))
 
 if a is b:
-    io("unreachable")
+    io.line("unreachable")
 ;

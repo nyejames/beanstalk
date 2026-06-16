@@ -13,13 +13,13 @@ use crate::compiler_frontend::hir::terminators::HirTerminator;
 // Host function and start-invocation tests [host] [start]
 // ---------------------------------------------------------------------------
 
-/// Verifies that host io(...) reads the binding value before logging. [host]
+/// Verifies that host io.line([: [...]]) reads the binding value before logging. [host]
 #[test]
 fn host_io_reads_the_underlying_value_before_logging() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
 
-    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine;
 
     let assign_message = statement(
         1,
@@ -93,7 +93,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
         .expect("expected local assignment to store the string value");
     let log_index = output
         .source
-        .find(&format!("__bs_io(__bs_read({message_name}));"))
+        .find(&format!("__bs_io_line(__bs_read({message_name}));"))
         .expect("expected host io call to read from the local binding");
 
     assert!(

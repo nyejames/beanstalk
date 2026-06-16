@@ -59,11 +59,6 @@ pub(crate) fn generate_wasm_bootstrap_js(
     out.push_str("function __bst_build_imports(instance_ref) {\n");
     out.push_str("  return {\n");
     out.push_str("    host: {\n");
-    out.push_str("      log_string(handle) {\n");
-    out.push_str(
-        "        const text = __bst_take_string(instance_ref.current, handle);\n        console.log(text);\n",
-    );
-    out.push_str("      },\n");
     out.push_str("      dom_create_text(handle) {\n");
     out.push_str(
         "        const text = __bst_take_string(instance_ref.current, handle);\n        return __bst_register_dom_node(document.createTextNode(text));\n",

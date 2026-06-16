@@ -6,9 +6,9 @@ condition = true
 
 if condition:
     result1 ~= x
-    io(result1)
+    io.line([: [result1]])
 else
     result2 ~= x
-    io(result2)
-    io(x)
+    io.line([: [result2]])
+    io.line([: [x]])
 ;

@@ -26,6 +26,6 @@ both = flag1 and flag2
 either = flag1 or flag2
 negated = not flag1
 
-io(sum)
-io(eq)
-io(both)
+io.line([: [sum]])
+io.line([: [eq]])
+io.line([: [both]])

@@ -5,10 +5,10 @@
 
 -- Type error  
 number = 42
-io(number + "string")
+io.line([: [number + "string"]])
 
 -- Undefined variable
-io(undefined_variable)
+io.line([: [undefined_variable]])
 
 -- Host function error
-io(123)  -- Wrong argument type
+io.line([: [123]])  -- Wrong argument type

@@ -21,7 +21,7 @@ page_head #= theme_head
         value = random_float()
         die_roll = random_int(1, 6)
 
-        io([:roll=[die_roll] value=[value]])
+        io.line([:roll=[die_roll] value=[value]])
     ]
 
     Seeded random is deferred.

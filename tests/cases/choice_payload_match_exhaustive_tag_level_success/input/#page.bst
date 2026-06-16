@@ -12,7 +12,7 @@ Response ::
 r = Response::Err("bad")
 
 if r is:
-    Success => io("ok")
-    Err(message) => io(message)
-    Pending(retry_count, message) => io(message)
+    Success => io.line("ok")
+    Err(message) => io.line([: [message]])
+    Pending(retry_count, message) => io.line([: [message]])
 ;

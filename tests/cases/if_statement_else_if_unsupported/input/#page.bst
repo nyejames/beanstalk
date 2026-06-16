@@ -1,5 +1,5 @@
 if true:
-    io("selected")
+    io.line("selected")
 else if false:
-    io("unsupported")
+    io.line("unsupported")
 ;

@@ -149,17 +149,36 @@ fn parse_type_atom(
             let type_name = *type_name;
             token_stream.advance();
 
-            // Check for namespace-qualified type syntax: `Namespace.Type`.
-            if token_stream.current_token_kind() == &TokenKind::Dot
-                && let Some(TokenKind::Symbol(member_name)) =
-                    token_stream.peek_next_token().cloned()
-            {
-                token_stream.advance(); // consume '.'
-                token_stream.advance();
-                return Ok(ParsedTypeRef::Namespaced {
-                    namespace: type_name,
-                    name: member_name,
-                    location: location.clone(),
+            // Check for namespace-qualified type syntax: `Namespace.Type` or
+            // `Namespace.Child.Type`. Collect all `Symbol . Symbol` segments into a
+            // single qualified path while preserving bare single-symbol types.
+            if token_stream.current_token_kind() == &TokenKind::Dot {
+                let mut path = vec![type_name];
+                let path_location = location.clone();
+
+                while token_stream.current_token_kind() == &TokenKind::Dot {
+                    token_stream.advance(); // consume '.'
+
+                    match token_stream.current_token_kind().to_owned() {
+                        TokenKind::Symbol(member_name) => {
+                            path.push(member_name);
+                            token_stream.advance();
+                        }
+                        other => {
+                            return Err(CompilerDiagnostic::invalid_type_annotation(
+                                context,
+                                InvalidTypeAnnotationReason::ExpectedTypeAnnotation {
+                                    found: other,
+                                },
+                                token_stream.current_location(),
+                            ));
+                        }
+                    }
+                }
+
+                return Ok(ParsedTypeRef::Qualified {
+                    path,
+                    location: path_location,
                 });
             }
 
@@ -762,6 +781,10 @@ fn parse_generic_arguments(
             ));
         }
         ParsedTypeRef::Named { .. } => {}
+        // Qualified paths such as `io.input.Input` are concrete type references,
+        // not generic bases. Generic application on namespace-qualified bases is
+        // deliberately deferred until there is a clear need and a resolved generic
+        // base policy; for now they fall through to the OnNonNamedType error.
         _ => {
             return Err(CompilerDiagnostic::invalid_generic_application(
                 GenericApplicationErrorReason::OnNonNamedType,

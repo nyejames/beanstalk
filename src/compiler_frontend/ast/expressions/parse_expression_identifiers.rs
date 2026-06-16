@@ -11,7 +11,7 @@ use super::expression_rpn::ExpressionRpnItem;
 use super::function_calls::{
     ExternalFunctionCallParseInput, parse_external_function_call_expression,
 };
-use super::namespace_member_access::{NamespaceMemberAccessInput, parse_namespace_member_access};
+use super::namespace_access::{NamespaceAccessInput, parse_namespace_access};
 use super::parse_expression_dispatch::{
     ExpressionOperandInput, push_expression_operand, push_expression_operand_at_location,
 };
@@ -256,15 +256,15 @@ pub(super) fn parse_identifier_or_call(
         .and_then(|fv| fv.visible_namespace_records.get(&identifier))
     {
         if token_stream.peek_next_token() == Some(&TokenKind::Dot) {
-            return parse_namespace_member_access(NamespaceMemberAccessInput {
+            return parse_namespace_access(NamespaceAccessInput {
                 token_stream,
                 context,
                 type_interner,
                 expression,
                 allow_boundary_catch,
                 expected_result_evidence_allowed,
-                record_name: identifier,
-                record,
+                root_name: identifier,
+                root_record: record,
                 string_table,
             });
         }

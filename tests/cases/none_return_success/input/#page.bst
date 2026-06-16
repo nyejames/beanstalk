@@ -5,4 +5,4 @@ make_name || -> String?:
     return none
 ;
 
-io("ok")
+io.line("ok")

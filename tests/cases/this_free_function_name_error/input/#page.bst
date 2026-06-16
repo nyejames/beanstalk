@@ -1,3 +1,3 @@
 this ||:
-    io("bad")
+    io.line("bad")
 ;

@@ -7,4 +7,4 @@ choose |condition Bool| -> Int:
 ;
 
 value = choose(false)
-io("value if return block test")
+io.line("value if return block test")

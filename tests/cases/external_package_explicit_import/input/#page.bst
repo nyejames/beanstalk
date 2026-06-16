@@ -1,3 +1,3 @@
-import @core/io { io }
+import @core/io { line }
 
-io("hello")
+line("hello")

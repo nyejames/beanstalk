@@ -10,4 +10,4 @@ else
     then 0
 ;
 
-io(value)
+io.line([: [value]])

@@ -1,11 +1,11 @@
 -- General capture pattern must not shadow an existing visible binding.
 
 helper ||:
-    io("helper")
+    io.line("helper")
 ;
 
 value ~= 1
 if value is:
-    helper => io(helper)
-    else => io("other")
+    helper => io.line([: [helper]])
+    else => io.line("other")
 ;

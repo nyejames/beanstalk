@@ -7,4 +7,4 @@ label = if parse_number("bad") is:
     else => then "other"
 ;
 
-io(label)
+io.line([: [label]])

@@ -1,3 +1,3 @@
 idle_helper ||:
-    io("idle helper start")
+    io.line("idle helper start")
 ;

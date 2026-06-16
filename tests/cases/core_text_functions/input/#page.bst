@@ -7,4 +7,4 @@ has_stalk = contains(text, "stalk")
 has_prefix = starts_with(text, "bean")
 has_suffix = ends_with(text, "stalk")
 
-io([:core_text len=[len] empty=[empty] has=[has_stalk] prefix=[has_prefix] suffix=[has_suffix]])
+io.line([:core_text len=[len] empty=[empty] has=[has_stalk] prefix=[has_prefix] suffix=[has_suffix]])

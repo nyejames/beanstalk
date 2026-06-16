@@ -5,4 +5,4 @@ increment |value ~Int| -> Int:
 
 x ~= 10
 result = increment(value = x)
-io(result)
+io.line([: [result]])

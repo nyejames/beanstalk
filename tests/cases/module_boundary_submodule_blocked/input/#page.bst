@@ -1,3 +1,3 @@
 import @./sub { thing }
 
-io(thing())
+io.line([: [thing()]])

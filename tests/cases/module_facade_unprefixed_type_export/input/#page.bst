@@ -6,4 +6,4 @@ instance = ExportedStruct("hello")
 variant = ExportedChoice::VariantA
 aliased_value ExportedAlias = "world"
 
-io(instance.value)
+io.line([: [instance.value]])

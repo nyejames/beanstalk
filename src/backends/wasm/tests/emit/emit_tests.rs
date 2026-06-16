@@ -597,7 +597,7 @@ fn build_manual_lir_module() -> WasmLirModule {
         imports: vec![WasmImport {
             id: WasmImportId(0),
             module_name: "host".to_owned(),
-            item_name: "log_string".to_owned(),
+            item_name: "test_import".to_owned(),
             kind: WasmImportKind::Function(WasmLirSignature {
                 params: vec![WasmAbiType::Handle],
                 results: vec![],

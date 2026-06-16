@@ -1,3 +1,3 @@
 import @core/math { sin as bad-name }
 
-io(bad_name(1.0))
+io.line([: [bad_name(1.0)]])

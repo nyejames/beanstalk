@@ -1,5 +1,5 @@
-import @core/io { IO }
+import @test/pkg-a { PkgError }
 
-foo |x IO|:
+foo |x PkgError|:
     y = x.something
 ;

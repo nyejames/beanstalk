@@ -18,5 +18,4 @@ must_contain = [
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0064"]
-message_contains = ["Wasm", "checked numeric operations"]
+diagnostic_codes = ["BST-RULE-0058"]

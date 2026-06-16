@@ -3,7 +3,7 @@
 use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::WasmLirLoweringContext;
 use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
-use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
+use crate::backends::wasm::lir::types::{WasmImportId, WasmLirSignature};
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
@@ -62,20 +62,15 @@ fn resolve_host_function_id(
 ) -> Result<WasmHostFunction, CompilerError> {
     // WHAT: map a host function id to its Wasm backend import identity.
     // WHY: ensures only explicitly supported host calls are lowered.
-    match id {
-        ExternalFunctionId::Io => Ok(WasmHostFunction::LogString),
-        _ => {
-            let function_name = context
-                .request
-                .external_package_registry
-                .get_function_by_id(id)
-                .map(|function| function.name.clone())
-                .unwrap_or_else(|| id.name().to_owned());
-            Err(lir_transformation_error(format!(
-                "Wasm backend does not yet support host function '{function_name}'"
-            )))
-        }
-    }
+    let function_name = context
+        .request
+        .external_package_registry
+        .get_function_by_id(id)
+        .map(|function| function.name.clone())
+        .unwrap_or_else(|| id.name().to_owned());
+    Err(lir_transformation_error(format!(
+        "Wasm backend does not yet support host function '{function_name}'"
+    )))
 }
 
 fn ensure_host_import(
@@ -106,10 +101,5 @@ fn ensure_host_import(
 fn host_function_signature(function: WasmHostFunction) -> WasmLirSignature {
     // WHAT: canonical ABI signature for each supported host function.
     // WHY: keeps import registration and signature assignment in one explicit place.
-    match function {
-        WasmHostFunction::LogString => WasmLirSignature {
-            params: vec![WasmAbiType::Handle],
-            results: vec![],
-        },
-    }
+    match function {}
 }

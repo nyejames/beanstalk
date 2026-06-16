@@ -331,7 +331,7 @@ body {
     count <span class='bst-code-operator'>=</span> length<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span>
     has_stalk <span class='bst-code-operator'>=</span> contains<span class='bst-code-parenthesis'>(</span>name, <span class='bst-code-string'>&quot;stalk&quot;</span><span class='bst-code-parenthesis'>)</span>
 
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>count<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span> has_stalk<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>has_stalk<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>count<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span> has_stalk<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>has_stalk<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>On the current HTML JavaScript path, text length follows JavaScript string length behavior.</p></section>
     <script>
     function __bs_is_ref(value) {
@@ -622,10 +622,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

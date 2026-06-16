@@ -16,4 +16,4 @@ if value is:
     else => label = "other"
 ;
 
-io(label)
+io.line([: [label]])

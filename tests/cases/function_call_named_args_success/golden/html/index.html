@@ -466,41 +466,37 @@ body {
         return String(value);
     }
 
-    function __bs_io(value) {
-        console.log(__bs_value_to_string(value));
+    function bst_pick_fn6(bst_left_l22, bst_right_l23) {
+        
+        bst_left_l22 = __bs_param_binding(bst_left_l22);
+        bst_right_l23 = __bs_param_binding(bst_right_l23);
+        
+        return __bs_clone_value(__bs_read(bst_right_l23));
     }
 
-    function bst_pick_fn1(bst_left_l3, bst_right_l4) {
+    function bst_start_fn7() {
+        let bst___hir_tmp_3_l24 = __bs_binding(undefined);
+        let bst_result_l25 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l26 = __bs_binding(undefined);
+        let bst___hir_tmp_5_l27 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l28 = __bs_binding(undefined);
         
-        bst_left_l3 = __bs_param_binding(bst_left_l3);
-        bst_right_l4 = __bs_param_binding(bst_right_l4);
-        
-        return __bs_clone_value(__bs_read(bst_right_l4));
-    }
-
-    function bst_start_fn2() {
-        let bst___hir_tmp_2_l5 = __bs_binding(undefined);
-        let bst_result_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l7 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l8 = __bs_binding(undefined);
-        let bst___hir_tmp_5_l9 = __bs_binding(undefined);
-        
-        __bs_assign_value(bst___hir_tmp_2_l5, []);
-        __bs_assign_value(bst___hir_tmp_3_l7, bst_pick_fn1(__bs_binding("a"), __bs_binding("b")));
-        __bs_assign_borrow(bst_result_l6, bst___hir_tmp_3_l7);
-        __bs_assign_value(bst___hir_tmp_4_l8, "");
-        __bs_assign_value(bst___hir_tmp_4_l8, (__bs_read(bst___hir_tmp_4_l8) + "function_call_named_args_success result="));
-        __bs_assign_value(bst___hir_tmp_5_l9, "");
-        __bs_assign_value(bst___hir_tmp_5_l9, (__bs_read(bst___hir_tmp_5_l9) + __bs_read(bst_result_l6)));
-        __bs_assign_value(bst___hir_tmp_4_l8, (__bs_read(bst___hir_tmp_4_l8) + __bs_clone_value(__bs_read(bst___hir_tmp_5_l9))));
-        __bs_read(bst___hir_tmp_2_l5).push(__bs_clone_value(__bs_read(bst___hir_tmp_4_l8)));
-        return __bs_read(bst___hir_tmp_2_l5);
+        __bs_assign_value(bst___hir_tmp_3_l24, []);
+        __bs_assign_value(bst___hir_tmp_4_l26, bst_pick_fn6(__bs_binding("a"), __bs_binding("b")));
+        __bs_assign_borrow(bst_result_l25, bst___hir_tmp_4_l26);
+        __bs_assign_value(bst___hir_tmp_5_l27, "");
+        __bs_assign_value(bst___hir_tmp_5_l27, (__bs_read(bst___hir_tmp_5_l27) + "function_call_named_args_success result="));
+        __bs_assign_value(bst___hir_tmp_6_l28, "");
+        __bs_assign_value(bst___hir_tmp_6_l28, (__bs_read(bst___hir_tmp_6_l28) + __bs_read(bst_result_l25)));
+        __bs_assign_value(bst___hir_tmp_5_l27, (__bs_read(bst___hir_tmp_5_l27) + __bs_clone_value(__bs_read(bst___hir_tmp_6_l28))));
+        __bs_read(bst___hir_tmp_3_l24).push(__bs_clone_value(__bs_read(bst___hir_tmp_5_l27)));
+        return __bs_read(bst___hir_tmp_3_l24);
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn2();
+      var bst_frags = bst_start_fn7();
       var bst_slots = [
         "bst-slot-0",
       ];

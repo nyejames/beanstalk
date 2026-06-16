@@ -6,4 +6,4 @@ run || -> String:
     return "duplicate_receiver_alias_ok"
 ;
 
-io(run())
+io.line([: [run()]])

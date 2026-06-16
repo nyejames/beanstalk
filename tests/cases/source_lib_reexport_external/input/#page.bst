@@ -1,2 +1,3 @@
 import @helper { sin }
-io(sin(0.0))
+sine_result = sin(0.0)
+io.line([: [sine_result]])

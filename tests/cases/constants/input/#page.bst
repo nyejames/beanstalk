@@ -4,4 +4,4 @@ second_const #= 2
 
 third_const #= first_const + second_const
 
-io(third_const)
+io.line([: [third_const]])

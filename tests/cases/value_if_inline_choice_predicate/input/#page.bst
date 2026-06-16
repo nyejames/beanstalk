@@ -13,8 +13,8 @@ qualified_score_for |status Status| -> Int:
     return score
 ;
 
-io("value_if_inline_choice_predicate")
+io.line("value_if_inline_choice_predicate")
 bare_ready = score_for(Status::Ready)
 qualified_waiting = qualified_score_for(Status::Waiting)
-io([:bare ready [bare_ready]])
-io([:qualified waiting [qualified_waiting]])
+io.line([:bare ready [bare_ready]])
+io.line([:qualified waiting [qualified_waiting]])

@@ -3,7 +3,7 @@
 -- BST-BORROW-0002: Multiple mutable borrows.
 
 touch |a ~Int, b ~Int|:
-    io("ok")
+    io.line("ok")
 ;
 
 x ~= 1

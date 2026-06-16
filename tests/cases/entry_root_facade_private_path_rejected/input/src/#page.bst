@@ -1,1 +1,1 @@
-io("root")
+io.line("root")

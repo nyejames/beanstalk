@@ -60,7 +60,7 @@ page_head #= theme_head
 
     - @./core (Core library overview)
     - @./core/prelude (Prelude)
-    - @./core/io (IO)
+    - @./core/io (Core IO)
     - @./core/collections (Collections)
     - @./core/math (Math)
     - @./core/text (Text)
@@ -159,7 +159,7 @@ page_head #= theme_head
         import @helper {double}
 
         value = double(5)
-        io(value)
+        io.line([: [value]])
     ]
 
     Facades can also wrap declarations imported from elsewhere.
@@ -235,7 +235,7 @@ page_head #= theme_head
         wave = sin(angle)
         bounded = clamp(wave, 0.0, 1.0)
 
-        io(bounded)
+        io.line([: [bounded]])
     ]
 
     `@core/math` currently exposes functions such as `sin`, `cos`, `tan`, `atan2`, `log`, `pow`, `sqrt`, `min`, `max`, and `clamp`.
@@ -268,7 +268,7 @@ page_head #= theme_head
         import @./drawing.js {draw_number}
 
         value = draw_number()
-        io(value)
+        io.line([: [value]])
     ]
 
     The JavaScript file describes its Beanstalk-facing surface with doc comments:
@@ -406,7 +406,7 @@ page_head #= theme_head
             then "missing canvas"
         ;
 
-        io(result)
+        io.line(result)
     ]
 
     JavaScript library files may currently import registered Beanstalk runtime modules with named static imports only.
@@ -483,7 +483,7 @@ page_head #= theme_head
             then "error"
         ;
 
-        io(result)
+        io.line(result)
     ]
 
     The higher-level `@html` source library exposes a source-owned `Canvas` wrapper and convenience `get_canvas()` helper for the built-in canvas component:

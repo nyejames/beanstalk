@@ -4,4 +4,4 @@ import @core/time {duration_from_seconds}
 d = duration_from_seconds(1.0)
 bad = d.as_seconds()
 
-io(bad)
+io.line([: [bad]])

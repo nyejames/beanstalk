@@ -1,4 +1,4 @@
 import @./models
 
 value = models.User
-io(value)
+io.line([: [value]])

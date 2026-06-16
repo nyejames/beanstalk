@@ -65,12 +65,12 @@ fn reports_invalid_match_pattern_forms_as_permanent_rule_errors() {
     let cases = [
         InvalidMatchPatternCase {
             name: "scalar wildcard arm",
-            source: "value = 1\nif value is:\n    _ => io(\"one\")\n;\n",
+            source: "value = 1\nif value is:\n    _ => io.line([: [\"one\"]])\n;\n",
             expected_reason: InvalidMatchPatternReason::WildcardNotSupported,
         },
         InvalidMatchPatternCase {
             name: "choice payload wildcard capture",
-            source: "Result :: Ok, Err | message String |;\n\nresult = Result::Err(\"bad\")\nif result is:\n    Err(_) => io(\"err\")\n;\n",
+            source: "Result :: Ok, Err | message String |;\n\nresult = Result::Err(\"bad\")\nif result is:\n    Err(_) => io.line([: [\"err\"]])\n;\n",
             expected_reason: InvalidMatchPatternReason::WildcardNotSupported,
         },
     ];
@@ -104,7 +104,7 @@ fn reports_invalid_match_pattern_forms_as_permanent_rule_errors() {
 
 #[test]
 fn rejects_bare_labeled_blocks_with_declaration_guidance() {
-    let diagnostic = parse_single_file_ast_diagnostic("label:\n    io(\"x\")\n;\n");
+    let diagnostic = parse_single_file_ast_diagnostic("label:\n    io.line([: [\"x\"]])\n;\n");
 
     assert_eq!(
         diagnostic.kind,
@@ -122,8 +122,9 @@ fn rejects_bare_labeled_blocks_with_declaration_guidance() {
 
 #[test]
 fn reports_unterminated_match_scope_at_end_of_file() {
-    let diagnostic =
-        parse_single_file_ast_diagnostic("value = 1\nif value is:\n    1 => io(\"one\")\n");
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "value = 1\nif value is:\n    1 => io.line([: [\"one\"]])\n",
+    );
 
     assert_eq!(
         diagnostic.kind,

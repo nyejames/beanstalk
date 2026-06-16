@@ -1,3 +1,3 @@
 import @core/math { sin as if }
 
-io(if(1.0))
+io.line([: [if(1.0)]])

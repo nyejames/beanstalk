@@ -317,7 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE PRELUDE</h1>
-    <section class="container"><p>The prelude is the tiny set of names available without an explicit import. It keeps common output and builtin error handling convenient without making every core library global.</p><p><code>io(...)</code> is available in normal source files and writes text to standard output. <code>IO</code> is the compiler-owned output surface behind that convenience call. Compiler-owned <code>Error</code> is also available for <code>Error!</code> flows.</p><pre style="
+    <section class="container"><p>The prelude is the tiny set of names available without an explicit import. It keeps common output and builtin error handling convenient without making every core library global.</p><p>The <code>io</code> namespace is available in normal source files and exposes Core IO helpers such as <code>io.line(...)</code>. Compiler-owned <code>Error</code> is also available for <code>Error!</code> flows.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -325,7 +325,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello from the prelude&quot;</span><span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello from the prelude&quot;</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Most core libraries still require imports:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -626,10 +626,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

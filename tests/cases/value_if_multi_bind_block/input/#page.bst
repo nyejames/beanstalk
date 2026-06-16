@@ -8,6 +8,6 @@ get_values |condition Bool| -> Int, String:
 ;
 
 a, b = get_values(false)
-io("block")
-io(a)
-io(b)
+io.line("block")
+io.line([: [a]])
+io.line([: [b]])

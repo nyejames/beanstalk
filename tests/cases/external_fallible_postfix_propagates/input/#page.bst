@@ -9,4 +9,4 @@ value = wrap_external() catch:
     then "fallback"
 ;
 
-io([:external_fallible_postfix_propagates value=[value]])
+io.line([:external_fallible_postfix_propagates value=[value]])

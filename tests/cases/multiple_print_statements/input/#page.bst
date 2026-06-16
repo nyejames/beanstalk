@@ -1,4 +1,4 @@
 -- Test multiple print statements
-io("First line")
-io("Second line")
-io("Third line")
+io.line("First line")
+io.line("Second line")
+io.line("Third line")

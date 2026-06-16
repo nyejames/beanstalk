@@ -42,16 +42,99 @@ pub(crate) enum NamespaceRecordSource {
     ExternalPackage(StringId),
 }
 
-/// A shallow field-access-only import record built from one import surface.
+/// A field-access-only import record built from one import surface.
 ///
 /// WHAT: maps member names to their resolved targets so AST can resolve
 /// `namespace.member` and `namespace.Type` without rebuilding import visibility.
 /// WHY: namespace imports expose value and type members separately; mixing them
-/// in the wrong context produces targeted diagnostics.
+/// in the wrong context produces targeted diagnostics. External package surfaces
+/// can additionally expose child namespace records for nested symbol paths.
+/// BOUNDARY: source and facade namespace records remain shallow; child namespaces
+/// are only built from external package symbol paths.
 #[derive(Clone, Debug)]
 pub(crate) struct NamespaceRecord {
     pub(crate) value_members: FxHashMap<StringId, NamespaceValueMember>,
     pub(crate) type_members: FxHashMap<StringId, NamespaceTypeMember>,
+    /// Child namespace records for external package surfaces that expose nested
+    /// namespaces such as `io.input`.
+    ///
+    /// WHAT: maps a namespace member name to its own namespace record, allowing
+    /// nested dotted paths to be represented at header/import visibility without
+    /// creating runtime namespace values.
+    /// WHY: external packages can register multi-component symbol paths; this tree
+    /// mirrors those paths so later phases can walk them by dotted name.
+    /// BOUNDARY: source and facade namespace records remain shallow; child namespaces
+    /// are only populated from external package symbol paths.
+    pub(crate) child_namespaces: FxHashMap<StringId, NamespaceRecord>,
+    /// Where this namespace record originated.
+    ///
+    /// WHAT: records whether the record was built from a source file, a facade, or an
+    /// external package surface. AST uses this to produce the correct diagnostic for
+    /// nested traversal attempts: source and facade records are shallow, so any
+    /// second dot is rejected with the existing `nested_traversal` diagnostic, while
+    /// external records may expose child namespaces.
+    /// WHY: the record structure itself does not encode origin; keeping origin here lets
+    /// value-position traversal respect the source/facade shallow boundary without
+    /// rebuilding import visibility in the expression parser.
+    pub(crate) record_source: NamespaceRecordSource,
+}
+
+impl NamespaceRecord {
+    /// Create an empty namespace record with the given origin.
+    ///
+    /// WHAT: helper used by record builders and tests to start a fresh record.
+    /// WHY: every record must carry its origin so AST traversal can distinguish
+    /// shallow source/facade records from recursive external package records.
+    pub(crate) fn empty(record_source: NamespaceRecordSource) -> Self {
+        Self {
+            value_members: FxHashMap::default(),
+            type_members: FxHashMap::default(),
+            child_namespaces: FxHashMap::default(),
+            record_source,
+        }
+    }
+}
+
+/// Result of looking up one dotted name inside a namespace record.
+///
+/// WHAT: tells the caller whether the name leads to another namespace, a value leaf,
+/// a type leaf, or is absent. The caller decides how to report each case based on
+/// position in the dotted path.
+/// WHY: traversal and diagnostics are separate concerns; this enum lets the parser
+/// loop stay readable while the lookup details live in one place.
+/// BOUNDARY: this is shared between value-position namespace access and type-position
+/// namespace resolution; keep it near `NamespaceRecord` so both stages use the same
+/// member-classification semantics.
+pub(crate) enum NamespaceMemberLookup<'a> {
+    ChildNamespace(&'a NamespaceRecord),
+    Value(&'a NamespaceValueMember),
+    Type,
+    Missing,
+}
+
+/// Look up one member name in a namespace record.
+///
+/// WHAT: searches child namespaces first, then value members, then type members.
+/// WHY: namespace slots are exclusive in the record builder, so at most one branch
+/// can match; the order only affects which diagnostic the caller produces when a
+/// name is both a namespace and a leaf (which cannot happen for valid records).
+pub(crate) fn lookup_namespace_member<'a>(
+    record: &'a NamespaceRecord,
+    name: StringId,
+) -> NamespaceMemberLookup<'a> {
+    if let Some(child) = record.child_namespaces.get(&name) {
+        return NamespaceMemberLookup::ChildNamespace(child);
+    }
+
+    if let Some(value_member) = record.value_members.get(&name) {
+        return NamespaceMemberLookup::Value(value_member);
+    }
+
+    if record.type_members.contains_key(&name) {
+        return NamespaceMemberLookup::Type;
+    }
+
+    NamespaceMemberLookup::Missing
 }
 
 /// One receiver method made visible to a source file.

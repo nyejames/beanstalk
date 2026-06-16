@@ -8,5 +8,5 @@ if flag:
     consume(~data)
 else
     consume(~data)
-    io(data)
+    io.line([: [data]])
 ;

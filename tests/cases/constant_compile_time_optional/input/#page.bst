@@ -2,4 +2,4 @@
 
 value #Int? = 42
 
-io("ok")
+io.line("ok")

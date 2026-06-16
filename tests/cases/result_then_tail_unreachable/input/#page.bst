@@ -5,9 +5,9 @@ can_error || -> Int, Error!:
 recover || -> Int:
     return can_error() catch:
         then 0
-        io("late")
+        io.line("late")
     ;
 ;
 
-io(recover())
-io("then tail after value production is unreachable")
+io.line([: [recover()]])
+io.line("then tail after value production is unreachable")

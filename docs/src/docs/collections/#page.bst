@@ -152,7 +152,7 @@ page_head #= theme_head
         ;
 
         ~items.push(3) catch |err|:
-            io(err.message) -- Fixed collection capacity exceeded
+            io.line(err.message) -- Fixed collection capacity exceeded
         ;
 
         removed = ~items.remove(0) catch:
@@ -187,7 +187,7 @@ page_head #= theme_head
         ;
 
         if scores.contains("Ada"):
-            io("found")
+            io.line("found")
         ;
 
         count = scores.length

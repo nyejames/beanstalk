@@ -10,4 +10,5 @@ label_for |status Status| -> String:
     ;
 ;
 
-io(label_for(Status::Waiting))
+waiting = Status::Waiting
+io.line([: [label_for(waiting)]])

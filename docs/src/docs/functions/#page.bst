@@ -12,7 +12,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         -- The simplest possible function
         main ||:
-            io("Hello from a function")
+            io.line("Hello from a function")
         ;
     ]
 
@@ -82,7 +82,7 @@ page_head #= theme_head
 
         recover |text String| -> Int:
             value = parse_number(text) catch |err|:
-                io(err.message)
+                io.line(err.message)
                 then 0
             ;
 

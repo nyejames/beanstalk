@@ -12,4 +12,4 @@ pick_label |n Int| -> String:
 ;
 
 result = pick_label(7)
-io(result)
+io.line([: [result]])

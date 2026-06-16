@@ -3,10 +3,10 @@ inner = false
 
 if outer:
     if not inner:
-        io("nested true")
+        io.line("nested true")
     else
-        io("nested false")
+        io.line("nested false")
     ;
 else
-    io("outer false")
+    io.line("outer false")
 ;

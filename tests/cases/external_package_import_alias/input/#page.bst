@@ -1,2 +1,3 @@
-import @core/io { io as print }
+import @core/io { line as print }
+
 print("hello")

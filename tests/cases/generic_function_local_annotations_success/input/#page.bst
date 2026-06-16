@@ -32,4 +32,4 @@ values {Int} = empty_values()
 box Box of String = wrap("leaf")
 choice Maybe of Int = choose(value)
 
-io([: generic_function_local_annotations_success [values.length()]])
+io.line([: generic_function_local_annotations_success [values.length()]])

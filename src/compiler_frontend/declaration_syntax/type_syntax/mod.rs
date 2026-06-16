@@ -53,12 +53,7 @@ pub(crate) fn parsed_ref_to_data_type(parsed: &ParsedTypeRef) -> DataType {
         ParsedTypeRef::BuiltinChar { .. } => DataType::Char,
         ParsedTypeRef::BuiltinNone { .. } => DataType::None,
         ParsedTypeRef::Named { name, .. } => DataType::NamedType(*name),
-        ParsedTypeRef::Namespaced {
-            namespace, name, ..
-        } => DataType::NamespacedType {
-            namespace: *namespace,
-            name: *name,
-        },
+        ParsedTypeRef::Qualified { path, .. } => DataType::NamespacedType { path: path.clone() },
         ParsedTypeRef::Applied {
             base, arguments, ..
         } => {

@@ -1,9 +1,9 @@
 //! External package registry and lookup APIs.
 //!
 //! WHAT: owns all registered virtual packages and provides resolution from package-scoped
-//! names to stable IDs, and from stable IDs to definitions.
+//! paths to stable IDs, and from stable IDs to definitions.
 //! WHY: the frontend needs one canonical source for external symbol metadata. Keeping
-//! registration and lookup in one place ensures consistency between the package map,
+//! registration and lookup in one place ensures consistency between the package surface maps,
 //! the ID-indexed maps, and the prelude.
 
 use super::definitions::{
@@ -14,6 +14,7 @@ use super::ids::ExternalPackageOrigin;
 use super::ids::{
     ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalSymbolId, ExternalTypeId,
 };
+use super::{ExternalSymbolPath, ExternalSymbolPathError};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -22,14 +23,20 @@ use std::collections::HashMap;
 
 /// Package-scoped key for looking up an external symbol in the registry.
 ///
-/// WHAT: `(package_id, symbol_name)` pair that uniquely identifies an external
-/// function or type within the registry.
-/// WHY: prevents collisions when two packages expose the same symbol name, and uses
-/// the stable package ID rather than a string so lookups are independent of path spelling.
+/// WHAT: `(package_id, symbol_path)` pair that uniquely identifies an external
+/// function, type, or constant within the registry.
+/// WHY: prevents collisions between different namespace paths that share the same leaf name,
+/// and uses the stable package ID rather than a string so lookups are independent of path spelling.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ExternalPackageSymbolKey {
     package_id: ExternalPackageId,
-    symbol_name: String,
+    path: ExternalSymbolPath,
+}
+
+impl ExternalPackageSymbolKey {
+    fn new(package_id: ExternalPackageId, path: ExternalSymbolPath) -> Self {
+        Self { package_id, path }
+    }
 }
 
 /// Match between an import path and the longest registered external package prefix.
@@ -52,11 +59,11 @@ pub struct ExternalPackageRegistry {
     functions_by_id: HashMap<ExternalFunctionId, ExternalFunctionDef>,
     types_by_id: HashMap<ExternalTypeId, ExternalTypeDef>,
     constants_by_id: HashMap<ExternalConstantId, ExternalConstantDef>,
-    /// Package-scoped function lookup: (package_id, symbol_name) -> ExternalFunctionId.
+    /// Package-scoped function lookup: (package_id, symbol_path) -> ExternalFunctionId.
     function_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalFunctionId>,
-    /// Package-scoped type lookup: (package_id, symbol_name) -> ExternalTypeId.
+    /// Package-scoped type lookup: (package_id, symbol_path) -> ExternalTypeId.
     type_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalTypeId>,
-    /// Package-scoped constant lookup: (package_id, symbol_name) -> ExternalConstantId.
+    /// Package-scoped constant lookup: (package_id, symbol_path) -> ExternalConstantId.
     constant_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalConstantId>,
     /// Reverse lookup: function ID -> package ID.
     ///
@@ -68,6 +75,15 @@ pub struct ExternalPackageRegistry {
     /// Prelude symbols that are auto-imported into every module.
     /// Bare-name lookup is only valid for the prelude.
     prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
+    /// Prelude namespace aliases that expose an external package surface under a
+    /// bare name without an explicit import.
+    ///
+    /// WHAT: maps the local alias name to the target external package path (e.g.
+    ///       `io` -> `@core/io`). The import environment resolves collisions with
+    ///       same-file declarations and explicit imports before injecting the record.
+    /// WHY: keeps the prelude namespace model in the registry alongside the
+    ///      existing prelude symbol model, so header preparation owns both.
+    prelude_namespace_aliases_by_name: HashMap<&'static str, &'static str>,
     /// Counter for package IDs.
     next_package_id: u32,
     /// Counter for dynamically assigned synthetic IDs.
@@ -87,7 +103,7 @@ impl ExternalPackageRegistry {
     }
 
     // ------------------------------------------------------------------
-    // Registration helpers (centralized)
+    // Package registration
     // ------------------------------------------------------------------
 
     /// Registers a new virtual package in the registry, assigning a stable package ID.
@@ -112,91 +128,260 @@ impl ExternalPackageRegistry {
         Ok(id)
     }
 
-    /// Registers an external function within a specific package.
-    pub fn register_function_in_package(
+    // ------------------------------------------------------------------
+    // Function registration
+    // ------------------------------------------------------------------
+
+    /// Registers an external function at a structured path within a specific package.
+    ///
+    /// WHAT: the canonical path-aware registration entry point. The definition is stored by ID,
+    /// and the package surface map records `path -> id`.
+    /// WHY: nested namespace symbols such as `io.input.new` need a full path identity, while
+    /// one-component callers use `register_function_in_package` as a convenience wrapper.
+    pub fn register_function_at_path(
         &mut self,
         package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
         id: ExternalFunctionId,
-        function: ExternalFunctionDef,
+        mut function: ExternalFunctionDef,
     ) -> Result<(), CompilerError> {
-        let package = self.packages.get_mut(&package_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "Cannot register function '{}' in unknown package '{:?}'.",
-                function.name, package_id
-            ))
-        })?;
+        let package_path_str = self
+            .packages
+            .get(&package_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "Cannot register function '{}' in unknown package '{:?}'.",
+                    path.display_text(),
+                    package_id
+                ))
+            })?
+            .path
+            .clone();
 
-        if package.functions.contains_key(&function.name) {
-            return_compiler_error!(
-                "External function '{}' is already registered in package '{}'.",
-                function.name,
-                package.path
-            );
-        }
+        function.name = path.leaf().to_owned();
 
-        let key = ExternalPackageSymbolKey {
+        self.reject_duplicate_path(
+            &package_path_str,
             package_id,
-            symbol_name: function.name.clone(),
-        };
+            &path,
+            path.leaf(),
+            "function",
+        )?;
+
+        let key = ExternalPackageSymbolKey::new(package_id, path);
         if self.function_ids_by_package_symbol.contains_key(&key) {
             return_compiler_error!(
                 "External function '{}' is already registered in package '{}'.",
-                function.name,
-                package.path
+                key.path.display_text(),
+                package_path_str
             );
         }
 
-        // Store in the package map by cloning, then move the original into the ID map.
-        let name = function.name.clone();
-        package.functions.insert(name, function.clone());
+        let package = self
+            .packages
+            .get_mut(&package_id)
+            .expect("package that was just looked up disappeared during function registration");
+        package.function_ids.insert(key.path.clone(), id);
         self.functions_by_id.insert(id, function);
         self.function_ids_by_package_symbol.insert(key, id);
         self.function_package_by_id.insert(id, package_id);
         Ok(())
     }
 
-    /// Registers an external type within a specific package.
+    /// Registers an external function within a specific package using its leaf name as a
+    /// one-component path.
+    ///
+    /// WHAT: convenience wrapper for the common case where the package symbol has no namespace.
+    /// WHY: keeps existing core package and provider registrations readable.
+    pub fn register_function_in_package(
+        &mut self,
+        package_id: ExternalPackageId,
+        id: ExternalFunctionId,
+        function: ExternalFunctionDef,
+    ) -> Result<(), CompilerError> {
+        let path = one_component_symbol_path("function", &function.name)?;
+        self.register_function_at_path(package_id, path, id, function)
+    }
+
+    // ------------------------------------------------------------------
+    // Type registration
+    // ------------------------------------------------------------------
+
+    /// Registers an external type at a structured path within a specific package.
+    pub fn register_type_at_path(
+        &mut self,
+        package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
+        id: ExternalTypeId,
+        mut type_def: ExternalTypeDef,
+    ) -> Result<(), CompilerError> {
+        let package_path_str = self
+            .packages
+            .get(&package_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "Cannot register type '{}' in unknown package '{:?}'.",
+                    path.display_text(),
+                    package_id
+                ))
+            })?
+            .path
+            .clone();
+
+        // Ensure the definition's leaf name matches the path leaf. This keeps the ID-indexed
+        // definition consistent with the package surface map.
+        type_def.name = path.leaf().to_owned();
+        type_def.package_id = package_id;
+
+        self.reject_duplicate_path(&package_path_str, package_id, &path, &type_def.name, "type")?;
+
+        let key = ExternalPackageSymbolKey::new(package_id, path);
+        if self.type_ids_by_package_symbol.contains_key(&key) {
+            return_compiler_error!(
+                "External type '{}' is already registered in package '{}'.",
+                key.path.display_text(),
+                package_path_str
+            );
+        }
+
+        let package = self
+            .packages
+            .get_mut(&package_id)
+            .expect("package that was just looked up disappeared during type registration");
+        package.type_ids.insert(key.path.clone(), id);
+        self.types_by_id.insert(id, type_def);
+        self.type_ids_by_package_symbol.insert(key, id);
+        Ok(())
+    }
+
+    /// Registers an external type within a specific package using its leaf name as a
+    /// one-component path.
     pub fn register_type_in_package(
         &mut self,
         package_id: ExternalPackageId,
         id: ExternalTypeId,
         type_def: ExternalTypeDef,
     ) -> Result<(), CompilerError> {
-        let package = self.packages.get_mut(&package_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "Cannot register type '{}' in unknown package '{:?}'.",
-                type_def.name, package_id
-            ))
-        })?;
+        let path = one_component_symbol_path("type", &type_def.name)?;
+        self.register_type_at_path(package_id, path, id, type_def)
+    }
 
-        if package.types.contains_key(&type_def.name) {
-            return_compiler_error!(
-                "External type '{}' is already registered in package '{}'.",
-                type_def.name,
-                package.path
-            );
-        }
+    // ------------------------------------------------------------------
+    // Constant registration
+    // ------------------------------------------------------------------
 
-        let key = ExternalPackageSymbolKey {
+    /// Registers an external constant at a structured path within a specific package.
+    pub fn register_constant_at_path(
+        &mut self,
+        package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
+        id: ExternalConstantId,
+        mut constant: ExternalConstantDef,
+    ) -> Result<(), CompilerError> {
+        let package_path_str = self
+            .packages
+            .get(&package_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "Cannot register constant '{}' in unknown package '{:?}'.",
+                    path.display_text(),
+                    package_id
+                ))
+            })?
+            .path
+            .clone();
+
+        constant.name = path.leaf().to_owned();
+
+        self.reject_duplicate_path(
+            &package_path_str,
             package_id,
-            symbol_name: type_def.name.clone(),
-        };
-        if self.type_ids_by_package_symbol.contains_key(&key) {
+            &path,
+            &constant.name,
+            "constant",
+        )?;
+
+        let key = ExternalPackageSymbolKey::new(package_id, path);
+        if self.constant_ids_by_package_symbol.contains_key(&key) {
             return_compiler_error!(
-                "External type '{}' is already registered in package '{}'.",
-                type_def.name,
-                package.path
+                "External constant '{}' is already registered in package '{}'.",
+                key.path.display_text(),
+                package_path_str
             );
         }
 
-        let name = type_def.name.clone();
-        package.types.insert(name, type_def.clone());
-        self.types_by_id.insert(id, type_def);
-        self.type_ids_by_package_symbol.insert(key, id);
+        let package = self
+            .packages
+            .get_mut(&package_id)
+            .expect("package that was just looked up disappeared during constant registration");
+        package.constant_ids.insert(key.path.clone(), id);
+        self.constants_by_id.insert(id, constant);
+        self.constant_ids_by_package_symbol.insert(key, id);
         Ok(())
     }
 
+    /// Registers an external constant within a specific package using its leaf name as a
+    /// one-component path.
+    pub fn register_constant_in_package(
+        &mut self,
+        package_id: ExternalPackageId,
+        id: ExternalConstantId,
+        constant: ExternalConstantDef,
+    ) -> Result<(), CompilerError> {
+        let path = one_component_symbol_path("constant", &constant.name)?;
+        self.register_constant_at_path(package_id, path, id, constant)
+    }
+
+    // ------------------------------------------------------------------
+    // Cross-kind duplicate detection
+    // ------------------------------------------------------------------
+
+    /// Rejects a symbol path that is already occupied by any kind of symbol in the package.
+    ///
+    /// WHAT: a single namespace slot cannot hold a function, type, and constant with the same
+    /// path, because namespace records would be ambiguous.
+    /// WHY: pushing this check into the registry keeps the package surface consistent and lets
+    /// tests and later phases rely on the invariant.
+    fn reject_duplicate_path(
+        &self,
+        package_path: &str,
+        package_id: ExternalPackageId,
+        path: &ExternalSymbolPath,
+        symbol_name: &str,
+        kind: &str,
+    ) -> Result<(), CompilerError> {
+        if self.has_symbol_at_path(package_id, path) {
+            return_compiler_error!(
+                "External {} '{}' at path '{}' in package '{}' collides with another symbol at the same namespace slot.",
+                kind,
+                symbol_name,
+                path.display_text(),
+                package_path
+            );
+        }
+        Ok(())
+    }
+
+    /// Returns true if any symbol (function, type, or constant) is registered at the path.
+    pub fn has_symbol_at_path(
+        &self,
+        package_id: ExternalPackageId,
+        path: &ExternalSymbolPath,
+    ) -> bool {
+        let key = ExternalPackageSymbolKey::new(package_id, path.clone());
+        self.function_ids_by_package_symbol.contains_key(&key)
+            || self.type_ids_by_package_symbol.contains_key(&key)
+            || self.constant_ids_by_package_symbol.contains_key(&key)
+    }
+
+    // ------------------------------------------------------------------
+    // Prelude
+    // ------------------------------------------------------------------
+
     /// Registers a prelude symbol that is auto-imported into every module.
+    // Kept covered by registry tests while the current builtin prelude only exposes namespace
+    // aliases; the import environment still owns both prelude-symbol and prelude-namespace paths.
+    #[allow(dead_code)]
     pub(crate) fn register_prelude_symbol(
         &mut self,
         public_name: &'static str,
@@ -205,7 +390,48 @@ impl ExternalPackageRegistry {
         if self.prelude_symbols_by_name.contains_key(public_name) {
             return_compiler_error!("Prelude symbol '{}' is already registered.", public_name);
         }
+        if self
+            .prelude_namespace_aliases_by_name
+            .contains_key(public_name)
+        {
+            return_compiler_error!(
+                "Prelude symbol '{}' collides with an existing prelude namespace alias.",
+                public_name
+            );
+        }
         self.prelude_symbols_by_name.insert(public_name, symbol_id);
+        Ok(())
+    }
+
+    /// Registers a prelude namespace alias that exposes an external package under a
+    /// bare name without an explicit import.
+    ///
+    /// WHAT: adds `local_name` to every module's visible namespace records, backed by
+    ///       the same recursive external package record as `import @package`.
+    /// WHY: keeps the registry as the single owner of prelude surface metadata.
+    ///
+    pub(crate) fn register_prelude_namespace_alias(
+        &mut self,
+        local_name: &'static str,
+        package_path: &'static str,
+    ) -> Result<(), CompilerError> {
+        if self
+            .prelude_namespace_aliases_by_name
+            .contains_key(local_name)
+        {
+            return_compiler_error!(
+                "Prelude namespace alias '{}' is already registered.",
+                local_name
+            );
+        }
+        if self.prelude_symbols_by_name.contains_key(local_name) {
+            return_compiler_error!(
+                "Prelude namespace alias '{}' collides with an existing prelude symbol.",
+                local_name
+            );
+        }
+        self.prelude_namespace_aliases_by_name
+            .insert(local_name, package_path);
         Ok(())
     }
 
@@ -232,8 +458,24 @@ impl ExternalPackageRegistry {
     // Dynamic registration (alpha: assigns Synthetic IDs)
     // ------------------------------------------------------------------
 
-    /// Registers an external function in a package, assigning the next available
+    /// Registers an external function at a path, assigning the next available
     /// synthetic ID automatically.
+    pub fn register_external_function_at_path(
+        &mut self,
+        package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
+        spec: ExternalFunctionSpec,
+    ) -> Result<ExternalFunctionId, CompilerError> {
+        let id = ExternalFunctionId::Synthetic(self.next_synthetic_id);
+        self.next_synthetic_id += 1;
+        let mut function: ExternalFunctionDef = spec.into();
+        function.name = path.leaf().to_owned();
+        self.register_function_at_path(package_id, path, id, function)?;
+        Ok(id)
+    }
+
+    /// Registers an external function in a package, assigning the next available
+    /// synthetic ID automatically and using the spec name as a one-component path.
     ///
     /// WHAT: builder-friendly entry point that does not require hardcoding an
     /// `ExternalFunctionId` enum variant.
@@ -243,23 +485,23 @@ impl ExternalPackageRegistry {
         package_id: ExternalPackageId,
         spec: ExternalFunctionSpec,
     ) -> Result<ExternalFunctionId, CompilerError> {
-        let id = ExternalFunctionId::Synthetic(self.next_synthetic_id);
-        self.next_synthetic_id += 1;
-        self.register_function_in_package(package_id, id, spec.into())?;
-        Ok(id)
+        let path = one_component_symbol_path("function", &spec.name)?;
+        self.register_external_function_at_path(package_id, path, spec)
     }
 
-    /// Registers an external type in a package, assigning the next available
+    /// Registers an external type at a path, assigning the next available
     /// dynamic ID automatically.
-    pub fn register_external_type(
+    pub fn register_external_type_at_path(
         &mut self,
         package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
         spec: ExternalTypeSpec,
     ) -> Result<ExternalTypeId, CompilerError> {
         let id = ExternalTypeId(self.next_synthetic_id);
         self.next_synthetic_id += 1;
-        self.register_type_in_package(
+        self.register_type_at_path(
             package_id,
+            path,
             id,
             ExternalTypeDef {
                 name: spec.name,
@@ -270,17 +512,40 @@ impl ExternalPackageRegistry {
         Ok(id)
     }
 
-    /// Registers an external constant in a package, assigning the next available
+    /// Registers an external type in a package, assigning the next available
+    /// dynamic ID automatically and using the spec name as a one-component path.
+    pub fn register_external_type(
+        &mut self,
+        package_id: ExternalPackageId,
+        spec: ExternalTypeSpec,
+    ) -> Result<ExternalTypeId, CompilerError> {
+        let path = one_component_symbol_path("type", &spec.name)?;
+        self.register_external_type_at_path(package_id, path, spec)
+    }
+
+    /// Registers an external constant at a path, assigning the next available
     /// dynamic ID automatically.
+    pub fn register_external_constant_at_path(
+        &mut self,
+        package_id: ExternalPackageId,
+        path: ExternalSymbolPath,
+        constant: ExternalConstantDef,
+    ) -> Result<ExternalConstantId, CompilerError> {
+        let id = ExternalConstantId(self.next_synthetic_id);
+        self.next_synthetic_id += 1;
+        self.register_constant_at_path(package_id, path, id, constant)?;
+        Ok(id)
+    }
+
+    /// Registers an external constant in a package, assigning the next available
+    /// dynamic ID automatically and using the constant name as a one-component path.
     pub fn register_external_constant(
         &mut self,
         package_id: ExternalPackageId,
         constant: ExternalConstantDef,
     ) -> Result<ExternalConstantId, CompilerError> {
-        let id = ExternalConstantId(self.next_synthetic_id);
-        self.next_synthetic_id += 1;
-        self.register_constant_in_package(package_id, id, constant)?;
-        Ok(id)
+        let path = one_component_symbol_path("constant", &constant.name)?;
+        self.register_external_constant_at_path(package_id, path, constant)
     }
 
     // ------------------------------------------------------------------
@@ -300,75 +565,12 @@ impl ExternalPackageRegistry {
                 self.register_package(test_package_path, ExternalPackageOrigin::BuilderRuntime)?
             }
         };
-        let test_package = self.packages.get_mut(&package_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "Test package '{}' was indexed but not stored.",
-                test_package_path
-            ))
-        })?;
-        if test_package.functions.contains_key(&function.name) {
-            return_compiler_error!(
-                "External function '{:?}' is already registered.",
-                function.name
-            );
-        }
-        let name = function.name.clone();
-        test_package
-            .functions
-            .insert(name.clone(), function.clone());
+
+        let path = one_component_symbol_path("function", &function.name)?;
         let id = ExternalFunctionId::Synthetic(self.next_synthetic_id);
         self.next_synthetic_id += 1;
-        self.functions_by_id.insert(id, function);
-        self.function_ids_by_package_symbol.insert(
-            ExternalPackageSymbolKey {
-                package_id,
-                symbol_name: name.to_string(),
-            },
-            id,
-        );
-        self.function_package_by_id.insert(id, package_id);
+        self.register_function_at_path(package_id, path, id, function)?;
         Ok(id)
-    }
-
-    /// Registers an external constant within a specific package.
-    pub fn register_constant_in_package(
-        &mut self,
-        package_id: ExternalPackageId,
-        id: ExternalConstantId,
-        constant: ExternalConstantDef,
-    ) -> Result<(), CompilerError> {
-        let package = self.packages.get_mut(&package_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "Cannot register constant '{}' in unknown package '{:?}'.",
-                constant.name, package_id
-            ))
-        })?;
-
-        if package.constants.contains_key(&constant.name) {
-            return_compiler_error!(
-                "External constant '{}' is already registered in package '{}'.",
-                constant.name,
-                package.path
-            );
-        }
-
-        let key = ExternalPackageSymbolKey {
-            package_id,
-            symbol_name: constant.name.clone(),
-        };
-        if self.constant_ids_by_package_symbol.contains_key(&key) {
-            return_compiler_error!(
-                "External constant '{}' is already registered in package '{}'.",
-                constant.name,
-                package.path
-            );
-        }
-
-        let name = constant.name.clone();
-        package.constants.insert(name, constant.clone());
-        self.constants_by_id.insert(id, constant);
-        self.constant_ids_by_package_symbol.insert(key, id);
-        Ok(())
     }
 
     // ------------------------------------------------------------------
@@ -391,39 +593,47 @@ impl ExternalPackageRegistry {
         self.packages.get(&id)
     }
 
-    /// Resolves any symbol (function, type, or constant) within a specific package.
+    /// Resolves any symbol (function, type, or constant) at a structured path within a
+    /// specific package.
+    pub fn resolve_package_symbol_by_path(
+        &self,
+        package_path: &str,
+        path: &ExternalSymbolPath,
+    ) -> Option<ExternalSymbolId> {
+        self.resolve_package_function_by_path(package_path, path)
+            .map(|(id, _)| ExternalSymbolId::Function(id))
+            .or_else(|| {
+                self.resolve_package_type_by_path(package_path, path)
+                    .map(|(id, _)| ExternalSymbolId::Type(id))
+            })
+            .or_else(|| {
+                self.resolve_package_constant_by_path(package_path, path)
+                    .map(|(id, _)| ExternalSymbolId::Constant(id))
+            })
+    }
+
+    /// Resolves any symbol at a one-component path within a specific package.
     pub fn resolve_package_symbol(
         &self,
         package_path: &str,
         symbol_name: &str,
     ) -> Option<ExternalSymbolId> {
+        let path = ExternalSymbolPath::try_from_single(symbol_name).ok()?;
+        self.resolve_package_symbol_by_path(package_path, &path)
+    }
+
+    /// Resolves a function symbol at a structured path within a specific package,
+    /// returning its ID and definition.
+    pub fn resolve_package_function_by_path(
+        &self,
+        package_path: &str,
+        path: &ExternalSymbolPath,
+    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
         let package_id = self.resolve_package_id(package_path)?;
-        let package = self.packages.get(&package_id)?;
-        if package.functions.contains_key(symbol_name) {
-            let key = ExternalPackageSymbolKey {
-                package_id,
-                symbol_name: symbol_name.to_string(),
-            };
-            let id = *self.function_ids_by_package_symbol.get(&key)?;
-            return Some(ExternalSymbolId::Function(id));
-        }
-        if package.types.contains_key(symbol_name) {
-            let key = ExternalPackageSymbolKey {
-                package_id,
-                symbol_name: symbol_name.to_string(),
-            };
-            let id = *self.type_ids_by_package_symbol.get(&key)?;
-            return Some(ExternalSymbolId::Type(id));
-        }
-        if package.constants.contains_key(symbol_name) {
-            let key = ExternalPackageSymbolKey {
-                package_id,
-                symbol_name: symbol_name.to_string(),
-            };
-            let id = *self.constant_ids_by_package_symbol.get(&key)?;
-            return Some(ExternalSymbolId::Constant(id));
-        }
-        None
+        let key = ExternalPackageSymbolKey::new(package_id, path.clone());
+        let id = *self.function_ids_by_package_symbol.get(&key)?;
+        let def = self.functions_by_id.get(&id)?;
+        Some((id, def))
     }
 
     /// Resolves a function symbol within a specific package, returning its ID and definition.
@@ -432,14 +642,21 @@ impl ExternalPackageRegistry {
         package_path: &str,
         symbol_name: &str,
     ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
+        let path = ExternalSymbolPath::try_from_single(symbol_name).ok()?;
+        self.resolve_package_function_by_path(package_path, &path)
+    }
+
+    /// Resolves a type symbol at a structured path within a specific package,
+    /// returning its ID and definition.
+    pub fn resolve_package_type_by_path(
+        &self,
+        package_path: &str,
+        path: &ExternalSymbolPath,
+    ) -> Option<(ExternalTypeId, &ExternalTypeDef)> {
         let package_id = self.resolve_package_id(package_path)?;
-        let package = self.packages.get(&package_id)?;
-        let def = package.functions.get(symbol_name)?;
-        let key = ExternalPackageSymbolKey {
-            package_id,
-            symbol_name: symbol_name.to_string(),
-        };
-        let id = *self.function_ids_by_package_symbol.get(&key)?;
+        let key = ExternalPackageSymbolKey::new(package_id, path.clone());
+        let id = *self.type_ids_by_package_symbol.get(&key)?;
+        let def = self.types_by_id.get(&id)?;
         Some((id, def))
     }
 
@@ -449,14 +666,21 @@ impl ExternalPackageRegistry {
         package_path: &str,
         type_name: &str,
     ) -> Option<(ExternalTypeId, &ExternalTypeDef)> {
+        let path = ExternalSymbolPath::try_from_single(type_name).ok()?;
+        self.resolve_package_type_by_path(package_path, &path)
+    }
+
+    /// Resolves a constant symbol at a structured path within a specific package,
+    /// returning its ID and definition.
+    pub fn resolve_package_constant_by_path(
+        &self,
+        package_path: &str,
+        path: &ExternalSymbolPath,
+    ) -> Option<(ExternalConstantId, &ExternalConstantDef)> {
         let package_id = self.resolve_package_id(package_path)?;
-        let package = self.packages.get(&package_id)?;
-        let def = package.types.get(type_name)?;
-        let key = ExternalPackageSymbolKey {
-            package_id,
-            symbol_name: type_name.to_string(),
-        };
-        let id = *self.type_ids_by_package_symbol.get(&key)?;
+        let key = ExternalPackageSymbolKey::new(package_id, path.clone());
+        let id = *self.constant_ids_by_package_symbol.get(&key)?;
+        let def = self.constants_by_id.get(&id)?;
         Some((id, def))
     }
 
@@ -466,15 +690,8 @@ impl ExternalPackageRegistry {
         package_path: &str,
         constant_name: &str,
     ) -> Option<(ExternalConstantId, &ExternalConstantDef)> {
-        let package_id = self.resolve_package_id(package_path)?;
-        let package = self.packages.get(&package_id)?;
-        let def = package.constants.get(constant_name)?;
-        let key = ExternalPackageSymbolKey {
-            package_id,
-            symbol_name: constant_name.to_string(),
-        };
-        let id = *self.constant_ids_by_package_symbol.get(&key)?;
-        Some((id, def))
+        let path = ExternalSymbolPath::try_from_single(constant_name).ok()?;
+        self.resolve_package_constant_by_path(package_path, &path)
     }
 
     /// Returns true if the registry contains a package with the given path.
@@ -524,6 +741,24 @@ impl ExternalPackageRegistry {
         self.packages
             .get(package_id)
             .map(|package| package.path.as_str())
+    }
+
+    /// Returns the package-local symbol path for a registered external function.
+    ///
+    /// WHAT: reverse lookup from stable function ID to the structured symbol path used in the
+    /// package surface map.
+    /// WHY: diagnostics should name nested external functions as `input.new`, not only by their
+    /// leaf name, while HIR and backends still carry stable function IDs rather than source syntax.
+    pub fn resolve_function_symbol_path(
+        &self,
+        id: ExternalFunctionId,
+    ) -> Option<&ExternalSymbolPath> {
+        let package_id = self.function_package_by_id.get(&id)?;
+        let package = self.packages.get(package_id)?;
+
+        package
+            .function_symbol_ids()
+            .find_map(|(path, function_id)| (*function_id == id).then_some(path))
     }
 
     /// Returns the package ID that owns the given external function ID.
@@ -599,6 +834,11 @@ impl ExternalPackageRegistry {
         &self.prelude_symbols_by_name
     }
 
+    /// Returns the prelude namespace alias map.
+    pub fn prelude_namespace_aliases_by_name(&self) -> &HashMap<&'static str, &'static str> {
+        &self.prelude_namespace_aliases_by_name
+    }
+
     /// Returns true if the given name is a prelude function.
     pub fn is_prelude_function(&self, name: &str) -> bool {
         self.prelude_symbols_by_name
@@ -628,6 +868,21 @@ fn external_package_path_from_components(
     }
 
     package_path
+}
+
+fn one_component_symbol_path(kind: &str, name: &str) -> Result<ExternalSymbolPath, CompilerError> {
+    ExternalSymbolPath::try_from_single(name)
+        .map_err(|error| invalid_external_symbol_path_error(kind, name, error))
+}
+
+fn invalid_external_symbol_path_error(
+    kind: &str,
+    name: &str,
+    error: ExternalSymbolPathError,
+) -> CompilerError {
+    CompilerError::compiler_error(format!(
+        "Invalid external {kind} symbol path '{name}': {error:?}"
+    ))
 }
 
 #[cfg(test)]

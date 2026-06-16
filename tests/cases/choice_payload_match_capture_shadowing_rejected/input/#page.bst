@@ -9,6 +9,6 @@ message = "outer"
 r = Response::Err("bad")
 
 if r is:
-    Err(message) => io(message)
-    Success => io("ok")
+    Err(message) => io.line([: [message]])
+    Success => io.line("ok")
 ;

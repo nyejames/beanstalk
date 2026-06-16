@@ -12,5 +12,5 @@ identity |value Int| -> Int:
 x = 5
 result1 = double(x)
 result2 = identity(42)
-io(result1)
-io(result2)
+io.line([: [result1]])
+io.line([: [result2]])

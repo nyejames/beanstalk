@@ -24,7 +24,7 @@ page_head #= theme_head
     ## Current pages
 
     - @./prelude (Prelude)
-    - @./io (IO)
+    - @./io (Core IO)
     - @./collections (Collections)
     - @./math (Math)
     - @./text (Text)

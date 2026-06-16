@@ -8,4 +8,4 @@ choose |condition Bool| -> Int:
 ;
 
 value = choose(true)
-io([:value if block declaration init result=[value]])
+io.line([:value if block declaration init result=[value]])

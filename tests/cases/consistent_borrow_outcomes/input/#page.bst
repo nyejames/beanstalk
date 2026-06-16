@@ -10,20 +10,20 @@ condition = true
 if condition:
     -- On this path, data is borrowed (not last use)
     temp1 ~= data
-    io(temp1)
+    io.line([: [temp1]])
     -- Use data again, preventing move
-    io(data)
+    io.line([: [data]])
 else
     -- On this path, data is also borrowed (not last use)
     temp2 ~= data
-    io(temp2)
+    io.line([: [temp2]])
     -- Use data again, preventing move
-    io(data)
+    io.line([: [data]])
 ;
 
 -- Final use of data (this would be the actual last use)
 final_result ~= data
-io(final_result)
+io.line([: [final_result]])
 
 -- This is correct because:
 -- 1. In both branches, data is borrowed (not the last use)

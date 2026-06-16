@@ -8,8 +8,8 @@
 
 use crate::compiler_frontend::hir::ids::FunctionId;
 
-pub const IO_FUNC_NAME: &str = "io";
-pub const IO_TYPE_NAME: &str = "IO";
+pub const CORE_IO_PACKAGE_PATH: &str = "@core/io";
+pub const IO_NAMESPACE_NAME: &str = "io";
 pub const COLLECTION_GET_HOST_NAME: &str = "__bs_collection_get";
 pub const COLLECTION_SET_HOST_NAME: &str = "__bs_collection_set";
 pub const COLLECTION_PUSH_HOST_NAME: &str = "__bs_collection_push";
@@ -28,7 +28,7 @@ pub struct ExternalPackageId(pub u32);
 /// Where an external package came from.
 ///
 /// WHAT: distinguishes built-in compiler packages, builder runtime packages, and
-/// project-local JS provider results so diagnostics and backend emission can reason
+/// project-local provider results so diagnostics and backend emission can reason
 /// about the source without parsing paths.
 /// WHY: origin metadata supports general provider frameworks while keeping the model
 /// non-JS-specific.
@@ -38,14 +38,33 @@ pub enum ExternalPackageOrigin {
     Builtin,
     /// Package provided by the builder runtime (e.g. builder-owned JS libraries).
     BuilderRuntime,
-    /// Package derived from a project-local JS file via an external import provider.
+    /// Package derived from a project-local file via an external import provider.
     ProjectLocalJs,
 }
 
 /// Stable identifier for an external function across all compiler stages and backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalFunctionId {
-    Io,
+    IoPrint,
+    IoLine,
+    IoDebug,
+    IoWarn,
+    IoError,
+    IoInputNew,
+    IoInputUpdate,
+    IoInputClose,
+    IoInputKeyDown,
+    IoInputKeyPressed,
+    IoInputKeyReleased,
+    IoInputPointerX,
+    IoInputPointerY,
+    IoInputPointerDown,
+    IoInputPointerPressed,
+    IoInputPointerReleased,
+    IoInputLastKeyPressed,
+    IoInputLastKeyReleased,
+    IoInputLastPointerPressed,
+    IoInputLastPointerReleased,
     CollectionGet,
     CollectionSet,
     CollectionPush,
@@ -56,10 +75,29 @@ pub enum ExternalFunctionId {
 }
 
 impl ExternalFunctionId {
-    /// Human-readable name for diagnostics and HIR display.
+    /// Stable JS/helper-facing name for diagnostics and HIR display.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Io => IO_FUNC_NAME,
+            Self::IoPrint => "__bs_io_print",
+            Self::IoLine => "__bs_io_line",
+            Self::IoDebug => "__bs_io_debug",
+            Self::IoWarn => "__bs_io_warn",
+            Self::IoError => "__bs_io_error",
+            Self::IoInputNew => "__bs_io_input_new",
+            Self::IoInputUpdate => "__bs_io_input_update",
+            Self::IoInputClose => "__bs_io_input_close",
+            Self::IoInputKeyDown => "__bs_io_input_key_down",
+            Self::IoInputKeyPressed => "__bs_io_input_key_pressed",
+            Self::IoInputKeyReleased => "__bs_io_input_key_released",
+            Self::IoInputPointerX => "__bs_io_input_pointer_x",
+            Self::IoInputPointerY => "__bs_io_input_pointer_y",
+            Self::IoInputPointerDown => "__bs_io_input_pointer_down",
+            Self::IoInputPointerPressed => "__bs_io_input_pointer_pressed",
+            Self::IoInputPointerReleased => "__bs_io_input_pointer_released",
+            Self::IoInputLastKeyPressed => "__bs_io_input_last_key_pressed",
+            Self::IoInputLastKeyReleased => "__bs_io_input_last_key_released",
+            Self::IoInputLastPointerPressed => "__bs_io_input_last_pointer_pressed",
+            Self::IoInputLastPointerReleased => "__bs_io_input_last_pointer_released",
             Self::CollectionGet => COLLECTION_GET_HOST_NAME,
             Self::CollectionSet => COLLECTION_SET_HOST_NAME,
             Self::CollectionPush => COLLECTION_PUSH_HOST_NAME,
@@ -73,6 +111,13 @@ impl ExternalFunctionId {
 /// Stable identifier for an external type across all compiler stages and backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExternalTypeId(pub u32);
+
+/// Stable identifier for the `io.input.Input` opaque external handle type.
+///
+/// WHAT: names the single external type used by the core IO input surface so that
+///       registry, frontend, HIR, and backend references use one constant value.
+/// WHY: prevents raw `ExternalTypeId(...)` values from scattering across the codebase.
+pub const IO_INPUT_EXTERNAL_TYPE_ID: ExternalTypeId = ExternalTypeId(1);
 
 /// Stable identifier for an external constant across all compiler stages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

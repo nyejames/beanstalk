@@ -7,4 +7,4 @@ pair |condition Bool| -> Int, String:
 ;
 
 a, b = pair(false)
-io("value if return multi block test")
+io.line("value if return multi block test")

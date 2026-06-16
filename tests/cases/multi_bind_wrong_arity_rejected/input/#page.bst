@@ -3,4 +3,4 @@ pair || -> String, Int:
 ;
 
 a, b, c = pair()
-io(a)
+io.line([: [a]])

@@ -15,4 +15,4 @@ render type T is DISPLAY_TEXT |value T| -> String:
 ;
 
 label = render(Label("looks structural"))
-io(label)
+io.line([: [label]])

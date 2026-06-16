@@ -21,5 +21,5 @@ result, count = outer() catch:
     then "outer_handler", 0
 
 ;
-io(result)
-io(count)
+io.line([: [result]])
+io.line([: [count]])

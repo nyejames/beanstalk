@@ -6,4 +6,4 @@ Palette = |
 palette #= Palette()
 
 value = palette
-io(value)
+io.line([: [value]])

@@ -10,6 +10,6 @@ recover || -> String, Float:
 ;
 
 name, score = recover()
-io("value catch multi bind")
-io(name)
-io(score)
+io.line("value catch multi bind")
+io.line([: [name]])
+io.line([: [score]])

@@ -1,7 +1,7 @@
 -- Configuration module with explicit initialization API.
 init_config ||:
-    io("Loading configuration...")
-    io("Configuration loaded")
+    io.line("Loading configuration...")
+    io.line("Configuration loaded")
 ;
 
 get_database_url || -> String:

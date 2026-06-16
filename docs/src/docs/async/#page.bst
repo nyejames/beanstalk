@@ -152,7 +152,7 @@ page_head #= theme_head
         consumer |reader ~Channel[Int]|:
             loop:
                 value << reader
-                io(value)
+                io.line(value)
             ;
         ;
     ]
@@ -288,7 +288,7 @@ page_head #= theme_head
         consumer |reader ~Channel(Int)|:
             loop:
                 value << reader
-                io(value)
+                io.line(value)
             ;
         ;
 

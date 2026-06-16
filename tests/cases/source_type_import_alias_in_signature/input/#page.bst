@@ -5,4 +5,4 @@ describe |person Human| -> String:
 ;
 
 ana = Human(name = "Ana")
-io(describe(ana))
+io.line([: [describe(ana)]])

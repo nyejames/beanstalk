@@ -4,6 +4,6 @@ get_values |condition Bool| -> Int, String:
 ;
 
 a, b = get_values(true)
-io("inline")
-io(a)
-io(b)
+io.line("inline")
+io.line([: [a]])
+io.line([: [b]])

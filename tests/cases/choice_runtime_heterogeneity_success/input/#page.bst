@@ -21,4 +21,4 @@ render |item Renderable| -> String:
 first = Renderable::LabelItem(Label("label"))
 second = Renderable::ButtonItem(Button("button"))
 
-io([:choice_runtime_heterogeneity_success [render(first)] [render(second)]])
+io.line([:choice_runtime_heterogeneity_success [render(first)] [render(second)]])

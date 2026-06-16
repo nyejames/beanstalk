@@ -1,3 +1,3 @@
 import @./#page { symbol }
 
-io(symbol)
+io.line([: [symbol]])

@@ -1,2 +1,2 @@
 value = not 1
-io(value)
+io.line([: [value]])

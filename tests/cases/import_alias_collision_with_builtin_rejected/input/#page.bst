@@ -1,2 +1,2 @@
-import @core/io { io as Error }
+import @core/io { line as Error }
 Error("hello")

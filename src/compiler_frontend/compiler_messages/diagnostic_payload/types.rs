@@ -1311,6 +1311,7 @@ pub enum InvalidStandaloneStatementReason {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NamespaceTypeValueMisuseKind {
+    Namespace,
     Type,
     Value,
 }

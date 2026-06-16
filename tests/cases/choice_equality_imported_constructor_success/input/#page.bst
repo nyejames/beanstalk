@@ -5,11 +5,11 @@ b Response = Response::Err("bad")
 c Response = Response::Err("good")
 
 if a is b:
-    io("equal")
+    io.line("equal")
 ;
 
 if a is c:
-    io("different")
+    io.line("different")
 else
-    io("not equal")
+    io.line("not equal")
 ;

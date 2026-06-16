@@ -11,7 +11,7 @@ Response ::
 
 r = Response::Pending(3, message = "waiting")
 if r is:
-    Success => io("done")
-    Err(message) => io(message)
-    Pending(retry_count, message) => io(["[retry_count] [message]"])
+    Success => io.line("done")
+    Err(message) => io.line([: [message]])
+    Pending(retry_count, message) => io.line([: [retry_count] [message]])
 ;

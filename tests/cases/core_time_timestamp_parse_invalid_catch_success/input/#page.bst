@@ -6,4 +6,4 @@ ts = time.timestamp_from_iso_string("not-a-date") catch:
 ;
 
 millis = time.unix_milliseconds(ts)
-io([:timestamp_parse_catch millis=[millis]])
+io.line([:timestamp_parse_catch millis=[millis]])

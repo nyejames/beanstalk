@@ -1,4 +1,4 @@
 if 1 is:
-    1 as one => io("ok")
-    else => io("no")
+    1 as one => io.line("ok")
+    else => io.line("no")
 ;

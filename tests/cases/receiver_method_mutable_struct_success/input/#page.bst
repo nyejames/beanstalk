@@ -8,4 +8,4 @@ increment |this ~Counter|:
 
 c ~= Counter(5)
 ~c.increment()
-io(c.count)
+io.line([: [c.count]])

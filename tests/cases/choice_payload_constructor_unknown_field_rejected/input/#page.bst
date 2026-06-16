@@ -1,4 +1,4 @@
 Response :: Success, Err | message String |;
 
 e = Response::Err(unknown = "bad")
-io("ok")
+io.line("ok")

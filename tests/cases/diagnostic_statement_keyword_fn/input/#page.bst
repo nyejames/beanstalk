@@ -1,4 +1,4 @@
 -- Test fn keyword
 fn hello():
-    io("hi")
+    io.line("hi")
 ;

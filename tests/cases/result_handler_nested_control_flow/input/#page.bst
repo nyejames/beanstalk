@@ -22,7 +22,7 @@ ok_name, ok_number = outer("Ana") catch:
 missing_name, missing_number = outer("") catch:
     then "missing-fallback", -1
 ;
-io(ok_name)
-io(ok_number)
-io(missing_name)
-io(missing_number)
+io.line([: [ok_name]])
+io.line([: [ok_number]])
+io.line([: [missing_name]])
+io.line([: [missing_number]])

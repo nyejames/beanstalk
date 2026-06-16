@@ -8,4 +8,4 @@ sec = time.as_seconds(d)
 value time.Duration = time.duration_from_seconds(2.0)
 millis = time.as_milliseconds(value)
 
-io([:namespace sec=[sec] millis=[millis]])
+io.line([:namespace sec=[sec] millis=[millis]])

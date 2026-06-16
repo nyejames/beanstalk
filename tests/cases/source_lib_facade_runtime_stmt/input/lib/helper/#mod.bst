@@ -1,2 +1,2 @@
 greet #= "hello"
-io("bad runtime code")
+io.line("bad runtime code")

@@ -3,5 +3,5 @@ pair || -> Int, Int:
 ;
 
 a, c ~= pair()
-io(a)
-io(c)
+io.line([: [a]])
+io.line([: [c]])

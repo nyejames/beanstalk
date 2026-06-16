@@ -89,7 +89,7 @@ fn create_multiple_expressions_inner(
 
         // Newlines are expression terminators almost everywhere else. Only normalize
         // them here when we're inside a parenthesized list so multiline calls like
-        // `io(\n value\n)` leave us positioned on the comma or `)`.
+        // `io.line(\n value\n)` leave us positioned on the comma or `)`.
         if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::Newline {
             token_stream.skip_newlines();
         }

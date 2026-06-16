@@ -2,4 +2,4 @@ EQUATABLE must:
     equals |This, other This| -> Bool
 ;
 
-io("named This parameter accepted")
+io.line("named This parameter accepted")

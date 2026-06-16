@@ -10,4 +10,4 @@ render |this Card| -> String:
 
 Card must RENDERABLE
 
-io("imported trait reference resolved")
+io.line("imported trait reference resolved")

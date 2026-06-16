@@ -333,3 +333,32 @@ fn parsed_type_ref_map_remaps_key_value_and_location() {
         _ => panic!("expected Map"),
     }
 }
+
+#[test]
+fn parsed_type_ref_qualified_remaps_all_path_components_and_location() {
+    let mut local = StringTable::new();
+    let mut global = StringTable::new();
+
+    let root_name = local.intern("io");
+    let child_name = local.intern("input");
+    let type_name = local.intern("Input");
+
+    let mut parsed = ParsedTypeRef::Qualified {
+        path: vec![root_name, child_name, type_name],
+        location: make_location(&mut local),
+    };
+
+    let remap = global.merge_from(&local);
+    parsed.remap_string_ids(&remap);
+
+    match parsed {
+        ParsedTypeRef::Qualified { path, location } => {
+            assert_eq!(path.len(), 3);
+            assert_eq!(global.resolve(path[0]), "io");
+            assert_eq!(global.resolve(path[1]), "input");
+            assert_eq!(global.resolve(path[2]), "Input");
+            assert_test_location(&location, &global);
+        }
+        _ => panic!("expected Qualified type"),
+    }
+}

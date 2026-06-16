@@ -479,6 +479,26 @@ pub(crate) fn namespace_type_value_misuse_message(
         (NamespaceTypeValueMisuseKind::Value, NamespaceTypeValueMisuseKind::Type) => {
             format!("`{name}` is a type member of the import record and cannot be used as a value.")
         }
+        (NamespaceTypeValueMisuseKind::Value, NamespaceTypeValueMisuseKind::Namespace) => {
+            format!(
+                "`{name}` is a namespace member of the import record and cannot be used as a value or type."
+            )
+        }
+        (NamespaceTypeValueMisuseKind::Type, NamespaceTypeValueMisuseKind::Namespace) => {
+            format!(
+                "`{name}` is a namespace member of the import record and cannot be used as a type."
+            )
+        }
+        (NamespaceTypeValueMisuseKind::Namespace, NamespaceTypeValueMisuseKind::Value) => {
+            format!(
+                "`{name}` is a value member of the import record and cannot be used as a namespace."
+            )
+        }
+        (NamespaceTypeValueMisuseKind::Namespace, NamespaceTypeValueMisuseKind::Type) => {
+            format!(
+                "`{name}` is a type member of the import record and cannot be used as a namespace."
+            )
+        }
         _ => format!("`{name}` cannot be used in this context."),
     }
 }

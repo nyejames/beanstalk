@@ -433,7 +433,7 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
             ValueMode::ImmutableOwned,
         )),
         guard: Some(Expression::host_function_call(
-            crate::compiler_frontend::external_packages::ExternalFunctionId::Io,
+            crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine,
             vec![Expression::bool(
                 true,
                 test_location(3),

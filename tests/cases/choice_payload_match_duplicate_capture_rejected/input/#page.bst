@@ -9,6 +9,6 @@ Response ::
 r = Response::Pending(3, "waiting")
 
 if r is:
-    Pending(retry_count, retry_count) => io("ok")
-    Success => io("ok")
+    Pending(retry_count, retry_count) => io.line("ok")
+    Success => io.line("ok")
 ;

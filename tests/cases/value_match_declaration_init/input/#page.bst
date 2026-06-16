@@ -13,4 +13,4 @@ label_for |status Status| -> String:
 ;
 
 label = label_for(Status::Ready)
-io([:value match declaration init label=[label]])
+io.line([:value match declaration init label=[label]])

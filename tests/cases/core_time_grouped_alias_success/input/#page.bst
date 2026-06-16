@@ -13,4 +13,4 @@ d2 = millis(500.0)
 sec = seconds_value(d1)
 m = millis_value(d2)
 
-io([:alias sec=[sec] millis=[m]])
+io.line([:alias sec=[sec] millis=[m]])

@@ -12,4 +12,4 @@ recover || -> Int:
     ;
 ;
 
-io(recover())
+io.line([: [recover()]])

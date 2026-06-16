@@ -16,4 +16,4 @@ ts = parse_epoch_plus_one() catch:
 millis = time.unix_milliseconds(ts)
 iso = time.to_iso_string(ts)
 
-io([:timestamp_parse millis=[millis] iso=[iso]])
+io.line([:timestamp_parse millis=[millis] iso=[iso]])

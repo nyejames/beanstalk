@@ -3,4 +3,4 @@ pair |condition Bool| -> Float, String:
 ;
 
 a, b = pair(true)
-io("value if return multi coerce test")
+io.line("value if return multi coerce test")

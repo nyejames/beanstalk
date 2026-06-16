@@ -1,3 +1,3 @@
 import @missing/package { foo }
 
-io("hello")
+io.line("hello")

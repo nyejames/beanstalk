@@ -8,13 +8,13 @@ right Maybe of Int = Maybe::Some(1)
 other Maybe of Int = Maybe::Some(2)
 
 if left is right:
-    io("same")
+    io.line("same")
 else
-    io("different")
+    io.line("different")
 ;
 
 if left is other:
-    io("unexpected")
+    io.line("unexpected")
 else
-    io("not same")
+    io.line("not same")
 ;

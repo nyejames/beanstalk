@@ -1,4 +1,4 @@
-# TODO(display): When io() accepts values through the Display-style coercion path,
+# TODO(display): When io.line() accepts values through the Display-style coercion path,
 # replace this negative test with a positive struct display/coercion fixture.
 
 [backends.html]

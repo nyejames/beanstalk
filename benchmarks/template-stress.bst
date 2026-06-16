@@ -304,31 +304,31 @@ shell_style #= [$insert("style"):
 
 -- Stress test entry
 run_tests ||:
-    io("Template stress test starting")
+    io.line("Template stress test starting")
     
     -- Deep nesting
     nested_result = build_nested(10)
-    io(nested_result)
+    io.line([: [nested_result]])
     
     -- Repeated slots
     repeated_result = build_repeated_slots(20)
-    io(repeated_result)
+    io.line([: [repeated_result]])
     
     -- Fresh mixing
     fresh_result = build_fresh_mix()
-    io(fresh_result)
+    io.line([: [fresh_result]])
     
     -- Formatter chains
     formatter_result = build_formatter_chain()
-    io(formatter_result)
+    io.line([: [formatter_result]])
     
     -- Multi insert
     multi_result = build_multi_insert()
-    io(multi_result)
+    io.line([: [multi_result]])
     
     -- Positional
     pos_result = build_positional_test()
-    io(pos_result)
+    io.line([: [pos_result]])
 ;
 
 -- Final output

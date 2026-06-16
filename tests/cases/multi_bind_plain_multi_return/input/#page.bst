@@ -3,5 +3,5 @@ pair || -> String, Int:
 ;
 
 left, right = pair()
-io(left)
-io(right)
+io.line([: [left]])
+io.line([: [right]])

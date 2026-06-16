@@ -1,3 +1,3 @@
 import @html { context_2d }
 
-io("should fail")
+io.line("should fail")

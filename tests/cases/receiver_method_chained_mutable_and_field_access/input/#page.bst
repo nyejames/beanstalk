@@ -8,4 +8,4 @@ shift |this ~Box|:
 
 b ~= Box(7)
 ~b.shift()
-io(b.x)
+io.line([: [b.x]])

@@ -11,4 +11,4 @@ millis0 = time.unix_milliseconds(ts0)
 sec1 = time.unix_seconds(ts1)
 millis2 = time.unix_milliseconds(ts2)
 
-io([:timestamp_conversions iso0=[iso0] iso1=[iso1] millis0=[millis0] sec1=[sec1] millis2=[millis2]])
+io.line([:timestamp_conversions iso0=[iso0] iso1=[iso1] millis0=[millis0] sec1=[sec1] millis2=[millis2]])

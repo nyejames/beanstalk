@@ -1,2 +1,2 @@
 value = true and 1
-io(value)
+io.line([: [value]])

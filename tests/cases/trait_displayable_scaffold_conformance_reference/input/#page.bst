@@ -8,4 +8,4 @@ display |this Label| -> String:
 
 Label must DISPLAYABLE
 
-io("displayable scaffold reference resolved")
+io.line("displayable scaffold reference resolved")

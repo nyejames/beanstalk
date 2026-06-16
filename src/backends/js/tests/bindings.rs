@@ -209,7 +209,7 @@ fn alias_local_read_emits_bs_read() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
 
-    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine;
 
     let assign_source = statement(
         1,
@@ -291,7 +291,7 @@ fn alias_local_read_emits_bs_read() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_io(__bs_read({alias_name}))")),
+            .contains(&format!("__bs_io_line(__bs_read({alias_name}))")),
         "reading an alias local in a host call must go through __bs_read"
     );
 }
@@ -518,7 +518,7 @@ fn computed_place_read_composes_with_bs_read() {
     let mut string_table = StringTable::new();
     let (type_environment, types) = build_type_environment();
 
-    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::IoLine;
 
     let log_field = statement(
         1,

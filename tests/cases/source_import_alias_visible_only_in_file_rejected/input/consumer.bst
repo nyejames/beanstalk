@@ -1,4 +1,4 @@
 use_it ||:
     user = DocsUser("Other")
-    io(user.name)
+    io.line([: [user.name]])
 ;

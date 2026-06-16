@@ -44,9 +44,16 @@ pub enum ParsedTypeRef {
         location: SourceLocation,
     },
 
-    Namespaced {
-        namespace: StringId,
-        name: StringId,
+    /// A dotted namespace-qualified type path such as `Canvas.Context` or
+    /// `io.input.Input`.
+    ///
+    /// WHAT: stores the unresolved path components before type resolution walks the
+    ///      visible namespace records.
+    /// WHY: external package surfaces expose nested namespaces, so type position must
+    ///      support arbitrary-depth dotted paths while keeping the syntax representation
+    ///      separate from semantic type identity.
+    Qualified {
+        path: Vec<StringId>,
         location: SourceLocation,
     },
 
@@ -135,13 +142,10 @@ impl ParsedTypeRef {
                 *name = remap.get(*name);
                 location.remap_string_ids(remap);
             }
-            ParsedTypeRef::Namespaced {
-                namespace,
-                name,
-                location,
-            } => {
-                *namespace = remap.get(*namespace);
-                *name = remap.get(*name);
+            ParsedTypeRef::Qualified { path, location } => {
+                for component in path {
+                    *component = remap.get(*component);
+                }
                 location.remap_string_ids(remap);
             }
 

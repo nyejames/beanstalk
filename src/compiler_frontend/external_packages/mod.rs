@@ -3,10 +3,11 @@
 //! WHAT: defines the external-call surface the frontend and borrow checker understand today.
 //! WHY: external calls need one canonical metadata source for signature lowering and call semantics.
 //!
-//! External symbols are registered by package scope: `(package_path, symbol_name)` uniquely
-//! identifies a function or type. The same symbol name may exist in multiple packages.
-//! The prelude (`io`, `IO`) is the only exception where bare-name lookup is valid.
-//! All other external symbol resolution must go through file-local `visible_external_symbols`.
+//! External symbols are registered by package scope: `(package_path, symbol_path)` uniquely
+//! identifies a function, type, or constant. The same leaf name may exist under different
+//! namespace paths in the same package. The prelude `io` namespace alias is the only exception where
+//! bare-name lookup is valid. All other external symbol resolution must go through file-local
+//! `visible_external_symbols`.
 //!
 //! ## Module layout
 //!
@@ -14,12 +15,14 @@
 //! - `abi`: backend-agnostic ABI types (`ExternalAbiType`, `ExternalParameter`, etc.)
 //! - `definitions`: function/type/constant definitions and lowering metadata
 //! - `registry`: `ExternalPackageRegistry` with registration and lookup APIs
+//! - `symbol_path`: structured multi-component external symbol path (`ExternalSymbolPath`)
 //! - `packages/`: test-only package definition files
 
 mod abi;
 mod definitions;
 mod ids;
 mod registry;
+mod symbol_path;
 
 mod packages;
 
@@ -30,6 +33,7 @@ pub use abi::*;
 pub use definitions::*;
 pub use ids::*;
 pub use registry::*;
+pub use symbol_path::*;
 
 /// Builds the mandatory external package registry used by normal frontend compilation.
 ///

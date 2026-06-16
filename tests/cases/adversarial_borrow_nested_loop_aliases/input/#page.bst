@@ -4,14 +4,14 @@ counter ~= 0
 loop counter < 3:
     if counter is 1:
         alias = data
-        io(alias)
+        io.line([: [alias]])
     else
         copied = copy(data)
-        io(copied)
+        io.line([: [copied]])
     ;
 
     counter = counter + 1
 ;
 
 final = data
-io(final)
+io.line([: [final]])

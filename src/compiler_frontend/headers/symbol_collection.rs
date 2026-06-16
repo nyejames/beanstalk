@@ -162,7 +162,10 @@ fn receiver_method_receiver_name(
 
     match &first_parameter.type_annotation {
         ParsedTypeRef::Named { name, .. } => Some(*name),
-        ParsedTypeRef::Namespaced { name, .. } => Some(*name),
+        ParsedTypeRef::Qualified { path, .. } => {
+            // Receiver type name is the final segment of a namespace-qualified path.
+            path.last().copied()
+        }
         // Builtin scalar types are parsed directly; map them to their language-visible names.
         ParsedTypeRef::BuiltinInt { .. } => Some(string_table.intern("Int")),
         ParsedTypeRef::BuiltinFloat { .. } => Some(string_table.intern("Float")),

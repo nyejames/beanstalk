@@ -7,9 +7,9 @@ can_error |ok Bool| -> String, Error!:
 ;
 
 value = can_error(true) catch |err|:
-    io(err.message)
+    io.line([: [err.message]])
     assert(false, "unreachable error path")
 ;
 
-io("value catch assert false terminal")
-io(value)
+io.line("value catch assert false terminal")
+io.line([: [value]])

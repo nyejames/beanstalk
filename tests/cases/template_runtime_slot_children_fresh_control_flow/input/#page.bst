@@ -17,4 +17,4 @@ rendered = [list:
     ]
 ]
 
-io(rendered)
+io.line(rendered)

@@ -7,5 +7,5 @@ bad1 = d.millis
 ts = timestamp_now()
 bad2 = ts.seconds
 
-io(bad1)
-io(bad2)
+io.line([: [bad1]])
+io.line([: [bad2]])

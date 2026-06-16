@@ -22,7 +22,7 @@ page_head #= theme_head
 
         import @models { User as ModelUser }
 
-        Err(message as error_message) => io(error_message)
+        Err(message as error_message) => io.line(error_message)
     ]
 
     Aliases are useful when a name has a domain-specific meaning, when a type annotation is long,
@@ -101,7 +101,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         UserId as Int
 
-        io(UserId)      -- Error: UserId is a type alias, not a value
+        io.line(UserId)      -- Error: UserId is a type alias, not a value
         id = UserId(42) -- Error: UserId is not a constructor
         copy_id = copy UserId -- Error: aliases cannot be copied
     ]
@@ -170,7 +170,7 @@ page_head #= theme_head
         name Username = "Bean"
 
         label = format_user(id, name)
-        io(label)
+        io.line(label)
     ]
 
     Because aliases are transparent, passing an `Int` where `UserId` is expected is valid.
@@ -179,7 +179,7 @@ page_head #= theme_head
         UserId as Int
 
         print_id |id UserId|:
-            io(id)
+            io.line(id)
         ;
 
         raw_id Int = 1
@@ -412,8 +412,8 @@ page_head #= theme_head
         response = Response::Err("Missing title")
 
         if response is:
-            Err(message as error_message) => io(error_message)
-            Success(value as body) => io(body)
+            Err(message as error_message) => io.line(error_message)
+            Success(value as body) => io.line(body)
         ;
     ]
 
@@ -421,7 +421,7 @@ page_head #= theme_head
     The name after `as` is the local capture name visible inside that arm.
 
     [codeblock, $code("bst"):
-        Err(message as error_message) => io(error_message)
+        Err(message as error_message) => io.line(error_message)
     ]
 
     This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.
@@ -429,7 +429,7 @@ page_head #= theme_head
     Without `as`, the capture name is the field name.
 
     [codeblock, $code("bst"):
-        Err(message) => io(message)
+        Err(message) => io.line(message)
     ]
 
     Capture aliases are useful when a field name would collide with an existing variable or when the local meaning is clearer
@@ -439,8 +439,8 @@ page_head #= theme_head
         message = "outer message"
 
         if response is:
-            Err(message as error_message) => io(error_message)
-            else => io(message)
+            Err(message as error_message) => io.line(error_message)
+            else => io.line(message)
         ;
     ]
 
@@ -487,7 +487,7 @@ page_head #= theme_head
     Use a Choice payload capture alias when the field name is correct on the type but awkward in one arm:
 
     [codeblock, $code("bst"):
-        Failed(message as failure_message) => io(failure_message)
+        Failed(message as failure_message) => io.line(failure_message)
     ]
 
     A good rule:

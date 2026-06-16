@@ -4,10 +4,15 @@
 //! WHY: host metadata feeds both AST lowering and borrow-check call summaries, so small
 //! regressions here can break multiple frontend stages at once.
 
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::{
-    ExternalAbiType, ExternalAccessKind, ExternalFunctionDef, ExternalFunctionId,
-    ExternalFunctionLowerings, ExternalPackageOrigin, ExternalPackageRegistry, ExternalParameter,
-    ExternalReturnAlias, ExternalReturnSlot, ExternalSignatureType, external_success_returns,
+    ExternalAbiType, ExternalAccessKind, ExternalConstantDef, ExternalConstantId,
+    ExternalConstantValue, ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings,
+    ExternalJsLowering, ExternalPackageOrigin, ExternalPackageRegistry, ExternalParameter,
+    ExternalReturnAlias, ExternalReturnSlot, ExternalSignatureType, ExternalSymbolId,
+    ExternalSymbolPath, ExternalTypeDef, ExternalTypeId, IO_INPUT_EXTERNAL_TYPE_ID,
+    external_success_returns,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -142,8 +147,11 @@ fn resolve_package_function_selects_correct_package() {
 fn builtin_packages_resolve_by_path_and_symbol_name() {
     let registry = ExternalPackageRegistry::new();
 
-    let io = registry.resolve_package_function("@core/io", "io");
-    assert!(io.is_some(), "@core/io/io should resolve by path and name");
+    let io = registry.resolve_package_function("@core/io", "line");
+    assert!(
+        io.is_some(),
+        "@core/io/line should resolve by path and name"
+    );
 
     let get = registry.resolve_package_function("@core/collections", "__bs_collection_get");
     assert!(
@@ -193,7 +201,7 @@ fn package_origin_recorded_for_integration_test_packages() {
 fn resolve_function_package_returns_readable_path() {
     let registry = ExternalPackageRegistry::new();
 
-    let package_path = registry.resolve_function_package(ExternalFunctionId::Io);
+    let package_path = registry.resolve_function_package(ExternalFunctionId::IoLine);
     assert_eq!(package_path, Some("@core/io"));
 }
 
@@ -256,4 +264,679 @@ fn virtual_package_detection_uses_symbol_suffixes() {
 
     assert!(registry.is_virtual_package_import(&package_symbol, &string_table));
     assert!(!registry.is_virtual_package_import(&source_path, &string_table));
+}
+
+// ------------------------------------------------------------------
+// Phase 1.1 path-aware external package surface tests
+// ------------------------------------------------------------------
+
+fn empty_void_function(name: &str) -> ExternalFunctionDef {
+    ExternalFunctionDef {
+        name: name.to_owned(),
+        parameters: Vec::new(),
+        returns: external_success_returns(ExternalAbiType::Void, ExternalReturnAlias::Fresh),
+        error_return_type: None,
+        lowerings: ExternalFunctionLowerings::default(),
+    }
+}
+
+#[test]
+fn register_function_at_path_rejects_duplicate_path() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("foo"),
+            ExternalFunctionId::Synthetic(10),
+            empty_void_function("foo"),
+        )
+        .expect("first registration at foo should succeed");
+
+    let result = registry.register_function_at_path(
+        package_id,
+        ExternalSymbolPath::from_single("foo"),
+        ExternalFunctionId::Synthetic(11),
+        empty_void_function("foo"),
+    );
+
+    assert!(
+        result.is_err(),
+        "duplicate function path in one package must be rejected"
+    );
+}
+
+#[test]
+fn same_function_leaf_under_different_namespaces_allowed() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_components(vec!["a".to_owned(), "foo".to_owned()]),
+            ExternalFunctionId::Synthetic(20),
+            empty_void_function("foo"),
+        )
+        .expect("a.foo should register");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_components(vec!["b".to_owned(), "foo".to_owned()]),
+            ExternalFunctionId::Synthetic(21),
+            empty_void_function("foo"),
+        )
+        .expect("b.foo should register");
+
+    let a_foo = registry
+        .resolve_package_function_by_path(
+            "@test/path",
+            &ExternalSymbolPath::from_components(vec!["a".to_owned(), "foo".to_owned()]),
+        )
+        .map(|(id, _)| id);
+    let b_foo = registry
+        .resolve_package_function_by_path(
+            "@test/path",
+            &ExternalSymbolPath::from_components(vec!["b".to_owned(), "foo".to_owned()]),
+        )
+        .map(|(id, _)| id);
+
+    assert_eq!(a_foo, Some(ExternalFunctionId::Synthetic(20)));
+    assert_eq!(b_foo, Some(ExternalFunctionId::Synthetic(21)));
+    assert_ne!(
+        a_foo, b_foo,
+        "same leaf under different namespaces must have distinct IDs"
+    );
+}
+
+#[test]
+fn function_type_collision_at_same_path_rejected() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("foo"),
+            ExternalFunctionId::Synthetic(30),
+            empty_void_function("foo"),
+        )
+        .expect("function at foo should register");
+
+    let result = registry.register_type_at_path(
+        package_id,
+        ExternalSymbolPath::from_single("foo"),
+        ExternalTypeId(31),
+        ExternalTypeDef {
+            name: "foo".to_owned(),
+            package_id,
+            abi_type: ExternalAbiType::Handle,
+        },
+    );
+
+    assert!(
+        result.is_err(),
+        "function and type at the same path must be rejected"
+    );
+}
+
+#[test]
+fn function_constant_collision_at_same_path_rejected() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("foo"),
+            ExternalFunctionId::Synthetic(40),
+            empty_void_function("foo"),
+        )
+        .expect("function at foo should register");
+
+    let result = registry.register_constant_at_path(
+        package_id,
+        ExternalSymbolPath::from_single("foo"),
+        ExternalConstantId(41),
+        ExternalConstantDef {
+            name: "foo".to_owned(),
+            data_type: ExternalAbiType::F64,
+            value: ExternalConstantValue::Float(1.0),
+        },
+    );
+
+    assert!(
+        result.is_err(),
+        "function and constant at the same path must be rejected"
+    );
+}
+
+#[test]
+fn nested_function_path_registers_and_resolves() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    let path = ExternalSymbolPath::from_components(vec![
+        "io".to_owned(),
+        "input".to_owned(),
+        "new".to_owned(),
+    ]);
+
+    registry
+        .register_function_at_path(
+            package_id,
+            path.clone(),
+            ExternalFunctionId::Synthetic(50),
+            empty_void_function("new"),
+        )
+        .expect("nested path registration should succeed");
+
+    let resolved = registry
+        .resolve_package_function_by_path("@test/path", &path)
+        .map(|(id, _)| id);
+    assert_eq!(resolved, Some(ExternalFunctionId::Synthetic(50)));
+
+    // One-component lookup for the same leaf should not find the nested symbol.
+    let flat = registry.resolve_package_function("@test/path", "new");
+    assert!(
+        flat.is_none(),
+        "nested symbol must not resolve through flat leaf lookup"
+    );
+}
+
+#[test]
+fn one_component_external_imports_still_resolve_by_path() {
+    let registry = ExternalPackageRegistry::new();
+
+    let io = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("line"))
+        .map(|(id, _)| id);
+    assert_eq!(io, Some(ExternalFunctionId::IoLine));
+
+    let io_flat = registry.resolve_package_function("@core/io", "line");
+    assert!(io_flat.is_some(), "one-component lookup must still resolve");
+}
+
+#[test]
+fn package_surface_iteration_exposes_one_component_paths_only() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .expect("test package registration should not collide");
+
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("line"),
+            ExternalFunctionId::Synthetic(60),
+            empty_void_function("line"),
+        )
+        .unwrap();
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_components(vec!["input".to_owned(), "new".to_owned()]),
+            ExternalFunctionId::Synthetic(61),
+            empty_void_function("new"),
+        )
+        .unwrap();
+
+    let package = registry.get_package("@test/path").unwrap();
+    let flat_names: Vec<&str> = package
+        .function_symbol_ids()
+        .filter(|(path, _)| path.is_single())
+        .map(|(path, _)| path.leaf())
+        .collect();
+    assert_eq!(flat_names, vec!["line"]);
+}
+
+// ------------------------------------------------------------------
+// StringContent signature tests
+// ------------------------------------------------------------------
+
+#[test]
+fn string_content_resolves_to_string_datatype() {
+    assert_eq!(
+        ExternalSignatureType::StringContent.to_datatype(),
+        Some(DataType::StringSlice)
+    );
+}
+
+#[test]
+fn string_content_resolves_to_canonical_string_type_id() {
+    let mut type_environment = TypeEnvironment::new();
+    let string_type_id = type_environment.builtins().string;
+
+    assert_eq!(
+        ExternalSignatureType::StringContent.to_parameter_type_id(&mut type_environment),
+        Some(string_type_id)
+    );
+
+    let none_type_id = type_environment.builtins().none;
+    let return_type_id =
+        ExternalSignatureType::StringContent.to_type_id(&mut type_environment, none_type_id);
+    assert_eq!(return_type_id, Some(string_type_id));
+}
+
+#[test]
+fn prelude_symbols_and_namespace_aliases_cannot_share_public_name() {
+    let mut registry = ExternalPackageRegistry::new();
+
+    registry
+        .register_prelude_namespace_alias("shared", "@core/io")
+        .expect("first prelude namespace alias should register");
+    let symbol_result =
+        registry.register_prelude_symbol("shared", ExternalSymbolId::Type(ExternalTypeId(9000)));
+    assert!(
+        symbol_result.is_err(),
+        "prelude symbol should reject a namespace alias name"
+    );
+
+    let mut registry = ExternalPackageRegistry::new();
+    registry
+        .register_prelude_symbol("shared", ExternalSymbolId::Type(ExternalTypeId(9001)))
+        .expect("first prelude symbol should register");
+    let alias_result = registry.register_prelude_namespace_alias("shared", "@core/io");
+    assert!(
+        alias_result.is_err(),
+        "prelude namespace alias should reject a symbol name"
+    );
+}
+
+// ------------------------------------------------------------------
+// Core IO console namespace tests
+// ------------------------------------------------------------------
+
+/// Verifies that the five V1 console functions are registered under `@core/io`.
+/// WHAT: ensures the public `io.print/line/debug/warn/error` surface is present.
+/// WHY: the previous flat `io(...)` function and `IO` type are gone; these replace them.
+#[test]
+fn core_io_console_functions_are_registered_at_namespace_path() {
+    let registry = ExternalPackageRegistry::new();
+
+    let print = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("print"))
+        .map(|(id, _)| id);
+    let line = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("line"))
+        .map(|(id, _)| id);
+    let debug = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("debug"))
+        .map(|(id, _)| id);
+    let warn = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("warn"))
+        .map(|(id, _)| id);
+    let error = registry
+        .resolve_package_function_by_path("@core/io", &ExternalSymbolPath::from_single("error"))
+        .map(|(id, _)| id);
+
+    assert_eq!(print, Some(ExternalFunctionId::IoPrint));
+    assert_eq!(line, Some(ExternalFunctionId::IoLine));
+    assert_eq!(debug, Some(ExternalFunctionId::IoDebug));
+    assert_eq!(warn, Some(ExternalFunctionId::IoWarn));
+    assert_eq!(error, Some(ExternalFunctionId::IoError));
+}
+
+/// Verifies that each console function accepts only string-content input.
+/// WHAT: console output must reject non-string values at the external boundary.
+/// WHY: this replaces the old IO-specific scalar-rendering validation branch with the
+/// reusable `StringContent` signature path.
+#[test]
+fn core_io_console_functions_use_string_content_parameter() {
+    let registry = ExternalPackageRegistry::new();
+
+    for function_id in [
+        ExternalFunctionId::IoPrint,
+        ExternalFunctionId::IoLine,
+        ExternalFunctionId::IoDebug,
+        ExternalFunctionId::IoWarn,
+        ExternalFunctionId::IoError,
+    ] {
+        let function = registry
+            .get_function_by_id(function_id)
+            .expect("console function should be registered");
+        assert_eq!(
+            function.parameters.len(),
+            1,
+            "{} should take exactly one argument",
+            function_id.name()
+        );
+        assert_eq!(
+            function.parameters[0].language_type,
+            ExternalSignatureType::StringContent,
+            "{} should use StringContent parameter",
+            function_id.name()
+        );
+    }
+}
+
+/// Verifies that console functions return Void and have no error slot.
+/// WHAT: V1 console output is infallible and produces no value.
+/// WHY: callers must not be able to postfix `!` or `catch` these calls.
+#[test]
+fn core_io_console_functions_return_void() {
+    let registry = ExternalPackageRegistry::new();
+
+    for function_id in [
+        ExternalFunctionId::IoPrint,
+        ExternalFunctionId::IoLine,
+        ExternalFunctionId::IoDebug,
+        ExternalFunctionId::IoWarn,
+        ExternalFunctionId::IoError,
+    ] {
+        let function = registry
+            .get_function_by_id(function_id)
+            .expect("console function should be registered");
+        assert!(
+            function.returns.is_empty(),
+            "{} should return no slots because Void maps to zero returns, got {}",
+            function_id.name(),
+            function.returns.len()
+        );
+        assert!(
+            function.error_return_type.is_none(),
+            "{} should not have an error return type",
+            function_id.name()
+        );
+    }
+}
+
+/// Verifies that every Core IO V1 function is JS-backed and intentionally unsupported on Wasm.
+/// WHAT: backend validation only needs lowering metadata; unsupported targets are represented by
+///       an absent lowering entry rather than a hand-written IO special case.
+/// WHY: Phase 5 depends on this metadata shape so reachable HTML-Wasm IO calls fail before
+///      lowering while HTML-JS continues to emit runtime helpers.
+#[test]
+fn core_io_functions_have_js_lowerings_and_no_wasm_lowerings() {
+    let registry = ExternalPackageRegistry::new();
+
+    for function_id in [
+        ExternalFunctionId::IoPrint,
+        ExternalFunctionId::IoLine,
+        ExternalFunctionId::IoDebug,
+        ExternalFunctionId::IoWarn,
+        ExternalFunctionId::IoError,
+        ExternalFunctionId::IoInputNew,
+        ExternalFunctionId::IoInputUpdate,
+        ExternalFunctionId::IoInputClose,
+        ExternalFunctionId::IoInputKeyDown,
+        ExternalFunctionId::IoInputKeyPressed,
+        ExternalFunctionId::IoInputKeyReleased,
+        ExternalFunctionId::IoInputPointerX,
+        ExternalFunctionId::IoInputPointerY,
+        ExternalFunctionId::IoInputPointerDown,
+        ExternalFunctionId::IoInputPointerPressed,
+        ExternalFunctionId::IoInputPointerReleased,
+        ExternalFunctionId::IoInputLastKeyPressed,
+        ExternalFunctionId::IoInputLastKeyReleased,
+        ExternalFunctionId::IoInputLastPointerPressed,
+        ExternalFunctionId::IoInputLastPointerReleased,
+    ] {
+        let function = registry
+            .get_function_by_id(function_id)
+            .expect("core IO function should be registered");
+        match function.lowerings.js.as_ref() {
+            Some(ExternalJsLowering::RuntimeFunction(helper_name)) => {
+                assert_eq!(
+                    helper_name,
+                    function_id.name(),
+                    "{} should lower to the matching JS runtime helper",
+                    function_id.name()
+                );
+            }
+            other => panic!(
+                "{} should lower to a JS runtime helper, got {other:?}",
+                function_id.name()
+            ),
+        }
+        assert!(
+            function.lowerings.wasm.is_none(),
+            "{} should rely on backend validation for Wasm rejection",
+            function_id.name()
+        );
+    }
+}
+
+/// Verifies that the old public `IO` type is no longer registered in `@core/io`.
+/// WHAT: the `IO` external opaque type was part of the callable `io(...)` API.
+/// WHY: removing it confirms the public type surface is gone.
+#[test]
+fn core_io_public_type_is_not_registered() {
+    let registry = ExternalPackageRegistry::new();
+    let io_type = registry.resolve_package_type("@core/io", "IO");
+    assert!(
+        io_type.is_none(),
+        "public IO type should no longer be registered in @core/io"
+    );
+}
+
+/// Verifies that the prelude registers `io` as a namespace alias to `@core/io`.
+/// WHAT: source files can write `io.line(...)` without an explicit import.
+/// WHY: the prelude must expose the lowercase namespace, not a bare function or type.
+#[test]
+fn prelude_registers_io_namespace_alias_to_core_io() {
+    let registry = ExternalPackageRegistry::new();
+    let aliases = registry.prelude_namespace_aliases_by_name();
+    assert!(
+        aliases.contains_key("io"),
+        "prelude should register io namespace alias"
+    );
+    assert_eq!(aliases["io"], "@core/io");
+}
+
+// ------------------------------------------------------------------
+// Optional external signature tests
+// ------------------------------------------------------------------
+
+/// Verifies that an external `String?` signature maps to the diagnostic option datatype.
+///
+/// WHAT: `ExternalSignatureType::Optional` carries the inner type through the same
+///       conversion path as scalar signatures.
+/// WHY: host boundaries must describe optional returns without inventing backend sentinels.
+#[test]
+fn optional_external_resolves_to_option_datatype() {
+    let optional_string = ExternalSignatureType::Optional(Box::new(ExternalSignatureType::Abi(
+        ExternalAbiType::Utf8Str,
+    )));
+
+    assert_eq!(
+        optional_string.to_datatype(),
+        Some(DataType::Option(Box::new(DataType::StringSlice)))
+    );
+}
+
+/// Verifies that an external `String?` signature interns the canonical option TypeId.
+///
+/// WHAT: optional external returns share the same `TypeId` as source-authored `String?`.
+/// WHY: pattern matching and type annotations must treat external and source options as
+///      the same type.
+#[test]
+fn optional_external_resolves_to_canonical_option_type_id() {
+    let mut type_environment = TypeEnvironment::new();
+    let string_type_id = type_environment.builtins().string;
+    let ordinary_option = type_environment.intern_option(string_type_id);
+    let none_type_id = type_environment.builtins().none;
+
+    let optional_string = ExternalSignatureType::Optional(Box::new(ExternalSignatureType::Abi(
+        ExternalAbiType::Utf8Str,
+    )));
+    let external_option = optional_string
+        .to_type_id(&mut type_environment, none_type_id)
+        .expect("external String? should resolve to a TypeId");
+
+    assert_eq!(
+        external_option, ordinary_option,
+        "external String? must use the same TypeId as ordinary String?"
+    );
+}
+
+/// Verifies that an external `String?` parameter also resolves to the canonical option TypeId.
+///
+/// WHAT: parameter and return contexts share the same optional signature conversion.
+/// WHY: keeps parameter compatibility and return typing consistent at host boundaries.
+#[test]
+fn optional_external_parameter_resolves_to_canonical_option_type_id() {
+    let mut type_environment = TypeEnvironment::new();
+    let string_type_id = type_environment.builtins().string;
+    let ordinary_option = type_environment.intern_option(string_type_id);
+
+    let optional_string = ExternalSignatureType::Optional(Box::new(ExternalSignatureType::Abi(
+        ExternalAbiType::Utf8Str,
+    )));
+    let parameter_option = optional_string
+        .to_parameter_type_id(&mut type_environment)
+        .expect("external String? parameter should resolve to a TypeId");
+
+    assert_eq!(
+        parameter_option, ordinary_option,
+        "external String? parameter must use the same TypeId as ordinary String?"
+    );
+}
+
+// ------------------------------------------------------------------
+// Core IO input metadata tests
+// ------------------------------------------------------------------
+
+/// Verifies that `io.input.Input` is registered as a nested external type.
+///
+/// WHAT: the opaque input handle type lives under the `input` namespace in `@core/io`.
+/// WHY: HIR and backends must refer to one stable external type ID, not path text.
+#[test]
+fn core_io_input_type_is_registered_at_nested_path() {
+    let registry = ExternalPackageRegistry::new();
+    let input_type = registry
+        .resolve_package_type_by_path(
+            "@core/io",
+            &ExternalSymbolPath::from_components(vec!["input".to_owned(), "Input".to_owned()]),
+        )
+        .map(|(id, _)| id);
+
+    assert_eq!(input_type, Some(IO_INPUT_EXTERNAL_TYPE_ID));
+}
+
+/// Verifies that the input functions are registered under `input.*` nested paths.
+///
+/// WHAT: each polling helper is reachable through `io.input.<name>` namespace traversal.
+/// WHY: stable IDs and nested paths replace any flat or IO-special-cased lookup.
+#[test]
+fn core_io_input_functions_are_registered_at_nested_paths() {
+    let registry = ExternalPackageRegistry::new();
+
+    let cases = [
+        ("new", ExternalFunctionId::IoInputNew),
+        ("update", ExternalFunctionId::IoInputUpdate),
+        ("close", ExternalFunctionId::IoInputClose),
+        ("key_down", ExternalFunctionId::IoInputKeyDown),
+        ("key_pressed", ExternalFunctionId::IoInputKeyPressed),
+        ("key_released", ExternalFunctionId::IoInputKeyReleased),
+        ("pointer_x", ExternalFunctionId::IoInputPointerX),
+        ("pointer_y", ExternalFunctionId::IoInputPointerY),
+        ("pointer_down", ExternalFunctionId::IoInputPointerDown),
+        ("pointer_pressed", ExternalFunctionId::IoInputPointerPressed),
+        (
+            "pointer_released",
+            ExternalFunctionId::IoInputPointerReleased,
+        ),
+        (
+            "last_key_pressed",
+            ExternalFunctionId::IoInputLastKeyPressed,
+        ),
+        (
+            "last_key_released",
+            ExternalFunctionId::IoInputLastKeyReleased,
+        ),
+        (
+            "last_pointer_pressed",
+            ExternalFunctionId::IoInputLastPointerPressed,
+        ),
+        (
+            "last_pointer_released",
+            ExternalFunctionId::IoInputLastPointerReleased,
+        ),
+    ];
+
+    for (leaf_name, expected_id) in cases {
+        let path =
+            ExternalSymbolPath::from_components(vec!["input".to_owned(), leaf_name.to_owned()]);
+        let actual_id = registry
+            .resolve_package_function_by_path("@core/io", &path)
+            .map(|(id, _)| id);
+        assert_eq!(
+            actual_id,
+            Some(expected_id),
+            "input.{leaf_name} should resolve to {expected_id:?}"
+        );
+    }
+}
+
+/// Verifies that diagnostics can recover the package-local path from a stable input function ID.
+///
+/// WHAT: `IoInputNew` is stored in HIR/backend reachability as a stable ID, but diagnostics should
+/// render its package path as `input.new`.
+/// WHY: nested external package symbols often share leaf names, so backend errors need the full
+/// package-local path to stay unambiguous.
+#[test]
+fn core_io_input_function_id_resolves_to_nested_symbol_path() {
+    let registry = ExternalPackageRegistry::new();
+    let path = registry
+        .resolve_function_symbol_path(ExternalFunctionId::IoInputNew)
+        .expect("input.new should have a package-local symbol path");
+
+    assert_eq!(path.display_text(), "input.new");
+}
+
+/// Verifies that `input.new` is fallible and returns the input handle type.
+///
+/// WHAT: creation returns `io.input.Input` on success and `Error!` on failure.
+/// WHY: callers must use postfix `!` or `catch`; the function cannot be treated as infallible.
+#[test]
+fn core_io_input_new_is_fallible_input_return() {
+    let registry = ExternalPackageRegistry::new();
+    let new_function = registry
+        .get_function_by_id(ExternalFunctionId::IoInputNew)
+        .expect("input.new should be registered");
+
+    assert!(new_function.parameters.is_empty());
+    assert_eq!(new_function.returns.len(), 1);
+    assert_eq!(
+        new_function.returns[0].value_type,
+        ExternalSignatureType::External(IO_INPUT_EXTERNAL_TYPE_ID)
+    );
+    assert_eq!(
+        new_function.error_return_type,
+        Some(ExternalSignatureType::BuiltinError)
+    );
+}
+
+/// Verifies that `input.last_key_pressed` returns `String?` using the canonical option shape.
+///
+/// WHAT: the `last_*` helpers expose optional string results.
+/// WHY: confirms the reusable optional external signature is wired for input metadata.
+#[test]
+fn core_io_input_last_key_pressed_returns_optional_string() {
+    let registry = ExternalPackageRegistry::new();
+    let last_key = registry
+        .get_function_by_id(ExternalFunctionId::IoInputLastKeyPressed)
+        .expect("input.last_key_pressed should be registered");
+
+    assert_eq!(last_key.returns.len(), 1);
+    assert_eq!(
+        last_key.returns[0].value_type,
+        ExternalSignatureType::Optional(Box::new(ExternalSignatureType::Abi(
+            ExternalAbiType::Utf8Str,
+        )))
+    );
+    assert!(last_key.error_return_type.is_none());
 }

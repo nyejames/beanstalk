@@ -8,6 +8,6 @@ raw ImportedBox of String = item
 
 maybe ImportedMaybe of Int = ImportedMaybe::Some(7)
 
-io(raw.value)
+io.line([: [raw.value]])
 
 [: generic import alias concrete alias]

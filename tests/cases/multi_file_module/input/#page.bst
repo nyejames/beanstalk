@@ -2,6 +2,6 @@
 -- Should change some of the import syntax later when it supports struct files
 import @helper { greet }
 
-io("Starting main")
+io.line("Starting main")
 greet("World")
-io("Main complete")
+io.line("Main complete")

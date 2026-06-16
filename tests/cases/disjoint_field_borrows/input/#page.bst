@@ -11,4 +11,4 @@ sum = x_ref + y_ref
 
 pair.x = sum
 pair.y = pair.y + 1
-io([: [pair.x] [pair.y]])
+io.line([: [pair.x] [pair.y]])

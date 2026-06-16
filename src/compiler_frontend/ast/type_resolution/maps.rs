@@ -42,7 +42,7 @@ pub(super) fn map_nesting_depth(parsed: &ParsedTypeRef) -> usize {
             let value_depth = map_nesting_depth(value);
             1 + key_depth.max(value_depth)
         }
-        ParsedTypeRef::Named { .. } | ParsedTypeRef::Namespaced { .. } => 0,
+        ParsedTypeRef::Named { .. } | ParsedTypeRef::Qualified { .. } => 0,
         ParsedTypeRef::Collection { element, .. } => map_nesting_depth(element),
         ParsedTypeRef::Optional { inner, .. } => map_nesting_depth(inner),
         ParsedTypeRef::Applied { arguments, .. } => {

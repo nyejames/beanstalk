@@ -22,7 +22,7 @@ local_name, local_count = local_recover()
 prop_name, prop_count = propagate_recover() catch:
     then "prop", 20
 ;
-io(local_name)
-io(local_count)
-io(prop_name)
-io(prop_count)
+io.line([: [local_name]])
+io.line([: [local_count]])
+io.line([: [prop_name]])
+io.line([: [prop_count]])

@@ -1,5 +1,5 @@
--- TODO(display): Replace this failure fixture once io() accepts Display-style struct values.
--- AST currently rejects struct values passed to io().
+-- TODO(display): Replace this failure fixture once io.line([: []]) accepts Display-style struct values.
+-- AST currently rejects struct values passed to io.line([: []]).
 
 Point = |
     x Int,
@@ -7,4 +7,4 @@ Point = |
 |
 
 point = Point(1, 2)
-io(point)
+io.line(point)

@@ -16,4 +16,4 @@ value = recover() catch:
     then 0
 ;
 
-io(value)
+io.line([: [value]])

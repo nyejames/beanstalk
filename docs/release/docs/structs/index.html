@@ -334,8 +334,8 @@ body {
     person <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Alice&quot;</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>)</span>
 
     <span class='bst-code-comment'>-- Access fields using dot notation</span>
-    io<span class='bst-code-parenthesis'>(</span>person.name<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- &quot;Alice&quot;</span>
-    io<span class='bst-code-parenthesis'>(</span>person.age<span class='bst-code-parenthesis'>)</span>  <span class='bst-code-comment'>-- 30</span>
+    io.line<span class='bst-code-parenthesis'>(</span>person.name<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- &quot;Alice&quot;</span>
+    io.line<span class='bst-code-parenthesis'>(</span>person.age<span class='bst-code-parenthesis'>)</span>  <span class='bst-code-comment'>-- 30</span>
 
     <span class='bst-code-comment'>-- Defining a struct, then defining a method for it</span>
     <span class='bst-code-struct'>Vector</span><span class='bst-code-number'>2</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
@@ -371,7 +371,7 @@ body {
     ;
 
     rect <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Rectangle</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>rect.area<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- 50</span>
+    io.line<span class='bst-code-parenthesis'>(</span>rect.area<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- 50</span>
     </code></pre><p><code>this</code> is reserved for method receivers. You are limited to one <code>this</code> parameter per method, and <code>method(value, ...)</code> is not valid syntax for calling receiver methods. Receiver methods are visible through the receiver type; they are not imported, aliased, or re-exported independently.</p><p>Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.</p></section>
     <script>
     function __bs_is_ref(value) {
@@ -662,10 +662,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

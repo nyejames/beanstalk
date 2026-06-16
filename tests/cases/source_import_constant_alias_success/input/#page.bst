@@ -1,2 +1,2 @@
 import @utils/MAX { MAX as Limit }
-io(Limit)
+io.line([: [Limit]])

@@ -33,7 +33,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop is_connected():
-            io("still connected")
+            io.line("still connected")
         ;
     ]
 
@@ -52,7 +52,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop items |item|:
-            io(item.to_string())
+            io.line(item.to_string())
         ;
     ]
 
@@ -60,7 +60,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop items |item, index|:
-            io([index]: [item])
+            io.line([index]: [item])
         ;
     ]
 
@@ -78,17 +78,17 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 0 to 10 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
         loop 0 to & 10 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 
         loop to 5 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- equivalent to: loop 0 to 5 |i|:
     ]
@@ -97,7 +97,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 10 to 15 |value, index|:
-            io([index]: [value])
+            io.line([index]: [value])
         ;
         -- yields: 0: 10
         -- yields: 1: 11
@@ -110,7 +110,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 0 to 10 by 2 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- yields: 0, 2, 4, 6, 8
     ]
@@ -126,7 +126,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 10 to 0 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- yields: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1
     ]
@@ -135,7 +135,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 10 to & 0 by 2 |i|:
-            io(i.to_string())
+            io.line(i.to_string())
         ;
         -- yields: 10, 8, 6, 4, 2, 0
     ]
@@ -147,7 +147,7 @@ page_head #= theme_head
 
     [codeblock, $code("bst"):
         loop 0.0 to 1.0 by 0.1 |t|:
-            io(t.to_string())
+            io.line(t.to_string())
         ;
     ]
 ]

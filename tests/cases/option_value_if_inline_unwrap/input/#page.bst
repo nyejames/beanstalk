@@ -8,6 +8,6 @@ maybe_missing String? = none
 present_name = display_name("Ada")
 missing_name = display_name(maybe_missing)
 
-io("option_value_if_inline_unwrap")
-io([:present [present_name]])
-io([:missing [missing_name]])
+io.line("option_value_if_inline_unwrap")
+io.line([:present [present_name]])
+io.line([:missing [missing_name]])

@@ -5,7 +5,7 @@ keep type T |value T| -> T?:
 maybe_name String? = keep("Ana")
 
 if maybe_name is "Ana":
-    io("optional generic ok")
+    io.line("optional generic ok")
 else
-    io("optional generic failed")
+    io.line("optional generic failed")
 ;

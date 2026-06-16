@@ -1,16 +1,16 @@
 -- Regression: valid scalar/template paths compile, invalid struct fails early
 
 -- Valid String
-io("hello")
+io.line("hello")
 
 -- Valid Int
-io(42)
+io.line([: [42]])
 
 -- Valid Float
-io(3.14)
+io.line([: [3.14]])
 
 -- Valid Bool
-io(true)
+io.line([: [true]])
 
 -- Valid Char (via template)
 c = 'A'
@@ -18,7 +18,7 @@ c = 'A'
 
 -- Valid template passed to io
 message ~= [:template_test]
-io(message)
+io.line([: [message]])
 
 -- Invalid struct should fail while the above compiled fine
 Point = |
@@ -27,4 +27,4 @@ Point = |
 |
 
 point = Point(1, 2)
-io(point)
+io.line(point)

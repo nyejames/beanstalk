@@ -7,4 +7,4 @@ if value is:
     else => result = "present"
 ;
 
-io([:option_match_duplicate_none_warning result=[result]])
+io.line([:option_match_duplicate_none_warning result=[result]])

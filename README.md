@@ -85,7 +85,7 @@ import @blog_styles {section, divider}
 -- Create a new blog post
 create_post |title String, date Int, content String| -> String:
     
-    io("Creating a blog post!")
+    io.line("Creating a blog post!")
 
     formatted_blog = [section, $markdown:
         [date]

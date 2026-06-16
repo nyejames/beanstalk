@@ -65,4 +65,4 @@ run |id String| -> String, Error!:
 result = run("game") catch:
     then "expanded_canvas_error"
 ;
-io(result)
+io.line([: [result]])

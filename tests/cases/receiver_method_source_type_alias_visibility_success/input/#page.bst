@@ -6,4 +6,4 @@ run || -> String:
     return "source_type_alias_visibility_ok"
 ;
 
-io(run())
+io.line([: [run()]])

@@ -1,3 +1,3 @@
 import @./helper.bst
 
-io(helper.greet())
+io.line([: [helper.greet()]])

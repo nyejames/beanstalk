@@ -4,6 +4,6 @@ get_values |condition Bool| -> Float, String:
 ;
 
 a, b = get_values(true)
-io("coerce")
-io(a)
-io(b)
+io.line("coerce")
+io.line([: [a]])
+io.line([: [b]])

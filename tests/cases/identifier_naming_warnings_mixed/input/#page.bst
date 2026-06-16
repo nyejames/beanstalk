@@ -2,7 +2,7 @@ SITE_TITLE #= "Beanstalk"
 
 badFunc |value Int|:
     BadLocal = value
-    io(BadLocal)
+    io.line([: [BadLocal]])
 ;
 
 person_record = |

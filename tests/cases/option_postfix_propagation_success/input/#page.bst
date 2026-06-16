@@ -16,29 +16,29 @@ display_name_fallible |present Bool| -> String?, Error!:
     return [:Fallible [name]]
 ;
 
-io("option_postfix_propagation_success")
+io.line("option_postfix_propagation_success")
 if display_name(true) is |name|:
-    io(name)
+    io.line([: [name]])
 else
-    io("unexpected missing")
+    io.line("unexpected missing")
 ;
 
 if display_name(false) is |name|:
-    io(name)
+    io.line([: [name]])
 else
-    io("missing")
+    io.line("missing")
 ;
 
 fallible_present = display_name_fallible(true) catch then none
 if fallible_present is |name|:
-    io(name)
+    io.line([: [name]])
 else
-    io("unexpected fallible missing")
+    io.line("unexpected fallible missing")
 ;
 
 fallible_missing = display_name_fallible(false) catch then none
 if fallible_missing is |name|:
-    io(name)
+    io.line([: [name]])
 else
-    io("fallible missing")
+    io.line("fallible missing")
 ;

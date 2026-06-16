@@ -11,4 +11,4 @@ output = [list:
     [:third]
 ]
 
-io(output)
+io.line([: [output]])

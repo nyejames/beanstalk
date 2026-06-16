@@ -18,4 +18,4 @@ Wrapper must A
 
 A must not B
 
-io("ok")
+io.line("ok")

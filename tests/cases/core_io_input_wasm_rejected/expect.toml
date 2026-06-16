@@ -1,0 +1,17 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["core_io_input_wasm_rejected"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["function __bs_io_input_new("]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0058"]
+message_contains = ["'input.new'", "'@core/io'", "Wasm"]

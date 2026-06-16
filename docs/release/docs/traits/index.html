@@ -472,7 +472,7 @@ body {
     ;
     </code></pre></section>
     <section class="container"><h1>Dispatch and backends</h1><p>Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.</p><p>Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.</p></section>
-    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
+    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io.line(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
     <section class="container"><h1>Outside trait design scope</h1><p>These surfaces are intentionally outside Beanstalk&#39;s trait design scope:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>blanket, conditional, negative, or specialized conformance</li><li>structural conformance</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>composed <code>This</code> forms</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li><li>dynamic trait values / trait objects</li><li>trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types</li></ul></section>
     <section class="container"><h1>Deferred trait work</h1><p>Deferred trait work is limited to static non-method requirements, compiler-owned builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that does not change traits into runtime values or a type-level programming system.</p></section>
     <script>
@@ -764,10 +764,6 @@ body {
     return "";
     }
     return String(value);
-    }
-
-    function __bs_io(value) {
-    console.log(__bs_value_to_string(value));
     }
 
     function b_fn6() {

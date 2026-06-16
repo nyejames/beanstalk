@@ -8,4 +8,4 @@ count |this Counter| -> Int:
 ;
 
 c = Counter(0)
-io(c.count())
+io.line([: [c.count()]])
