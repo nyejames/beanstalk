@@ -8,6 +8,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
+- [Markdown file imports](docs/roadmap/plans/markdown_import_implementation_plan.md)
 
 # Follow up notes and possible TODOs for future plans
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
