@@ -2,7 +2,8 @@
 //!
 //! WHAT: tracks which non-`.bst` source file kinds the active builder supports.
 //! WHY: the compiler owns `.bst` as the built-in source kind; builders opt into additional
-//!      file kinds such as Beandown `.bd` through `LibrarySet` so support is builder-controlled.
+//!      file kinds such as Beandown `.bd` and plain Markdown `.md` through `LibrarySet` so support
+//!      is builder-controlled.
 
 use std::collections::HashMap;
 
@@ -17,6 +18,10 @@ pub enum SourceFileKind {
     Beanstalk,
     /// Beandown `.bd` template-body files.
     Beandown,
+    /// Plain Markdown `.md` content files.
+    ///
+    /// WHY: HTML projects can import Markdown as a generated `content #String` constant.
+    PlainMarkdown,
 }
 
 /// A single registered source file kind mapping.
@@ -104,6 +109,7 @@ impl SourceFileKind {
         match extension {
             "bst" => Some(Self::Beanstalk),
             "bd" => Some(Self::Beandown),
+            "md" => Some(Self::PlainMarkdown),
             _ => None,
         }
     }
@@ -113,6 +119,7 @@ impl SourceFileKind {
         match self {
             Self::Beanstalk => "bst",
             Self::Beandown => "bd",
+            Self::PlainMarkdown => "md",
         }
     }
 
@@ -121,6 +128,7 @@ impl SourceFileKind {
         match self {
             Self::Beanstalk => ".bst",
             Self::Beandown => ".bd",
+            Self::PlainMarkdown => ".md",
         }
     }
 
@@ -134,6 +142,10 @@ impl SourceFileKind {
             SupportedSourceFileKind {
                 extension: "bd",
                 kind: SourceFileKind::Beandown,
+            },
+            SupportedSourceFileKind {
+                extension: "md",
+                kind: SourceFileKind::PlainMarkdown,
             },
         ];
 

@@ -3068,3 +3068,249 @@ fn extensionless_bst_import_and_virtual_package_import_still_work() {
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
+
+#[test]
+fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning() {
+    let root = temp_dir("markdown_no_import_scanning");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.md"), "import @./missing\n").expect("should write markdown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect(".md body text must not be scanned for imports");
+
+    let input_paths: HashSet<_> = modules[0]
+        .input_files
+        .iter()
+        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .collect();
+    assert!(input_paths.contains(OsStr::new("#page.bst")));
+    assert!(input_paths.contains(OsStr::new("intro.md")));
+
+    let markdown_input = modules[0]
+        .input_files
+        .iter()
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.md")))
+        .expect("intro.md should be in discovered inputs");
+    assert_eq!(
+        markdown_input.source_kind,
+        crate::libraries::SourceFileKind::PlainMarkdown
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
+    let root = temp_dir("markdown_no_same_directory_facade");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
+    fs::write(src.join("#mod.bst"), "export x #= 1\n").expect("should write same-directory facade");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("reachable .md should not discover same-directory #mod.bst");
+
+    let input_paths: HashSet<_> = modules[0]
+        .input_files
+        .iter()
+        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .collect();
+    assert!(input_paths.contains(OsStr::new("#page.bst")));
+    assert!(input_paths.contains(OsStr::new("intro.md")));
+    assert!(!input_paths.contains(OsStr::new("#mod.bst")));
+
+    let markdown_input = modules[0]
+        .input_files
+        .iter()
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.md")))
+        .expect("intro.md should be in discovered inputs");
+    assert_eq!(
+        markdown_input.source_kind,
+        crate::libraries::SourceFileKind::PlainMarkdown
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn reachable_file_discovery_unimported_markdown_file_is_ignored() {
+    let root = temp_dir("unimported_markdown_ignored");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("unimported .md file should not affect discovery");
+
+    assert_eq!(modules[0].input_files.len(), 1);
+    assert_eq!(
+        modules[0].input_files[0].source_path.file_name().unwrap(),
+        OsStr::new("#page.bst")
+    );
+    assert_eq!(
+        modules[0].input_files[0].source_kind,
+        crate::libraries::SourceFileKind::Beanstalk
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn reachable_file_discovery_direct_markdown_extension_import_reports_bst_import_0024() {
+    let root = temp_dir("direct_markdown_extension");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro.md\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("direct .md import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0024",
+        "expected explicit source extension diagnostic, got {:?}",
+        diagnostic
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ExplicitSourceExtension { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn reachable_file_discovery_unsupported_markdown_import_reports_bst_import_0025() {
+    let root = temp_dir("unsupported_markdown_import");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("unsupported .md import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0025",
+        "expected unsupported source file kind diagnostic, got {:?}",
+        diagnostic
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::UnsupportedSourceFileKind { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}

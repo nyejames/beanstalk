@@ -92,7 +92,8 @@ fn tokenize_beandown_source(source: &str) -> (FileTokens, StringTable) {
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown),
+        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown)
+            .expect("Beandown should tokenize"),
         &style_directives,
         &mut string_table,
         None,
@@ -108,7 +109,8 @@ fn tokenize_beandown_error(source: &str) -> (CompilerDiagnostic, StringTable) {
     let diagnostic = tokenize(
         source,
         &source_path,
-        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown),
+        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown)
+            .expect("Beandown should tokenize"),
         &style_directives,
         &mut string_table,
         None,

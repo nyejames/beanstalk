@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["<details>", "<summary>More</summary>", "Raw HTML details body."]
+rendered_output_not_contains = ["&lt;details&gt;"]

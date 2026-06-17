@@ -46,7 +46,8 @@ fn prepare_directly(source: &str) -> (FileFrontendPrepareOutput, StringTable) {
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown),
+        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown)
+            .expect("Beandown should tokenize"),
         &style_directives,
         &mut string_table,
         None,

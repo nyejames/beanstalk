@@ -54,13 +54,17 @@ fn first_invalid_config_reason(messages: &CompilerMessages) -> &InvalidConfigRea
 }
 
 #[test]
-fn libraries_register_beandown_source_kind() {
+fn libraries_register_content_source_kinds() {
     let builder = HtmlProjectBuilder::new();
     let libraries = builder.libraries();
 
     assert_eq!(
         libraries.source_file_kinds.kind_for_extension("bd"),
         Some(crate::libraries::SourceFileKind::Beandown)
+    );
+    assert_eq!(
+        libraries.source_file_kinds.kind_for_extension("md"),
+        Some(crate::libraries::SourceFileKind::PlainMarkdown)
     );
 
     assert_eq!(libraries.source_file_kinds.kind_for_extension("bst"), None);

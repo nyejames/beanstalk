@@ -47,6 +47,7 @@ page_head #= theme_head
     - @./project-structure (The shape of Beanstalk projects)
     - @./libraries (Libraries and modules)
     - @./libraries/core (Core libraries)
+    - @./markdown (Plain Markdown imports)
     - @./beandown (Beandown content files)
 
     ## More info

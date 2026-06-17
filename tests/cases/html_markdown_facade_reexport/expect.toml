@@ -1,0 +1,10 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["html_markdown_facade_reexport facade content", "Facade reexport"]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"

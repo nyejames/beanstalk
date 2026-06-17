@@ -38,12 +38,20 @@ impl TokenizerEntryMode {
         }
     }
 
-    pub fn for_source_file_kind(source_kind: SourceFileKind) -> Self {
+    /// Returns the tokenizer entry mode for a source kind, if any.
+    ///
+    /// WHAT: maps source kinds that need tokenization to their entry policy.
+    /// WHY: some compiler-recognized source kinds such as plain Markdown are content assets and
+    ///      must not be tokenized as Beanstalk syntax.
+    ///
+    /// `None` means the source kind is compiler-recognized but has no tokenizer path.
+    pub fn for_source_file_kind(source_kind: SourceFileKind) -> Option<Self> {
         match source_kind {
-            SourceFileKind::Beanstalk => Self::SourceFile,
-            SourceFileKind::Beandown => Self::TemplateBody {
+            SourceFileKind::Beanstalk => Some(Self::SourceFile),
+            SourceFileKind::Beandown => Some(Self::TemplateBody {
                 initial_close_policy: InitialTemplateClosePolicy::RejectOuterClose { source_kind },
-            },
+            }),
+            SourceFileKind::PlainMarkdown => None,
         }
     }
 }

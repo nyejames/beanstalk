@@ -1,0 +1,6 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["<table>", "type=\"checkbox\"", "<pre><code", "<del>deleted</del>", "#1", "footnote note"]

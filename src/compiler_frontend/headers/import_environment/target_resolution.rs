@@ -220,8 +220,9 @@ enum ImportPathMatch {
 ///
 /// WHAT: first tries exact component match (with optional source-file extensions), then tries
 /// suffix match with the same source-file extension rules.
-/// WHY: `@path/to/symbol` may match `@path/to/symbol.bst` or Beandown's generated
-/// `@path/to/file.bd/content` symbol while user import syntax stays extensionless.
+/// WHY: `@path/to/symbol` may match `@path/to/symbol.bst` or a generated content asset symbol
+/// such as `@path/to/file.bd/content` or `@path/to/file.md/content` while user import syntax stays
+/// extensionless.
 fn resolve_import_target_path(
     requested_path: &InternedPath,
     candidates: &FxHashSet<InternedPath>,
@@ -369,11 +370,7 @@ fn source_components_match(
     string_table: &StringTable,
 ) -> bool {
     components_match_with_optional_bst_extension(candidate, requested, string_table)
-        || components_match_with_optional_beandown_file_extension(
-            candidate,
-            requested,
-            string_table,
-        )
+        || components_match_with_optional_content_file_extension(candidate, requested, string_table)
 }
 
 fn components_match_with_optional_bst_extension(
@@ -403,7 +400,7 @@ fn components_match_with_optional_bst_extension(
         })
 }
 
-fn components_match_with_optional_beandown_file_extension(
+fn components_match_with_optional_content_file_extension(
     candidate_components: &[StringId],
     requested_components: &[StringId],
     string_table: &StringTable,
@@ -425,6 +422,8 @@ fn components_match_with_optional_beandown_file_extension(
 
             candidate_str.strip_suffix(SourceFileKind::Beandown.extension_suffix())
                 == Some(requested_str)
+                || candidate_str.strip_suffix(SourceFileKind::PlainMarkdown.extension_suffix())
+                    == Some(requested_str)
         })
 }
 

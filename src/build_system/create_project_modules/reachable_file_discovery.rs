@@ -107,8 +107,8 @@ pub(super) fn collect_reachable_input_files(
 ///
 /// WHAT: follows each Beanstalk file's declared imports, resolves them to canonical typed source
 /// files, and returns the full ordered set of files reachable from the entry point.
-/// WHY: source kind belongs to Stage 0 input discovery. Beandown files can be loaded and carried
-/// forward without being scanned for imports or treated as module roots.
+/// WHY: source kind belongs to Stage 0 input discovery. Builder-supported content assets can be
+///      loaded and carried forward without being treated as Beanstalk module roots.
 pub(super) fn discover_reachable_source_files(
     entry_point: &Path,
     project_path_resolver: &ProjectPathResolver,
@@ -153,9 +153,21 @@ pub(super) fn discover_reachable_source_files(
             continue;
         }
 
-        if next_file.kind == SourceFileKind::Beandown {
-            queue_same_directory_facade_for_beandown(&canonical_file, &reachable, &mut queue);
-            continue;
+        match next_file.kind {
+            SourceFileKind::Beandown => {
+                // Beandown is a Beanstalk template body with a small compile-time scope, so the
+                // same-directory facade may supply visible constants. Plain Markdown is raw
+                // content and has no Beanstalk scope; facades still re-export it normally because
+                // the facade file itself is scanned as ordinary Beanstalk source.
+                queue_same_directory_facade_for_beandown(&canonical_file, &reachable, &mut queue);
+                continue;
+            }
+            SourceFileKind::PlainMarkdown => {
+                // Markdown files are importless content assets. They are carried forward for
+                // header-stage preparation but are never scanned for imports.
+                continue;
+            }
+            SourceFileKind::Beanstalk => {}
         }
 
         // 4. Extract imports from the current file.

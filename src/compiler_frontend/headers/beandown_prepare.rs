@@ -7,21 +7,17 @@
 //! or textually wrapped source.
 
 use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
-use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
-use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
-use crate::compiler_frontend::headers::types::{
-    FileFrontendPrepareOutput, FileRole, Header, HeaderExportMode, HeaderKind,
+use crate::compiler_frontend::headers::synthetic_content_header::{
+    SyntheticContentHeaderInput, synthetic_content_header,
 };
+use crate::compiler_frontend::headers::types::{FileFrontendPrepareOutput, FileRole};
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::collect_symbol_references;
-use std::collections::HashSet;
 use std::path::PathBuf;
 
-const BEANDOWN_CONTENT_NAME: &str = "content";
 const BEANDOWN_MARKDOWN_DIRECTIVE: &str = "markdown";
 
 /// Build the header-stage output for one `.bd` source file.
@@ -35,7 +31,7 @@ pub(crate) fn prepare_beandown_file(
 ) -> FileFrontendPrepareOutput {
     let token_count = file_tokens.length;
     let context = BeandownPrepareContext::new(file_tokens, string_table);
-    let content_header = context.content_header();
+    let content_header = context.content_header(string_table);
 
     FileFrontendPrepareOutput {
         source_file: context.source_file,
@@ -62,7 +58,6 @@ struct BeandownPrepareContext {
     canonical_os_path: Option<PathBuf>,
     body_tokens: Vec<Token>,
     synthetic_location: SourceLocation,
-    content_name: StringId,
     markdown_directive: StringId,
 }
 
@@ -73,7 +68,6 @@ impl BeandownPrepareContext {
             CharPosition::default(),
             CharPosition::default(),
         );
-        let content_name = string_table.intern(BEANDOWN_CONTENT_NAME);
         let markdown_directive = string_table.intern(BEANDOWN_MARKDOWN_DIRECTIVE);
 
         let body_tokens = file_tokens
@@ -88,42 +82,28 @@ impl BeandownPrepareContext {
             canonical_os_path: file_tokens.canonical_os_path,
             body_tokens,
             synthetic_location,
-            content_name,
             markdown_directive,
         }
     }
 
-    fn content_header(&self) -> Header {
-        let declaration = self.content_declaration();
-        let header_path = self.source_file.append(self.content_name);
-        let mut header_tokens = FileTokens::new_with_file_id(header_path, self.file_id, Vec::new());
-        header_tokens.canonical_os_path = self.canonical_os_path.clone();
-
-        Header {
-            kind: HeaderKind::Constant { declaration },
-            file_role: FileRole::Normal,
-            export_mode: HeaderExportMode::Private,
-            dependencies: HashSet::new(),
-            name_location: self.synthetic_location.clone(),
-            tokens: header_tokens,
-            source_file: self.source_file.clone(),
-            capacity_references: Vec::new(),
-        }
-    }
-
-    fn content_declaration(&self) -> DeclarationSyntax {
+    fn content_header(
+        &self,
+        string_table: &mut StringTable,
+    ) -> crate::compiler_frontend::headers::types::Header {
         let initializer_tokens = self.template_initializer_tokens();
         let initializer_references = collect_symbol_references(&initializer_tokens);
 
-        DeclarationSyntax {
-            binding_mode: BindingMode::CompileTimeConstant,
-            type_annotation: ParsedTypeRef::BuiltinString {
+        synthetic_content_header(
+            SyntheticContentHeaderInput {
+                source_file: self.source_file.clone(),
+                file_id: self.file_id,
+                canonical_os_path: self.canonical_os_path.clone(),
                 location: self.synthetic_location.clone(),
+                initializer_tokens,
+                initializer_references,
             },
-            initializer_tokens,
-            initializer_references,
-            location: self.synthetic_location.clone(),
-        }
+            string_table,
+        )
     }
 
     fn template_initializer_tokens(&self) -> Vec<Token> {

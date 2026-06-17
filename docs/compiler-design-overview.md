@@ -19,6 +19,7 @@ User-facing docs-site pages contain examples and beginner-oriented explanations:
 - [`src/docs/libraries/core/#page.bst`](src/docs/libraries/core/#page.bst) for core library pages
 - [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst) for template syntax, directives, markdown behavior, and slots
 - [`src/docs/beandown/#page.bst`](src/docs/beandown/#page.bst) for Beandown authoring and import rules
+- [`src/docs/markdown/#page.bst`](src/docs/markdown/#page.bst) for plain Markdown `.md` import rules
 
 Build systems use the compiler through HIR and borrow validation, then apply their own backend lowering. They assemble one or more compiled modules into runnable artifacts such as HTML, JavaScript, Wasm, or other target outputs.
 
@@ -293,9 +294,9 @@ Binding-mode syntax, constant rules, facade visibility, and top-level template s
 
 The compiler frontend and build system process modules through these stages:
 
-0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source libraries, and external package namespaces.
-1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables and a source-kind-specific tokenizer entry mode.
-2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, fixed-capacity reference edges, constant initializer reference edges, and captures entry start body separately. Source-kind adapters such as Beandown synthesize ordinary declaration headers here. In project builds this is fused with tokenization as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
+0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source libraries, and external package namespaces. Plain Markdown `.md` files are builder-supported source assets discovered through the same extensionless source import candidate path.
+1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables and a source-kind-specific tokenizer entry mode. Plain Markdown `.md` files bypass tokenization because they are raw content assets, not Beanstalk syntax.
+2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, fixed-capacity reference edges, constant initializer reference edges, and captures entry start body separately. Source-kind adapters such as Beandown and plain Markdown synthesize ordinary declaration headers here. In project builds this is fused with tokenization or source-kind preparation as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
 3. **Dependency Sorting**: orders top-level declaration headers by all header-provided top-level dependency edges.
 4. **AST Construction**: consumes sorted headers linearly, resolves and validates semantic information, parses executable bodies, type-checks expressions, validates terminality, and prepares templates/constants for HIR/builders.
 5. **HIR Generation**: lowers the typed AST into backend-facing semantic IR with explicit control flow.
@@ -327,7 +328,7 @@ Stage 0 owns:
 - expanding each module to reachable `.bst` files and builder-supported source assets through imports
 - detecting source-library roots visible to imports
 - recognizing external package prefixes so virtual imports are not treated as filesystem paths
-- resolving source-kind candidates through the builder-provided registry
+- resolving source-kind candidates through the builder-provided registry, including HTML `.bd` and `.md` content assets
 - resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
 - rejecting sibling `.bst` file/folder import-name collisions and special-file imports before semantic compilation
 - recording source file identities for later diagnostics and path rendering
@@ -352,7 +353,7 @@ Tokenization converts source text into structured tokens with source locations. 
 - style directive token recognition through the merged directive registry
 - syntax-level rejection of unsupported or unknown directive forms where applicable
 
-`TokenizerEntryMode` chooses the initial lexical state for a source file kind. Normal `.bst` files start in ordinary code mode. Beandown `.bd` files start inside an implicit template body, which lets the tokenizer preserve original Beandown source locations while rejecting an unescaped outer `]`. `TokenizeMode` remains the internal lexical stack state used while scanning nested templates.
+`TokenizerEntryMode` chooses the initial lexical state for a source file kind. Normal `.bst` files start in ordinary code mode. Beandown `.bd` files start inside an implicit template body, which lets the tokenizer preserve original Beandown source locations while rejecting an unescaped outer `]`. Plain Markdown `.md` has no tokenizer entry mode and is prepared before tokenization. `TokenizeMode` remains the internal lexical stack state used while scanning nested templates.
 
 ## Stage 2: Header Parsing
 
@@ -393,9 +394,10 @@ Constants are compile-time declarations. Header parsing records symbol-shaped re
 
 Executable function/start body references do not participate in dependency sorting. Body-local declarations do not participate in dependency sorting. The implicit entry start header is always appended last.
 
-Beandown header preparation lives in [`headers/beandown_prepare.rs`](../src/compiler_frontend/headers/beandown_prepare.rs). A `.bd` input contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$markdown` template over the original `.bd` body tokens. Later dependency sorting and AST folding treat that declaration like any other compile-time constant. There is no Beandown-specific HIR path.
+Beandown header preparation lives in [`headers/beandown_prepare.rs`](../src/compiler_frontend/headers/beandown_prepare.rs). A `.bd` input contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$markdown` template over the original `.bd` body tokens. Plain Markdown preparation lives in [`headers/plain_markdown_prepare.rs`](../src/compiler_frontend/headers/plain_markdown_prepare.rs). A `.md` input renders the raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer. Later dependency sorting and AST folding treat both declarations like any other compile-time constant. There is no Beandown- or Markdown-specific AST, HIR, borrow-checker, or backend path.
 
 User-facing Beandown authoring and import rules are in [`src/docs/beandown/#page.bst`](src/docs/beandown/#page.bst).
+User-facing plain Markdown authoring and import rules are in [`src/docs/markdown/#page.bst`](src/docs/markdown/#page.bst).
 
 ### Declaration shells
 

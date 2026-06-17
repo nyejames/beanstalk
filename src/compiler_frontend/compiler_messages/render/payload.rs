@@ -508,6 +508,7 @@ fn source_kind_name(source_kind: SourceFileKind) -> &'static str {
     match source_kind {
         SourceFileKind::Beanstalk => "Beanstalk `.bst` source",
         SourceFileKind::Beandown => "Beandown `.bd` source",
+        SourceFileKind::PlainMarkdown => "plain Markdown `.md` source",
     }
 }
 

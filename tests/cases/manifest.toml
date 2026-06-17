@@ -7449,6 +7449,66 @@ path = "beandown_unescaped_outer_close_rejected"
 tags = ["integration", "beandown", "html", "diagnostics"]
 
 [[case]]
+id = "html_markdown_import_basic"
+path = "html_markdown_import_basic"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_grouped_import_alias"
+path = "html_markdown_grouped_import_alias"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_plain_not_beanstalk"
+path = "html_markdown_plain_not_beanstalk"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_tables_tasks_code"
+path = "html_markdown_tables_tasks_code"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_raw_html_preserved"
+path = "html_markdown_raw_html_preserved"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_facade_reexport"
+path = "html_markdown_facade_reexport"
+tags = ["integration", "markdown", "html", "imports", "facades"]
+
+[[case]]
+id = "html_markdown_literal_relative_links"
+path = "html_markdown_literal_relative_links"
+tags = ["integration", "markdown", "html", "imports"]
+
+[[case]]
+id = "html_markdown_direct_extension_import_rejected"
+path = "html_markdown_direct_extension_import_rejected"
+tags = ["integration", "markdown", "html", "diagnostics", "imports"]
+
+[[case]]
+id = "html_markdown_collision_with_beandown"
+path = "html_markdown_collision_with_beandown"
+tags = ["integration", "markdown", "html", "diagnostics", "imports"]
+
+[[case]]
+id = "html_markdown_collision_with_bst"
+path = "html_markdown_collision_with_bst"
+tags = ["integration", "markdown", "html", "diagnostics", "imports"]
+
+[[case]]
+id = "html_markdown_collision_with_folder"
+path = "html_markdown_collision_with_folder"
+tags = ["integration", "markdown", "html", "diagnostics", "imports"]
+
+[[case]]
+id = "html_markdown_entry_rejected"
+path = "html_markdown_entry_rejected"
+tags = ["integration", "markdown", "html", "diagnostics", "imports"]
+
+[[case]]
 id = "cast_int_to_float_no_helper_emission"
 path = "cast_int_to_float_no_helper_emission"
 tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]

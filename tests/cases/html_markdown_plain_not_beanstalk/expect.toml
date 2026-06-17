@@ -1,0 +1,11 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["This costs $100 -- not a comment.", "[not_a_template]", "[: <p>not parsed</p>]"]
+rendered_output_not_contains = ["should not compile"]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"

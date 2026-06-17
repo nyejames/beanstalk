@@ -94,7 +94,7 @@ page_head #= theme_head
 
     - `@./` resolves relative to the importing file.
     - parent-directory imports with `..` are not supported.
-    - `.bst` imports are extensionless.
+    - `.bst`, `.bd`, and `.md` source imports are extensionless.
     - direct `.js` imports keep the `.js` extension.
     - source-library imports use their library prefix directly, such as `@helper` or `@html`.
     - non-relative imports whose first path segment matches a source-library prefix resolve from that library root.
@@ -102,6 +102,7 @@ page_head #= theme_head
     - core and builder runtime packages use their registered package path, such as `@core/math` or `@web/canvas`.
     - specific symbol imports use grouped syntax. Direct symbol-path imports such as `import @core/math/sin` are rejected.
     - direct imports of special files such as `#mod.bst`, `#page.bst`, and `#config.bst` are rejected.
+    - Beandown `.bd` and plain Markdown `.md` content files both expose generated `content` constants.
     - folder imports across module boundaries require a `#mod.bst` facade. Import concrete same-module files directly when no facade is intended.
 
     Source and facade namespace imports are shallow.

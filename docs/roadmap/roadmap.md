@@ -8,10 +8,9 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [Markdown file imports](docs/roadmap/plans/markdown_import_implementation_plan.md)
+- [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md)
 
 # Follow up notes and possible TODOs for future plans
-- The compiler is starting to feel very sluggish and unoptimised. The next priority should be tightening up some of the sloppy patterns and hardening the AST stage and its design to avoid excessive work.
 
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 

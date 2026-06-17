@@ -17,13 +17,16 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderParseOptions, Headers,
     parse_file_headers_with_table,
 };
+use crate::compiler_frontend::headers::plain_markdown_prepare::{
+    PlainMarkdownPrepareInput, prepare_plain_markdown_file,
+};
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbols::identity::SourceFileTable;
+use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
@@ -66,6 +69,42 @@ pub(crate) struct FrontendFilePrepareInput<'a> {
     pub(crate) source_kind: SourceFileKind,
     pub(crate) const_template_offset: usize,
     pub(crate) runtime_fragment_offset: usize,
+}
+
+/// Stable identity facts for one source file as seen by the frontend.
+///
+/// WHAT: bundles the interned logical path, explicit file ID, and canonical OS path that
+///       tokenization and non-tokenized preparation both need.
+/// WHY: keeps source-identity lookup in one place so Markdown preparation can reuse the same
+///      identity path as tokenized files without duplicating the `SourceFileTable` fallback logic.
+struct FrontendSourceFileIdentity {
+    logical_path: InternedPath,
+    file_id: Option<FileId>,
+    canonical_os_path: Option<PathBuf>,
+}
+
+/// Look up frontend identity for a source path.
+///
+/// WHAT: returns the logical interned path, stable file ID, and canonical OS path for one file.
+/// WHY: tokenized Beanstalk/Beandown files and non-tokenized Markdown files must share the same
+///      source identity so downstream stages treat them as ordinary module members.
+fn source_file_identity(
+    source_files: &SourceFileTable,
+    source_path: &PathBuf,
+    string_table: &mut StringTable,
+) -> FrontendSourceFileIdentity {
+    match source_files.get_by_canonical_path(source_path.as_path()) {
+        Some(identity) => FrontendSourceFileIdentity {
+            logical_path: identity.logical_path.clone(),
+            file_id: Some(identity.file_id),
+            canonical_os_path: Some(identity.canonical_os_path.clone()),
+        },
+        None => FrontendSourceFileIdentity {
+            logical_path: InternedPath::from_path_buf(source_path, string_table),
+            file_id: None,
+            canonical_os_path: Some(source_path.to_owned()),
+        },
+    }
 }
 
 impl CompilerFrontend {
@@ -120,29 +159,17 @@ impl CompilerFrontend {
         tokenizer_entry_mode: TokenizerEntryMode,
         string_table: &mut StringTable,
     ) -> Result<FileTokens, CompilerDiagnostic> {
-        let (logical_path, file_id, canonical_os_path) =
-            match source_files.get_by_canonical_path(module_path.as_path()) {
-                Some(identity) => (
-                    identity.logical_path.clone(),
-                    Some(identity.file_id),
-                    Some(identity.canonical_os_path.clone()),
-                ),
-                None => (
-                    InternedPath::from_path_buf(module_path, string_table),
-                    None,
-                    Some(module_path.to_owned()),
-                ),
-            };
+        let identity = source_file_identity(source_files, module_path, string_table);
 
         let mut tokens = tokenize(
             source_code,
-            &logical_path,
+            &identity.logical_path,
             tokenizer_entry_mode,
             style_directives,
             string_table,
-            file_id,
+            identity.file_id,
         )?;
-        tokens.canonical_os_path = canonical_os_path;
+        tokens.canonical_os_path = identity.canonical_os_path;
         Ok(tokens)
     }
 
@@ -157,38 +184,63 @@ impl CompilerFrontend {
         input: FrontendFilePrepareInput<'_>,
         local_string_table: &mut StringTable,
     ) -> Result<FileFrontendPrepareOutput, FileFrontendPrepareError> {
-        let tokenizer_entry_mode = TokenizerEntryMode::for_source_file_kind(input.source_kind);
-
-        let tokenization = Self::tokenize_source(
-            context.source_files,
-            context.style_directives,
-            input.source_code,
-            input.source_path,
-            tokenizer_entry_mode,
-            local_string_table,
-        );
-
-        let mut file_tokens = match tokenization {
-            Ok(tokens) => tokens,
-            Err(diagnostic) => {
-                return Err(FileFrontendPrepareError {
-                    warnings: Vec::new(),
-                    diagnostic: Box::new(diagnostic),
-                });
-            }
-        };
-
         match input.source_kind {
-            SourceFileKind::Beanstalk => parse_file_headers_with_table(
-                &mut file_tokens,
-                context.entry_file_path,
-                context.options,
-                context.external_package_registry,
-                local_string_table,
-                input.const_template_offset,
-                input.runtime_fragment_offset,
-            ),
-            SourceFileKind::Beandown => Ok(prepare_beandown_file(file_tokens, local_string_table)),
+            SourceFileKind::PlainMarkdown => {
+                let identity = source_file_identity(
+                    context.source_files,
+                    input.source_path,
+                    local_string_table,
+                );
+                Ok(prepare_plain_markdown_file(
+                    PlainMarkdownPrepareInput {
+                        source_code: input.source_code,
+                        source_file: identity.logical_path,
+                        file_id: identity.file_id,
+                        canonical_os_path: identity.canonical_os_path,
+                    },
+                    local_string_table,
+                ))
+            }
+            SourceFileKind::Beanstalk | SourceFileKind::Beandown => {
+                let tokenizer_entry_mode =
+                    match TokenizerEntryMode::for_source_file_kind(input.source_kind) {
+                        Some(mode) => mode,
+                        None => unreachable!("Beanstalk and Beandown have tokenizer entry modes"),
+                    };
+
+                let tokenization = Self::tokenize_source(
+                    context.source_files,
+                    context.style_directives,
+                    input.source_code,
+                    input.source_path,
+                    tokenizer_entry_mode,
+                    local_string_table,
+                );
+
+                let mut file_tokens = match tokenization {
+                    Ok(tokens) => tokens,
+                    Err(diagnostic) => {
+                        return Err(FileFrontendPrepareError {
+                            warnings: Vec::new(),
+                            diagnostic: Box::new(diagnostic),
+                        });
+                    }
+                };
+
+                if input.source_kind == SourceFileKind::Beanstalk {
+                    parse_file_headers_with_table(
+                        &mut file_tokens,
+                        context.entry_file_path,
+                        context.options,
+                        context.external_package_registry,
+                        local_string_table,
+                        input.const_template_offset,
+                        input.runtime_fragment_offset,
+                    )
+                } else {
+                    Ok(prepare_beandown_file(file_tokens, local_string_table))
+                }
+            }
         }
     }
 

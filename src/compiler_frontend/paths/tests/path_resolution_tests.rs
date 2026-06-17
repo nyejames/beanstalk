@@ -1164,3 +1164,128 @@ fn import_case_sensitive_symbol_mismatch_rejected() {
         );
     }
 }
+
+// -----------------------------------------------------------------------
+// Plain Markdown import discovery
+// -----------------------------------------------------------------------
+
+#[test]
+fn markdown_import_resolves_when_registered() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("md", SourceFileKind::PlainMarkdown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.md"), "# Hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let result = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect("registered .md import should resolve");
+
+    assert_eq!(result.kind, SourceFileKind::PlainMarkdown);
+    assert!(result.path.ends_with("src/docs/intro.md"));
+}
+
+#[test]
+fn markdown_import_rejected_when_unsupported() {
+    let mut h = TestHarness::new();
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.md"), "# Hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("unregistered .md import should be rejected");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::UnsupportedSourceFileKind
+        )
+    );
+}
+
+#[test]
+fn markdown_and_beanstalk_same_stem_are_ambiguous() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("md", SourceFileKind::PlainMarkdown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bst"), "").unwrap();
+    fs::write(h.project_root.join("src/docs/intro.md"), "# Hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("same-stem .bst and .md should be ambiguous");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
+    );
+}
+
+#[test]
+fn markdown_and_folder_same_stem_are_ambiguous() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("md", SourceFileKind::PlainMarkdown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs/intro")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.md"), "# Hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err(".md and folder with same stem should be ambiguous");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
+    );
+}
+
+#[test]
+fn markdown_and_beandown_same_stem_are_ambiguous() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    registry.register("md", SourceFileKind::PlainMarkdown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+    fs::write(h.project_root.join("src/docs/intro.md"), "# Hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("same-stem .bd and .md should be ambiguous");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
+    );
+}

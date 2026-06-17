@@ -191,11 +191,19 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
+            [: Plain Markdown [$html:<code>.md</code>] content assets]
+            [: Supported]
+            [: Broad extensionless import, grouped alias, facade re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and entry-rejection coverage.]
+            [: HTML builder / frontend]
+            [: [$html:<code>.md</code>] files are plain Markdown content assets that render to HTML at compile time and synthesize one private [$html:<code>content #String</code>] constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory facade scope. Links/images render literally and are not tracked assets in V1.]
+        ]
+
+        [data:
             [: Builder-supported source file kinds]
             [: Partial]
-            [: Targeted Beandown source-kind registry, extensionless resolution, unsupported-kind diagnostics, source discovery, and tokenizer entry-mode coverage.]
+            [: Targeted Beandown and Markdown source-kind registry, extensionless resolution, unsupported-kind diagnostics, source discovery, and tokenizer/preparation coverage.]
             [: Stage 0 / frontend]
-            [: Builders can declare non-[$html:<code>.bst</code>] source file kinds that participate in source import discovery and frontend preparation. V1 implements Beandown [$html:<code>.bd</code>] for the HTML builder only.]
+            [: Builders can declare non-[$html:<code>.bst</code>] source file kinds that participate in source import discovery and frontend preparation. The HTML builder implements Beandown [$html:<code>.bd</code>] and plain Markdown [$html:<code>.md</code>] content assets.]
         ]
 
         [data:

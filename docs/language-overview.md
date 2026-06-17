@@ -865,6 +865,38 @@ export @components/card {
 
 Use `.bst` files for pages, composition, imports, functions, and richer compile-time setup. Use `.bd` for small markdown-first content fragments consumed by `.bst`.
 
+### Plain Markdown `.md` Content Files
+
+Plain Markdown files are HTML-builder content helpers for raw CommonMark-style Markdown. A `.md`
+file renders to HTML at compile time and exposes exactly one generated constant:
+
+```beanstalk
+content #String = "<rendered html>"
+```
+
+Import `.md` files with the same extensionless source import syntax as Beanstalk and Beandown
+source assets:
+
+```beanstalk
+import @docs/intro
+import @docs/intro {
+    content as intro_content,
+}
+
+[:[intro.content] [intro_content]]
+```
+
+Rules:
+- A `.md` file exposes exactly one generated constant, `content #String`.
+- Direct extension imports such as `import @docs/intro.md` are invalid; use `import @docs/intro`.
+- `.md` files are never page entries, module roots, config files, or standalone project types.
+- `.md` files have no Beanstalk imports, declarations, interpolation, templates, frontmatter, or metadata.
+- `.md` files do not see same-directory facade constants or `@html` constants. They have no Beanstalk scope.
+- Raw HTML is preserved in V1. This feature does not add a sanitizer or raw-HTML policy key.
+- Markdown links and images render literal `href` and `src` values in V1. They are not tracked assets and are not rewritten.
+- `.bd` remains the Beanstalk-aware content format. Use `.bd` when content needs `$markdown`,
+  nested templates, or the restricted same-directory facade constant scope.
+
 ### If Statements and Pattern Matching
 
 Statement `if` is non-exhaustive. It has no statement-level `else if`; use nested `if` or full match.

@@ -317,7 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> BEANDOWN</h1>
-    <section class="container"><p>Beandown is Beanstalk&#39;s equivalent of Markdown files. They provide the same flavour of markdown as string templates. You can use nested templates inside of Beandown as if it was a string template body.</p><p>Beandown files use the <code>.bd</code> extension for markdown-first content fragments in HTML projects. They are helpers for <code>.bst</code> pages and modules, not pages themselves.</p><p>A <code>.bd</code> file is compiled as if its whole body were the body of an implicit compile-time markdown template:</p><pre style="
+    <section class="container"><p>Beandown files are Beanstalk-aware markdown-first content files. They use the same markdown flavour as string templates and can contain nested templates as if the file were a template body.</p><p>Beandown files use the <code>.bd</code> extension for markdown-first content fragments in HTML projects. They are helpers for <code>.bst</code> pages and modules, not pages themselves. Use @./markdown for plain <code>.md</code> files that should be rendered as raw Markdown with no Beanstalk syntax.</p><p>A <code>.bd</code> file is compiled as if its whole body were the body of an implicit compile-time markdown template:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

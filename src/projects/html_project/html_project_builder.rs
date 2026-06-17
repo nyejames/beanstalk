@@ -254,6 +254,10 @@ impl BackendBuilder for HtmlProjectBuilder {
             SourceFileKind::Beandown.extension(),
             SourceFileKind::Beandown,
         );
+        libraries.source_file_kinds.register(
+            SourceFileKind::PlainMarkdown.extension(),
+            SourceFileKind::PlainMarkdown,
+        );
 
         libraries
             .external_import_providers

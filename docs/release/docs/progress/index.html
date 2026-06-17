@@ -466,11 +466,19 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Plain Markdown <code>.md</code> content assets</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad extensionless import, grouped alias, facade re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and entry-rejection coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> HTML builder / frontend</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>.md</code> files are plain Markdown content assets that render to HTML at compile time and synthesize one private <code>content #String</code> constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory facade scope. Links/images render literally and are not tracked assets in V1.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Builder-supported source file kinds</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted Beandown source-kind registry, extensionless resolution, unsupported-kind diagnostics, source discovery, and tokenizer entry-mode coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted Beandown and Markdown source-kind registry, extensionless resolution, unsupported-kind diagnostics, source discovery, and tokenizer/preparation coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Stage 0 / frontend</td>
-     <td style="padding: 0.2em 0.5em;  "> Builders can declare non-<code>.bst</code> source file kinds that participate in source import discovery and frontend preparation. V1 implements Beandown <code>.bd</code> for the HTML builder only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Builders can declare non-<code>.bst</code> source file kinds that participate in source import discovery and frontend preparation. The HTML builder implements Beandown <code>.bd</code> and plain Markdown <code>.md</code> content assets.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

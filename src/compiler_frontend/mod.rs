@@ -6,12 +6,12 @@
 pub(crate) mod ast;
 pub(crate) mod declaration_syntax;
 pub(crate) mod headers;
+pub(crate) mod module_dependencies;
 pub(crate) mod numeric_text;
+pub(crate) mod plain_markdown;
 pub(crate) mod source_libraries;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
-
-pub(crate) mod module_dependencies;
 
 pub(crate) mod builtins;
 pub(crate) mod instrumentation;
@@ -76,5 +76,6 @@ pub(crate) mod tests {
     pub(crate) mod hir_fixture_support;
     mod keyword_tests;
     pub(crate) mod parse_support;
+    mod plain_markdown_tests;
     pub(crate) mod type_id_fixture_support;
 }

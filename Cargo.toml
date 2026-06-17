@@ -39,6 +39,8 @@ ryu = "1.0.23"
 # For future release builds:
 # oxc_minifier = "0.115.0"
 
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+
 [dev-dependencies]
 tempfile = "3"
 

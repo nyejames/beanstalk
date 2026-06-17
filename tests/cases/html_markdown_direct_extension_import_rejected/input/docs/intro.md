@@ -1,0 +1,1 @@
+direct extension import rejected

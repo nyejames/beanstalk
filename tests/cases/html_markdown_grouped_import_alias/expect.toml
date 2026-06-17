@@ -1,0 +1,10 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["html_markdown_grouped_import_alias aliased content", "Grouped alias"]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
