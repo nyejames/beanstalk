@@ -24,7 +24,6 @@ page_head #= theme_head
 
     ### Introduction
     - @./language-overview (Language Basics)
-    - @./design-scope (Language Design Scope)
     - @./getting-started (Getting Started)
 
     ### Core Language Features
@@ -35,18 +34,25 @@ page_head #= theme_head
     - @./collections (Collections)
     - @./structs (Structs)
     - @./choices (Choices)
+    - @./errors (Error Handling)
+
+    ### Advanced Language Features
+    - @./generics (Generics)
+    - @./traits (Traits)
     - @./aliases (Aliases)
+    - @./reactivity (Reactivity)
+
 
     ## Project Structure
     - @./project-structure (The shape of Beanstalk projects)
-    - @./beandown (Beandown content files)
     - @./libraries (Libraries and modules)
     - @./libraries/core (Core libraries)
+    - @./beandown (Beandown content files)
+
+    ## More info
+    - @./design-scope (Language Design Scope)
 
     ### Future Design Drafts
-    - @./errors (Error Handling)
-    - @./reactivity (Reactivity)
     - @./async (Async)
-    - @./generics (Generics)
-    - @./traits (Traits)
+
 ]

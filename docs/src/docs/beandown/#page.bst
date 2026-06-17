@@ -9,6 +9,9 @@ page_head #= theme_head
 #[title, center: BEANDOWN]
 
 #[section, $markdown:
+    Beandown is Beanstalk's equivalent of Markdown files. They provide the same flavour of markdown as string templates.
+    You can use nested templates inside of Beandown as if it was a string template body.
+
     Beandown files use the `.bd` extension for markdown-first content fragments in HTML projects.
     They are helpers for `.bst` pages and modules, not pages themselves.
 

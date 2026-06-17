@@ -253,6 +253,7 @@ page_head #= theme_head
     - @./core/time (Time)
 
     Other builders may expose a different core surface.
+    
 ]
 
 #[section, $markdown:
@@ -290,6 +291,15 @@ page_head #= theme_head
 
     Every JavaScript export in a Beanstalk JS library must be annotated with `@bst.sig`.
     Keep private helpers unexported.
+
+    Source-authored `@bst.sig` comments should expose free functions and opaque types. `this`
+    receiver signatures are being kept out of the source receiver-method surface.
+    
+    JS libraries may import registered runtime modules such as `@beanstalk/runtime` with named static imports only.
+    The named runtime import list may span multiple lines.
+    
+    Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use `bstOk` / `bstErr` helpers or return the wrapper shape manually.
+
 ]
 
 #[section, $markdown:

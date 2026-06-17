@@ -20,31 +20,6 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Static reuse
-
-    Use generic trait bounds when code should be reused statically across types.
-
-    [codeblock, $code("bst"):
-        render type Item is DISPLAY_TEXT |item Item| -> String:
-            return item.display()
-        ;
-    ]
-]
-
-#[section, $markdown:
-    # Runtime heterogeneity
-
-    Use choices when a value should carry one of several concrete runtime shapes.
-
-    [codeblock, $code("bst"):
-        Renderable ::
-            LabelItem | value Label |,
-            ButtonItem | value Button |,
-        ;
-    ]
-]
-
-#[section, $markdown:
     # Outside design scope
 
     [styled_table:
@@ -74,5 +49,31 @@ page_head #= theme_head
             [: Type-level programming]
             [: Type values, reflection, higher-kinded types, partial application, and parameterized aliases make code harder to inspect.]
         ]
+    ]
+]
+
+
+#[section, $markdown:
+    # Static reuse
+
+    Use generic trait bounds when code should be reused statically across types.
+
+    [codeblock, $code("bst"):
+        render type Item is DISPLAY_TEXT |item Item| -> String:
+            return item.display()
+        ;
+    ]
+]
+
+#[section, $markdown:
+    # Runtime heterogeneity
+
+    Use choices when a value should carry one of several concrete runtime shapes.
+
+    [codeblock, $code("bst"):
+        Renderable ::
+            LabelItem | value Label |,
+            ButtonItem | value Button |,
+        ;
     ]
 ]

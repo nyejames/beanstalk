@@ -318,31 +318,6 @@ body {
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> LANGUAGE DESIGN SCOPE</h1>
     <section class="container"><p>Beanstalk keeps the source language deliberately small. Compiler complexity is acceptable when it makes the programmer-facing model simpler, safer, and easier to read.</p><p>Future work is separated into two categories:</p><ul><li><strong>Deferred</strong>: fits Beanstalk&#39;s design, but is not implemented yet or is not part of Alpha.</li><li><strong>Outside language design scope</strong>: intentionally not planned because it would make the language broader, more implicit, more solver-heavy, or harder to reason about.</li></ul></section>
-    <section class="container"><h1>Static reuse</h1><p>Use generic trait bounds when code should be reused statically across types.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre></section>
-    <section class="container"><h1>Runtime heterogeneity</h1><p>Use choices when a value should carry one of several concrete runtime shapes.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Renderable</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
-        <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
-    ;
-    </code></pre></section>
     <section class="container"><h1>Outside design scope</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -377,6 +352,31 @@ body {
         </tr>
         
     </table></section>
+    <section class="container"><h1>Static reuse</h1><p>Use generic trait bounds when code should be reused statically across types.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre></section>
+    <section class="container"><h1>Runtime heterogeneity</h1><p>Use choices when a value should carry one of several concrete runtime shapes.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Renderable</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
+    ;
+    </code></pre></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

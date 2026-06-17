@@ -9,6 +9,12 @@ page_head #= theme_head
 #[title, center: LANGUAGE BASICS]
 
 #[section, $markdown:
+    Beanstalk is designed to be simple, readable and safe by default.
+    The language is very explicit about what can / cannot change and how values are passed around in the program.
+
+    The syntax can be a bit unusual due to it being designed from first principles and make sure that each symbol or keyword signifies a single concept.
+    
+    ## What a Beanstalk project looks like
     Every project has a `#config.bst` file that defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
@@ -33,7 +39,7 @@ page_head #= theme_head
     - Square brackets are NOT used for arrays, curly braces are used instead
     Square brackets are only used for string templates. Items in collections are accessed via methods.
 
-    - Equality and other logical operators use keywords like "is" and "not"; symbolic equality
+    - Equality and other logical operators use keywords like "is" and "not". symbolic equality
     and logical-not forms are not part of Beanstalk syntax.
 
     - tilde symbol ` ~` to indicate mutability (mutability must be explicit).
@@ -51,21 +57,11 @@ page_head #= theme_head
 
     ## Imports and Receiver Methods
     Namespace imports expose receiver methods only through receiver-call syntax, never as namespace fields.
-    Source-authored receiver methods are visible through their receiver type; they are not imported,
+    Source-authored receiver methods are visible through their receiver type. They are not imported,
     aliased, or re-exported independently.
     Receiver-method names can be shared across different receiver types because dispatch includes
     the receiver type.
-
-    ## External JavaScript Signatures
-    Annotated `.js` imports use `@bst.opaque` and `@bst.sig` comments.
-    Supported JavaScript export forms are `export function name(...) { ... }` and block-bodied `export const name = (...) => { ... }`.
-    Expression-bodied arrow exports are rejected.
-    Source-authored `@bst.sig` comments should expose free functions and opaque types; `this`
-    receiver signatures are being kept out of the source receiver-method surface.
-    JS libraries may import registered runtime modules such as `@beanstalk/runtime` with named static imports only.
-    The named runtime import list may span multiple lines.
-    Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use `bstOk` / `bstErr` helpers or return the wrapper shape manually.
-
+    
     ## Formatting
     - 4 spaces are recommended for indentation.
     - Types use UpperCamelCase.
@@ -232,7 +228,7 @@ page_head #= theme_head
     Valid targets are the compiler-supported builtin core types: `Bool`, `Int`, `String`,
     `Char`, `Float`, and `Error`. Optional receiving contexts cast to the inner builtin type and
     then wrap normally. For `T? = cast source catch:`, the recovery handler also produces the
-    inner `T`; `then none` is invalid because recovery handles the cast result before optional
+    inner `T`. `then none` is invalid because recovery handles the cast result before optional
     wrapping.
 
     In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize signed
@@ -250,7 +246,7 @@ page_head #= theme_head
     ]
 
     `Error(...)` remains a constructor. Scalar constructor-style conversions such as `Int(...)`,
-    `Float(...)`, `Bool(...)`, `String(...)`, and `Char(...)` are rejected; use `cast` instead.
+    `Float(...)`, `Bool(...)`, `String(...)`, and `Char(...)` are rejected. Use `cast` instead.
 ]
 
 #[section, $markdown:
