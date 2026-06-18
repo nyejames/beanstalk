@@ -41,8 +41,14 @@ bench-report:
 bench-frontend-check:
     cargo run --package xtask --bin xtask -- bench-frontend-check
 
+profile filter="terse":
+    cargo run --package xtask --bin xtask -- bench-profile --filter {{filter}}
+
+profile-case case filter="terse":
+    cargo run --package xtask --bin xtask -- bench-profile --case {{case}} --filter {{filter}}
+
 profile-build:
-    RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --features detailed_timers
+    RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --features detailed_timers --bin bean
 
 ci-clippy:
     rustc +1.95.0 -vV

@@ -6,6 +6,7 @@
 //! without adding a second nominal-type system just for headers.
 
 use super::builder::AstModuleEnvironmentBuilder;
+use std::sync::Arc;
 
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::scope_context::{
@@ -137,8 +138,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     ContextKind::ConstantHeader,
                     header.tokens.src_path.to_owned(),
                     Rc::clone(&self.declaration_table),
-                    self.context.external_package_registry.clone(),
+                    Arc::clone(&self.context.external_package_registry),
                     vec![],
+                    0,
                 )
                 .with_style_directives(self.context.style_directives)
                 .with_build_profile(self.context.build_profile)

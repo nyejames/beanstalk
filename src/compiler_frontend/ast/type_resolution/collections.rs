@@ -46,7 +46,7 @@ pub(crate) fn fold_collection_capacity(
                 ));
             };
 
-            if !scope_context.is_explicit_compile_time_constant(declaration)
+            if !scope_context.is_explicit_compile_time_constant(declaration.as_declaration())
                 || !declaration.value.is_compile_time_constant()
             {
                 return Err(CompilerDiagnostic::invalid_collection_type(

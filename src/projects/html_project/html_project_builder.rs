@@ -40,6 +40,7 @@ use crate::projects::routing::parse_html_site_config;
 use crate::projects::settings::{Config, ProjectConfigError};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const HTML_SOURCE_LIBRARY_PREFIX: &str = "html";
 
@@ -320,7 +321,7 @@ impl HtmlProjectBuilder {
         };
         validate_hir_external_package_support(
             &module.hir,
-            &module.external_package_registry,
+            module.external_package_registry.as_ref(),
             backend_target,
             string_table,
         )
@@ -377,7 +378,7 @@ impl HtmlProjectBuilder {
             document_config,
             release_build,
             entry_runtime_fragment_count: module.entry_runtime_fragment_count,
-            external_package_registry: module.external_package_registry.clone(),
+            external_package_registry: Arc::clone(&module.external_package_registry),
         };
         if wasm_enabled {
             let compiled_wasm =

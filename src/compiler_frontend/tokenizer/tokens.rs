@@ -3,6 +3,7 @@
 //! WHAT: defines token kinds, token records, and the location metadata threaded through parsing.
 //! WHY: every frontend stage past lexing depends on one canonical token and location model.
 
+use crate::compiler_frontend::arena::TokenStats;
 pub use crate::compiler_frontend::compiler_messages::source_location::{
     CharPosition, SourceLocation,
 };
@@ -157,6 +158,10 @@ pub struct FileTokens {
     pub file_id: Option<FileId>,
     /// Canonical filesystem source path for IO/path-resolution-only logic.
     pub canonical_os_path: Option<PathBuf>,
+    // WHAT: Cheap token classification gathered during lexing.
+    // WHY: stats travel with the token stream so header preparation can carry them into the
+    //      module-wide aggregation without a second token traversal.
+    pub(crate) token_stats: TokenStats,
     pub index: usize,
     pub length: usize,
 }
@@ -186,6 +191,7 @@ impl FileTokens {
             file_id,
             canonical_os_path,
             tokens,
+            token_stats: TokenStats::default(),
             index: 0,
         }
     }

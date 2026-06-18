@@ -1,6 +1,7 @@
 use super::*;
 use crate::bench_history::{LocalCaseRecord, LocalMetricRecord, LocalRunRecord};
-use crate::bench_types::BenchmarkSystem;
+use crate::bench_types::{BenchmarkMetric, BenchmarkSystem};
+use crate::profile::history::{HistoryCaseRecord, HistoryHotFunction, ProfileHistoryRecord};
 
 #[test]
 fn report_handles_no_local_history() {
@@ -250,4 +251,205 @@ fn metric(name: &str, value: f64) -> LocalMetricRecord {
         name: name.to_string(),
         value,
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Latest profile run tests
+// ---------------------------------------------------------------------------
+
+/// Build a minimal `ProfileHistoryRecord` for testing.
+fn test_profile_record(run_id: &str, system_uuid: &str) -> ProfileHistoryRecord {
+    ProfileHistoryRecord {
+        format_version: 1,
+        run_id: run_id.to_string(),
+        timestamp: "June 18th - 10:30".to_string(),
+        commit: Some("abc1234".to_string()),
+        system_uuid: system_uuid.to_string(),
+        system_display: "Test System".to_string(),
+        filter_mode: "terse".to_string(),
+        sample_rate_hz: None,
+        cases: vec![HistoryCaseRecord {
+            case_name: "check_foo_bst".to_string(),
+            group_name: "core".to_string(),
+            command: "check".to_string(),
+            args: vec!["foo.bst".to_string()],
+            observation_wall_ms: 1234.5,
+            sample_count: 500,
+            sample_weight: 500.0,
+            stage_timings: vec![BenchmarkMetric {
+                name: "ast_ms".to_string(),
+                value: 812.0,
+            }],
+            counters: vec![BenchmarkMetric {
+                name: "token_count".to_string(),
+                value: 12000.0,
+            }],
+            hot_functions: vec![HistoryHotFunction {
+                name: "beanstalk::compiler_frontend::ast::resolve_type".to_string(),
+                bucket_label: "AST".to_string(),
+                inclusive_samples: 400.0,
+                self_samples: 200.0,
+                inclusive_pct: 30.0,
+                self_pct: 16.0,
+            }],
+            top_bucket_label: "AST".to_string(),
+            run_directory_path: format!("benchmarks/local-data/profiles/{}", run_id),
+        }],
+    }
+}
+
+/// Build a second profile record with different hotspot data for drift testing.
+fn test_profile_record_shifted(run_id: &str, system_uuid: &str) -> ProfileHistoryRecord {
+    ProfileHistoryRecord {
+        format_version: 1,
+        run_id: run_id.to_string(),
+        timestamp: "June 18th - 11:00".to_string(),
+        commit: Some("def5678".to_string()),
+        system_uuid: system_uuid.to_string(),
+        system_display: "Test System".to_string(),
+        filter_mode: "terse".to_string(),
+        sample_rate_hz: None,
+        cases: vec![HistoryCaseRecord {
+            case_name: "check_foo_bst".to_string(),
+            group_name: "core".to_string(),
+            command: "check".to_string(),
+            args: vec!["foo.bst".to_string()],
+            observation_wall_ms: 1500.0,
+            sample_count: 600,
+            sample_weight: 600.0,
+            stage_timings: vec![BenchmarkMetric {
+                name: "ast_ms".to_string(),
+                value: 900.0,
+            }],
+            counters: vec![BenchmarkMetric {
+                name: "token_count".to_string(),
+                value: 13000.0,
+            }],
+            hot_functions: vec![HistoryHotFunction {
+                name: "beanstalk::compiler_frontend::ast::resolve_type".to_string(),
+                bucket_label: "AST".to_string(),
+                inclusive_samples: 500.0,
+                self_samples: 250.0,
+                inclusive_pct: 41.7,
+                self_pct: 20.0,
+            }],
+            top_bucket_label: "AST".to_string(),
+            run_directory_path: format!("benchmarks/local-data/profiles/{}", run_id),
+        }],
+    }
+}
+
+#[test]
+fn report_has_no_latest_profile_run_section_when_none() {
+    let mut report = calculate_benchmark_report(&[], None);
+    report.latest_profile_run = None;
+    let rendered = format_benchmark_report(&report);
+
+    assert!(!rendered.contains("Latest profile run"));
+}
+
+#[test]
+fn report_includes_latest_profile_run_section() {
+    let mut report = calculate_benchmark_report(&[], None);
+    report.latest_profile_run = Some(LatestProfileRun {
+        run_id: "2026-06-18T10-30-abc1234".to_string(),
+        filter_mode: "terse".to_string(),
+        case_count: 3,
+        top_drift_item: "none".to_string(),
+        agent_summary_path:
+            "benchmarks/local-data/profiles/2026-06-18T10-30-abc1234/agent-summary.md".to_string(),
+    });
+    let rendered = format_benchmark_report(&report);
+
+    assert!(rendered.contains("Latest profile run:"));
+    assert!(rendered.contains("2026-06-18T10-30-abc1234"));
+    assert!(rendered.contains("Filter:    terse"));
+    assert!(rendered.contains("Cases:     3"));
+    assert!(rendered.contains("Top drift: none"));
+    assert!(rendered.contains("agent-summary.md"));
+}
+
+#[test]
+fn format_top_drift_item_shows_drift_when_comparable_previous_exists() {
+    let previous = test_profile_record("2026-06-18T10-00-old0001", "TEST-UUID-001");
+    let latest = test_profile_record_shifted("2026-06-18T11-00-new0002", "TEST-UUID-001");
+    let records = vec![previous.clone(), latest.clone()];
+
+    // Debug: verify find_comparable_previous finds the previous record.
+    let found = crate::profile::drift::find_comparable_previous(
+        &records,
+        "TEST-UUID-001",
+        "terse",
+        None,
+        "2026-06-18T11-00-new0002",
+    );
+    assert!(
+        found.is_some(),
+        "find_comparable_previous should find the previous record"
+    );
+    assert_eq!(found.unwrap().run_id, "2026-06-18T10-00-old0001");
+
+    // Debug: verify compute_drift finds the function drift.
+    let drift_cases = vec![crate::profile::drift::DriftCaseInput {
+        case_name: "check_foo_bst".to_string(),
+        command: "check".to_string(),
+        args: vec!["foo.bst".to_string()],
+        stage_timings: vec![BenchmarkMetric {
+            name: "ast_ms".to_string(),
+            value: 900.0,
+        }],
+        counters: vec![BenchmarkMetric {
+            name: "token_count".to_string(),
+            value: 13000.0,
+        }],
+        hot_functions: vec![crate::profile::drift::DriftHotFunction {
+            name: "beanstalk::compiler_frontend::ast::resolve_type".to_string(),
+            bucket_label: "AST".to_string(),
+            inclusive_samples: 500.0,
+            inclusive_pct: 41.7,
+        }],
+    }];
+    let wall_times = std::collections::HashMap::from([("check_foo_bst".to_string(), 1500.0)]);
+    let drift_report =
+        crate::profile::drift::compute_drift(&drift_cases, found.unwrap(), &wall_times);
+
+    assert!(
+        !drift_report.function_increases.is_empty(),
+        "compute_drift should find function increases; decreases={}, stages={}, counters={}",
+        drift_report.function_decreases.len(),
+        drift_report.stage_movements.len(),
+        drift_report.counter_movements.len()
+    );
+
+    // Now test the full format_top_drift_item path.
+    let system = test_system("TEST-UUID-001");
+    let top_drift = format_top_drift_item(&records, Some(&system), &latest);
+
+    // The shifted record has resolve_type at 41.7% vs 30.0%, a +11.7pp increase.
+    assert!(
+        top_drift.contains("+11.7pp"),
+        "expected significant drift, got: {}",
+        top_drift
+    );
+    assert!(
+        top_drift.contains("resolve_type"),
+        "expected function name, got: {}",
+        top_drift
+    );
+    assert!(
+        top_drift.contains("AST"),
+        "expected bucket label, got: {}",
+        top_drift
+    );
+}
+
+#[test]
+fn format_top_drift_item_returns_none_when_no_comparable_previous() {
+    let latest = test_profile_record("2026-06-18T10-30-abc1234", "TEST-UUID-001");
+    let records = vec![latest.clone()];
+
+    let system = test_system("TEST-UUID-001");
+    let top_drift = format_top_drift_item(&records, Some(&system), &latest);
+
+    assert_eq!(top_drift, "none");
 }

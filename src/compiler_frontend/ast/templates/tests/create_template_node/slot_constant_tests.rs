@@ -14,6 +14,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn create_expression_for_test(
     token_stream: &mut FileTokens,
@@ -156,8 +157,9 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             ContextKind::Constant,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationTable::new(declarations.clone())),
-            ExternalPackageRegistry::default(),
+            Arc::new(ExternalPackageRegistry::default()),
             vec![],
+            0,
         ),
         &scope,
         &style_directives,

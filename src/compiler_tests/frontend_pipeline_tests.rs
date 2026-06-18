@@ -27,6 +27,7 @@ use crate::libraries::external_import_providers::resolution_table::ExternalImpor
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 struct FrontendProject {
@@ -99,7 +100,7 @@ impl FrontendProject {
             &Config::new(canonical_project_root),
             string_table,
             style_directives,
-            crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
+            Arc::new(crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()),
             Some(resolver),
         );
         frontend.set_source_files(source_files);
@@ -202,7 +203,12 @@ impl FrontendProject {
     fn ast(&mut self) -> crate::compiler_frontend::ast::Ast {
         let sorted = self.sorted_headers();
         self.frontend
-            .headers_to_ast(sorted, &self.entry_file, FrontendBuildProfile::Dev)
+            .headers_to_ast(
+                sorted,
+                &self.entry_file,
+                FrontendBuildProfile::Dev,
+                Default::default(),
+            )
             .expect("AST construction should succeed")
     }
 
@@ -277,11 +283,12 @@ fn frontend_diagnostics_preserve_string_table_context() {
     );
 
     let sorted = project.sorted_headers();
-    let Err(messages) =
-        project
-            .frontend
-            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
-    else {
+    let Err(messages) = project.frontend.headers_to_ast(
+        sorted,
+        &project.entry_file,
+        FrontendBuildProfile::Dev,
+        Default::default(),
+    ) else {
         panic!("const host calls should fail during AST construction");
     };
 

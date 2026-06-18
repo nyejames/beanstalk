@@ -90,7 +90,7 @@ pub(super) fn parse_mutable_receiver_expression(
     token_stream.advance();
     let receiver_expression = parse_field_access_expression_with_receiver_access(
         token_stream,
-        receiver_declaration,
+        receiver_declaration.as_declaration(),
         context,
         ReceiverAccessMode::Mutable,
         type_interner,
@@ -170,7 +170,7 @@ fn parse_copy_place_payload(
             };
 
             if context
-                .source_callable_signature(place_declaration)
+                .source_callable_signature(place_declaration.as_declaration())
                 .is_some()
             {
                 Err(CompilerDiagnostic::invalid_copy_target(
@@ -181,7 +181,7 @@ fn parse_copy_place_payload(
             } else {
                 let reference_location = token_stream.current_location();
                 let reference_expression = reference_expression_from_declaration(
-                    place_declaration,
+                    place_declaration.as_declaration(),
                     context,
                     type_interner,
                     reference_location.clone(),

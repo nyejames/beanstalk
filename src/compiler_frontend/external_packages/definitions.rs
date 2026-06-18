@@ -3,6 +3,7 @@
 //! WHAT: describes the metadata for individual external symbols and the packages that group them.
 //! WHY: the registry stores these definitions so the frontend and backends can query signatures
 //! and lowering metadata without re-parsing binding files.
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 use super::abi::{ExternalAbiType, ExternalParameter, ExternalReturnAlias, ExternalSignatureType};
 use super::ids::{
@@ -39,7 +40,7 @@ pub enum ExternalWasmLowering {
 }
 
 /// Full definition of a single external function.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ExternalFunctionDef {
     /// Leaf symbol name within its package.
     ///
@@ -60,6 +61,19 @@ pub struct ExternalFunctionDef {
     pub error_return_type: Option<ExternalSignatureType>,
     /// Backend-specific lowering metadata.
     pub lowerings: ExternalFunctionLowerings,
+}
+
+impl Clone for ExternalFunctionDef {
+    fn clone(&self) -> Self {
+        increment_frontend_counter(FrontendCounter::ExternalFunctionDefinitionCloneCount);
+        Self {
+            name: self.name.clone(),
+            parameters: self.parameters.clone(),
+            returns: self.returns.clone(),
+            error_return_type: self.error_return_type.clone(),
+            lowerings: self.lowerings.clone(),
+        }
+    }
 }
 
 impl ExternalFunctionDef {
@@ -192,7 +206,7 @@ pub struct ExternalConstantDef {
 }
 
 /// A single virtual package provided by a project builder.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ExternalPackage {
     pub id: ExternalPackageId,
     pub path: String,
@@ -207,6 +221,20 @@ pub struct ExternalPackage {
     pub type_ids: HashMap<ExternalSymbolPath, ExternalTypeId>,
     /// Path-to-ID surface map for registered constants.
     pub constant_ids: HashMap<ExternalSymbolPath, ExternalConstantId>,
+}
+
+impl Clone for ExternalPackage {
+    fn clone(&self) -> Self {
+        increment_frontend_counter(FrontendCounter::ExternalPackageDefinitionCloneCount);
+        Self {
+            id: self.id,
+            path: self.path.clone(),
+            origin: self.origin,
+            function_ids: self.function_ids.clone(),
+            type_ids: self.type_ids.clone(),
+            constant_ids: self.constant_ids.clone(),
+        }
+    }
 }
 
 impl ExternalPackage {

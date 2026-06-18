@@ -116,7 +116,7 @@ pub(crate) fn parse_this_statement(
             token_stream.advance();
             let accessed_node = parse_field_access(
                 token_stream,
-                this_reference,
+                this_reference.as_declaration(),
                 context,
                 type_interner,
                 string_table,
@@ -135,7 +135,7 @@ pub(crate) fn parse_this_statement(
 
                 ast.push(handle_mutation_target(
                     token_stream,
-                    this_reference,
+                    this_reference.as_declaration(),
                     target,
                     context,
                     type_interner,
@@ -235,7 +235,7 @@ pub(crate) fn parse_symbol_statement(
                 token_stream.advance();
                 ast.push(handle_mutation(
                     token_stream,
-                    existing_reference,
+                    existing_reference.as_declaration(),
                     context,
                     type_interner,
                     string_table,
@@ -248,7 +248,7 @@ pub(crate) fn parse_symbol_statement(
                 token_stream.advance();
                 let accessed_node = parse_field_access(
                     token_stream,
-                    existing_reference,
+                    existing_reference.as_declaration(),
                     context,
                     type_interner,
                     string_table,
@@ -267,7 +267,7 @@ pub(crate) fn parse_symbol_statement(
 
                     ast.push(handle_mutation_target(
                         token_stream,
-                        existing_reference,
+                        existing_reference.as_declaration(),
                         target,
                         context,
                         type_interner,

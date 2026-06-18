@@ -5,6 +5,7 @@
 //! WHY: per-file frontend preparation produces these flat metadata structures using local
 //!      string tables; remapping must preserve all paths, names, aliases, and source locations.
 
+use crate::compiler_frontend::arena::TokenStats;
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, NameNamespace, RuleDiagnosticKind,
@@ -610,6 +611,7 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
         source_file,
         file_id: None,
         token_count: 12,
+        token_stats: TokenStats::default(),
         file_role: FileRole::Normal,
         file_imports: vec![import],
         canonical_os_path: None,

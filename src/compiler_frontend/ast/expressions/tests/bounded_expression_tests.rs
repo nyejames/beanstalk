@@ -25,6 +25,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use crate::compiler_frontend::type_coercion::parse_context::{CastTargetContext, ExpectedType};
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
     let scope = InternedPath::from_single_str("test.bst", string_table);
@@ -32,8 +33,9 @@ fn test_scope(string_table: &mut StringTable) -> (InternedPath, ScopeContext) {
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
     (scope, context)
 }

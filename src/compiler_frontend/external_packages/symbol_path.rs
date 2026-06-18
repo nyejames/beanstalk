@@ -8,6 +8,7 @@
 //!
 //! The canonical representation is the component vector. Display text joins components with
 //! `.` only for human-readable diagnostics; no caller should parse the joined form.
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 use std::fmt;
 
@@ -39,9 +40,18 @@ pub enum ExternalSymbolPathError {
 /// ordinary flat package symbol; multi-component paths are nested namespace symbols.
 /// WHY: the registry needs to store and look up symbols by their full path to support
 /// nested namespaces without flattening them into a single string.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ExternalSymbolPath {
     components: Vec<String>,
+}
+
+impl Clone for ExternalSymbolPath {
+    fn clone(&self) -> Self {
+        increment_frontend_counter(FrontendCounter::ExternalSymbolPathCloneCount);
+        Self {
+            components: self.components.clone(),
+        }
+    }
 }
 
 impl ExternalSymbolPath {

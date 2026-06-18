@@ -14,12 +14,14 @@
 //! and re-borrows the `StringTable` as needed.
 
 use crate::compiler_frontend::FrontendBuildProfile;
+use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::sync::Arc;
 
 /// Shared dependencies and configuration required to build one module AST.
 ///
@@ -29,7 +31,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 ///      do not need to track these individually.
 pub struct AstBuildContext<'a> {
     /// Backend-provided virtual package metadata and external symbol registry.
-    pub external_package_registry: &'a ExternalPackageRegistry,
+    pub external_package_registry: Arc<ExternalPackageRegistry>,
 
     /// Merged frontend + builder style directive registry used by tokenizer and template parsing.
     pub style_directives: &'a StyleDirectiveRegistry,
@@ -51,6 +53,9 @@ pub struct AstBuildContext<'a> {
 
     /// Per-loop expansion limit for compile-time template loops.
     pub template_const_loop_iteration_limit: usize,
+
+    /// Module-level frontend arena capacity policy gathered before AST construction.
+    pub capacity_estimate: FrontendArenaCapacityEstimate,
 }
 
 /// Narrowed phase-local view of `AstBuildContext` without the mutable `StringTable`.
@@ -60,13 +65,14 @@ pub struct AstBuildContext<'a> {
 /// WHY: prevents simultaneous mutable borrows of the string table and the context struct
 ///      when both are passed through recursive parsing calls.
 pub(crate) struct AstPhaseContext<'a> {
-    pub(crate) external_package_registry: &'a ExternalPackageRegistry,
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
     pub(crate) style_directives: &'a StyleDirectiveRegistry,
     pub(crate) entry_dir: InternedPath,
     pub(crate) build_profile: FrontendBuildProfile,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) path_format_config: PathStringFormatConfig,
     pub(crate) template_const_loop_iteration_limit: usize,
+    pub(crate) capacity_estimate: FrontendArenaCapacityEstimate,
 }
 
 impl<'a> AstPhaseContext<'a> {
@@ -86,6 +92,7 @@ impl<'a> AstPhaseContext<'a> {
             project_path_resolver,
             path_format_config,
             template_const_loop_iteration_limit,
+            capacity_estimate,
         } = context;
 
         (
@@ -97,6 +104,7 @@ impl<'a> AstPhaseContext<'a> {
                 project_path_resolver,
                 path_format_config,
                 template_const_loop_iteration_limit,
+                capacity_estimate,
             },
             string_table,
         )

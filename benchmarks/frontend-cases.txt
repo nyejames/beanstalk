@@ -14,11 +14,19 @@ frontend docs
 # group: stress
 frontend benchmarks/collection-stress.bst
 frontend benchmarks/environment-stress.bst
+frontend benchmarks/adversarial/one-module-kitchen-sink.bst
+frontend benchmarks/adversarial/deep-scope-churn.bst
+frontend benchmarks/adversarial/template-render-plan-churn.bst
+frontend benchmarks/adversarial/constant-dag-churn.bst
+frontend benchmarks/adversarial/expression-rpn-churn.bst
+frontend benchmarks/adversarial/generic-trait-churn.bst
+frontend benchmarks/adversarial/collection-map-borrow-churn.bst
 
 # group: module
 frontend benchmarks/module-graph
 frontend benchmarks/import-fanout
 frontend benchmarks/external-js-imports
+frontend benchmarks/adversarial/import-external-churn
 
 # group: borrow
 frontend benchmarks/borrow-stress.bst

@@ -31,6 +31,9 @@ New code contributions must follow the [codebase style guide](docs/codebase-styl
 | `just bench-check` | Performance sanity check without recording history | No |
 | `just bench` | Intentional benchmark recording after meaningful performance work | Yes, tracked summaries may change |
 | `just bench-report` | Local investigation of benchmark history | No tracked output |
+| `just profile` | Profiling a case with Samply (default terse filter) | No — all outputs local-only |
+| `just profile <filter>` | Profiling with a specific filter (terse, normal, deep, raw-index) | No — all outputs local-only |
+| `just profile-case <case> [filter]` | Profiling one specific benchmark case | No — all outputs local-only |
 | `just profile-build` | Building a profiling binary after a benchmark report identifies a target | No tracked output |
 
 ---
@@ -146,9 +149,25 @@ New benchmark cases should be valid end-to-end programs or projects. Do not add 
 
 Benchmark project fixtures should commit only source inputs. Generated `dev/` and `release/` output directories are ignored and must not be committed.
 
+### Profiling
+
+Use `just bench-report` first to identify which case and stage are worth investigating. When stage or counter data points at a hot area but source ownership is unclear, use `just profile` to collect Samply-backed stack samples alongside `detailed_timers` observations.
+
+```bash
+just bench-report                          # find the target case and stage
+just profile                               # profile all cases, default terse filter
+just profile-case <case-name> normal       # profile one case with more detail
+```
+
+Read `benchmarks/local-data/profiles/<run-id>/agent-summary.md` first. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
+
+All profiling outputs are local-only under `benchmarks/local-data/`. Do not commit them.
+
+Profile evidence is attribution, not proof. Use benchmark movement and `just validate` to prove or reject a change.
+
 ### Design Principles
 
-- **Zero external dependencies**: Uses only Rust stdlib (no clap, serde, criterion)
+- **Minimal external dependencies**: Normal benchmark orchestration uses only Rust stdlib (no clap, criterion). Profile JSON extraction uses a small direct `serde_json` dependency in `xtask`.
 - **Cross-platform**: Works on macOS, Linux, and Windows
 - **Fail-fast**: Fail-fast with no partial benchmark writes
 - **Isolated tooling**: Implemented in separate `xtask/` workspace crate

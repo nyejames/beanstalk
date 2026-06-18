@@ -13,15 +13,16 @@ use crate::compiler_frontend::external_packages::{
     ExternalAbiType, ExternalFunctionId, ExternalPackageRegistry, ExternalSignatureType,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::sync::Arc;
 
 pub(crate) fn default_external_package_registry(
     _string_table: &mut StringTable,
-) -> ExternalPackageRegistry {
-    ExternalPackageRegistry::new()
+) -> Arc<ExternalPackageRegistry> {
+    Arc::new(ExternalPackageRegistry::new())
 }
 
 pub(crate) fn register_external_function(
-    registry: &mut ExternalPackageRegistry,
+    registry: &mut Arc<ExternalPackageRegistry>,
     name: &'static str,
     param_access: Vec<TestExternalAccessKind>,
     return_alias: TestExternalReturnAlias,
@@ -37,6 +38,12 @@ pub(crate) fn register_external_function(
         })
         .collect::<Vec<_>>();
 
-    register_test_external_function(registry, name, parameters, return_alias, return_type)
-        .expect("external function registration should succeed")
+    register_test_external_function(
+        Arc::make_mut(registry),
+        name,
+        parameters,
+        return_alias,
+        return_type,
+    )
+    .expect("external function registration should succeed")
 }

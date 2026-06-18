@@ -34,6 +34,7 @@ use crate::projects::settings::{Config, ProjectConfigError};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
 
@@ -92,7 +93,7 @@ pub struct Module {
     ///      must carry the effective registry so backends validate and lower against the same
     ///      symbols the frontend resolved, rather than reconstructing a fresh registry that
     ///      loses provider-created packages.
-    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
     /// Provider-resolved external imports used by this module, deduplicated.
     ///
     /// WHY: backends need a flat list of runtime assets and required imports to emit glue

@@ -5,6 +5,7 @@
 //! WHY: per-file parsing and module aggregation are separate boundaries so callers can merge and
 //! remap local string-table outputs before dependency sorting and AST construction.
 
+use crate::compiler_frontend::arena::{HeaderStats, TokenStats};
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::constant_dependencies::{
@@ -130,6 +131,11 @@ pub fn parse_headers(
     let mut headers: Vec<Header> = Vec::new();
     let mut top_level_const_fragments = Vec::new();
     let mut runtime_fragment_count = 0usize;
+    let mut token_stats = TokenStats::default();
+
+    for output in &prepared_files {
+        token_stats.add(&output.token_stats);
+    }
 
     for output in prepared_files {
         headers.extend(output.headers);
@@ -173,10 +179,14 @@ pub fn parse_headers(
         string_table,
     })?;
 
+    let header_stats = HeaderStats::from_headers_and_symbols(&headers, &module_symbols);
+
     Ok(Headers {
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count: runtime_fragment_count,
+        token_stats,
+        header_stats,
         module_symbols,
         import_environment,
     })
@@ -184,4 +194,4 @@ pub fn parse_headers(
 
 #[cfg(test)]
 #[path = "tests/parse_file_headers_tests.rs"]
-mod parse_file_headers_tests;
+pub(crate) mod parse_file_headers_tests;

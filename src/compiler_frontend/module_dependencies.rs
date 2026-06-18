@@ -320,6 +320,7 @@ pub fn resolve_module_dependencies(
         entry_runtime_fragment_count,
         mut module_symbols,
         import_environment,
+        ..
     } = parsed;
 
     // Partition: StartFunction headers are appended last, not sorted.

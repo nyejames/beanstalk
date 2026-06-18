@@ -33,6 +33,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn first_start_declaration_expression(source: &str) -> Expression {
     nth_start_declaration_expression(source, 0)
@@ -87,8 +88,9 @@ fn ordinary_expression_rejects_path_string_concatenation() {
         ContextKind::Template,
         source_scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     )
     .with_source_file_scope(source_scope.clone())
     .with_path_format_config(PathStringFormatConfig {
@@ -433,8 +435,9 @@ fn template_shaped_string_operand_is_rejected() {
         ContextKind::Template,
         InternedPath::from_single_str("#page.bst", &mut string_table),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
 
     let mut current_type = ExpectedType::Infer;

@@ -16,6 +16,7 @@ use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidTemplateSlotReason};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
+use std::sync::Arc;
 
 // Internal schema helpers are tested here because they drive composition
 // correctness. These tests assert structural invariants rather than raw shapes.
@@ -70,8 +71,9 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
         ContextKind::Constant,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::default(),
+        Arc::new(ExternalPackageRegistry::default()),
         vec![],
+        0,
     )
     .with_project_path_resolver(Some(resolver))
     .with_source_file_scope(scope)

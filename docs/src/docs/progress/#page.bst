@@ -578,6 +578,21 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
 ]
 
 #[section, $markdown:
+    # Compiler implementation and tooling
+
+    [styled_table:
+        [header: [: Surface] [: Status] [: Coverage] [: Current status] ]
+
+        [data:
+            [: Frontend Arena + Semantic Invariant Optimisation]
+            [: Partial]
+            [: Broad benchmark, profiling, adversarial-fixture, scope-frame, capacity-estimate, and validation coverage.]
+            [: Implemented pieces include frontend token/header stats, conservative capacity estimates, AST-owned scope-frame arenas, production scope-arena seeding, external package registry clone reduction, and adversarial benchmark fixtures. Broader expression, template/render-plan, HIR, bump-allocation, and persistent-cache migrations remain deferred until profiling justifies them.]
+        ]
+    ]
+]
+
+#[section, $markdown:
     # Deferred, rejected, and outside-scope surfaces
 
     [styled_table:

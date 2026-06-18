@@ -137,10 +137,13 @@ impl ScopeContext {
     ///      contains `module_constants`, but fixed-capacity type syntax still needs to
     ///      distinguish explicit constants from merely foldable runtime bindings.
     pub(crate) fn with_explicit_compile_time_constants(
-        mut self,
+        self,
         constants: &[Declaration],
     ) -> ScopeContext {
-        self.explicit_compile_time_constant_declarations
+        self.arena
+            .borrow_mut()
+            .frame_mut(self.current_frame_id)
+            .explicit_compile_time_constant_declarations
             .extend(constants.iter().map(|constant| constant.id.clone()));
         self
     }

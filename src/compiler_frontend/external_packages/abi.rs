@@ -5,6 +5,7 @@
 //! type system because host boundaries are intentionally restricted.
 //! WHY: the frontend needs to know how to validate and lower arguments without embedding
 //! backend-specific knowledge into the AST.
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 use super::ids::ExternalTypeId;
 use crate::compiler_frontend::datatypes::DataType;
@@ -156,7 +157,7 @@ impl From<ExternalAbiType> for ExternalSignatureType {
 }
 
 /// A single external-call parameter definition.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ExternalParameter {
     /// What the Beanstalk language accepts.
     ///
@@ -167,6 +168,16 @@ pub struct ExternalParameter {
     pub language_type: ExternalSignatureType,
     /// Borrow access mode required for this argument.
     pub access_kind: ExternalAccessKind,
+}
+
+impl Clone for ExternalParameter {
+    fn clone(&self) -> Self {
+        increment_frontend_counter(FrontendCounter::ExternalAbiParameterCloneCount);
+        Self {
+            language_type: self.language_type.clone(),
+            access_kind: self.access_kind,
+        }
+    }
 }
 
 /// Borrow access mode for an external parameter.

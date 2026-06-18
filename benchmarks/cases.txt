@@ -19,6 +19,13 @@ check benchmarks/fold-stress.bst
 check benchmarks/pattern-stress.bst
 check benchmarks/collection-stress.bst
 check benchmarks/environment-stress.bst
+check benchmarks/adversarial/one-module-kitchen-sink.bst
+check benchmarks/adversarial/deep-scope-churn.bst
+check benchmarks/adversarial/template-render-plan-churn.bst
+check benchmarks/adversarial/constant-dag-churn.bst
+check benchmarks/adversarial/expression-rpn-churn.bst
+check benchmarks/adversarial/generic-trait-churn.bst
+check benchmarks/adversarial/collection-map-borrow-churn.bst
 
 # group: module
 check benchmarks/module-graph
@@ -27,6 +34,8 @@ check benchmarks/import-fanout
 build benchmarks/import-fanout
 check benchmarks/external-js-imports
 build benchmarks/external-js-imports
+check benchmarks/adversarial/import-external-churn
+build benchmarks/adversarial/import-external-churn
 
 # group: borrow
 check benchmarks/borrow-stress.bst

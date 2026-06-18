@@ -9,6 +9,9 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 # Plans
 - [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md)
+  — initial frontend stats, adversarial fixtures, external package clone reduction, scope-frame
+  arenas, and capacity tuning are complete; broader expression/template/HIR arena migrations are
+  deferred until profiling justifies them.
 
 # Follow up notes and possible TODOs for future plans
 

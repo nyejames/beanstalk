@@ -41,6 +41,7 @@ use crate::compiler_frontend::declaration_syntax::choice::{
 };
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberSyntax;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use std::sync::Arc;
 
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
@@ -1003,7 +1004,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     choice_variant_shells_by_path: Rc::clone(&choice_variant_shells_by_path),
                     type_environment: &mut self.type_environment,
                     nominal_type_ids_by_path: Rc::clone(&nominal_type_ids_by_path),
-                    external_package_registry: self.context.external_package_registry,
+                    external_package_registry: &self.context.external_package_registry,
                     style_directives: self.context.style_directives,
                     project_path_resolver: self.context.project_path_resolver.clone(),
                     path_format_config: self.context.path_format_config.clone(),
@@ -1154,8 +1155,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             ContextKind::ConstantHeader,
             header.tokens.src_path.to_owned(),
             Rc::clone(&self.declaration_table),
-            self.context.external_package_registry.clone(),
+            Arc::clone(&self.context.external_package_registry),
             vec![],
+            0,
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)

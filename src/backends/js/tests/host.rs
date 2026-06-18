@@ -9,6 +9,7 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId}
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use std::sync::Arc;
 
 // Host function and start-invocation tests [host] [start]
 // ---------------------------------------------------------------------------
@@ -79,7 +80,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
             emit_locations: false,
             auto_invoke_start: true,
             function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
-            external_package_registry: ExternalPackageRegistry::new(),
+            external_package_registry: Arc::new(ExternalPackageRegistry::new()),
             external_module_export_glue_enabled: false,
         },
         &type_environment,
@@ -135,7 +136,7 @@ fn auto_invokes_start_function_when_enabled() {
             emit_locations: false,
             auto_invoke_start: true,
             function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
-            external_package_registry: ExternalPackageRegistry::new(),
+            external_package_registry: Arc::new(ExternalPackageRegistry::new()),
             external_module_export_glue_enabled: false,
         },
         &type_environment,

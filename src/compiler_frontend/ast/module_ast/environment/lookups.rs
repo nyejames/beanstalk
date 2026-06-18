@@ -34,6 +34,7 @@ use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Immutable resolved lookups shared by AST body emission and downstream stages.
 ///
@@ -92,7 +93,7 @@ pub(crate) struct AstModuleLookups {
 
     // Environment-wide immutable services copied from AstPhaseContext so ScopeShared can
     // reference everything through one Rc<AstModuleEnvironment>.
-    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) build_profile: FrontendBuildProfile,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,

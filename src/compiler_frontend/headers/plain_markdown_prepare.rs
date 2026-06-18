@@ -6,6 +6,7 @@
 //! MUST NOT: tokenize Markdown, inspect it as Beanstalk syntax, scan rendered HTML for imports or
 //!           symbols, or produce runtime fragments.
 
+use crate::compiler_frontend::arena::TokenStats;
 use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
 use crate::compiler_frontend::headers::synthetic_content_header::{
     SyntheticContentHeaderInput, synthetic_content_header,
@@ -72,6 +73,7 @@ pub(crate) fn prepare_plain_markdown_file(
         source_file: content_header.source_file.clone(),
         file_id: input.file_id,
         token_count: 0,
+        token_stats: TokenStats::default(),
         file_role: FileRole::Normal,
         file_imports: Vec::new(),
         canonical_os_path,

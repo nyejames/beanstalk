@@ -42,7 +42,7 @@ struct HeaderTestPrepareContext<'a> {
     external_package_registry: &'a ExternalPackageRegistry,
 }
 
-fn prepare_single_file(
+pub(crate) fn prepare_single_file(
     source: &str,
     file_path: &Path,
     entry_file_path: &Path,
@@ -111,7 +111,7 @@ fn prepare_test_source_file(
     )
 }
 
-fn parse_single_file_headers(source: &str) -> Headers {
+pub(crate) fn parse_single_file_headers(source: &str) -> Headers {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from("src/#page.bst");
     let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
@@ -1857,7 +1857,7 @@ fn constant_header_with_declared_type_captures_type_in_declaration() {
 /// WHAT: entry file contributes runtime templates, const templates, and a start function;
 ///       a non-entry library file contributes declarations; a facade file contributes exports.
 /// WHY: this is the primary observable boundary introduced by the per-file refactor.
-fn parse_multi_file_headers(sources: &[(String, String)], entry_path: &str) -> Headers {
+pub(crate) fn parse_multi_file_headers(sources: &[(String, String)], entry_path: &str) -> Headers {
     let mut string_table = StringTable::new();
     let entry_file_path = PathBuf::from(entry_path);
     let external_package_registry = ExternalPackageRegistry::new();

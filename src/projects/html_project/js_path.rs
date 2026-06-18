@@ -30,6 +30,7 @@ use crate::projects::html_project::output_plan::derive_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Inputs for rendering a JS-backed HTML document.
 ///
@@ -73,7 +74,7 @@ pub(crate) fn compile_html_module_js(
 ) -> Result<CompiledHtmlJsModule, CompilerMessages> {
     let js_lowering_config = JsLoweringConfig::html_page_bundle(
         input.release_build,
-        input.external_package_registry.clone(),
+        Arc::clone(&input.external_package_registry),
     );
 
     let js_module = lower_hir_to_js(
@@ -94,7 +95,7 @@ pub(crate) fn compile_html_module_js(
     let glue_result = generate_module_glue(
         module,
         &js_module.referenced_external_functions,
-        &input.external_package_registry,
+        input.external_package_registry.as_ref(),
         &output_path,
         input.release_build,
     )

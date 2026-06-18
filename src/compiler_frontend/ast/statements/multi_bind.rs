@@ -483,7 +483,7 @@ fn resolve_multi_bind_targets(
             target_syntax,
             *slot_type,
             explicit_type_id.as_ref(),
-            existing_declaration,
+            existing_declaration.as_declaration(),
             slot_index,
             string_table,
             type_interner.environment(),

@@ -5,6 +5,7 @@
 //! WHY: keeping these types separate from parser control flow makes the header-stage API obvious
 //! and avoids making `parse_file_headers.rs` the dumping ground for every header concern.
 
+use crate::compiler_frontend::arena::{HeaderStats, TokenStats};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
@@ -44,6 +45,17 @@ pub struct Headers {
     /// WHY: only the entry file produces runtime slots; header parsing is the single authoritative
     /// counter so builders do not need to re-scan HIR for `PushRuntimeFragment` statements.
     pub entry_runtime_fragment_count: usize,
+    /// Aggregate cheap token classification for this module.
+    ///
+    /// WHAT: the sum of per-file `TokenStats` gathered during tokenization.
+    /// WHY: provides a policy-only seed for arena capacity heuristics without re-tokenizing.
+    pub token_stats: TokenStats,
+    /// Aggregate cheap header classification for this module.
+    ///
+    /// WHAT: counts of declaration headers, their generic parameters, signature members,
+    ///       choice variants, and dependency edges.
+    /// WHY: provides a policy-only seed for arena capacity heuristics.
+    pub header_stats: HeaderStats,
     /// Header-owned module symbol package.
     ///
     /// WHY: top-level symbol discovery is owned by the header stage; dependency sorting and AST
@@ -421,6 +433,11 @@ pub struct FileFrontendPrepareOutput {
     /// WHY: benchmark instrumentation needs module-level token volume without retokenizing or
     /// walking source text after the Stage 2 preparation boundary.
     pub token_count: usize,
+    /// Cheap token classification for this file.
+    ///
+    /// WHAT: counts gathered during the existing tokenization pass.
+    /// WHY: per-file stats merge into the module-wide aggregate without a second traversal.
+    pub token_stats: TokenStats,
     /// The role of this source file within the module.
     ///
     /// WHAT: distinguishes entry files, normal source files, and module facades.

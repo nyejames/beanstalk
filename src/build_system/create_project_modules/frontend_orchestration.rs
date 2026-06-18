@@ -7,6 +7,7 @@
 use crate::build_system::build::{CompiledModuleResult, InputFile, Module, ResolvedConstFragment};
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -38,6 +39,7 @@ use crate::{benchmark_timer_log, borrow_log};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 // -------------------------
@@ -55,7 +57,7 @@ pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) build_profile: FrontendBuildProfile,
     pub(super) project_path_resolver: Option<ProjectPathResolver>,
     pub(super) style_directives: &'a StyleDirectiveRegistry,
-    pub(super) external_packages: &'a ExternalPackageRegistry,
+    pub(super) external_packages: Arc<ExternalPackageRegistry>,
     pub(super) external_import_resolution_table: &'a ExternalImportResolutionTable,
     pub(super) builder_runtime_packages: &'a [BuilderRuntimePackageMetadata],
 }
@@ -68,7 +70,7 @@ impl FrontendModuleBuildContext<'_> {
         entry_file_path: &Path,
         string_table: StringTable,
     ) -> Result<CompiledModuleResult, CompilerMessages> {
-        record_module_input_counters(module);
+        let source_byte_count = record_module_input_counters(module);
 
         let external_import_resolution_table = self.external_import_resolution_table;
 
@@ -76,7 +78,7 @@ impl FrontendModuleBuildContext<'_> {
             self.config,
             string_table,
             self.style_directives.to_owned(),
-            self.external_packages.clone(),
+            Arc::clone(&self.external_packages),
             self.project_path_resolver.clone(),
         );
 
@@ -99,6 +101,9 @@ impl FrontendModuleBuildContext<'_> {
                 })?;
             warnings.extend(file_warnings);
 
+            let capacity_estimate =
+                record_frontend_capacity_estimate(module.len(), source_byte_count, &module_headers);
+
             // 3. Resolve dependencies and sort headers for linear processing.
             let sorted = timed_frontend_stage(
                 "dependency_sort_ms",
@@ -110,7 +115,13 @@ impl FrontendModuleBuildContext<'_> {
 
             // 4. Build the Abstract Syntax Tree (AST).
             let module_ast = timed_frontend_stage("ast_ms", "AST created in: ", || {
-                self.build_ast(&mut compiler, sorted, entry_file_path, &mut warnings)
+                self.build_ast(
+                    &mut compiler,
+                    sorted,
+                    entry_file_path,
+                    capacity_estimate,
+                    &mut warnings,
+                )
             })?;
 
             // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
@@ -143,7 +154,7 @@ impl FrontendModuleBuildContext<'_> {
                 .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
             let reachable_external_package_ids = collect_reachable_external_package_ids(
                 &reachability.reachable_external_functions,
-                &compiler.external_package_registry,
+                compiler.external_package_registry.as_ref(),
             );
 
             // -------------------------
@@ -216,7 +227,7 @@ impl FrontendModuleBuildContext<'_> {
                 warnings,
                 const_top_level_fragments,
                 entry_runtime_fragment_count,
-                external_package_registry: compiler.external_package_registry.clone(),
+                external_package_registry: Arc::clone(&compiler.external_package_registry),
                 module_external_imports,
             })
         })();
@@ -301,7 +312,7 @@ impl FrontendModuleBuildContext<'_> {
             let prepare_context = FrontendFilePrepareContext {
                 source_files: &compiler.source_files,
                 style_directives: &compiler.style_directives,
-                external_package_registry: &compiler.external_package_registry,
+                external_package_registry: compiler.external_package_registry.as_ref(),
                 entry_file_path,
                 options: &options,
             };
@@ -387,7 +398,7 @@ impl FrontendModuleBuildContext<'_> {
             .sum();
         let headers = parse_headers(
             prepared_outputs,
-            &compiler.external_package_registry,
+            compiler.external_package_registry.as_ref(),
             external_import_resolution_table,
             options.project_path_resolver.as_ref(),
             &mut compiler.string_table,
@@ -428,9 +439,15 @@ impl FrontendModuleBuildContext<'_> {
         compiler: &mut CompilerFrontend,
         sorted: SortedHeaders,
         entry_file_path: &Path,
+        capacity_estimate: FrontendArenaCapacityEstimate,
         warnings: &mut Vec<CompilerDiagnostic>,
     ) -> Result<Ast, CompilerMessages> {
-        match compiler.headers_to_ast(sorted, entry_file_path, self.build_profile) {
+        match compiler.headers_to_ast(
+            sorted,
+            entry_file_path,
+            self.build_profile,
+            capacity_estimate,
+        ) {
             Ok(ast) => {
                 warnings.extend(ast.warnings.clone());
                 Ok(ast)
@@ -469,7 +486,7 @@ impl FrontendModuleBuildContext<'_> {
 //  Shared Helpers
 // -------------------------
 
-fn record_module_input_counters(module: &[InputFile]) {
+fn record_module_input_counters(module: &[InputFile]) -> usize {
     add_frontend_counter(FrontendCounter::ModuleCount, 1);
     add_frontend_counter(FrontendCounter::SourceFileCount, module.len());
 
@@ -478,6 +495,7 @@ fn record_module_input_counters(module: &[InputFile]) {
         .map(|input_file| input_file.source_code.len())
         .sum();
     add_frontend_counter(FrontendCounter::SourceByteCount, source_byte_count);
+    source_byte_count
 }
 
 fn record_header_counters(headers: &Headers) {
@@ -509,6 +527,33 @@ fn record_header_counters(headers: &Headers) {
         FrontendCounter::TopLevelDeclarationCount,
         top_level_declaration_count,
     );
+}
+
+fn record_frontend_capacity_estimate(
+    source_file_count: usize,
+    source_byte_count: usize,
+    headers: &Headers,
+) -> FrontendArenaCapacityEstimate {
+    let const_fragment_count = headers.top_level_const_fragments.len();
+    let capacity = FrontendArenaCapacityEstimate::new(
+        source_file_count,
+        source_byte_count,
+        headers.token_stats,
+        headers.header_stats,
+        const_fragment_count,
+        headers.entry_runtime_fragment_count,
+    );
+
+    // Phase 1 wires the scope-frame estimate because scope-frame arenas are the first typed arena
+    // target. Phase 4 records actual frame allocation and arena capacity growth from the scope
+    // arena owner; this site records only the policy estimate.
+    add_frontend_counter(FrontendCounter::EstimatedScopeFrames, capacity.scope_frames);
+    add_frontend_counter(
+        FrontendCounter::CappedCapacityEstimates,
+        capacity.capped_field_count,
+    );
+
+    capacity
 }
 
 fn record_borrow_counters(report: &BorrowCheckReport) {

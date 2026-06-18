@@ -5,6 +5,7 @@
 //! callers can run it against worker-local string tables before deterministic module aggregation.
 #![allow(clippy::result_large_err)]
 
+use crate::compiler_frontend::arena::TokenStats;
 use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
 use crate::compiler_frontend::keywords::{
     attached_bang_keyword_token_kind, is_identifier_continue, is_valid_identifier,
@@ -184,9 +185,11 @@ pub fn tokenize(
     let mut token: Token = Token::new(TokenKind::ModuleStart, SourceLocation::default());
     let mut last_meaningful_token_kind: Option<TokenKind> = None;
     let mut meaningful_token_before_last_kind: Option<TokenKind> = None;
+    let mut token_stats = TokenStats::default();
 
     loop {
         token_log!(#token);
+        token_stats.accumulate(&token.kind);
 
         if token.kind == TokenKind::Eof {
             break;
@@ -210,11 +213,9 @@ pub fn tokenize(
 
     tokens.push(token);
 
-    Ok(FileTokens::new_with_file_id(
-        src_path.to_owned(),
-        file_id,
-        tokens,
-    ))
+    let mut file_tokens = FileTokens::new_with_file_id(src_path.to_owned(), file_id, tokens);
+    file_tokens.token_stats = token_stats;
+    Ok(file_tokens)
 }
 
 fn get_token_kind(

@@ -54,6 +54,7 @@ use crate::compiler_frontend::traits::syntax::{
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 struct TraitRequirementResolutionInput<'a> {
     header: &'a Header,
@@ -522,8 +523,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             ContextKind::ConstantHeader,
             header.tokens.src_path.to_owned(),
             Rc::clone(&self.declaration_table),
-            self.context.external_package_registry.clone(),
+            Arc::clone(&self.context.external_package_registry),
             vec![],
+            0,
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)

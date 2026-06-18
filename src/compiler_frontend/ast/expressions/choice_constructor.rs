@@ -335,9 +335,11 @@ pub(super) fn parse_choice_construct(
                     let is_placeholder_reference =
                         if let ExpressionKind::Reference(path) = &value.kind {
                             path.name().is_some_and(|name| {
-                                context
-                                    .get_reference(&name)
-                                    .is_some_and(Declaration::is_unresolved_constant_placeholder)
+                                context.get_reference(&name).is_some_and(|declaration| {
+                                    declaration
+                                        .as_declaration()
+                                        .is_unresolved_constant_placeholder()
+                                })
                             })
                         } else {
                             false

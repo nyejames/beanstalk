@@ -15,6 +15,37 @@ use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// Resolved declaration reference returned by `ScopeContext::get_reference`.
+///
+/// WHAT: abstracts over declarations that live in the local scope-frame arena (owned as
+///       `Rc<Declaration>`) and declarations that live in the immutable module lookup
+///       tables (borrowed as `&Declaration`).
+/// WHY: local declarations are stored as `Rc<Declaration>` so lookup can hand out a
+///      cheap owned handle without exposing a `RefCell` borrow guard. Shared declarations
+///      can still be returned by reference because the lookup tables outlive the query.
+pub(crate) enum ScopeDeclarationRef<'a> {
+    Local(Rc<Declaration>),
+    Shared(&'a Declaration),
+}
+
+impl<'a> ScopeDeclarationRef<'a> {
+    /// Return a borrowed view of the underlying declaration.
+    pub(crate) fn as_declaration(&self) -> &Declaration {
+        match self {
+            ScopeDeclarationRef::Local(rc) => rc.as_ref(),
+            ScopeDeclarationRef::Shared(declaration) => declaration,
+        }
+    }
+}
+
+impl<'a> std::ops::Deref for ScopeDeclarationRef<'a> {
+    type Target = Declaration;
+
+    fn deref(&self) -> &Declaration {
+        self.as_declaration()
+    }
+}
+
 /// Resolved struct constructor metadata for identifier-led expression dispatch.
 ///
 /// WHAT: carries canonical nominal identity plus the original AST field declarations used for
@@ -33,12 +64,11 @@ impl ScopeContext {
     //  Symbol lookup
     // --------------------------
 
-    pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
-        // 1. Locals (latest visible local wins)
-        if let Some(indices) = self.local_declarations_by_name.get(name) {
-            return indices
-                .last()
-                .map(|index| &self.local_declarations[*index as usize]);
+    pub(crate) fn get_reference(&self, name: &StringId) -> Option<ScopeDeclarationRef<'_>> {
+        // 1. Locals (latest visible local wins). Parent-linked frames walk the chain
+        //    without copying ancestor declarations into the current scope.
+        if let Some(declaration) = self.arena.borrow().lookup(self.current_frame_id, name) {
+            return Some(ScopeDeclarationRef::Local(declaration));
         }
 
         // 2. Source-visible names → canonical declaration path.
@@ -57,7 +87,7 @@ impl ScopeContext {
                     .get_by_path(canonical_path)
                 && !declaration.value.is_receiver_function()
             {
-                return Some(declaration);
+                return Some(ScopeDeclarationRef::Shared(declaration));
             }
             // file_visibility is set but name not found — do not fall back.
             // This ensures import aliases hide the original name.
@@ -70,6 +100,22 @@ impl ScopeContext {
             .lookups
             .declaration_table
             .get_visible_non_receiver_by_name(*name, self.visible_declaration_ids.as_ref())
+            .map(ScopeDeclarationRef::Shared)
+    }
+
+    /// Return whether a name already resolves to a visible local declaration.
+    ///
+    /// WHAT: a dedicated existence check used before declaring a new local binding.
+    ///       It walks the same parent-linked frame chain as `get_reference`, but counts
+    ///       the walk as a redeclaration ancestor check for instrumentation.
+    /// WHY: no-shadowing means the latest visible local wins; a new binding is illegal
+    ///      if any ancestor frame already declares the name.
+    pub(crate) fn has_visible_local_declaration(&self, name: &StringId) -> bool {
+        increment_ast_counter(AstCounter::ScopeFrameRedeclarationAncestorChecks);
+        self.arena
+            .borrow()
+            .lookup(self.current_frame_id, name)
+            .is_some()
     }
 
     /// Return whether a declaration is visible as an authored `#` constant in this context.
@@ -79,8 +125,9 @@ impl ScopeContext {
     /// WHY: fixed-capacity type syntax must reject foldable runtime bindings while still
     /// allowing visible explicit constants before and after the final lookup package exists.
     pub(crate) fn is_explicit_compile_time_constant(&self, declaration: &Declaration) -> bool {
-        self.explicit_compile_time_constant_declarations
-            .contains(&declaration.id)
+        self.arena
+            .borrow()
+            .is_explicit_compile_time_constant(self.current_frame_id, declaration)
             || self
                 .shared
                 .lookups

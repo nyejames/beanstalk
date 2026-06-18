@@ -20,6 +20,7 @@ use crate::compiler_frontend::tests::ast_fixture_support::{
 use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
 use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
 use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+use std::sync::Arc;
 
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::Config;
@@ -77,7 +78,7 @@ fn frontend_check_borrows_propagates_failures() {
         &config,
         string_table,
         StyleDirectiveRegistry::built_ins(),
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
+        Arc::new(crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()),
         None,
     );
     let messages = frontend
@@ -142,7 +143,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
         warnings: Vec::new(),
         const_top_level_fragments: Vec::new(),
         entry_runtime_fragment_count: 0,
-        external_package_registry: external_package_registry.clone(),
+        external_package_registry: Arc::clone(&external_package_registry),
         module_external_imports: Vec::new(),
     };
 

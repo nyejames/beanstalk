@@ -1,0 +1,52 @@
+{
+  "threads": [
+    {
+      "name": "Main Thread",
+      "isMainThread": true,
+      "stringArray": [
+        "main",
+        "beanstalk::compiler_frontend::ast::resolve_type",
+        "beanstalk::compiler_frontend::hir::generate",
+        "std::alloc::alloc",
+        "rayon::ThreadPool::spawn"
+      ],
+      "funcTable": {
+        "name": [0, 1, 2, 3, 4]
+      },
+      "frameTable": {
+        "func": [0, 1, 2, 3, 4]
+      },
+      "stackTable": {
+        "frame": [0, 1, 3, 2, 3, 4],
+        "prefix": [-1, 0, 1, 0, 3, 0]
+      },
+      "samples": {
+        "weightType": "samples",
+        "stack": [5, 2, 4],
+        "weight": [3, 1, 2]
+      }
+    },
+    {
+      "name": "Worker",
+      "isMainThread": false,
+      "stringArray": [
+        "main",
+        "beanstalk::compiler_frontend::ast::resolve_type",
+        "std::alloc::alloc"
+      ],
+      "funcTable": {
+        "name": [0, 1, 2]
+      },
+      "frameTable": {
+        "func": [0, 1, 2]
+      },
+      "stackTable": {
+        "frame": [0, 2, 1],
+        "prefix": [-1, 0, 1]
+      },
+      "samples": {
+        "stack": [2, null]
+      }
+    }
+  ]
+}

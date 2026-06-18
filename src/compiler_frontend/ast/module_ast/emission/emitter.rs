@@ -38,6 +38,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages,
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, GenericSubstitutionDiagnostic, InvalidTemplateStructureReason,
 };
+use std::sync::Arc;
 
 use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
 use crate::compiler_frontend::datatypes::DataType;
@@ -80,6 +81,10 @@ pub(in crate::compiler_frontend::ast) struct AstEmission {
     pub(in crate::compiler_frontend::ast) generic_instance_count: usize,
 }
 
+#[cfg(test)]
+#[path = "capacity_budget_tests.rs"]
+mod capacity_budget_tests;
+
 /// Shared input used by [`AstEmitter::build_base_scope_context`] to create a
 /// [`ScopeContext`] that is identical across function, start, and const-template emission.
 struct BaseScopeContextInput<'scope> {
@@ -88,6 +93,39 @@ struct BaseScopeContextInput<'scope> {
     top_level_declarations: &'scope Rc<TopLevelDeclarationTable>,
     visibility: Rc<FileVisibility>,
     source_file_scope: InternedPath,
+    scope_frame_capacity: usize,
+}
+
+/// AST-local spender for module-level scope-frame capacity estimates.
+///
+/// WHAT: divides one module estimate across the root parse contexts known from sorted headers.
+/// WHY: `ScopeArena` is owned per parse context, so applying the full module estimate to every
+/// root would multiply memory use. This budget spends the estimate once and lets undersized roots
+/// grow normally.
+struct ScopeFrameCapacityBudget {
+    remaining_frames: usize,
+    remaining_roots: usize,
+}
+
+impl ScopeFrameCapacityBudget {
+    fn new(module_frame_estimate: usize, root_count: usize) -> Self {
+        Self {
+            remaining_frames: module_frame_estimate,
+            remaining_roots: root_count,
+        }
+    }
+
+    fn next_root_capacity(&mut self) -> usize {
+        if self.remaining_roots == 0 || self.remaining_frames == 0 {
+            self.remaining_roots = self.remaining_roots.saturating_sub(1);
+            return 0;
+        }
+
+        let capacity = self.remaining_frames.div_ceil(self.remaining_roots);
+        self.remaining_frames = self.remaining_frames.saturating_sub(capacity);
+        self.remaining_roots -= 1;
+        capacity
+    }
 }
 
 /// Rebase each parameter's [`InternedPath`] from a bare name to a fully qualified path
@@ -118,6 +156,28 @@ fn rebase_signature_parameters(signature: &mut FunctionSignature, function_path:
             }
         }
     }
+}
+
+/// Count sorted-header roots that create independent root `ScopeArena`s during emission.
+///
+/// WHAT: function headers count once whether they emit a concrete body or validate a generic
+/// template body; start headers and top-level const templates also parse in their own root
+/// contexts.
+/// WHY: the module-wide capacity estimate must be distributed over root parse contexts that can
+/// consume it once. Header kinds handled entirely by environment construction or metadata
+/// validation do not allocate root body arenas here.
+fn count_root_scope_arena_consumers(headers: &[Header]) -> usize {
+    headers
+        .iter()
+        .filter(|header| {
+            matches!(
+                header.kind,
+                HeaderKind::Function { .. }
+                    | HeaderKind::StartFunction
+                    | HeaderKind::ConstTemplate { .. }
+            )
+        })
+        .count()
 }
 
 pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'environment> {
@@ -163,8 +223,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             input.kind,
             input.scope,
             Rc::clone(input.top_level_declarations),
-            self.context.external_package_registry.clone(),
+            Arc::clone(&self.context.external_package_registry),
             Vec::<TypeId>::new(),
+            input.scope_frame_capacity,
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
@@ -216,6 +277,12 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         #[cfg(feature = "detailed_timers")]
         let mut const_templates_emitted = 0usize;
 
+        let root_scope_consumer_count = count_root_scope_arena_consumers(&sorted_headers);
+        let mut scope_frame_capacity_budget = ScopeFrameCapacityBudget::new(
+            self.context.capacity_estimate.scope_frames,
+            root_scope_consumer_count,
+        );
+
         for header in sorted_headers {
             let visibility = Rc::new(
                 self.environment
@@ -236,6 +303,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                             header,
                             visibility,
                             source_file_scope,
+                            scope_frame_capacity_budget.next_root_capacity(),
                             string_table,
                         )?;
                         continue;
@@ -243,7 +311,13 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
 
                     #[cfg(feature = "detailed_timers")]
                     let start = Instant::now();
-                    self.emit_function(header, visibility, source_file_scope, string_table)?;
+                    self.emit_function(
+                        header,
+                        visibility,
+                        source_file_scope,
+                        scope_frame_capacity_budget.next_root_capacity(),
+                        string_table,
+                    )?;
                     #[cfg(feature = "detailed_timers")]
                     {
                         total_function_body_parse_time += start.elapsed();
@@ -254,7 +328,13 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 HeaderKind::StartFunction => {
                     #[cfg(feature = "detailed_timers")]
                     let start = Instant::now();
-                    self.emit_start(header, visibility, source_file_scope, string_table)?;
+                    self.emit_start(
+                        header,
+                        visibility,
+                        source_file_scope,
+                        scope_frame_capacity_budget.next_root_capacity(),
+                        string_table,
+                    )?;
                     #[cfg(feature = "detailed_timers")]
                     {
                         total_start_body_parse_time += start.elapsed();
@@ -287,6 +367,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         top_level_declarations: &top_level_declarations,
                         visibility,
                         source_file_scope,
+                        scope_frame_capacity: scope_frame_capacity_budget.next_root_capacity(),
                     });
 
                     #[cfg(feature = "detailed_timers")]
@@ -587,6 +668,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 top_level_declarations: &Rc::clone(&self.environment.lookups.declaration_table),
                 visibility,
                 source_file_scope: template.source_file.clone(),
+                scope_frame_capacity: 0,
             })
             .with_visible_declarations(visible_declarations)
             .with_active_generic_type_context(generic_type_context)
@@ -673,6 +755,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         header: Header,
         visibility: Rc<FileVisibility>,
         source_file_scope: InternedPath,
+        scope_frame_capacity: usize,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         // --------------------------
@@ -723,6 +806,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 top_level_declarations: &Rc::clone(&self.environment.lookups.declaration_table),
                 visibility,
                 source_file_scope,
+                scope_frame_capacity,
             })
             .with_visible_declarations(visible_declarations);
         let generic_type_context = self.build_active_generic_type_context(
@@ -756,6 +840,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         header: Header,
         visibility: Rc<FileVisibility>,
         source_file_scope: InternedPath,
+        scope_frame_capacity: usize,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         // --------------------------
@@ -785,7 +870,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         }
 
         // Top-level declarations are shared via Rc (no data copy);
-        // parameters live in local_declarations.
+        // parameters live in the function's current scope frame.
         let mut context = self
             .build_base_scope_context(BaseScopeContextInput {
                 kind: ContextKind::Function,
@@ -793,6 +878,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 top_level_declarations: &Rc::clone(&self.environment.lookups.declaration_table),
                 visibility,
                 source_file_scope,
+                scope_frame_capacity,
             })
             .with_visible_declarations(visible_declarations);
         let expected_result_type_ids = resolved_signature.signature.success_return_type_ids();
@@ -850,6 +936,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         header: Header,
         visibility: Rc<FileVisibility>,
         source_file_scope: InternedPath,
+        scope_frame_capacity: usize,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         // --------------------------
@@ -861,6 +948,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             top_level_declarations: &Rc::clone(&self.environment.lookups.declaration_table),
             visibility,
             source_file_scope,
+            scope_frame_capacity,
         });
 
         let mut token_stream = header.tokens;

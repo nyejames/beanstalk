@@ -37,6 +37,7 @@ use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegi
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tempfile::TempDir;
 
 fn prepare_directly(source: &str) -> (FileFrontendPrepareOutput, StringTable) {
@@ -66,13 +67,13 @@ fn prepare_via_pipeline(
 > {
     let source_files = SourceFileTable::empty();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let external_package_registry = ExternalPackageRegistry::new();
+    let external_package_registry = Arc::new(ExternalPackageRegistry::new());
     let entry_file_path = PathBuf::from("src/#page.bst");
     let options = HeaderParseOptions::default();
     let context = FrontendFilePrepareContext {
         source_files: &source_files,
         style_directives: &style_directives,
-        external_package_registry: &external_package_registry,
+        external_package_registry: external_package_registry.as_ref(),
         entry_file_path: entry_file_path.as_path(),
         options: &options,
     };
@@ -92,7 +93,7 @@ fn prepare_via_pipeline(
 fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     let source_files = SourceFileTable::empty();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let external_package_registry = ExternalPackageRegistry::new();
+    let external_package_registry = Arc::new(ExternalPackageRegistry::new());
     let project_path = std::env::temp_dir();
     let project_path_resolver = ProjectPathResolver::new(
         project_path.clone(),
@@ -109,7 +110,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     let context = FrontendFilePrepareContext {
         source_files: &source_files,
         style_directives: &style_directives,
-        external_package_registry: &external_package_registry,
+        external_package_registry: external_package_registry.as_ref(),
         entry_file_path: entry_file_path.as_path(),
         options: &options,
     };
@@ -146,7 +147,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
             top_level_const_fragments: sorted_headers.top_level_const_fragments,
         },
         AstBuildContext {
-            external_package_registry: &external_package_registry,
+            external_package_registry: Arc::clone(&external_package_registry),
             style_directives: &style_directives,
             string_table: &mut string_table,
             entry_dir,
@@ -154,6 +155,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
             project_path_resolver: Some(project_path_resolver),
             path_format_config: PathStringFormatConfig::default(),
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            capacity_estimate: Default::default(),
         },
     )
     .expect("Beandown content constant should build through AST");
@@ -267,7 +269,7 @@ export render_html || -> String:
             .map_err(first_diagnostic_from_bag)?;
         let entry_dir = InternedPath::from_path_buf(&self.entry_file_path, &mut string_table);
         let style_directives = StyleDirectiveRegistry::built_ins();
-        let external_package_registry = ExternalPackageRegistry::new();
+        let external_package_registry = Arc::new(ExternalPackageRegistry::new());
 
         Ast::new(
             AstBuildInput {
@@ -277,7 +279,7 @@ export render_html || -> String:
                 top_level_const_fragments: sorted_headers.top_level_const_fragments,
             },
             AstBuildContext {
-                external_package_registry: &external_package_registry,
+                external_package_registry: Arc::clone(&external_package_registry),
                 style_directives: &style_directives,
                 string_table: &mut string_table,
                 entry_dir,
@@ -285,6 +287,7 @@ export render_html || -> String:
                 project_path_resolver: Some(self.project_path_resolver.clone()),
                 path_format_config: PathStringFormatConfig::default(),
                 template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                capacity_estimate: Default::default(),
             },
         )
         .map_err(|messages| {
@@ -330,7 +333,7 @@ export render_html || -> String:
         Box<CompilerDiagnostic>,
     > {
         let style_directives = StyleDirectiveRegistry::built_ins();
-        let external_package_registry = ExternalPackageRegistry::new();
+        let external_package_registry = Arc::new(ExternalPackageRegistry::new());
         let options = HeaderParseOptions {
             entry_file_id: None,
             project_path_resolver: Some(self.project_path_resolver.clone()),
@@ -338,7 +341,7 @@ export render_html || -> String:
         let context = FrontendFilePrepareContext {
             source_files: &self.source_files,
             style_directives: &style_directives,
-            external_package_registry: &external_package_registry,
+            external_package_registry: external_package_registry.as_ref(),
             entry_file_path: self.entry_file_path.as_path(),
             options: &options,
         };
@@ -444,7 +447,7 @@ fn prepare_beanstalk_source(
         file_tokens,
         entry_file_path,
         &HeaderParseOptions::default(),
-        &ExternalPackageRegistry::new(),
+        &Arc::new(ExternalPackageRegistry::new()),
         string_table,
         0,
         0,

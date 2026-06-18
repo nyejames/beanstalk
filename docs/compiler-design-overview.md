@@ -479,6 +479,21 @@ Internally, AST construction is organized around three phase owners:
 - [`emit_ast_nodes`](../src/compiler_frontend/ast/module_ast/emission/) parses function/start/template bodies against the completed environment, validates function terminality, emits AST nodes, and emits const-template output.
 - [`finalize_ast`](../src/compiler_frontend/ast/module_ast/finalization/) performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, reactive template metadata propagation, template normalization, module constant normalization, type-boundary validation, const-fact collection, concrete choice-definition gathering, builtin AST merging, and final `Ast` construction.
 
+### Frontend arenas and capacity policy
+
+Frontend arenas are stage/module-owned implementation details. They provide stable IDs and reduce
+clone/allocation pressure inside the owning stage, but they do not change source semantics,
+diagnostics, declaration ordering, HIR shape, or backend artifacts.
+
+Token/header statistics and `FrontendArenaCapacityEstimate` produce conservative `Vec` capacity
+seeds. These estimates are policy-only: undersized estimates grow normally, oversized estimates
+only reserve bounded extra capacity, and capacity formulas must remain centralized in the frontend
+arena policy modules.
+
+The scope-frame arena is AST-owned. It replaces cloned body-local scope maps with parent-linked
+frames while continuing to consume header-built visibility through `ScopeContext`. `StringTable`
+remains the path and string identity system, and AST/HIR ownership boundaries remain unchanged.
+
 Important AST subowners:
 
 - [`type_resolution/`](../src/compiler_frontend/ast/type_resolution/) owns parsed type-reference resolution to canonical `TypeId`, including source-visible lookup, aliases, fixed collection capacity, maps, and generic nominal instantiation.

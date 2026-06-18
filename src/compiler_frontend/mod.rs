@@ -44,6 +44,7 @@ pub(crate) mod external_packages;
 pub(crate) mod hir;
 
 pub(crate) mod analysis;
+pub(crate) mod arena;
 
 pub(crate) mod paths;
 

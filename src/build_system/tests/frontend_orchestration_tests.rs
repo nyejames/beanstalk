@@ -24,6 +24,7 @@ use crate::compiler_frontend::{FrontendFilePrepareContext, FrontendFilePrepareIn
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::Config;
 use std::fs;
+use std::sync::Arc;
 
 #[test]
 fn merge_stage_messages_preserves_render_type_context_with_warnings() {
@@ -77,7 +78,7 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
         &Config::new(temp_dir.path().to_path_buf()),
         string_table,
         StyleDirectiveRegistry::built_ins(),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         None,
     );
     frontend.set_source_files(source_files);
@@ -103,7 +104,7 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
             let prepare_context = FrontendFilePrepareContext {
                 source_files: &frontend.source_files,
                 style_directives: &frontend.style_directives,
-                external_package_registry: &frontend.external_package_registry,
+                external_package_registry: frontend.external_package_registry.as_ref(),
                 entry_file_path: &canonical_a,
                 options: &options,
             };
@@ -266,7 +267,7 @@ fn parallel_file_preparation_produces_deterministic_ordered_output() {
         &Config::new(temp_dir.path().to_path_buf()),
         string_table,
         StyleDirectiveRegistry::built_ins(),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         None,
     );
     frontend.set_source_files(source_files);

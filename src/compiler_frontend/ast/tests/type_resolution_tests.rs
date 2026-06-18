@@ -32,6 +32,7 @@ use crate::compiler_frontend::tests::parse_support::{
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------
 //  Checked / optional diagnostic-type-to-TypeId bridge tests
@@ -290,8 +291,9 @@ fn constant_capacity_resolves_to_fixed_collection() {
         ContextKind::Function,
         InternedPath::new(),
         declaration_table.clone(),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
     let constant_declaration = Declaration {
         id: InternedPath::from_components(vec![capacity_name]),

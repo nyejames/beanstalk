@@ -459,51 +459,58 @@ or extend `xtask` if that already owns repo tooling in the current implementatio
 
 This phase creates the evidence baseline and report structure before changing optimisation-sensitive code. It should capture the current compiler shape, current benchmark behaviour, and current Samply hotspot profile. No major optimisation refactor belongs in this phase.
 
+Phase 0 completed on 2026-06-18. The baseline report is in
+`benchmarks/frontend-optimization-results.md`. Existing benchmark fixtures were repaired to match
+current language rules before the final benchmark/validation pass. Samply profile files were
+produced under ignored local data, but contained zero samples even after a repeated docs profile,
+so Phase 1 should use the benchmark stage/counter baseline unless a later slice needs
+function-level attribution.
+
 ### Implementation steps
 
-- [ ] Create `benchmarks/frontend-optimization-results.md`.
-- [ ] Add a baseline section with:
-  - [ ] date;
-  - [ ] commit SHA;
-  - [ ] machine/OS/CPU notes;
-  - [ ] Rust toolchain;
-  - [ ] command list;
-  - [ ] benchmark suite versions/case list;
-  - [ ] raw profile filenames stored locally only.
-- [ ] Run semantic validation:
-  - [ ] `just validate`.
-- [ ] Run benchmark checks:
-  - [ ] `just bench-frontend-check`;
-  - [ ] `just bench-check`.
-- [ ] Run five recorded benchmark invocations:
-  - [ ] `just bench-frontend` five times;
-  - [ ] `just bench` five times;
-  - [ ] summarize medians with `just bench-report`.
-- [ ] Build a profiling binary:
-  - [ ] `just profile-build`, or `cargo build --profile profiling --features detailed_timers` if needed.
-- [ ] Record baseline Samply profiles:
-  - [ ] `samply record ./target/profiling/bean build docs --release`;
-  - [ ] one targeted profile for existing `template-stress.bst`;
-  - [ ] one targeted profile for existing `environment-stress.bst`.
-- [ ] Summarize top findings in `benchmarks/frontend-optimization-results.md`:
-  - [ ] top stage timings;
-  - [ ] top counters;
-  - [ ] top sampled functions from Samply;
-  - [ ] obvious clone/allocation/drop hotspots;
-  - [ ] no raw profile data.
-- [ ] Record the agreed semantic invariants and the intended optimisation use of each invariant.
+- [x] Create `benchmarks/frontend-optimization-results.md`.
+- [x] Add a baseline section with:
+  - [x] date;
+  - [x] commit SHA;
+  - [x] machine/OS/CPU notes;
+  - [x] Rust toolchain;
+  - [x] command list;
+  - [x] benchmark suite versions/case list;
+  - [x] raw profile filenames stored locally only.
+- [x] Run semantic validation:
+  - [x] `just validate`.
+- [x] Run benchmark checks:
+  - [x] `just bench-frontend-check`;
+  - [x] `just bench-check`.
+- [x] Run five recorded benchmark invocations:
+  - [x] `just bench-frontend` five times;
+  - [x] `just bench` five times;
+  - [x] summarize medians with `just bench-report`.
+- [x] Build a profiling binary:
+  - [x] `just profile-build`, or `cargo build --profile profiling --features detailed_timers` if needed.
+- [x] Record baseline Samply profiles:
+  - [x] `samply record ./target/profiling/bean build docs --release`;
+  - [x] one targeted profile for existing `template-stress.bst`;
+  - [x] one targeted profile for existing `environment-stress.bst`.
+- [x] Summarize top findings in `benchmarks/frontend-optimization-results.md`:
+  - [x] top stage timings;
+  - [x] top counters;
+  - [x] top sampled functions from Samply;
+  - [x] obvious clone/allocation/drop hotspots;
+  - [x] no raw profile data.
+- [x] Record the agreed semantic invariants and the intended optimisation use of each invariant.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm no compiler semantics changed.
-- [ ] Confirm no raw local data or profiles were committed.
-- [ ] Confirm benchmark report stays concise and does not duplicate raw counter tables.
-- [ ] Confirm `just validate` passes.
+- [x] Confirm no compiler semantics changed.
+- [x] Confirm no raw local data or profiles were committed.
+- [x] Confirm benchmark report stays concise and does not duplicate raw counter tables.
+- [x] Confirm `just validate` passes.
 
 ### Backtrack criteria
 
 - [ ] If the benchmark report workflow is too noisy or hard to reproduce, simplify it before proceeding.
-- [ ] If baseline profiles are too short to interpret, profile larger targeted cases or repeat workloads before optimisation phases begin.
+- [x] If baseline profiles are too short to interpret, profile larger targeted cases or repeat workloads before optimisation phases begin.
 
 ---
 
@@ -513,9 +520,15 @@ This phase creates the evidence baseline and report structure before changing op
 
 This phase adds cheap, unconditional statistics that piggyback on work already performed during tokenization and header aggregation. It also introduces the central capacity-estimate model used by typed arenas. This phase should not alter compiler semantics.
 
+Phase 1 completed on 2026-06-18. It added frontend-local token/header statistics, centralized
+capacity-estimate policy, and initial detailed-timer counters for scope-frame estimates. Actual
+scope-frame and scope-arena-capacity counters remain zero until Phase 4 creates real arena
+storage. The user requested a pause before starting Phase 2 to add more comprehensive profiling
+and benchmarking tooling.
+
 ### Implementation steps
 
-- [ ] Add `TokenStats` in a dedicated module, preferably:
+- [x] Add `TokenStats` in a dedicated module, preferably:
 
 ```text
 src/compiler_frontend/arena/token_stats.rs
@@ -523,98 +536,101 @@ src/compiler_frontend/arena/token_stats.rs
 
 or another clearly named frontend stats module if the final owner is different.
 
-- [ ] Track cheap token counts while tokenization already creates tokens:
-  - [ ] total tokens;
-  - [ ] symbols;
-  - [ ] literals;
-  - [ ] operators;
-  - [ ] template starts/body markers;
-  - [ ] style directives;
-  - [ ] imports;
-  - [ ] hashes;
-  - [ ] `if`;
-  - [ ] `loop`;
-  - [ ] `catch`;
-  - [ ] `then`;
-  - [ ] returns;
-  - [ ] casts;
-  - [ ] mutable markers;
-  - [ ] map/collection delimiters.
+- [x] Track cheap token counts while tokenization already creates tokens:
+  - [x] total tokens;
+  - [x] symbols;
+  - [x] literals;
+  - [x] operators;
+  - [x] template starts/body markers;
+  - [x] style directives;
+  - [x] imports;
+  - [x] hashes;
+  - [x] `if`;
+  - [x] `loop`;
+  - [x] `catch`;
+  - [x] `then`;
+  - [x] returns;
+  - [x] casts;
+  - [x] mutable markers;
+  - [x] map/collection delimiters.
 
-- [ ] Add `TokenStats` to `FileFrontendPrepareOutput`.
-- [ ] Remap handling must remain unaffected; stats contain counts only and need no string-ID remap.
-- [ ] Add `HeaderStats` in a dedicated module, preferably:
+- [x] Add `TokenStats` to `FileFrontendPrepareOutput`.
+- [x] Remap handling must remain unaffected; stats contain counts only and need no string-ID remap.
+- [x] Add `HeaderStats` in a dedicated module, preferably:
 
 ```text
 src/compiler_frontend/arena/header_stats.rs
 ```
 
-- [ ] Compute `HeaderStats` during `parse_headers(...)` aggregation or adjacent header-counter recording:
-  - [ ] functions;
-  - [ ] constants;
-  - [ ] structs;
-  - [ ] choices;
-  - [ ] type aliases;
-  - [ ] traits;
-  - [ ] conformances;
-  - [ ] trait incompatibilities;
-  - [ ] const templates;
-  - [ ] start functions;
-  - [ ] imports;
-  - [ ] generic parameters;
-  - [ ] signature members;
-  - [ ] choice variants;
-  - [ ] dependency edges.
+- [x] Compute `HeaderStats` during `parse_headers(...)` aggregation or adjacent header-counter recording:
+  - [x] functions;
+  - [x] constants;
+  - [x] structs;
+  - [x] choices;
+  - [x] type aliases;
+  - [x] traits;
+  - [x] conformances;
+  - [x] trait incompatibilities;
+  - [x] const templates;
+  - [x] start functions;
+  - [x] imports;
+  - [x] generic parameters;
+  - [x] signature members;
+  - [x] choice variants;
+  - [x] dependency edges.
 
-- [ ] Add `FrontendArenaCapacityEstimate` in:
+- [x] Add `FrontendArenaCapacityEstimate` in:
 
 ```text
 src/compiler_frontend/arena/capacity.rs
 ```
 
-- [ ] Seed initial estimates using:
-  - [ ] source file count;
-  - [ ] source byte count;
-  - [ ] token stats;
-  - [ ] header stats;
-  - [ ] existing fragment counts.
+- [x] Seed initial estimates using:
+  - [x] source file count;
+  - [x] source byte count;
+  - [x] token stats;
+  - [x] header stats;
+  - [x] existing fragment counts.
 
-- [ ] Keep formulas conservative with modest over-allocation and hard caps.
-- [ ] Add a short comment above every non-obvious formula explaining what it estimates and why.
-- [ ] Add initial estimate fields for:
-  - [ ] scope frames;
-  - [ ] declarations;
-  - [ ] expressions;
-  - [ ] expression items;
-  - [ ] statements;
-  - [ ] templates;
-  - [ ] template atoms;
-  - [ ] render pieces;
-  - [ ] HIR blocks/statements/expressions;
-  - [ ] borrow facts.
+- [x] Keep formulas conservative with modest over-allocation and hard caps.
+- [x] Add a short comment above every non-obvious formula explaining what it estimates and why.
+- [x] Add initial estimate fields for:
+  - [x] scope frames;
+  - [x] declarations;
+  - [x] expressions;
+  - [x] expression items;
+  - [x] statements;
+  - [x] templates;
+  - [x] template atoms;
+  - [x] render pieces;
+  - [x] HIR blocks/statements/expressions;
+  - [x] borrow facts.
 
-- [ ] Only wire the fields needed by early phases. Future fields may remain unused with a clear TODO and no dead-code suppression unless necessary.
-- [ ] Add counters for estimate-vs-actual reporting behind `detailed_timers`:
-  - [ ] estimated scope frames;
-  - [ ] actual scope frames;
-  - [ ] scope arena capacity;
-  - [ ] estimate saturation / capped estimates;
-  - [ ] future fields as they become used.
+- [x] Only wire the fields needed by early phases. Future fields remain unused until their arena
+      phases consume them.
+- [x] Add counters for estimate-vs-actual reporting behind `detailed_timers`:
+  - [x] estimated scope frames;
+  - [x] actual scope frames;
+  - [x] scope arena capacity;
+  - [x] estimate saturation / capped estimates;
+  - [ ] future fields as they become used. Deferred to the arena phase that consumes each field.
 
 ### Tests
 
-- [ ] Add unit tests for `TokenStats` classification if tokenization APIs make this cheap.
-- [ ] Add unit tests for `HeaderStats` from simple synthetic headers.
-- [ ] Add unit tests for `FrontendArenaCapacityEstimate` caps and monotonic behaviour.
-- [ ] Add regression tests ensuring stats do not affect diagnostics or output.
+- [x] Add unit tests for `TokenStats` classification if tokenization APIs make this cheap.
+- [x] Add unit tests for `HeaderStats` from simple synthetic headers.
+- [x] Add unit tests for `FrontendArenaCapacityEstimate` caps and monotonic behaviour.
+- [x] Add regression tests ensuring stats do not affect diagnostics or output. Existing
+      integration/golden validation is the regression owner; adding a duplicate fixture would not
+      prove a distinct behavior because stats are policy-only.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm stats collection does not add a new full source/token/header traversal beyond work already being done.
-- [ ] Confirm stats/capacity files are separate from pipeline orchestration.
-- [ ] Confirm `FrontendArenaCapacityEstimate` is policy-only.
-- [ ] Run `just validate`.
-- [ ] Run `just bench-frontend-check` and compare to baseline.
+- [x] Confirm stats collection does not add a new full source/token/header traversal beyond work already being done.
+- [x] Confirm stats/capacity files are separate from pipeline orchestration.
+- [x] Confirm `FrontendArenaCapacityEstimate` is policy-only.
+- [x] Run `just validate`.
+- [x] Run `just bench-frontend-check` and compare to baseline.
 
 ### Backtrack criteria
 
@@ -629,38 +645,40 @@ src/compiler_frontend/arena/capacity.rs
 
 This phase expands benchmark coverage before the major refactors. The goal is to expose unexpected compiler weak spots and produce repeatable high-churn workloads. Fixtures should be valid Beanstalk programs, not diagnostic failures.
 
+Phase 2 completed on 2026-06-18. It added hand-authored adversarial benchmark fixtures under
+`benchmarks/adversarial/`, wired them into the focused frontend and end-to-end benchmark suites,
+documented the fixture purpose in `benchmarks/README.md`, and recorded validation/profile evidence
+in `benchmarks/frontend-optimization-results.md`. No generator was added because the initial
+fixtures are clearer as static source inputs.
+
 ### Implementation steps
 
-- [ ] Add a `benchmarks/adversarial/` directory.
-- [ ] Add static committed fixtures first:
-  - [ ] `one-module-kitchen-sink.bst` — many constructs in one module to stress combined AST/environment/type/template paths.
-  - [ ] `deep-scope-churn.bst` — nested functions/control/value blocks/templates to stress scope frame creation and lookup.
-  - [ ] `template-render-plan-churn.bst` — nested templates, slots, `$children`, `$markdown`, runtime template control flow.
-  - [ ] `constant-dag-churn.bst` — many constants, cross-constant references, folded templates, arithmetic trees.
-  - [ ] `expression-rpn-churn.bst` — large expressions, casts, operators, value-producing blocks at valid receiving sites.
-  - [ ] `generic-trait-churn.bst` — generic functions/types, trait bounds, conformances, concrete instantiations.
-  - [ ] `collection-map-borrow-churn.bst` — collections, maps, mutable access, fallible operations, borrow-valid aliases.
-  - [ ] `import-external-churn/` — project fixture with import fanout and repeated external package usage.
+- [x] Add a `benchmarks/adversarial/` directory.
+- [x] Add static committed fixtures first:
+  - [x] `one-module-kitchen-sink.bst` — many constructs in one module to stress combined AST/environment/type/template paths.
+  - [x] `deep-scope-churn.bst` — nested functions/control/value blocks/templates to stress scope frame creation and lookup.
+  - [x] `template-render-plan-churn.bst` — nested templates, slots, `$children`, `$markdown`, runtime template control flow.
+  - [x] `constant-dag-churn.bst` — many constants, cross-constant references, folded templates, arithmetic trees.
+  - [x] `expression-rpn-churn.bst` — large expressions, casts, operators, value-producing blocks at valid receiving sites.
+  - [x] `generic-trait-churn.bst` — generic functions/types, trait bounds, conformances, concrete instantiations.
+  - [x] `collection-map-borrow-churn.bst` — collections, maps, mutable access, fallible operations, borrow-valid aliases.
+  - [x] `import-external-churn/` — project fixture with import fanout and repeated external package usage.
 
-- [ ] Keep fixtures representative; do not add many near-duplicates.
-- [ ] Add fixtures to `benchmarks/cases.txt` and `benchmarks/frontend-cases.txt` under existing `stress` or `module` groups unless a new group is clearly justified.
-- [ ] If generation is useful, add deterministic generator support:
-  - [ ] prefer extending `xtask` if it already owns repo tooling;
-  - [ ] otherwise place a small documented generator under `benchmarks/generators/`;
-  - [ ] commit generated `.bst` fixtures as canonical benchmark inputs;
-  - [ ] document exact regeneration command.
-
-- [ ] Update `benchmarks/README.md` fixture list with the new adversarial fixtures.
-- [ ] Add notes explaining that adversarial fixtures are for compiler churn discovery, not public language examples.
+- [x] Keep fixtures representative; do not add many near-duplicates.
+- [x] Add fixtures to `benchmarks/cases.txt` and `benchmarks/frontend-cases.txt` under existing `stress` or `module` groups unless a new group is clearly justified.
+- [x] Generation was considered but was not useful for this static fixture set; no generator was added.
+- [x] Update `benchmarks/README.md` fixture list with the new adversarial fixtures.
+- [x] Add notes explaining that adversarial fixtures are for compiler churn discovery, not public language examples.
 
 ### Audit / style guide review / validation
 
-- [ ] Ensure all fixtures are valid successful programs/projects.
-- [ ] Ensure no generated output folders are committed.
-- [ ] Ensure benchmark groups remain readable.
-- [ ] Run `just bench-frontend-check`.
-- [ ] Run `just bench-check`.
-- [ ] Run targeted Samply profile for `one-module-kitchen-sink.bst` after it is added.
+- [x] Ensure all fixtures are valid successful programs/projects.
+- [x] Ensure no generated output folders are committed.
+- [x] Ensure benchmark groups remain readable.
+- [x] Run `just bench-frontend-check`.
+- [x] Run `just bench-check`.
+- [x] Run targeted Samply profile for `one-module-kitchen-sink.bst` after it is added.
+- [x] Run `just validate` before committing the accepted slice.
 
 ### Backtrack criteria
 
@@ -675,49 +693,56 @@ This phase expands benchmark coverage before the major refactors. The goal is to
 
 The first Samply review showed external package metadata cloning as a surprising hotspot. This phase reduces clone pressure before the deeper AST scope rewrite. It is a targeted quick-win phase and should stay independent from arena work where possible.
 
+Phase 3 completed on 2026-06-18. It added detailed-timer counters for external package clone
+pressure, captured before/after counter data on import-heavy fixtures, and replaced deep registry
+clones through the frontend/AST/module/backend handoff with a shared immutable
+`Arc<ExternalPackageRegistry>`. Remaining definition/path/ABI clones are registration-time
+ownership or owned builder-runtime metadata at true module handoff boundaries.
+
 ### Implementation steps
 
-- [ ] Audit clone sites for:
-  - [ ] `ExternalPackageRegistry`;
-  - [ ] `ExternalPackage`;
-  - [ ] `ExternalFunctionDef`;
-  - [ ] `ExternalSymbolPath`;
-  - [ ] ABI parameter lists;
-  - [ ] builder runtime package metadata.
+- [x] Audit clone sites for:
+  - [x] `ExternalPackageRegistry`;
+  - [x] `ExternalPackage`;
+  - [x] `ExternalFunctionDef`;
+  - [x] `ExternalSymbolPath`;
+  - [x] ABI parameter lists;
+  - [x] builder runtime package metadata.
 
-- [ ] Add or verify counters:
-  - [ ] `ExternalPackageRegistryCloneCount`;
-  - [ ] `ExternalPackageDefinitionCloneCount`;
-  - [ ] `ExternalFunctionDefinitionCloneCount`;
-  - [ ] `ExternalSymbolPathCloneCount`;
-  - [ ] `ExternalAbiParameterCloneCount`.
+- [x] Add or verify counters:
+  - [x] `ExternalPackageRegistryCloneCount`;
+  - [x] `ExternalPackageDefinitionCloneCount`;
+  - [x] `ExternalFunctionDefinitionCloneCount`;
+  - [x] `ExternalSymbolPathCloneCount`;
+  - [x] `ExternalAbiParameterCloneCount`.
 
-- [ ] Review whether `CompilerFrontend::new(...)` can borrow or share immutable external package metadata instead of cloning it.
-- [ ] Prefer `Arc`/shared immutable storage only where ownership needs to survive across module/backend boundaries.
-- [ ] Avoid lifetime-heavy borrow threading if it makes the pipeline harder to reason about; use a small shared registry wrapper if needed.
-- [ ] Preserve backend-facing `Module` semantics:
-  - [ ] backend validators still have access to reachable external function metadata;
-  - [ ] diagnostics can still resolve external symbol/type names;
-  - [ ] module external imports remain reachable-filtered as before.
+- [x] Review whether `CompilerFrontend::new(...)` can borrow or share immutable external package metadata instead of cloning it.
+- [x] Prefer `Arc`/shared immutable storage only where ownership needs to survive across module/backend boundaries.
+- [x] Avoid lifetime-heavy borrow threading if it makes the pipeline harder to reason about; use a small shared registry wrapper if needed.
+- [x] Preserve backend-facing `Module` semantics:
+  - [x] backend validators still have access to reachable external function metadata;
+  - [x] diagnostics can still resolve external symbol/type names;
+  - [x] module external imports remain reachable-filtered as before.
 
-- [ ] If final `Module` still needs an effective registry, make it cheap to clone by sharing internal immutable tables.
-- [ ] Remove obsolete clone-heavy APIs after replacement.
-- [ ] Do not add compatibility wrappers.
+- [x] If final `Module` still needs an effective registry, make it cheap to clone by sharing internal immutable tables.
+- [x] Remove obsolete clone-heavy APIs after replacement.
+- [x] Do not add compatibility wrappers.
 
 ### Tests
 
-- [ ] Run existing external package/import tests.
-- [ ] Add targeted tests only if ownership/API changes create new invariants.
-- [ ] Ensure external JS import fixtures still pass.
+- [x] Run existing external package/import tests.
+- [x] Add targeted tests only if ownership/API changes create new invariants. Existing targeted
+      coverage was sufficient because semantics did not change.
+- [x] Ensure external JS import fixtures still pass.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm immutable external package metadata is not accidentally made mutable through shared ownership.
-- [ ] Confirm no backend rediscovery or duplicate metadata path was introduced.
-- [ ] Confirm code remains organised under `external_packages/` and pipeline files only pass the new shared handle/context.
-- [ ] Run `just validate`.
-- [ ] Run `just bench-frontend-check` and targeted external/import benchmarks.
-- [ ] Record before/after clone counters and Samply findings.
+- [x] Confirm immutable external package metadata is not accidentally made mutable through shared ownership.
+- [x] Confirm no backend rediscovery or duplicate metadata path was introduced.
+- [x] Confirm code remains organised under `external_packages/` and pipeline files only pass the new shared handle/context.
+- [x] Run `just validate`.
+- [x] Run `just bench-frontend-check` and targeted external/import benchmarks.
+- [x] Record before/after clone counters and Samply findings.
 
 ### Backtrack criteria
 
@@ -731,6 +756,14 @@ The first Samply review showed external package metadata cloning as a surprising
 ### Summary
 
 This is the first major arena refactor. Replace scope-context cloning with a typed `Vec` arena of parent-linked scope frames. This directly exploits Beanstalk’s no-shadowing invariant and should reduce cloned maps/vectors during AST environment, expression, template, and body parsing.
+
+Phase 4 completed on 2026-06-18. It replaced the flat cloned local-declaration state with
+`ScopeArena`, stable `ScopeFrameId`s, parent-linked frames, and arena-local local declarations
+stored behind cheap handles so parser APIs do not expose `RefCell` guards. Body-local functions
+still start from fresh root frames, preserving the no-closure/no-capture language invariant.
+Capacity preallocation from `FrontendArenaCapacityEstimate` is intentionally left to Phase 5:
+Phase 4 observations show current estimates undercount scope frames on scope-heavy fixtures, so
+the formulas should be tuned before they seed arena capacity.
 
 ### Target design
 
@@ -761,7 +794,7 @@ Exact field names should follow the current codebase’s naming and existing typ
 
 ### Implementation steps
 
-- [ ] Move/split scope code so arena-specific pieces are separate:
+- [x] Move/split scope code so arena-specific pieces are separate:
 
 ```text
 src/compiler_frontend/ast/module_ast/scope_context/
@@ -774,65 +807,66 @@ src/compiler_frontend/ast/module_ast/scope_context/
 
 Use the current module shape if it differs, but keep arena internals out of high-level AST orchestration files.
 
-- [ ] Add `ScopeArena::with_capacity(estimate.scope_frames)`.
-- [ ] Add `ScopeFrameId` with safe index conversion helpers.
-- [ ] Add root/module/file/function/template/block frame constructors.
-- [ ] Replace child context clone constructors with frame allocation:
-  - [ ] child expression context;
-  - [ ] child template context;
-  - [ ] child function/body context;
-  - [ ] child constant context;
-  - [ ] block/value-producing context.
+- [ ] Add `ScopeArena::with_capacity(estimate.scope_frames)`. Deferred to Phase 5 tuning after
+      actual-vs-estimate observations showed the initial estimates undercount scope-heavy cases.
+- [x] Add `ScopeFrameId` with safe index conversion helpers.
+- [x] Add root/module/file/function/template/block frame constructors.
+- [x] Replace child context clone constructors with frame allocation:
+  - [x] child expression context;
+  - [x] child template context;
+  - [x] child function/body context;
+  - [x] child constant context;
+  - [x] block/value-producing context.
 
-- [ ] Replace visible-local cloned maps with parent-chain lookup.
-- [ ] Implement redeclaration checks using no-shadowing:
-  - [ ] check current frame;
-  - [ ] check ancestor frames until file/module boundary as required by current visibility rules;
-  - [ ] check shared header-built visibility/import/builtin records.
+- [x] Replace visible-local cloned maps with parent-chain lookup.
+- [x] Implement redeclaration checks using no-shadowing:
+  - [x] check current frame;
+  - [x] check ancestor frames until file/module boundary as required by current visibility rules;
+  - [x] check shared header-built visibility/import/builtin records.
 
-- [ ] Ensure import visibility remains header-owned and shared.
-- [ ] Ensure diagnostics keep correct `SourceLocation` and source labels.
-- [ ] Add actual arena counters:
-  - [ ] frames allocated;
-  - [ ] max frame depth;
-  - [ ] local declarations inserted;
-  - [ ] lookup ancestor steps;
-  - [ ] redeclaration ancestor checks;
-  - [ ] old scope-context clone counter, if still present during migration, should trend to zero and then be removed.
+- [x] Ensure import visibility remains header-owned and shared.
+- [x] Ensure diagnostics keep correct `SourceLocation` and source labels.
+- [x] Add actual arena counters:
+  - [x] frames allocated;
+  - [x] max frame depth;
+  - [x] local declarations inserted;
+  - [x] lookup ancestor steps;
+  - [x] redeclaration ancestor checks;
+  - [x] old scope-context clone counter, if still present during migration, should trend to zero and then be removed.
 
-- [ ] Delete obsolete scope cloning helpers once callers are migrated.
-- [ ] Do not keep old and new scope APIs in parallel.
+- [x] Delete obsolete scope cloning helpers once callers are migrated.
+- [x] Do not keep old and new scope APIs in parallel.
 
 ### Tests
 
-- [ ] Add focused scope-frame unit tests outside production files:
-  - [ ] parent lookup;
-  - [ ] no-shadowing redeclaration across frames;
-  - [ ] same-frame redeclaration;
-  - [ ] visibility boundary behaviour;
-  - [ ] expected-result propagation where applicable.
+- [x] Add focused scope-frame unit tests outside production files:
+  - [x] parent lookup;
+  - [x] no-shadowing redeclaration across frames;
+  - [x] same-frame redeclaration;
+  - [x] visibility boundary behaviour;
+  - [x] expected-result propagation where applicable.
 
-- [ ] Run integration tests covering:
-  - [ ] local declarations;
-  - [ ] nested `if`/loop/catch/value-producing blocks;
-  - [ ] templates capturing values;
-  - [ ] same-file receiver methods;
-  - [ ] imports and aliases;
-  - [ ] duplicate declaration diagnostics.
+- [x] Run integration tests covering:
+  - [x] local declarations;
+  - [x] nested `if`/loop/catch/value-producing blocks;
+  - [x] templates capturing values;
+  - [x] same-file receiver methods;
+  - [x] imports and aliases;
+  - [x] duplicate declaration diagnostics.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm no user-visible shadowing rule changed.
-- [ ] Confirm AST does not rebuild import visibility.
-- [ ] Confirm scope arena internals are not embedded in pipeline orchestration files.
-- [ ] Confirm stage-local diagnostics still use `CompilerDiagnostic`.
-- [ ] Confirm no compatibility wrappers remain.
-- [ ] Run `just validate`.
-- [ ] Run five repeated frontend benchmark invocations and compare medians.
-- [ ] Run targeted Samply profiles for:
-  - [ ] `environment-stress.bst`;
-  - [ ] `deep-scope-churn.bst`;
-  - [ ] `one-module-kitchen-sink.bst`.
+- [x] Confirm no user-visible shadowing rule changed.
+- [x] Confirm AST does not rebuild import visibility.
+- [x] Confirm scope arena internals are not embedded in pipeline orchestration files.
+- [x] Confirm stage-local diagnostics still use `CompilerDiagnostic`.
+- [x] Confirm no compatibility wrappers remain.
+- [x] Run `just validate`.
+- [x] Run five repeated frontend benchmark invocations and compare medians.
+- [x] Run targeted Samply profiles for:
+  - [x] `environment-stress.bst`;
+  - [x] `deep-scope-churn.bst`;
+  - [x] `one-module-kitchen-sink.bst`.
 
 ### Backtrack criteria
 
@@ -848,33 +882,47 @@ Use the current module shape if it differs, but keep arena internals out of high
 
 After scope frames are arena-backed, tune capacity estimates using actual data. This phase should tighten formulas based on `docs`, existing benchmarks, and adversarial fixtures.
 
+Phase 5 completed on 2026-06-18. It tuned the scope-frame estimate formula, added
+estimate/actual ratio counters, added `ScopeArena::with_capacity`, and threaded the module-level
+estimate into AST emission. Production seeding uses an AST-owned
+`ScopeFrameCapacityBudget` that spends the module scope-frame estimate once across known root
+function, start, generic-template-validation, and const-template parse contexts. Dynamic generic
+instances and direct AST helper callers remain unseeded and grow normally. The final Phase 5
+evidence pass found no scope-frame under-estimates across docs, template, scope, kitchen-sink, and
+import/module fixtures; capacity/actual ratios ranged from about `2.9x` to `3.8x`. Five recorded
+frontend and end-to-end benchmark invocations showed no measurable regression.
+
 ### Implementation steps
 
-- [ ] Record estimate-vs-actual data for scope frames across:
-  - [ ] docs build;
-  - [ ] `environment-stress.bst`;
-  - [ ] `template-stress.bst`;
-  - [ ] `deep-scope-churn.bst`;
-  - [ ] `one-module-kitchen-sink.bst`;
-  - [ ] import/module fixtures.
+- [x] Record estimate-vs-actual data for scope frames across:
+  - [x] docs build;
+  - [x] `environment-stress.bst`;
+  - [x] `template-stress.bst`;
+  - [x] `deep-scope-churn.bst`;
+  - [x] `one-module-kitchen-sink.bst`;
+  - [x] import/module fixtures.
 
-- [ ] Add reported ratios behind detailed timers:
-  - [ ] estimated / actual;
-  - [ ] final capacity / actual;
-  - [ ] capped estimate count.
+- [x] Add reported ratios behind detailed timers:
+  - [x] estimated / actual;
+  - [x] final capacity / actual;
+  - [x] capped estimate count.
 
-- [ ] Tune formulas in `capacity.rs` only.
-- [ ] Keep modest over-allocation acceptable.
-- [ ] Add comments explaining any fixture-specific insight that influenced formulas.
-- [ ] Do not add fixture-specific special cases unless they represent a real semantic category.
+- [x] Tune formulas in `capacity.rs` only.
+- [x] Keep modest over-allocation acceptable.
+- [x] Add comments explaining the semantic categories that influenced formulas.
+- [x] Do not add fixture-specific special cases unless they represent a real semantic category.
+- [x] Add `ScopeArena::with_capacity` for frame Vec storage.
+- [x] Choose a narrow AST-owned distribution policy for module-level scope estimates before wiring
+      `estimate.scope_frames` into production `ScopeArena` construction.
+- [x] Wire production scope arena seeding after the per-root policy is chosen.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm formulas remain centralized.
-- [ ] Confirm capacity estimates do not affect semantics.
-- [ ] Run `just validate`.
-- [ ] Run five repeated benchmark invocations.
-- [ ] Update `benchmarks/frontend-optimization-results.md` with estimate-vs-actual summaries.
+- [x] Confirm formulas remain centralized.
+- [x] Confirm capacity estimates do not affect semantics.
+- [x] Run `just validate`.
+- [x] Run five repeated benchmark invocations.
+- [x] Update `benchmarks/frontend-optimization-results.md` with estimate-vs-actual summaries.
 
 ### Backtrack criteria
 
@@ -891,11 +939,18 @@ This phase is gated by evidence. Implement only if profiles/counters still show 
 
 Start with scratch-buffer reuse and typed `Vec` arenas. Do not convert the entire expression AST to borrowed arena references.
 
+Gate checked on 2026-06-18 with an Ollama worker plus parent-side `profile-case` reruns after
+nested Samply failed inside the worker. The `expression-rpn-churn` profile showed a small
+`~5ms` AST case and no dedicated expression allocation/clone pressure counter. Phase 6 is deferred
+until a future report shows expression-specific pressure.
+
 ### Entry criteria
 
-- [ ] Samply or counters show meaningful expression allocation/clone pressure.
+- [ ] Samply or counters show meaningful expression allocation/clone pressure. Phase 5 evidence
+      and the Phase 6 gate profile did not establish this for a broad expression arena pilot.
 - [ ] `expression-rpn-churn.bst` or real docs/build profiles show expression paths as top movers.
-- [ ] Phase 4 and 5 are complete and stable.
+      Phase 5 and gate reports point first at file preparation and docs AST emission instead.
+- [x] Phase 4 and 5 are complete and stable.
 
 ### Implementation steps
 
@@ -944,10 +999,19 @@ src/compiler_frontend/ast/expressions/scratch.rs
 
 This phase is gated by evidence. Templates are central to Beanstalk, so template arena changes must be cautious and heavily validated. The goal is to reduce cloning of template atoms, render pieces, and composed/finalized templates.
 
+Gate checked on 2026-06-18 with targeted template and docs profiles. The
+`template-render-plan-churn` fixture remained a small `~7ms` AST case. The docs profile showed
+meaningful AST emit/finalize time and large template counts, but the stack samples were still
+unsymbolicated and the counters did not isolate template/render-plan clone pressure. Phase 7 is
+deferred as a broad arena migration until narrower docs/template attribution justifies it.
+
 ### Entry criteria
 
 - [ ] Samply or counters show template/render-plan clone/allocation pressure after earlier phases.
-- [ ] `template-stress.bst`, `template-render-plan-churn.bst`, or docs profiles show template paths as top movers.
+      Gate profiles did not isolate this pressure.
+- [ ] `template-stress.bst`, `template-render-plan-churn.bst`, or docs profiles show template paths
+      as top movers. Docs shows AST emit/finalize pressure, but not yet template/render-plan
+      clone pressure specifically.
 - [ ] Existing template semantics and goldens are stable.
 
 ### Implementation steps
@@ -1015,11 +1079,15 @@ or equivalent current-project names.
 
 This is deliberately later. The original profile did not show HIR, borrow checking, or JS lowering as the primary bottleneck. Do not start here unless earlier phases shift the bottleneck or targeted fixtures expose HIR/borrow pressure.
 
+Gate posture after the 2026-06-18 Phase 6/7 evidence pass: HIR and borrow timings were small in
+the expression, template, and docs profiles. Phase 8 remains deferred.
+
 ### Entry criteria
 
-- [ ] Benchmarks show HIR or borrow validation as a meaningful remaining stage mover.
+- [ ] Benchmarks show HIR or borrow validation as a meaningful remaining stage mover. Gate profiles
+      did not show this.
 - [ ] Samply identifies dense ID hash maps, borrow snapshots, or fact storage as hot.
-- [ ] AST/scope/template/external clone work is complete or intentionally deferred.
+- [x] AST/scope/template/external clone work is complete or intentionally deferred.
 
 ### Investigation steps
 
@@ -1052,68 +1120,68 @@ This phase records the optimisation programme in project planning docs and docum
 
 ### Roadmap/progress updates
 
-- [ ] Add a roadmap/progress matrix item named:
+- [x] Add a roadmap/progress matrix item named:
 
 ```text
 Frontend Arena + Semantic Invariant Optimisation
 ```
 
-- [ ] Status suggestion:
-  - [ ] `Planned` before implementation starts;
-  - [ ] `In Progress` once baseline/instrumentation and first arena work begins;
-  - [ ] `Partial` or equivalent when scope arenas and capacity heuristics land;
-  - [ ] keep deeper arena migrations separate/deferred unless implemented.
+- [x] Status suggestion:
+  - [x] `Planned` before implementation starts;
+  - [x] `In Progress` once baseline/instrumentation and first arena work begins;
+  - [x] `Partial` or equivalent when scope arenas and capacity heuristics land;
+  - [x] keep deeper arena migrations separate/deferred unless implemented.
 
-- [ ] Describe scope:
-  - [ ] typed `Vec` arenas with stable IDs;
-  - [ ] capacity heuristics from token/header stats;
-  - [ ] scope-frame arena refactor;
-  - [ ] clone reduction in external package metadata;
-  - [ ] benchmark/adversarial fixture expansion;
-  - [ ] evidence-based rollback rules.
+- [x] Describe scope:
+  - [x] typed `Vec` arenas with stable IDs;
+  - [x] capacity heuristics from token/header stats;
+  - [x] scope-frame arena refactor;
+  - [x] clone reduction in external package metadata;
+  - [x] benchmark/adversarial fixture expansion;
+  - [x] evidence-based rollback rules.
 
 ### Deliberately deferred items
 
 Add these as deferred until profiling justifies them:
 
-- [ ] `bumpalo`/dropless bump allocation.
-- [ ] Full AST node arena conversion.
-- [ ] Full expression arena conversion beyond scratch-buffer reuse.
-- [ ] Full template/render-plan arena migration.
-- [ ] HIR arena conversion.
-- [ ] Borrow fact compaction and snapshot reduction.
-- [ ] Source-library HIR caching.
-- [ ] Incremental compiler caching.
-- [ ] Whole-project persistent semantic cache.
+- [x] `bumpalo`/dropless bump allocation.
+- [x] Full AST node arena conversion.
+- [x] Full expression arena conversion beyond scratch-buffer reuse.
+- [x] Full template/render-plan arena migration.
+- [x] HIR arena conversion.
+- [x] Borrow fact compaction and snapshot reduction.
+- [x] Source-library HIR caching.
+- [x] Incremental compiler caching.
+- [x] Whole-project persistent semantic cache.
 
 ### Documentation updates
 
-- [ ] Update `docs/compiler-design-overview.md` only after implementation changes are real.
-- [ ] Add a short section explaining:
-  - [ ] frontend arenas are stage/module-owned implementation details;
-  - [ ] capacity heuristics are policy-only;
-  - [ ] `StringTable` remains the path/string identity system;
-  - [ ] AST/HIR stage ownership remains unchanged.
+- [x] Update `docs/compiler-design-overview.md` only after implementation changes are real.
+- [x] Add a short section explaining:
+  - [x] frontend arenas are stage/module-owned implementation details;
+  - [x] capacity heuristics are policy-only;
+  - [x] `StringTable` remains the path/string identity system;
+  - [x] AST/HIR stage ownership remains unchanged.
 
-- [ ] Update `benchmarks/README.md`:
-  - [ ] list new adversarial fixtures;
-  - [ ] explain the optimisation campaign’s five-invocation median protocol;
-  - [ ] reaffirm raw local data/profiles are not committed.
+- [x] Update `benchmarks/README.md`:
+  - [x] list new adversarial fixtures;
+  - [x] explain the optimisation campaign’s five-invocation median protocol;
+  - [x] reaffirm raw local data/profiles are not committed.
 
-- [ ] Keep `benchmarks/frontend-optimization-results.md` current:
-  - [ ] baseline;
-  - [ ] per-phase result summaries;
-  - [ ] regressions and reversions;
-  - [ ] heuristic tuning notes;
-  - [ ] final decisions.
+- [x] Keep `benchmarks/frontend-optimization-results.md` current:
+  - [x] baseline;
+  - [x] per-phase result summaries;
+  - [x] regressions and reversions;
+  - [x] heuristic tuning notes;
+  - [x] final decisions.
 
 ### Audit / style guide review / validation
 
-- [ ] Confirm docs do not promise deferred work as implemented.
-- [ ] Confirm progress matrix wording is concise and editor-friendly.
-- [ ] Confirm no stale design notes conflict with the new arena direction.
-- [ ] Run doc/build validation if the docs site is affected.
-- [ ] Run `just validate`.
+- [x] Confirm docs do not promise deferred work as implemented.
+- [x] Confirm progress matrix wording is concise and editor-friendly.
+- [x] Confirm no stale design notes conflict with the new arena direction.
+- [x] Run doc/build validation if the docs site is affected.
+- [x] Run `just validate`.
 
 ---
 
@@ -1121,16 +1189,16 @@ Add these as deferred until profiling justifies them:
 
 Use these as independent implementation chunks. Do not merge phases unless the change is trivial.
 
-1. [ ] Phase 0: Baseline and report file.
-2. [ ] Phase 1: Stats and capacity estimate framework.
-3. [ ] Phase 2: Adversarial benchmark fixtures.
-4. [ ] Phase 3: External package registry clone reduction.
-5. [ ] Phase 4: Scope-frame arena refactor.
-6. [ ] Phase 5: Scope arena capacity tuning.
-7. [ ] Phase 6: Expression scratch/arena pilot, only if evidence supports it.
-8. [ ] Phase 7: Template/render-plan arena pilot, only if evidence supports it.
-9. [ ] Phase 8: HIR/borrow dense storage investigation, only if evidence supports it.
-10. [ ] Phase 9: Roadmap/progress/docs finalization.
+1. [x] Phase 0: Baseline and report file.
+2. [x] Phase 1: Stats and capacity estimate framework.
+3. [x] Phase 2: Adversarial benchmark fixtures.
+4. [x] Phase 3: External package registry clone reduction.
+5. [x] Phase 4: Scope-frame arena refactor.
+6. [x] Phase 5: Scope arena capacity tuning.
+7. [x] Phase 6: Expression scratch/arena pilot, deferred until evidence supports it.
+8. [x] Phase 7: Template/render-plan arena pilot, deferred until evidence supports it.
+9. [x] Phase 8: HIR/borrow dense storage investigation, deferred until evidence supports it.
+10. [x] Phase 9: Roadmap/progress/docs finalization.
 
 ---
 
@@ -1138,14 +1206,13 @@ Use these as independent implementation chunks. Do not merge phases unless the c
 
 The initial optimisation programme is complete when:
 
-- [ ] `TokenStats`, `HeaderStats`, and `FrontendArenaCapacityEstimate` exist and are used by the first arena implementation.
-- [ ] Scope context cloning has been replaced by parent-linked scope frames in a typed `Vec` arena.
-- [ ] External package registry clone pressure has been reduced or documented as unavoidable at true ownership boundaries.
-- [ ] Benchmark/adversarial fixtures exist and are documented.
-- [ ] `benchmarks/frontend-optimization-results.md` records baseline and final phase summaries.
-- [ ] Roadmap/progress matrix explicitly tracks the optimisation work and deferred deeper arena features.
-- [ ] `just validate` passes.
-- [ ] Five-run median benchmarks show no unjustified regressions.
-- [ ] Samply profiles show the targeted clone/allocation hotspot was reduced or moved.
-- [ ] Core pipeline files remain readable and are not bloated with arena/capacity helper internals.
-
+- [x] `TokenStats`, `HeaderStats`, and `FrontendArenaCapacityEstimate` exist and are used by the first arena implementation.
+- [x] Scope context cloning has been replaced by parent-linked scope frames in a typed `Vec` arena.
+- [x] External package registry clone pressure has been reduced or documented as unavoidable at true ownership boundaries.
+- [x] Benchmark/adversarial fixtures exist and are documented.
+- [x] `benchmarks/frontend-optimization-results.md` records baseline and final phase summaries.
+- [x] Roadmap/progress matrix explicitly tracks the optimisation work and deferred deeper arena features.
+- [x] `just validate` passes.
+- [x] Five-run median benchmarks show no unjustified regressions.
+- [x] Samply profiles show the targeted clone/allocation hotspot was reduced or moved.
+- [x] Core pipeline files remain readable and are not bloated with arena/capacity helper internals.

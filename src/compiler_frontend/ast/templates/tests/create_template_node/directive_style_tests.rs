@@ -19,6 +19,7 @@ use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use std::sync::Arc;
 
 fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
@@ -55,8 +56,9 @@ fn test_context(scope: InternedPath) -> ScopeContext {
         ContextKind::Constant,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::default(),
+        Arc::new(ExternalPackageRegistry::default()),
         vec![],
+        0,
     )
     .with_project_path_resolver(Some(resolver))
     .with_source_file_scope(scope)

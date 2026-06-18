@@ -70,6 +70,27 @@ pub(crate) enum FrontendCounter {
     StringTableFullClones,
     StringTableMergeFromSourceEntriesScanned,
     ModuleRemapStringIdsCalls,
+
+    // Arena capacity-estimate counters (Phase 1).
+    EstimatedScopeFrames,
+    ActualScopeFrames,
+    ScopeArenaCapacity,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    ScopeFrameEstimateToActualBasisPoints,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    ScopeArenaCapacityToActualBasisPoints,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    ScopeFrameUnderEstimateCount,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    ScopeFrameOverEstimateCount,
+    CappedCapacityEstimates,
+
+    // External package metadata clone-pressure counters (Phase 3).
+    ExternalPackageRegistryCloneCount,
+    ExternalPackageDefinitionCloneCount,
+    ExternalFunctionDefinitionCloneCount,
+    ExternalSymbolPathCloneCount,
+    ExternalAbiParameterCloneCount,
 }
 
 #[cfg(feature = "detailed_timers")]
@@ -97,6 +118,19 @@ mod detailed {
     static STRING_TABLE_FULL_CLONES: AtomicUsize = AtomicUsize::new(0);
     static STRING_TABLE_MERGE_FROM_SOURCE_ENTRIES_SCANNED: AtomicUsize = AtomicUsize::new(0);
     static MODULE_REMAP_STRING_IDS_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static ESTIMATED_SCOPE_FRAMES: AtomicUsize = AtomicUsize::new(0);
+    static ACTUAL_SCOPE_FRAMES: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_ARENA_CAPACITY: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_FRAME_ESTIMATE_TO_ACTUAL_BASIS_POINTS: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_ARENA_CAPACITY_TO_ACTUAL_BASIS_POINTS: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_FRAME_UNDER_ESTIMATE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_FRAME_OVER_ESTIMATE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static CAPPED_CAPACITY_ESTIMATES: AtomicUsize = AtomicUsize::new(0);
+    static EXTERNAL_PACKAGE_REGISTRY_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static EXTERNAL_PACKAGE_DEFINITION_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static EXTERNAL_FUNCTION_DEFINITION_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static EXTERNAL_SYMBOL_PATH_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static EXTERNAL_ABI_PARAMETER_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static MODULE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static SOURCE_FILE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static SOURCE_BYTE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -150,6 +184,7 @@ mod detailed {
 
     pub(crate) fn log_frontend_counters() {
         let print_human_counters = detailed_timer_output_enabled();
+        update_scope_capacity_derived_counters();
 
         if print_human_counters {
             saying::say!("Frontend/performance counters:");
@@ -165,7 +200,7 @@ mod detailed {
         }
     }
 
-    fn all_counters() -> [FrontendCounter; 50] {
+    fn all_counters() -> [FrontendCounter; 63] {
         [
             FrontendCounter::ModuleCount,
             FrontendCounter::SourceFileCount,
@@ -217,6 +252,19 @@ mod detailed {
             FrontendCounter::StringTableFullClones,
             FrontendCounter::StringTableMergeFromSourceEntriesScanned,
             FrontendCounter::ModuleRemapStringIdsCalls,
+            FrontendCounter::EstimatedScopeFrames,
+            FrontendCounter::ActualScopeFrames,
+            FrontendCounter::ScopeArenaCapacity,
+            FrontendCounter::ScopeFrameEstimateToActualBasisPoints,
+            FrontendCounter::ScopeArenaCapacityToActualBasisPoints,
+            FrontendCounter::ScopeFrameUnderEstimateCount,
+            FrontendCounter::ScopeFrameOverEstimateCount,
+            FrontendCounter::CappedCapacityEstimates,
+            FrontendCounter::ExternalPackageRegistryCloneCount,
+            FrontendCounter::ExternalPackageDefinitionCloneCount,
+            FrontendCounter::ExternalFunctionDefinitionCloneCount,
+            FrontendCounter::ExternalSymbolPathCloneCount,
+            FrontendCounter::ExternalAbiParameterCloneCount,
         ]
     }
 
@@ -335,6 +383,42 @@ mod detailed {
             }
 
             FrontendCounter::ModuleRemapStringIdsCalls => &MODULE_REMAP_STRING_IDS_CALLS,
+
+            FrontendCounter::EstimatedScopeFrames => &ESTIMATED_SCOPE_FRAMES,
+
+            FrontendCounter::ActualScopeFrames => &ACTUAL_SCOPE_FRAMES,
+
+            FrontendCounter::ScopeArenaCapacity => &SCOPE_ARENA_CAPACITY,
+
+            FrontendCounter::ScopeFrameEstimateToActualBasisPoints => {
+                &SCOPE_FRAME_ESTIMATE_TO_ACTUAL_BASIS_POINTS
+            }
+
+            FrontendCounter::ScopeArenaCapacityToActualBasisPoints => {
+                &SCOPE_ARENA_CAPACITY_TO_ACTUAL_BASIS_POINTS
+            }
+
+            FrontendCounter::ScopeFrameUnderEstimateCount => &SCOPE_FRAME_UNDER_ESTIMATE_COUNT,
+
+            FrontendCounter::ScopeFrameOverEstimateCount => &SCOPE_FRAME_OVER_ESTIMATE_COUNT,
+
+            FrontendCounter::CappedCapacityEstimates => &CAPPED_CAPACITY_ESTIMATES,
+
+            FrontendCounter::ExternalPackageRegistryCloneCount => {
+                &EXTERNAL_PACKAGE_REGISTRY_CLONE_COUNT
+            }
+
+            FrontendCounter::ExternalPackageDefinitionCloneCount => {
+                &EXTERNAL_PACKAGE_DEFINITION_CLONE_COUNT
+            }
+
+            FrontendCounter::ExternalFunctionDefinitionCloneCount => {
+                &EXTERNAL_FUNCTION_DEFINITION_CLONE_COUNT
+            }
+
+            FrontendCounter::ExternalSymbolPathCloneCount => &EXTERNAL_SYMBOL_PATH_CLONE_COUNT,
+
+            FrontendCounter::ExternalAbiParameterCloneCount => &EXTERNAL_ABI_PARAMETER_CLONE_COUNT,
         }
     }
 
@@ -457,6 +541,42 @@ mod detailed {
             }
 
             FrontendCounter::ModuleRemapStringIdsCalls => "Module/remap_string_ids count",
+
+            FrontendCounter::EstimatedScopeFrames => "arena/estimated scope frames",
+
+            FrontendCounter::ActualScopeFrames => "arena/actual scope frames",
+
+            FrontendCounter::ScopeArenaCapacity => "arena/scope arena capacity",
+
+            FrontendCounter::ScopeFrameEstimateToActualBasisPoints => {
+                "arena/scope estimate-to-actual basis points"
+            }
+
+            FrontendCounter::ScopeArenaCapacityToActualBasisPoints => {
+                "arena/scope capacity-to-actual basis points"
+            }
+
+            FrontendCounter::ScopeFrameUnderEstimateCount => "arena/scope frame under-estimate",
+
+            FrontendCounter::ScopeFrameOverEstimateCount => "arena/scope frame over-estimate",
+
+            FrontendCounter::CappedCapacityEstimates => "arena/capped capacity estimates",
+
+            FrontendCounter::ExternalPackageRegistryCloneCount => {
+                "external package registry clones"
+            }
+
+            FrontendCounter::ExternalPackageDefinitionCloneCount => {
+                "external package definition clones"
+            }
+
+            FrontendCounter::ExternalFunctionDefinitionCloneCount => {
+                "external function definition clones"
+            }
+
+            FrontendCounter::ExternalSymbolPathCloneCount => "external symbol path clones",
+
+            FrontendCounter::ExternalAbiParameterCloneCount => "external ABI parameter clones",
         }
     }
 
@@ -577,11 +697,73 @@ mod detailed {
             }
 
             FrontendCounter::ModuleRemapStringIdsCalls => "module_remap_string_ids_calls",
+
+            FrontendCounter::EstimatedScopeFrames => "estimated_scope_frames",
+
+            FrontendCounter::ActualScopeFrames => "actual_scope_frames",
+
+            FrontendCounter::ScopeArenaCapacity => "scope_arena_capacity",
+
+            FrontendCounter::ScopeFrameEstimateToActualBasisPoints => {
+                "scope_frame_estimate_to_actual_bps"
+            }
+
+            FrontendCounter::ScopeArenaCapacityToActualBasisPoints => {
+                "scope_arena_capacity_to_actual_bps"
+            }
+
+            FrontendCounter::ScopeFrameUnderEstimateCount => "scope_frame_under_estimate_count",
+
+            FrontendCounter::ScopeFrameOverEstimateCount => "scope_frame_over_estimate_count",
+
+            FrontendCounter::CappedCapacityEstimates => "capped_capacity_estimates",
+
+            FrontendCounter::ExternalPackageRegistryCloneCount => {
+                "external_package_registry_clone_count"
+            }
+
+            FrontendCounter::ExternalPackageDefinitionCloneCount => {
+                "external_package_definition_clone_count"
+            }
+
+            FrontendCounter::ExternalFunctionDefinitionCloneCount => {
+                "external_function_definition_clone_count"
+            }
+
+            FrontendCounter::ExternalSymbolPathCloneCount => "external_symbol_path_clone_count",
+
+            FrontendCounter::ExternalAbiParameterCloneCount => "external_abi_parameter_clone_count",
         }
     }
 
     fn counter_value(counter: FrontendCounter) -> usize {
         atomic_counter(counter).load(Ordering::Relaxed)
+    }
+
+    fn update_scope_capacity_derived_counters() {
+        let estimated = ESTIMATED_SCOPE_FRAMES.load(Ordering::Relaxed);
+        let actual = ACTUAL_SCOPE_FRAMES.load(Ordering::Relaxed);
+        let capacity = SCOPE_ARENA_CAPACITY.load(Ordering::Relaxed);
+
+        SCOPE_FRAME_ESTIMATE_TO_ACTUAL_BASIS_POINTS
+            .store(ratio_basis_points(estimated, actual), Ordering::Relaxed);
+        SCOPE_ARENA_CAPACITY_TO_ACTUAL_BASIS_POINTS
+            .store(ratio_basis_points(capacity, actual), Ordering::Relaxed);
+
+        if actual > estimated {
+            SCOPE_FRAME_UNDER_ESTIMATE_COUNT.store(actual - estimated, Ordering::Relaxed);
+            SCOPE_FRAME_OVER_ESTIMATE_COUNT.store(0, Ordering::Relaxed);
+        } else {
+            SCOPE_FRAME_UNDER_ESTIMATE_COUNT.store(0, Ordering::Relaxed);
+            SCOPE_FRAME_OVER_ESTIMATE_COUNT.store(estimated - actual, Ordering::Relaxed);
+        }
+    }
+
+    fn ratio_basis_points(numerator: usize, denominator: usize) -> usize {
+        numerator
+            .saturating_mul(10_000)
+            .checked_div(denominator)
+            .unwrap_or(0)
     }
 }
 

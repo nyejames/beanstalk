@@ -6,6 +6,7 @@ use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{create_test_module, expect_js_output};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[test]
 fn compile_html_module_wasm_exports_bst_start_directly() {
@@ -24,8 +25,9 @@ fn compile_html_module_wasm_exports_bst_start_directly() {
         document_config: &HtmlDocumentConfig::default(),
         release_build: false,
         entry_runtime_fragment_count: 0,
-        external_package_registry:
+        external_package_registry: Arc::new(
             crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
+        ),
     };
     let compiled =
         compile_html_module_wasm(&compile_input, &mut string_table, Path::new("index.html"))
@@ -107,8 +109,9 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
         document_config: &HtmlDocumentConfig::default(),
         release_build: false,
         entry_runtime_fragment_count: 0,
-        external_package_registry:
+        external_package_registry: Arc::new(
             crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
+        ),
     };
     let compiled = compile_html_module_wasm(
         &compile_input,

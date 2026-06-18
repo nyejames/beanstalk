@@ -25,6 +25,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[test]
 fn parse_literal_expression_accepts_signed_i32_min_token() {
@@ -111,8 +112,9 @@ fn parse_whole_number_token(
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
 
     let min_text = string_table.intern(normalized_text);

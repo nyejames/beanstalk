@@ -289,7 +289,7 @@ shell #= [:
     <style>[$slot("style")]</style>
 </head>
 <body>
-    [$slot("body")]
+    [$slot]
 </body>
 </html>
 ]
@@ -333,20 +333,20 @@ run_tests ||:
 
 -- Final output
 [shell, shell_style:
-    [page_title]
+    [$insert("title"):
+        [page_title]
+    ]
     
-    [$insert("body"):
-        [level_1]
-        [large_template]
-        [heavy_interpolation]
-        [replay_template, replay_content]
-        [fresh_parent:
-            [fresh_child_normal]
-            [fresh_child_fresh]
-            [fresh_child_normal]
-        ]
-        [nested_wrapper:
-            [: nested content ]
-        ]
+    [level_1]
+    [large_template]
+    [heavy_interpolation]
+    [replay_template, replay_content]
+    [fresh_parent:
+        [fresh_child_normal]
+        [fresh_child_fresh]
+        [fresh_child_normal]
+    ]
+    [nested_wrapper:
+        [: nested content ]
     ]
 ]

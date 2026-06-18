@@ -5,6 +5,7 @@
 //! WHY: the frontend needs one canonical source for external symbol metadata. Keeping
 //! registration and lookup in one place ensures consistency between the package surface maps,
 //! the ID-indexed maps, and the prelude.
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 use super::definitions::{
     ExternalConstantDef, ExternalFunctionDef, ExternalFunctionSpec, ExternalPackage,
@@ -51,7 +52,7 @@ pub(crate) struct ExternalPackagePathMatch {
     pub(crate) matched_component_count: usize,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct ExternalPackageRegistry {
     packages: HashMap<ExternalPackageId, ExternalPackage>,
     /// Path-to-ID index so package lookup by readable import path still works.
@@ -88,6 +89,27 @@ pub struct ExternalPackageRegistry {
     next_package_id: u32,
     /// Counter for dynamically assigned synthetic IDs.
     next_synthetic_id: u32,
+}
+
+impl Clone for ExternalPackageRegistry {
+    fn clone(&self) -> Self {
+        increment_frontend_counter(FrontendCounter::ExternalPackageRegistryCloneCount);
+        Self {
+            packages: self.packages.clone(),
+            package_id_by_path: self.package_id_by_path.clone(),
+            functions_by_id: self.functions_by_id.clone(),
+            types_by_id: self.types_by_id.clone(),
+            constants_by_id: self.constants_by_id.clone(),
+            function_ids_by_package_symbol: self.function_ids_by_package_symbol.clone(),
+            type_ids_by_package_symbol: self.type_ids_by_package_symbol.clone(),
+            constant_ids_by_package_symbol: self.constant_ids_by_package_symbol.clone(),
+            function_package_by_id: self.function_package_by_id.clone(),
+            prelude_symbols_by_name: self.prelude_symbols_by_name.clone(),
+            prelude_namespace_aliases_by_name: self.prelude_namespace_aliases_by_name.clone(),
+            next_package_id: self.next_package_id,
+            next_synthetic_id: self.next_synthetic_id,
+        }
+    }
 }
 
 impl ExternalPackageRegistry {

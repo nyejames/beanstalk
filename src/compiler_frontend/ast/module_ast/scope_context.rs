@@ -9,8 +9,8 @@
 //! ## Relationship to AST emission
 //!
 //! `AstEmitter` creates `ScopeContext` fresh for each function/template body after the semantic
-//! environment is complete. `ScopeContext` owns only local scope growth (`local_declarations`,
-//! `loop_depth`, type expectations).
+//! environment is complete. `ScopeContext` owns only local scope growth through parent-linked
+//! frames, loop depth, and type expectations.
 //!
 //! `ScopeContext` receives shared state from the completed environment (for example
 //! `Rc<TopLevelDeclarationTable>` for top-level symbols and `Rc<ReceiverMethodCatalog>` for
@@ -60,7 +60,7 @@ use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationMetadata, ModuleSymbols,
 };
 use crate::compiler_frontend::instrumentation::{
-    AstCounter, add_ast_counter, increment_ast_counter,
+    AstCounter, increment_ast_counter, record_ast_counter_max,
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -76,6 +76,7 @@ use crate::return_compiler_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
@@ -87,6 +88,9 @@ mod diagnostic_sinks;
 mod local_declarations;
 mod lookup;
 mod required_services;
+mod scope_frame;
+
+use scope_frame::{ScopeArena, ScopeFrameId};
 
 /// Global counter for generating unique synthetic scope paths in child control-flow contexts.
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -105,7 +109,7 @@ pub struct ScopeShared {
     pub(crate) nominal_type_ids_by_path: Rc<FxHashMap<InternedPath, TypeId>>,
 
     // External package and frontend services.
-    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) build_profile: FrontendBuildProfile,
 
@@ -140,7 +144,6 @@ pub struct ScopeShared {
 }
 
 /// Shared parser/lowering context for one active AST scope.
-#[derive(Clone)]
 pub struct ScopeContext {
     // Core scope identity.
     pub kind: ContextKind,
@@ -149,18 +152,22 @@ pub struct ScopeContext {
     // Immutable shared services are cheap to clone into child scopes.
     pub(crate) shared: Rc<ScopeShared>,
 
-    // Per-scope locals: function parameters + body-declared variables only.
-    // Grows incrementally in source order via add_var(); never carries module-wide data.
-    pub local_declarations: Vec<Declaration>,
+    // Typed Vec arena that owns every frame for this parse context.
+    //
+    // WHAT: all scope frames for one AST parse context live in one contiguous allocation.
+    //       The arena is shared across all clones/children through `Rc<RefCell<_>>`,
+    //       but borrow guards are never exposed through parser APIs.
+    // WHY: replaces per-frame `Rc<ScopeFrame>` allocations with stable IDs and
+    //      index-based parent chains.
+    pub(crate) arena: Rc<RefCell<ScopeArena>>,
 
-    // Indexed local lookup: name → ordered indices into local_declarations.
-    // Preserves "latest visible local wins" without reverse scanning the full vec.
-    local_declarations_by_name: FxHashMap<StringId, Vec<u32>>,
-
-    // Declarations authored with `#` that are visible to this context. Foldable
-    // runtime bindings may still be compile-time values, but fixed-capacity type
-    // syntax requires an explicit compile-time constant name.
-    explicit_compile_time_constant_declarations: FxHashSet<InternedPath>,
+    // Stable ID of the frame that owns this scope layer's local declarations.
+    //
+    // WHAT: `current_frame_id` points to the arena frame that receives `add_var` calls.
+    //       Child contexts get a new frame whose parent is the parent's current frame.
+    // WHY: explicit frame identity makes clone/child semantics clear and prevents
+    //      accidental mutation of a shared `Rc<ScopeFrame>` from multiple contexts.
+    pub(crate) current_frame_id: ScopeFrameId,
 
     // Assignment targets are readable on the success side of an assignment expression, but not from
     // catch recovery subtrees attached to that assignment. The pending set is activated only when
@@ -201,6 +208,39 @@ pub struct ScopeContext {
 
     // Control flow state.
     pub loop_depth: usize,
+}
+
+impl Clone for ScopeContext {
+    /// Clone a scope context for a sibling branch or catch handler.
+    ///
+    /// WHAT: copies every non-frame field and allocates a new arena frame that is a
+    ///       shallow copy of the current frame. The new frame shares the same parent
+    ///       chain and existing declaration IDs, but its own `add_var` calls mutate
+    ///       only the copy.
+    /// WHY: match/if arms and catch handlers must not add captures to the original
+    ///      context's frame.
+    fn clone(&self) -> Self {
+        let new_frame_id = self.arena.borrow_mut().clone_frame(self.current_frame_id);
+
+        Self {
+            kind: self.kind.clone(),
+            scope: self.scope.clone(),
+            shared: Rc::clone(&self.shared),
+            arena: Rc::clone(&self.arena),
+            current_frame_id: new_frame_id,
+            unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
+            pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
+            visible_declaration_ids: self.visible_declaration_ids.clone(),
+            expected_result_type_ids: self.expected_result_type_ids.clone(),
+            expected_error_type: self.expected_error_type,
+            current_function_return_type_ids: self.current_function_return_type_ids.clone(),
+            active_value_target: self.active_value_target.clone(),
+            active_generic_type_context: self.active_generic_type_context.clone(),
+            generic_template_validation: self.generic_template_validation,
+            generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
+            loop_depth: self.loop_depth,
+        }
+    }
 }
 
 impl std::ops::Deref for ScopeContext {
@@ -275,21 +315,31 @@ impl ScopeContext {
     pub(crate) fn active_generic_type_context(&self) -> Option<&ActiveGenericTypeContext> {
         self.active_generic_type_context.as_ref()
     }
-}
 
-/// Build an index mapping local declaration names to their positions in `local_declarations`.
-///
-/// WHAT: enables O(1) lookup of all locals with a given name, with the last
-///       registered index representing the currently visible binding.
-/// WHY: avoids reverse-scanning the full declaration vec on every name resolution.
-fn build_local_declarations_index(declarations: &[Declaration]) -> FxHashMap<StringId, Vec<u32>> {
-    let mut index: FxHashMap<StringId, Vec<u32>> = FxHashMap::default();
-    for (i, declaration) in declarations.iter().enumerate() {
-        if let Some(name) = declaration.id.name() {
-            index.entry(name).or_default().push(i as u32);
-        }
+    #[cfg(test)]
+    /// Return the declarations declared in the current scope frame.
+    ///
+    /// WHAT: exposes the current frame's local declarations for tests and diagnostics.
+    ///       Ancestor declarations remain accessible through `get_reference`.
+    pub fn local_declarations(&self) -> Vec<Rc<Declaration>> {
+        self.arena
+            .borrow()
+            .frame(self.current_frame_id)
+            .local_declarations()
+            .to_vec()
     }
-    index
+
+    #[cfg(test)]
+    /// Return the total number of visible declarations across the frame chain.
+    ///
+    /// WHAT: counts declarations in the current frame plus every ancestor frame.
+    /// WHY: useful for tests and instrumentation that need the effective scope size.
+    pub fn total_declaration_count(&self) -> usize {
+        let arena = self.arena.borrow();
+        arena
+            .frame(self.current_frame_id)
+            .total_declaration_count(&arena)
+    }
 }
 
 // --------------------------
@@ -310,8 +360,9 @@ impl ScopeContext {
         kind: ContextKind,
         scope: InternedPath,
         top_level_declarations: Rc<TopLevelDeclarationTable>,
-        external_package_registry: ExternalPackageRegistry,
+        external_package_registry: Arc<ExternalPackageRegistry>,
         expected_result_type_ids: Vec<TypeId>,
+        scope_frame_capacity: usize,
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
 
@@ -364,13 +415,18 @@ impl ScopeContext {
             trait_environment_override: None,
         });
 
+        let arena = Rc::new(RefCell::new(ScopeArena::with_capacity(
+            scope_frame_capacity,
+        )));
+        let root_frame_id = arena.borrow_mut().alloc_root_frame_with_capacity(0);
+        record_scope_frame_depth(0);
+
         ScopeContext {
             kind,
             scope,
             shared,
-            local_declarations: Vec::new(),
-            local_declarations_by_name: FxHashMap::default(),
-            explicit_compile_time_constant_declarations: FxHashSet::default(),
+            arena,
+            current_frame_id: root_frame_id,
             unavailable_assignment_targets: FxHashSet::default(),
             pending_catch_assignment_targets: FxHashSet::default(),
             visible_declaration_ids: None,
@@ -391,10 +447,12 @@ impl ScopeContext {
         string_table: &mut StringTable,
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
-        add_ast_counter(
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
-            self.local_declarations.len(),
-        );
+
+        let child_frame_id = self
+            .arena
+            .borrow_mut()
+            .alloc_child_frame(self.current_frame_id);
+        record_scope_frame_depth(self.arena.borrow().frame(child_frame_id).depth());
 
         let loop_depth = if matches!(kind, ContextKind::Loop) {
             self.loop_depth + 1
@@ -424,11 +482,8 @@ impl ScopeContext {
             kind,
             scope,
             shared: Rc::clone(&self.shared),
-            local_declarations: self.local_declarations.clone(),
-            local_declarations_by_name: self.local_declarations_by_name.clone(),
-            explicit_compile_time_constant_declarations: self
-                .explicit_compile_time_constant_declarations
-                .clone(),
+            arena: Rc::clone(&self.arena),
+            current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -454,25 +509,37 @@ impl ScopeContext {
         _string_table: &mut StringTable,
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
-        add_ast_counter(
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
-            self.local_declarations.len(),
-        );
 
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Function;
+        // Body-local functions are not closures. They receive the completed
+        // top-level/import visibility through `shared`, but their local frame starts
+        // fresh with parameters only so outer locals cannot be captured implicitly.
+        let child_frame_id = self
+            .arena
+            .borrow_mut()
+            .alloc_root_frame_with_capacity(signature.parameters.len());
+        record_scope_frame_depth(0);
+
         let expected_result_type_ids = signature.success_return_type_ids();
         let expected_error_type = signature.error_return_type_id();
-        new_context.expected_result_type_ids = expected_result_type_ids;
-        new_context.expected_error_type = expected_error_type;
-        new_context.current_function_return_type_ids = new_context.expected_result_type_ids.clone();
-        new_context.active_value_target = None;
-        new_context.active_generic_type_context = None;
-        new_context.generic_template_validation = false;
 
-        // Create a new scope path by joining the current scope with the function name.
-        new_context.scope = self.scope.append(function_name);
-        new_context.loop_depth = 0;
+        let mut new_context = ScopeContext {
+            kind: ContextKind::Function,
+            scope: self.scope.append(function_name),
+            shared: Rc::clone(&self.shared),
+            arena: Rc::clone(&self.arena),
+            current_frame_id: child_frame_id,
+            unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
+            pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
+            visible_declaration_ids: self.visible_declaration_ids.clone(),
+            expected_result_type_ids: expected_result_type_ids.clone(),
+            expected_error_type,
+            current_function_return_type_ids: expected_result_type_ids,
+            active_value_target: None,
+            active_generic_type_context: None,
+            generic_template_validation: false,
+            generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
+            loop_depth: 0,
+        };
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
         new_context.set_local_declarations(signature.parameters);
@@ -482,20 +549,19 @@ impl ScopeContext {
 
     pub fn new_child_expression(&self, expected_result_type_ids: Vec<TypeId>) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
-        add_ast_counter(
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
-            self.local_declarations.len(),
-        );
+
+        let child_frame_id = self
+            .arena
+            .borrow_mut()
+            .alloc_child_frame(self.current_frame_id);
+        record_scope_frame_depth(self.arena.borrow().frame(child_frame_id).depth());
 
         ScopeContext {
             kind: ContextKind::Expression,
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
-            local_declarations: self.local_declarations.clone(),
-            local_declarations_by_name: self.local_declarations_by_name.clone(),
-            explicit_compile_time_constant_declarations: self
-                .explicit_compile_time_constant_declarations
-                .clone(),
+            arena: Rc::clone(&self.arena),
+            current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -516,10 +582,12 @@ impl ScopeContext {
     /// compile-time values. All other contexts parse templates as runtime-capable.
     pub fn new_template_parsing_context(&self) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
-        add_ast_counter(
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
-            self.local_declarations.len(),
-        );
+
+        let child_frame_id = self
+            .arena
+            .borrow_mut()
+            .alloc_child_frame(self.current_frame_id);
+        record_scope_frame_depth(self.arena.borrow().frame(child_frame_id).depth());
 
         let template_kind = if self.kind.is_constant_context() {
             self.kind.clone()
@@ -531,11 +599,8 @@ impl ScopeContext {
             kind: template_kind,
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
-            local_declarations: self.local_declarations.clone(),
-            local_declarations_by_name: self.local_declarations_by_name.clone(),
-            explicit_compile_time_constant_declarations: self
-                .explicit_compile_time_constant_declarations
-                .clone(),
+            arena: Rc::clone(&self.arena),
+            current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -552,26 +617,25 @@ impl ScopeContext {
 
     /// Builds a constant child context that preserves project-aware folding/path state.
     ///
-    /// WHAT: clones the parent visibility/declaration environment and forces
+    /// WHAT: shares the parent visibility/declaration environment and forces
     ///       resolver + source file scope propagation into constant parsing paths.
     /// WHY: resolver-less constant contexts are invalid for template folding and
     ///      template-head path coercion.
     pub fn new_constant(scope: InternedPath, parent: &ScopeContext) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
-        add_ast_counter(
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
-            parent.local_declarations.len(),
-        );
+
+        let child_frame_id = parent
+            .arena
+            .borrow_mut()
+            .alloc_child_frame(parent.current_frame_id);
+        record_scope_frame_depth(parent.arena.borrow().frame(child_frame_id).depth());
 
         ScopeContext {
             kind: ContextKind::Constant,
             scope,
             shared: Rc::clone(&parent.shared),
-            local_declarations: parent.local_declarations.clone(),
-            local_declarations_by_name: parent.local_declarations_by_name.clone(),
-            explicit_compile_time_constant_declarations: parent
-                .explicit_compile_time_constant_declarations
-                .clone(),
+            arena: Rc::clone(&parent.arena),
+            current_frame_id: child_frame_id,
             unavailable_assignment_targets: parent.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: parent.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
@@ -587,4 +651,13 @@ impl ScopeContext {
             loop_depth: parent.loop_depth,
         }
     }
+}
+
+/// Update the recorded maximum scope-frame depth.
+///
+/// WHAT: records the deepest parent-linked frame observed during AST construction.
+/// WHY: the no-shadowing frame depth is an objective signal for how nested the
+///      current input is, and it helps validate capacity estimates later.
+fn record_scope_frame_depth(depth: usize) {
+    record_ast_counter_max(AstCounter::ScopeMaxFrameDepth, depth);
 }

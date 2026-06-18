@@ -3,6 +3,7 @@
 //! This backend lowers HIR into readable JavaScript using GC semantics.
 //! Borrowing and ownership are optimization concerns and therefore ignored here.
 
+use std::sync::Arc;
 mod emitter;
 mod identifiers;
 mod js_calls;
@@ -65,7 +66,7 @@ pub struct JsLoweringConfig {
     pub function_emission_policy: JsFunctionEmissionPolicy,
 
     /// External package registry for resolving backend lowering metadata.
-    pub external_package_registry: ExternalPackageRegistry,
+    pub external_package_registry: Arc<ExternalPackageRegistry>,
     /// Allow provider-created ES module exports to lower through generated HTML glue.
     ///
     /// WHY: only the HTML builder can emit the matching ES module glue. Direct JS backend
@@ -86,7 +87,7 @@ impl JsLoweringConfig {
             emit_locations: false,
             auto_invoke_start: false,
             function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
-            external_package_registry: ExternalPackageRegistry::new(),
+            external_package_registry: Arc::new(ExternalPackageRegistry::new()),
             external_module_export_glue_enabled: false,
         }
     }
@@ -99,7 +100,7 @@ impl JsLoweringConfig {
     /// registry is stored directly because the HTML builder already owns it.
     pub fn html_page_bundle(
         release_build: bool,
-        external_package_registry: ExternalPackageRegistry,
+        external_package_registry: Arc<ExternalPackageRegistry>,
     ) -> Self {
         let mut config = Self::direct_js(release_build);
         config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
@@ -117,7 +118,7 @@ impl JsLoweringConfig {
     /// silently lowered through glue that the artifact path cannot emit.
     pub(crate) fn html_wasm_companion(
         release_build: bool,
-        external_package_registry: ExternalPackageRegistry,
+        external_package_registry: Arc<ExternalPackageRegistry>,
     ) -> Self {
         let mut config = Self::direct_js(release_build);
         config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;

@@ -8,7 +8,10 @@
 #[derive(Copy, Clone)]
 pub(crate) enum AstCounter {
     ScopeContextsCreated,
-    ScopeLocalDeclarationsClonedTotal,
+    ScopeMaxFrameDepth,
+    ScopeFrameLookupAncestorSteps,
+    ScopeFrameRedeclarationAncestorChecks,
+    ScopeLocalDeclarationsInserted,
     BoundedExpressionTokenWindows,
     BoundedExpressionTokenCopiesAvoided,
     TemplateNormalizationNodesVisited,
@@ -28,7 +31,10 @@ mod detailed {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static SCOPE_CONTEXTS_CREATED: AtomicUsize = AtomicUsize::new(0);
-    static SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_MAX_FRAME_DEPTH: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_FRAME_LOOKUP_ANCESTOR_STEPS: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_FRAME_REDECLARATION_ANCESTOR_CHECKS: AtomicUsize = AtomicUsize::new(0);
+    static SCOPE_LOCAL_DECLARATIONS_INSERTED: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_WINDOWS: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_COPIES_AVOIDED: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATE_NORMALIZATION_NODES_VISITED: AtomicUsize = AtomicUsize::new(0);
@@ -51,14 +57,23 @@ mod detailed {
         atomic_counter(counter).fetch_add(amount, Ordering::Relaxed);
     }
 
+    pub(crate) fn record_ast_counter_max(counter: AstCounter, value: usize) {
+        atomic_counter(counter).fetch_max(value, Ordering::Relaxed);
+    }
+
     pub(crate) fn log_ast_counters() {
         if !detailed_timer_output_enabled() {
             return;
         }
 
         let scope_contexts_created = counter_value(AstCounter::ScopeContextsCreated);
-        let scope_local_declarations_cloned_total =
-            counter_value(AstCounter::ScopeLocalDeclarationsClonedTotal);
+        let scope_max_frame_depth = counter_value(AstCounter::ScopeMaxFrameDepth);
+        let scope_frame_lookup_ancestor_steps =
+            counter_value(AstCounter::ScopeFrameLookupAncestorSteps);
+        let scope_frame_redeclaration_ancestor_checks =
+            counter_value(AstCounter::ScopeFrameRedeclarationAncestorChecks);
+        let scope_local_declarations_inserted =
+            counter_value(AstCounter::ScopeLocalDeclarationsInserted);
         let bounded_expression_token_windows =
             counter_value(AstCounter::BoundedExpressionTokenWindows);
         let bounded_expression_token_copies_avoided =
@@ -78,8 +93,20 @@ mod detailed {
             Dark Green scope_contexts_created
         );
         saying::say!(
-            "  scope local declarations cloned total = ",
-            Dark Green scope_local_declarations_cloned_total
+            "  scope max frame depth = ",
+            Dark Green scope_max_frame_depth
+        );
+        saying::say!(
+            "  scope frame lookup ancestor steps = ",
+            Dark Green scope_frame_lookup_ancestor_steps
+        );
+        saying::say!(
+            "  scope frame redeclaration ancestor checks = ",
+            Dark Green scope_frame_redeclaration_ancestor_checks
+        );
+        saying::say!(
+            "  scope local declarations inserted = ",
+            Dark Green scope_local_declarations_inserted
         );
         saying::say!(
             "  bounded expression token windows = ",
@@ -111,10 +138,13 @@ mod detailed {
         );
     }
 
-    fn all_counters() -> [AstCounter; 9] {
+    fn all_counters() -> [AstCounter; 12] {
         [
             AstCounter::ScopeContextsCreated,
-            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            AstCounter::ScopeMaxFrameDepth,
+            AstCounter::ScopeFrameLookupAncestorSteps,
+            AstCounter::ScopeFrameRedeclarationAncestorChecks,
+            AstCounter::ScopeLocalDeclarationsInserted,
             AstCounter::BoundedExpressionTokenWindows,
             AstCounter::BoundedExpressionTokenCopiesAvoided,
             AstCounter::TemplateNormalizationNodesVisited,
@@ -129,7 +159,15 @@ mod detailed {
         match counter {
             AstCounter::ScopeContextsCreated => &SCOPE_CONTEXTS_CREATED,
 
-            AstCounter::ScopeLocalDeclarationsClonedTotal => &SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL,
+            AstCounter::ScopeMaxFrameDepth => &SCOPE_MAX_FRAME_DEPTH,
+
+            AstCounter::ScopeFrameLookupAncestorSteps => &SCOPE_FRAME_LOOKUP_ANCESTOR_STEPS,
+
+            AstCounter::ScopeFrameRedeclarationAncestorChecks => {
+                &SCOPE_FRAME_REDECLARATION_ANCESTOR_CHECKS
+            }
+
+            AstCounter::ScopeLocalDeclarationsInserted => &SCOPE_LOCAL_DECLARATIONS_INSERTED,
 
             AstCounter::BoundedExpressionTokenWindows => &BOUNDED_EXPRESSION_TOKEN_WINDOWS,
 
@@ -158,7 +196,8 @@ mod detailed {
 
 #[cfg(feature = "detailed_timers")]
 pub(crate) use detailed::{
-    add_ast_counter, increment_ast_counter, log_ast_counters, reset_ast_counters,
+    add_ast_counter, increment_ast_counter, log_ast_counters, record_ast_counter_max,
+    reset_ast_counters,
 };
 
 // Stubs when detailed timers are disabled.
@@ -170,6 +209,9 @@ pub(crate) fn increment_ast_counter(_counter: AstCounter) {}
 
 #[cfg(not(feature = "detailed_timers"))]
 pub(crate) fn add_ast_counter(_counter: AstCounter, _amount: usize) {}
+
+#[cfg(not(feature = "detailed_timers"))]
+pub(crate) fn record_ast_counter_max(_counter: AstCounter, _value: usize) {}
 
 #[cfg(not(feature = "detailed_timers"))]
 pub(crate) fn log_ast_counters() {}

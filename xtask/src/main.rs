@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```text
-//! cargo run --package xtask --bin xtask -- <mode>
+//! cargo run --package xtask --bin xtask -- <mode> [options]
 //! ```
 //!
 //! Modes:
@@ -16,6 +16,7 @@
 //! - `bench-report`         - Print a local-only benchmark drilldown report
 //! - `bench-frontend-check` - Run the focused frontend benchmark suite without writing history
 //! - `bench-frontend`       - Run the focused frontend benchmark suite and record
+//! - `bench-profile`        - Run Samply-backed profiling on benchmark cases
 
 mod bench;
 mod bench_history;
@@ -31,44 +32,37 @@ mod compiler_binary;
 mod frontend_bench;
 mod mode;
 mod process_runner;
+mod profile;
 
 use bench::{BenchMode, BenchOptions, run_benchmarks};
 use bench_report::run_benchmark_report;
 use frontend_bench::{FrontendBenchMode, FrontendBenchOptions, run_frontend_benchmarks};
-use mode::BenchmarkMode;
+use mode::{BenchmarkMode, ModeParseResult};
 use std::env;
 use std::process;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 2 {
-        eprintln!("Usage: xtask <mode>");
-        eprintln!();
-        eprintln!("Modes:");
-        eprintln!(
-            "  bench                Run the full benchmark suite and update local/public summaries"
-        );
-        eprintln!(
-            "  bench-check          Run the full benchmark suite without writing benchmark history"
-        );
-        eprintln!("  bench-report         Print a local-only benchmark drilldown report");
-        eprintln!(
-            "  bench-frontend-check Run the focused frontend benchmark suite without writing history"
-        );
-        eprintln!("  bench-frontend       Run the focused frontend benchmark suite and record");
+    // The binary name is args[0]; mode and options follow.
+    if args.len() < 2 {
+        print_usage();
         process::exit(1);
     }
 
-    let mode_str = &args[1];
-
-    let Some(mode) = BenchmarkMode::parse(mode_str) else {
-        eprintln!("Error: Unknown mode '{}'", mode_str);
-        eprintln!();
-        eprintln!(
-            "Valid modes: bench, bench-check, bench-report, bench-frontend-check, bench-frontend"
-        );
-        process::exit(1);
+    // parse_args receives everything after the binary name.
+    let mode = match BenchmarkMode::parse_args(&args[1..]) {
+        ModeParseResult::Mode(mode) => mode,
+        ModeParseResult::ProfileHelp(help) => {
+            println!("{}", help);
+            process::exit(0);
+        }
+        ModeParseResult::Error(error) => {
+            eprintln!("Error: {}", error);
+            eprintln!();
+            print_usage();
+            process::exit(1);
+        }
     };
 
     match mode {
@@ -111,7 +105,29 @@ fn main() {
 
             exit_with_result(run_frontend_benchmarks(options));
         }
+        BenchmarkMode::BenchProfile(options) => {
+            exit_with_result(profile::run_profile_benchmarks(options));
+        }
     }
+}
+
+/// Print the top-level usage message listing all supported modes.
+fn print_usage() {
+    eprintln!("Usage: xtask <mode> [options]");
+    eprintln!();
+    eprintln!("Modes:");
+    eprintln!(
+        "  bench                Run the full benchmark suite and update local/public summaries"
+    );
+    eprintln!(
+        "  bench-check          Run the full benchmark suite without writing benchmark history"
+    );
+    eprintln!("  bench-report         Print a local-only benchmark drilldown report");
+    eprintln!(
+        "  bench-frontend-check Run the focused frontend benchmark suite without writing history"
+    );
+    eprintln!("  bench-frontend       Run the focused frontend benchmark suite and record");
+    eprintln!("  bench-profile        Run Samply-backed profiling (use --help for options)");
 }
 
 fn exit_with_result(result: Result<(), String>) -> ! {

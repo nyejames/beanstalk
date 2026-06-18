@@ -11,7 +11,6 @@
 
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource,
 };
@@ -40,7 +39,11 @@ fn is_unresolved_constant_placeholder_reference(
 
     path.name()
         .and_then(|name| context.get_reference(&name))
-        .is_some_and(Declaration::is_unresolved_constant_placeholder)
+        .is_some_and(|declaration| {
+            declaration
+                .as_declaration()
+                .is_unresolved_constant_placeholder()
+        })
 }
 
 fn validate_template_head_value_type(

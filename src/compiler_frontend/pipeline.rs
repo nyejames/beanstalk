@@ -7,6 +7,7 @@ use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
 };
+use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
@@ -34,9 +35,10 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode
 use crate::libraries::SourceFileKind;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub struct CompilerFrontend {
-    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) external_package_registry: Arc<ExternalPackageRegistry>,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
@@ -112,7 +114,7 @@ impl CompilerFrontend {
         project_config: &Config,
         string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
-        external_package_registry: ExternalPackageRegistry,
+        external_package_registry: Arc<ExternalPackageRegistry>,
         project_path_resolver: Option<ProjectPathResolver>,
     ) -> Self {
         let origin = project_config
@@ -259,6 +261,7 @@ impl CompilerFrontend {
         sorted: SortedHeaders,
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
+        capacity_estimate: FrontendArenaCapacityEstimate,
     ) -> Result<Ast, CompilerMessages> {
         let interned_entry_file = self
             .source_files
@@ -276,7 +279,7 @@ impl CompilerFrontend {
                 top_level_const_fragments: sorted.top_level_const_fragments,
             },
             AstBuildContext {
-                external_package_registry: &self.external_package_registry,
+                external_package_registry: Arc::clone(&self.external_package_registry),
                 style_directives: &self.style_directives,
                 string_table: &mut self.string_table,
                 entry_dir: interned_entry_file,
@@ -284,6 +287,7 @@ impl CompilerFrontend {
                 project_path_resolver: self.project_path_resolver.clone(),
                 path_format_config: self.path_format_config.clone(),
                 template_const_loop_iteration_limit: self.template_const_loop_iteration_limit,
+                capacity_estimate,
             },
         )
     }
@@ -307,7 +311,7 @@ impl CompilerFrontend {
     ) -> Result<BorrowCheckReport, CompilerMessages> {
         match run_borrow_checker(
             hir_module,
-            &self.external_package_registry,
+            self.external_package_registry.as_ref(),
             &self.string_table,
         ) {
             Ok(report) => Ok(report),

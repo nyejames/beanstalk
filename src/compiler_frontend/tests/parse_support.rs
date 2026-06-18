@@ -23,6 +23,7 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
+use std::sync::Arc;
 
 pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     let cwd = std::env::temp_dir();
@@ -40,7 +41,7 @@ pub(crate) fn parse_single_file_ast_result(
 ) -> Result<(Ast, StringTable), Box<CompilerDiagnostic>> {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let external_package_registry = ExternalPackageRegistry::new();
+    let external_package_registry = Arc::new(ExternalPackageRegistry::new());
     let file_path = std::path::PathBuf::from("#page.bst");
 
     let options = HeaderParseOptions {
@@ -63,7 +64,7 @@ pub(crate) fn parse_single_file_ast_result(
         file_tokens,
         &file_path,
         &options,
-        &external_package_registry,
+        external_package_registry.as_ref(),
         &mut string_table,
         0,
         0,
@@ -72,7 +73,7 @@ pub(crate) fn parse_single_file_ast_result(
 
     let headers = parse_headers(
         vec![output],
-        &external_package_registry,
+        external_package_registry.as_ref(),
         &ExternalImportResolutionTable::default(),
         options.project_path_resolver.as_ref(),
         &mut string_table,
@@ -112,7 +113,7 @@ pub(crate) fn parse_single_file_ast_result(
             top_level_const_fragments: sorted.top_level_const_fragments,
         },
         AstBuildContext {
-            external_package_registry: &external_package_registry,
+            external_package_registry,
             style_directives: &style_directives,
             string_table: &mut string_table,
             entry_dir: entry_path,
@@ -120,6 +121,7 @@ pub(crate) fn parse_single_file_ast_result(
             project_path_resolver: Some(test_project_path_resolver()),
             path_format_config: PathStringFormatConfig::default(),
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            capacity_estimate: Default::default(),
         },
     )
     .map_err(|messages| {

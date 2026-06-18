@@ -1,0 +1,433 @@
+//! Profiling module - Samply-backed profiling workflow for benchmark cases
+//!
+//! WHAT: Provides a profiling workflow that builds a dedicated profiling
+//! compiler binary, runs Samply against benchmark cases, extracts function
+//! hotspots, and generates agent-readable summaries with source-owner hints.
+//!
+//! WHY: Profiling gives attribution evidence for optimization work. The
+//! workflow separates observation passes (detailed timer/counter data) from
+//! Samply stack sampling so each concern stays independently testable.
+//!
+//! # What this module owns
+//! - Profiling command parsing and option types (`ProfileOptions`, `ProfileFilterMode`)
+//! - Profiling build helpers (via `compiler_binary` module)
+//! - Artifact layout, observation logging, Samply runner integration
+//! - Profile JSON parsing and hotspot extraction
+//! - Agent summaries and drift reports
+//! - Profile history recording
+//!
+//! # What this module does NOT own
+//! - Normal benchmark orchestration (see `bench.rs`)
+//! - Frontend benchmark orchestration (see `frontend_bench.rs`)
+//! - Release compiler binary building (see `compiler_binary.rs`)
+//! - Benchmark observation parsing (see `bench_observations.rs`)
+//! - Benchmark history and reports (see `bench_history.rs`, `bench_report.rs`)
+
+pub(crate) mod artifacts;
+pub(crate) mod buckets;
+pub(crate) mod drift;
+pub(crate) mod history;
+pub(crate) mod hotspots;
+pub(crate) mod observations;
+pub(crate) mod options;
+pub(crate) mod parse;
+pub(crate) mod runner;
+pub(crate) mod summary;
+
+// Re-export the narrow surface needed by main.rs and mode.rs.
+pub(crate) use options::{ProfileOptions, ProfileParseResult, parse_profile_args};
+
+use crate::bench_history::get_commit_hash;
+use crate::bench_time::BenchmarkTimestamp;
+use crate::case_parser::parse_cases;
+use crate::compiler_binary::build_profiling_compiler_with_timers;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use artifacts::{ProfileCaseManifest, ProfileRunPaths, write_index_md, write_run_manifest};
+use drift::{
+    DriftCaseInput, DriftHotFunction, compute_drift, find_comparable_previous,
+    format_drift_markdown, format_drift_summary_section, no_previous_drift_report,
+};
+use history::{HistoryCaseRecord, HistoryHotFunction, PROFILE_RUNS_JSONL_PATH};
+use hotspots::{HotspotExtractionResult, extract_hotspots};
+use observations::{run_observation, run_warmup};
+use options::ProfileFilterMode;
+use parse::parse_profile;
+use runner::{SamplyRunInput, check_samply_available, run_samply};
+use summary::{
+    CaseSummaryData, append_drift_to_agent_summary, generate_agent_summary, generate_case_summary,
+    generate_root_hotspots_json,
+};
+
+/// Root path for all profiling local data, relative to repo root.
+const PROFILES_ROOT: &str = "benchmarks/local-data/profiles";
+
+/// Path to the benchmark cases file.
+const BENCHMARK_CASES_PATH: &str = "benchmarks/cases.txt";
+
+/// Run the profiling benchmark workflow.
+///
+/// WHAT: Loads benchmark cases, applies case filtering, builds the profiling
+/// compiler, runs warmup + observation passes for each selected case, records
+/// Samply profiles, and writes local artifacts under
+/// `benchmarks/local-data/profiles/`.
+///
+/// WHY: This is the Phase 2+3 orchestrator that ties together artifact layout,
+/// observation logging, Samply recording, and case filtering. The observation
+/// pass gives timer/counter data without profiler overhead; the Samply pass
+/// gives stack samples for hotspot extraction.
+///
+/// If any case fails, the run directory is left for debugging but no history
+/// is appended.
+pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), String> {
+    // Load and filter benchmark cases.
+    let all_cases = parse_cases(&PathBuf::from(BENCHMARK_CASES_PATH))?;
+    let selected_cases = filter_cases(&all_cases, options.case_filter.as_deref())?;
+
+    if selected_cases.is_empty() {
+        return Err(format!(
+            "No benchmark cases matched the filter '{}'.",
+            options.case_filter.as_deref().unwrap_or("(all cases)")
+        ));
+    }
+
+    // Verify Samply is available before doing any work.
+    check_samply_available()?;
+
+    // Build the profiling compiler with frame pointers for Samply.
+    println!("Building profiling compiler...");
+    let profiling_binary = build_profiling_compiler_with_timers()?;
+    let bean_path = profiling_binary.as_path();
+
+    // Get the short commit hash for the run id.
+    let commit = get_commit_hash();
+
+    // Create the run directory.
+    let profiles_root = PathBuf::from(PROFILES_ROOT);
+    let run_paths = ProfileRunPaths::create(&profiles_root, commit.as_deref())?;
+
+    println!(
+        "Profiling run {} — {} cases, filter: {}",
+        run_paths.run_id,
+        selected_cases.len(),
+        options.filter.display_label(),
+    );
+
+    // Run each selected case: warmup → observation → Samply → write artifacts.
+    // Accumulate both manifests (for run-manifest.json) and summary data
+    // (for root agent-summary.md and profile-hotspots.json).
+    let mut case_manifests = Vec::new();
+    let mut case_summaries: Vec<(
+        observations::ProfileObservation,
+        Option<HotspotExtractionResult>,
+    )> = Vec::new();
+
+    for case in &selected_cases {
+        print!("  {} ", case.name);
+
+        // Warmup pass.
+        run_warmup(bean_path, case)?;
+
+        // Observation pass (timer/counter data without profiler overhead).
+        let observation = run_observation(bean_path, case)?;
+        print!("~{:.0}ms ", observation.wall_ms);
+
+        // Write per-case artifacts (stdout, stderr, observations).
+        // Summary is deferred until after hotspot extraction so it can include
+        // hotspot data, hints, and sample counts.
+        let case_paths = run_paths.case_paths(&case.name);
+        case_paths.create_dir()?;
+        case_paths.write_stdout(&observation.stdout)?;
+        case_paths.write_stderr(&observation.stderr)?;
+        case_paths.write_observations_json(&observation)?;
+
+        // Samply recording pass (stack samples for hotspot extraction).
+        let samply_input = SamplyRunInput {
+            bean_path: bean_path.to_path_buf(),
+            command: case.command.clone(),
+            args: case.args.clone(),
+            output_path: case_paths.profile_json.clone(),
+            samply_rate_hz: options.samply_rate_hz,
+            presymbolicate: options.presymbolicate,
+        };
+
+        let samply_run = run_samply(&samply_input)?;
+
+        if !samply_run.success {
+            return Err(format!(
+                "Samply recording failed for case '{}'.\nStdout: {}\nStderr: {}",
+                case.name,
+                samply_run.stdout.trim(),
+                samply_run.stderr.trim()
+            ));
+        }
+
+        print!("[samply {:.0}ms] ", samply_run.duration_ms);
+
+        // Hotspot extraction: parse the profile and extract hotspots for
+        // non-RawIndex modes. RawIndex skips parsing to save time.
+        let hotspot_result = if options.filter != ProfileFilterMode::RawIndex {
+            let parsed = parse_profile(&case_paths.profile_json)
+                .map_err(|e| format!("Failed to parse profile for case '{}': {}", case.name, e))?;
+
+            let result = extract_hotspots(&parsed, options.filter, observation.wall_ms);
+            artifacts::write_hotspots_json(&case_paths, &result)?;
+            print!("[{} hotspots] ", result.functions.len());
+            Some(result)
+        } else {
+            None
+        };
+
+        // Build manifest entry for this case.
+        case_manifests.push(ProfileCaseManifest {
+            case_name: case.name.clone(),
+            group_name: case.group_name.clone(),
+            command: case.command.clone(),
+            args: case.args.clone(),
+            observation_wall_ms: observation.wall_ms,
+            profile_path: format!("cases/{}/profile.json.gz", case.name),
+            stdout_path: format!("cases/{}/stdout.log", case.name),
+            stderr_path: format!("cases/{}/stderr.log", case.name),
+            summary_path: format!("cases/{}/summary.md", case.name),
+        });
+
+        // Accumulate for root summary generation.
+        case_summaries.push((observation, hotspot_result));
+
+        println!("done");
+    }
+
+    // ---------------------------------------------------------------
+    //  Enriched per-case summaries and root summary artifacts
+    // ---------------------------------------------------------------
+
+    // Generate enriched per-case summary.md files that include hotspots and hints.
+    // This overwrites the basic summary that was not written during case processing.
+    let mut summary_data_refs: Vec<CaseSummaryData<'_>> = Vec::new();
+    for (observation, hotspot_result) in &case_summaries {
+        if let Some(hotspots) = hotspot_result {
+            let profile_path = format!("cases/{}/profile.json.gz", observation.case_name);
+            let data = CaseSummaryData {
+                observation,
+                hotspots,
+                profile_relative_path: profile_path,
+                filter: options.filter,
+            };
+            generate_case_summary(&run_paths, &data)?;
+            summary_data_refs.push(data);
+        }
+    }
+
+    // Write root artifacts.
+    write_run_manifest(
+        &run_paths,
+        &run_paths.run_id,
+        commit.as_deref(),
+        options.filter,
+        options.samply_rate_hz,
+        &case_manifests,
+    )?;
+
+    write_index_md(
+        &run_paths,
+        &run_paths.run_id,
+        options.filter,
+        &case_manifests,
+    )?;
+
+    // Generate root summary artifacts when hotspot data is available.
+    if !summary_data_refs.is_empty() {
+        generate_root_hotspots_json(
+            &run_paths,
+            &summary_data_refs,
+            &run_paths.run_id,
+            commit.as_deref(),
+            options.filter,
+            options.samply_rate_hz,
+        )?;
+
+        generate_agent_summary(
+            &run_paths,
+            &summary_data_refs,
+            &run_paths.run_id,
+            options.filter,
+        )?;
+    }
+
+    // ---------------------------------------------------------------
+    //  Phase 6: Profile history and drift reports
+    // ---------------------------------------------------------------
+
+    // Compute drift against the latest comparable previous record.
+    let drift_report = if options.filter != ProfileFilterMode::RawIndex {
+        let history_path = std::path::Path::new(PROFILE_RUNS_JSONL_PATH);
+        let previous_records = history::read_profile_runs(history_path).unwrap_or_default();
+
+        let system = crate::bench_system::load_or_create_system(
+            crate::bench_system::SystemIdentityMode::ReadOnly,
+        )
+        .unwrap_or(None);
+        let system_uuid = system
+            .as_ref()
+            .map(|s| s.system_uuid.as_str())
+            .unwrap_or("unknown");
+
+        let previous = find_comparable_previous(
+            &previous_records,
+            system_uuid,
+            options.filter.display_label(),
+            options.samply_rate_hz,
+            &run_paths.run_id,
+        );
+
+        if let Some(prev) = previous {
+            // Build current case inputs for drift comparison.
+            let mut drift_cases = Vec::new();
+            let mut wall_times = HashMap::new();
+
+            for (observation, hotspot_result) in &case_summaries {
+                wall_times.insert(observation.case_name.clone(), observation.wall_ms);
+
+                if let Some(hotspots) = hotspot_result {
+                    let hot_functions: Vec<DriftHotFunction> = hotspots
+                        .functions
+                        .iter()
+                        .map(|f| DriftHotFunction {
+                            name: f.name.clone(),
+                            bucket_label: f.bucket.label.clone(),
+                            inclusive_samples: f.inclusive_samples,
+                            inclusive_pct: f.inclusive_pct,
+                        })
+                        .collect();
+
+                    drift_cases.push(DriftCaseInput {
+                        case_name: observation.case_name.clone(),
+                        command: observation.command.clone(),
+                        args: observation.command_args.clone(),
+                        stage_timings: observation.observations.stage_timings.clone(),
+                        counters: observation.observations.counters.clone(),
+                        hot_functions,
+                    });
+                }
+            }
+
+            compute_drift(&drift_cases, prev, &wall_times)
+        } else {
+            no_previous_drift_report()
+        }
+    } else {
+        no_previous_drift_report()
+    };
+
+    // Write profile-drift.md.
+    let drift_md = format_drift_markdown(&drift_report);
+    let drift_path = run_paths.root.join("profile-drift.md");
+    std::fs::write(&drift_path, drift_md).map_err(|e| {
+        format!(
+            "Failed to write profile-drift.md '{}': {}",
+            drift_path.display(),
+            e
+        )
+    })?;
+
+    // Append drift section to agent-summary.md only when the summary exists
+    // (i.e. not in raw-index mode, which skips parsed hotspots and summary).
+    if options.filter != ProfileFilterMode::RawIndex {
+        let drift_section = format_drift_summary_section(&drift_report);
+        append_drift_to_agent_summary(&run_paths, &drift_section)?;
+    }
+
+    // Append profile history record after the full run succeeds.
+    if options.filter != ProfileFilterMode::RawIndex {
+        let history_cases: Vec<HistoryCaseRecord> = case_summaries
+            .iter()
+            .filter_map(|(observation, hotspot_result)| {
+                hotspot_result.as_ref().map(|hotspots| {
+                    let hot_functions: Vec<HistoryHotFunction> = hotspots
+                        .functions
+                        .iter()
+                        .map(|f| HistoryHotFunction {
+                            name: f.name.clone(),
+                            bucket_label: f.bucket.label.clone(),
+                            inclusive_samples: f.inclusive_samples,
+                            self_samples: f.self_samples,
+                            inclusive_pct: f.inclusive_pct,
+                            self_pct: f.self_pct,
+                        })
+                        .collect();
+
+                    let top_bucket_label = hot_functions
+                        .first()
+                        .map(|f| f.bucket_label.clone())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    HistoryCaseRecord {
+                        case_name: observation.case_name.clone(),
+                        group_name: observation.group_name.clone(),
+                        command: observation.command.clone(),
+                        args: observation.command_args.clone(),
+                        observation_wall_ms: observation.wall_ms,
+                        sample_count: hotspots.total_sample_count,
+                        sample_weight: hotspots.total_sample_weight,
+                        stage_timings: observation.observations.stage_timings.clone(),
+                        counters: observation.observations.counters.clone(),
+                        hot_functions,
+                        top_bucket_label,
+                        run_directory_path: run_paths.root.to_str().unwrap_or("").to_string(),
+                    }
+                })
+            })
+            .collect();
+
+        let ts = BenchmarkTimestamp::now();
+        let timestamp = ts.format_run_header();
+
+        let history_record = history::build_history_record(
+            &run_paths.run_id,
+            &timestamp,
+            commit.as_deref(),
+            options.filter.display_label(),
+            options.samply_rate_hz,
+            history_cases,
+        )?;
+
+        let history_path = std::path::Path::new(PROFILE_RUNS_JSONL_PATH);
+        history::append_profile_run(history_path, &history_record)?;
+    }
+
+    println!(
+        "\nProfiling artifacts written to: {}",
+        run_paths.root.display()
+    );
+
+    Ok(())
+}
+
+/// Filter benchmark cases by an optional case name filter.
+///
+/// Returns all cases if the filter is `None`. Returns only matching cases
+/// otherwise. Returns an error if the filter matches no case.
+fn filter_cases(
+    cases: &[crate::case_parser::BenchmarkCase],
+    case_filter: Option<&str>,
+) -> Result<Vec<crate::case_parser::BenchmarkCase>, String> {
+    let Some(filter) = case_filter else {
+        return Ok(cases.to_vec());
+    };
+
+    let matched: Vec<_> = cases
+        .iter()
+        .filter(|case| case.name == filter)
+        .cloned()
+        .collect();
+
+    if matched.is_empty() {
+        Err(format!(
+            "Case filter '{}' matched no benchmark case. Use 'bench-report' to see available cases.",
+            filter
+        ))
+    } else {
+        Ok(matched)
+    }
+}

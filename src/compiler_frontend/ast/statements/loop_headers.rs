@@ -814,8 +814,7 @@ fn declare_loop_binding(
 
     if parser
         .scope_context
-        .get_reference(&binding_name.id)
-        .is_some()
+        .has_visible_local_declaration(&binding_name.id)
     {
         return loop_header_error(
             InvalidLoopHeaderReason::BindingAlreadyDeclared,

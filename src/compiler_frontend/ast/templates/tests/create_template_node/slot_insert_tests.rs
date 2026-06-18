@@ -11,6 +11,7 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
+use std::sync::Arc;
 
 fn assert_template_slot_error(
     diagnostic: &CompilerDiagnostic,
@@ -448,8 +449,9 @@ fn fills_nested_slots_for_runtime_wrappers() {
         Rc::new(TopLevelDeclarationTable::new(vec![
             value_declaration.to_owned(),
         ])),
-        ExternalPackageRegistry::default(),
+        Arc::new(ExternalPackageRegistry::default()),
         vec![],
+        0,
     );
     let mut wrapper_tokens = template_tokens_from_source(
         "[value: outer [: inner [$slot(\"first\")] middle [$slot] [: deep [$slot(\"second\")] end] tail] after]",
@@ -473,8 +475,9 @@ fn fills_nested_slots_for_runtime_wrappers() {
         ContextKind::Template,
         scope,
         Rc::new(TopLevelDeclarationTable::new(declarations)),
-        ExternalPackageRegistry::default(),
+        Arc::new(ExternalPackageRegistry::default()),
         vec![],
+        0,
     );
     let mut token_stream = template_tokens_from_source(
         "[runtime_wrapper: [$insert(\"first\"): first slot] in between [$insert(\"second\"): second slot]]",

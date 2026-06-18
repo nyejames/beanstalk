@@ -10,6 +10,7 @@
 use crate::build_system::create_project_modules::extract_source_code;
 use crate::build_system::create_project_modules::import_scanning::extract_import_paths;
 use crate::build_system::project_config::ProjectConfigParseServices;
+use std::sync::Arc;
 
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, SourceLocation};
@@ -180,6 +181,8 @@ pub(super) fn parse_config_file(
         headers: parsed_headers.headers,
         top_level_const_fragments: parsed_headers.top_level_const_fragments,
         entry_runtime_fragment_count: parsed_headers.entry_runtime_fragment_count,
+        token_stats: parsed_headers.token_stats,
+        header_stats: parsed_headers.header_stats,
         module_symbols: parsed_headers.module_symbols,
         import_environment: parsed_headers.import_environment,
     };
@@ -200,6 +203,8 @@ pub(super) fn parse_config_file(
     // -------------------------
     let interned_path = InternedPath::from_path_buf(config_path, string_table);
 
+    let external_package_registry = Arc::new(services.libraries.external_packages.clone());
+
     let ast = Ast::new(
         AstBuildInput {
             headers: sorted.headers,
@@ -208,7 +213,7 @@ pub(super) fn parse_config_file(
             top_level_const_fragments: sorted.top_level_const_fragments,
         },
         AstBuildContext {
-            external_package_registry: &services.libraries.external_packages,
+            external_package_registry,
             style_directives: services.style_directives,
             string_table,
             entry_dir: interned_path,
@@ -216,6 +221,7 @@ pub(super) fn parse_config_file(
             project_path_resolver: Some(project_path_resolver),
             path_format_config: PathStringFormatConfig::default(),
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            capacity_estimate: Default::default(),
         },
     )?;
 

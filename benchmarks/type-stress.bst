@@ -387,7 +387,8 @@ find_edges_from |this EdgeLookup, from_id Int| -> {Edge}:
     result ~{Edge} = {}
     loop this.edges |edge|:
         if edge.from_id is from_id:
-            ~result.push(edge)
+            ~result.push(edge) catch:
+            ;
         ;
     ;
     return result

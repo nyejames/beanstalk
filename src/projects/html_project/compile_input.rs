@@ -10,6 +10,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
+use std::sync::Arc;
 
 /// Module-level inputs shared by all HTML builder compilation paths.
 pub(crate) struct HtmlModuleCompileInput<'a> {
@@ -21,5 +22,5 @@ pub(crate) struct HtmlModuleCompileInput<'a> {
     pub document_config: &'a HtmlDocumentConfig,
     pub release_build: bool,
     pub entry_runtime_fragment_count: usize,
-    pub external_package_registry: ExternalPackageRegistry,
+    pub external_package_registry: Arc<ExternalPackageRegistry>,
 }

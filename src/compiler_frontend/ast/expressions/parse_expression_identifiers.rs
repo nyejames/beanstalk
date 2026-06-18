@@ -108,8 +108,8 @@ pub(super) fn parse_identifier_or_call(
         // record coercion can validate field values instead of rejecting the
         // struct symbol itself as a non-constant reference.
         if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-            && let Some(struct_constructor) =
-                context.source_struct_constructor(binding, type_interner.environment())
+            && let Some(struct_constructor) = context
+                .source_struct_constructor(binding.as_declaration(), type_interner.environment())
         {
             let struct_instance = parse_struct_constructor_expression(
                 token_stream,
@@ -140,10 +140,12 @@ pub(super) fn parse_identifier_or_call(
 
         // Choice constructors are routed through their own parser.
         if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
-            if context.is_source_choice_declaration(binding, type_interner.environment()) {
+            if context
+                .is_source_choice_declaration(binding.as_declaration(), type_interner.environment())
+            {
                 let choice_value = parse_choice_construct(
                     token_stream,
-                    binding,
+                    binding.as_declaration(),
                     context,
                     type_interner,
                     string_table,
@@ -197,7 +199,7 @@ pub(super) fn parse_identifier_or_call(
             .into());
         }
 
-        match context.source_callable_signature(binding) {
+        match context.source_callable_signature(binding.as_declaration()) {
             Some(signature) => {
                 let generic_template = context.lookup_generic_function_template(&binding.id);
                 let call_location = token_stream.current_location();
@@ -223,7 +225,7 @@ pub(super) fn parse_identifier_or_call(
             None => {
                 let reference_location = token_stream.current_location();
                 let reference_expression = reference_expression_from_declaration(
-                    binding,
+                    binding.as_declaration(),
                     context,
                     type_interner,
                     reference_location.clone(),
@@ -447,7 +449,7 @@ fn parse_this_reference(
 
     let reference_location = token_stream.current_location();
     let reference_expression = reference_expression_from_declaration(
-        receiver_declaration,
+        receiver_declaration.as_declaration(),
         context,
         type_interner,
         reference_location.clone(),

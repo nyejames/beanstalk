@@ -28,7 +28,8 @@ basic_mutations ||:
     
     -- Push operations
     loop 0 to 20 |i|:
-        ~numbers.push(i * 3)
+        ~numbers.push(i * 3) catch:
+        ;
     ;
     
     io.line([: Pushed [numbers.length()] items])
@@ -88,19 +89,22 @@ nested_collection_loops ||:
     
     outer ~{Int} = {}
     loop 0 to 5 |i|:
-        ~outer.push(i)
+        ~outer.push(i) catch:
+        ;
     ;
     
     inner ~{Int} = {}
     loop 0 to 4 |j|:
-        ~inner.push(j * 10)
+        ~inner.push(j * 10) catch:
+        ;
     ;
     
     result ~{String} = {}
     
     loop outer |o, oi|:
         loop inner |i, ii|:
-            ~result.push([: o=[o]([oi]) i=[i]([ii])])
+            ~result.push([: o=[o]([oi]) i=[i]([ii])]) catch:
+            ;
         ;
     ;
     
@@ -191,9 +195,11 @@ mixed_nesting ||:
     loop 0 to 5 |row|:
         row_items ~{Int} = {}
         loop 0 to 5 |col|:
-            ~row_items.push(row * 10 + col)
+            ~row_items.push(row * 10 + col) catch:
+            ;
         ;
-        ~matrix.push(row_items)
+        ~matrix.push(row_items) catch:
+        ;
     ;
     
     -- Process matrix with collection loops
@@ -216,7 +222,8 @@ struct_collection ||:
     -- Add items
     loop 0 to 10 |i|:
         item = Item(i, [: item-[i]])
-        ~items.push(item)
+        ~items.push(item) catch:
+        ;
     ;
     
     -- Update items
@@ -249,17 +256,20 @@ deep_nesting ||:
     
     outer ~{Int} = {}
     loop 0 to 3 |o|:
-        ~outer.push(o)
+        ~outer.push(o) catch:
+        ;
     ;
     
     middle ~{Int} = {}
     loop 0 to 3 |m|:
-        ~middle.push(m * 10)
+        ~middle.push(m * 10) catch:
+        ;
     ;
     
     inner ~{Int} = {}
     loop 0 to 3 |i|:
-        ~inner.push(i * 100)
+        ~inner.push(i * 100) catch:
+        ;
     ;
     
     combinations ~= 0
@@ -282,13 +292,16 @@ accumulator_pattern ||:
     
     loop 0 to 20 |i|:
         if i % 2 is 0:
-            ~result.push([: even-[i]])
+            ~result.push([: even-[i]]) catch:
+            ;
         ;
         if i % 3 is 0:
-            ~result.push([: triple-[i]])
+            ~result.push([: triple-[i]]) catch:
+            ;
         ;
         if i % 5 is 0:
-            ~result.push([: fifth-[i]])
+            ~result.push([: fifth-[i]]) catch:
+            ;
         ;
     ;
     
@@ -299,7 +312,8 @@ accumulator_pattern ||:
     to_remove ~{Int} = {}
     loop result |value, idx|:
         if idx % 3 is 0:
-            ~to_remove.push(idx)
+            ~to_remove.push(idx) catch:
+            ;
         ;
     ;
     
@@ -322,10 +336,12 @@ conditional_building ||:
     
     loop -20 to 21 |n|:
         if n > 0:
-            ~positives.push(n)
+            ~positives.push(n) catch:
+            ;
         ;
         if n < 0:
-            ~negatives.push(n)
+            ~negatives.push(n) catch:
+            ;
         ;
     ;
     
@@ -360,8 +376,10 @@ transformation ||:
     squared ~{Int} = {}
     
     loop source |n|:
-        ~doubled.push(n * 2)
-        ~squared.push(n * n)
+        ~doubled.push(n * 2) catch:
+        ;
+        ~squared.push(n * n) catch:
+        ;
     ;
     
     sum_doubled ~= 0
@@ -386,7 +404,8 @@ record_collection ||:
     -- Build records
     loop 0 to 10 |i|:
         r = Record([: key-[i]], i * 10, i / 1)
-        ~records.push(r)
+        ~records.push(r) catch:
+        ;
     ;
     
     -- Process records
@@ -408,21 +427,24 @@ complex_workflow ||:
     -- Stage 1: Build initial collection
     stage1 ~{Int} = {}
     loop 0 to 100 |i|:
-        ~stage1.push(i)
+        ~stage1.push(i) catch:
+        ;
     ;
     
     -- Stage 2: Filter and transform
     stage2 ~{Int} = {}
     loop stage1 |n|:
         if n % 7 is 0:
-            ~stage2.push(n * 3)
+            ~stage2.push(n * 3) catch:
+            ;
         ;
     ;
     
     -- Stage 3: Further processing
     stage3 ~{String} = {}
     loop stage2 |n, idx|:
-        ~stage3.push([: item-[idx]=[n]])
+        ~stage3.push([: item-[idx]=[n]]) catch:
+        ;
     ;
     
     -- Stage 4: Final aggregation

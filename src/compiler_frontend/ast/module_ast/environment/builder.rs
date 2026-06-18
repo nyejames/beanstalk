@@ -53,6 +53,7 @@ use crate::{benchmark_timer_log, timer_log};
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
@@ -371,7 +372,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 generic_declarations_by_path: Rc::new(generic_declarations_by_path),
                 nominal_type_ids_by_path: Rc::new(self.nominal_type_ids_by_path),
 
-                external_package_registry: self.context.external_package_registry.clone(),
+                external_package_registry: Arc::clone(&self.context.external_package_registry),
                 style_directives: self.context.style_directives.clone(),
                 build_profile: self.context.build_profile,
                 project_path_resolver: self.context.project_path_resolver.clone(),

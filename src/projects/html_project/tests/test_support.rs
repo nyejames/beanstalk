@@ -24,6 +24,7 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Create the smallest valid HIR module with one entry start function.
 pub(crate) fn create_test_hir_module() -> HirModule {
@@ -78,7 +79,7 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
         warnings: vec![],
         const_top_level_fragments: vec![],
         entry_runtime_fragment_count: 0,
-        external_package_registry: ExternalPackageRegistry::new(),
+        external_package_registry: Arc::new(ExternalPackageRegistry::new()),
         module_external_imports: vec![],
     }
 }

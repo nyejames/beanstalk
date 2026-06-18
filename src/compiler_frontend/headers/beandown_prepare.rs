@@ -30,6 +30,7 @@ pub(crate) fn prepare_beandown_file(
     string_table: &mut StringTable,
 ) -> FileFrontendPrepareOutput {
     let token_count = file_tokens.length;
+    let token_stats = file_tokens.token_stats;
     let context = BeandownPrepareContext::new(file_tokens, string_table);
     let content_header = context.content_header(string_table);
 
@@ -37,6 +38,7 @@ pub(crate) fn prepare_beandown_file(
         source_file: context.source_file,
         file_id: context.file_id,
         token_count,
+        token_stats,
         file_role: FileRole::Normal,
         file_imports: Vec::new(),
         canonical_os_path: context.canonical_os_path,

@@ -7,9 +7,15 @@ impl ScopeContext {
     //  Local mutation
     // --------------------------
 
+    /// Replace the declarations in the current scope frame.
+    ///
+    /// WHAT: rebuilds the frame-local name index and declaration vec. Used when a
+    ///       function or start body frame is initialised with parameter declarations.
     pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
-        self.local_declarations_by_name = build_local_declarations_index(&declarations);
-        self.local_declarations = declarations;
+        self.arena
+            .borrow_mut()
+            .frame_mut(self.current_frame_id)
+            .set_local_declarations(declarations);
     }
 
     pub(crate) fn with_pending_catch_assignment_targets(

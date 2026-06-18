@@ -11,6 +11,10 @@ use crate::bench_types::{
     BenchmarkCaseResult, BenchmarkComparison, BenchmarkMetric, BenchmarkStageMovement,
     BenchmarkSuiteKind, BenchmarkSystem, BenchmarkThresholds, calculate_stage_movement,
 };
+use crate::profile::drift::{
+    DriftCaseInput, DriftHotFunction, compute_drift, find_comparable_previous,
+};
+use crate::profile::history::{PROFILE_RUNS_JSONL_PATH, ProfileHistoryRecord, read_profile_runs};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -106,7 +110,10 @@ const RATIO_CATALOG: &[RatioSpec] = &[
 pub fn run_benchmark_report() -> Result<(), String> {
     let runs = read_local_runs(Path::new(RUNS_JSONL_PATH))?;
     let system = load_or_create_system(SystemIdentityMode::ReadOnly)?;
-    let report = calculate_benchmark_report(&runs, system.as_ref());
+    let mut report = calculate_benchmark_report(&runs, system.as_ref());
+
+    // Collect the latest profile run info (silently omitted if missing/malformed).
+    report.latest_profile_run = collect_latest_profile_run(system.as_ref());
 
     println!("{}", format_benchmark_report(&report));
 
@@ -117,6 +124,31 @@ pub fn run_benchmark_report() -> Result<(), String> {
 pub(crate) struct BenchmarkReport {
     pub(crate) used_current_system: bool,
     pub(crate) suites: Vec<SuiteReport>,
+    pub(crate) latest_profile_run: Option<LatestProfileRun>,
+}
+
+/// Compact data for the "Latest profile run" section of the bench report.
+///
+/// WHAT: Shows the most recent profiling run's identity, filter mode, case
+/// count, and a single top drift item if a comparable previous run exists.
+///
+/// WHY: `bench-report` is the first stop for optimization work. Surfacing
+/// the latest profile run here lets developers jump to the profiling
+/// artifacts without leaving the report. The section stays compact to
+/// avoid duplicating the full `profile-drift.md` table.
+#[derive(Debug, Clone)]
+pub(crate) struct LatestProfileRun {
+    /// Run identifier (e.g., "2026-06-18T10-30-abc1234").
+    pub(crate) run_id: String,
+    /// Filter mode label ("terse", "normal", "deep", "raw-index").
+    pub(crate) filter_mode: String,
+    /// Number of cases profiled in this run.
+    pub(crate) case_count: usize,
+    /// Concise description of the top drift item, or "none" if no
+    /// comparable previous record exists or no drift exceeded thresholds.
+    pub(crate) top_drift_item: String,
+    /// Relative path to the run's `agent-summary.md`.
+    pub(crate) agent_summary_path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -211,6 +243,7 @@ pub(crate) fn calculate_benchmark_report(
     BenchmarkReport {
         used_current_system: current_system.is_some(),
         suites,
+        latest_profile_run: None,
     }
 }
 
@@ -545,6 +578,8 @@ pub(crate) fn format_benchmark_report(report: &BenchmarkReport) -> String {
         } else {
             output.push_str("\nNo local benchmark history found.\n");
         }
+        // Still show the latest profile run even when benchmark history is empty.
+        append_latest_profile_run(&mut output, report);
         return output;
     }
 
@@ -572,6 +607,8 @@ pub(crate) fn format_benchmark_report(report: &BenchmarkReport) -> String {
         append_ratios(&mut output, suite);
         append_investigation_hints(&mut output, suite);
     }
+
+    append_latest_profile_run(&mut output, report);
 
     output
 }
@@ -701,6 +738,179 @@ fn format_ratio_value(value: f64) -> String {
     } else {
         format!("{value:.4}")
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Latest profile run integration
+// ---------------------------------------------------------------------------
+
+/// Append the "Latest profile run" section to the report output.
+///
+/// WHAT: Renders a compact section showing the latest profiling run's
+/// identity, filter mode, case count, top drift item, and path to the
+/// agent summary.
+///
+/// WHY: `bench-report` is the first stop for optimization work. Pointing
+/// to the latest profile run lets developers jump to profiling artifacts
+/// without leaving the report. The section stays compact to avoid
+/// duplicating the full `profile-drift.md` table.
+fn append_latest_profile_run(output: &mut String, report: &BenchmarkReport) {
+    let Some(profile_run) = &report.latest_profile_run else {
+        return;
+    };
+
+    output.push_str("\nLatest profile run:\n");
+    output.push_str(&format!("  Run:       {}\n", profile_run.run_id));
+    output.push_str(&format!("  Filter:    {}\n", profile_run.filter_mode));
+    output.push_str(&format!("  Cases:     {}\n", profile_run.case_count));
+    output.push_str(&format!("  Top drift: {}\n", profile_run.top_drift_item));
+    output.push_str(&format!(
+        "  Summary:   {}\n",
+        profile_run.agent_summary_path
+    ));
+}
+
+/// Collect the latest profile run info from `profile-runs.jsonl`.
+///
+/// WHAT: Reads the profile history file, finds the latest record, compares
+/// it against the most recent previous comparable record to determine the
+/// top drift item, and returns a compact `LatestProfileRun`.
+///
+/// WHY: Returns `None` silently when the file is missing, empty, or
+/// malformed so `bench-report` never depends on profile data existing.
+fn collect_latest_profile_run(
+    current_system: Option<&BenchmarkSystem>,
+) -> Option<LatestProfileRun> {
+    let history_path = Path::new(PROFILE_RUNS_JSONL_PATH);
+    let records = read_profile_runs(history_path).ok()?;
+
+    let latest = records.last()?;
+
+    // Filter by system UUID if a system identity is available.
+    if let Some(system) = current_system
+        && latest.system_uuid != system.system_uuid
+    {
+        return None;
+    }
+
+    let case_count = latest.cases.len();
+    let agent_summary_path = latest
+        .cases
+        .first()
+        .map(|c| format!("{}/agent-summary.md", c.run_directory_path))
+        .unwrap_or_else(|| {
+            format!(
+                "benchmarks/local-data/profiles/{}/agent-summary.md",
+                latest.run_id
+            )
+        });
+
+    // Find the comparable previous record for drift.
+    let top_drift_item = format_top_drift_item(&records, current_system, latest);
+
+    Some(LatestProfileRun {
+        run_id: latest.run_id.clone(),
+        filter_mode: latest.filter_mode.clone(),
+        case_count,
+        top_drift_item,
+        agent_summary_path,
+    })
+}
+
+/// Determine the top drift item by comparing the latest record against
+/// the most recent previous comparable record.
+///
+/// WHAT: Uses `find_comparable_previous` and `compute_drift` from the
+/// profile drift module to find the single most significant function
+/// drift. Returns a concise one-line description or "none".
+///
+/// WHY: A single top drift item gives a quick pointer to the most
+/// interesting change without duplicating the full drift table.
+fn format_top_drift_item(
+    records: &[ProfileHistoryRecord],
+    current_system: Option<&BenchmarkSystem>,
+    latest: &ProfileHistoryRecord,
+) -> String {
+    let system_uuid = current_system
+        .map(|s| s.system_uuid.as_str())
+        .unwrap_or("unknown");
+
+    let previous = find_comparable_previous(
+        records,
+        system_uuid,
+        &latest.filter_mode,
+        latest.sample_rate_hz,
+        &latest.run_id,
+    );
+
+    let Some(prev) = previous else {
+        return "none".to_string();
+    };
+
+    // Build drift case inputs from the latest record's case data.
+    let drift_cases: Vec<DriftCaseInput> = latest
+        .cases
+        .iter()
+        .map(|case| {
+            let hot_functions: Vec<DriftHotFunction> = case
+                .hot_functions
+                .iter()
+                .map(|f| DriftHotFunction {
+                    name: f.name.clone(),
+                    bucket_label: f.bucket_label.clone(),
+                    inclusive_samples: f.inclusive_samples,
+                    inclusive_pct: f.inclusive_pct,
+                })
+                .collect();
+
+            DriftCaseInput {
+                case_name: case.case_name.clone(),
+                command: case.command.clone(),
+                args: case.args.clone(),
+                stage_timings: case.stage_timings.clone(),
+                counters: case.counters.clone(),
+                hot_functions,
+            }
+        })
+        .collect();
+
+    let wall_times: std::collections::HashMap<String, f64> = latest
+        .cases
+        .iter()
+        .map(|case| (case.case_name.clone(), case.observation_wall_ms))
+        .collect();
+
+    let drift_report = compute_drift(&drift_cases, prev, &wall_times);
+
+    // Find the single most significant function drift (increase or decrease).
+    // Increases are positive deltas; decreases are stored as negative deltas
+    // so the final sign is preserved in the output.
+    let top_increase = drift_report
+        .function_increases
+        .first()
+        .map(|d| (d.delta_pct, d.function_name.clone(), &d.bucket_label));
+
+    let top_decrease = drift_report
+        .function_decreases
+        .first()
+        .map(|d| (-d.delta_pct.abs(), d.function_name.clone(), &d.bucket_label));
+
+    let top = match (top_increase, top_decrease) {
+        (Some((inc_delta, inc_name, inc_bucket)), Some((dec_delta, dec_name, dec_bucket))) => {
+            if inc_delta.abs() >= dec_delta.abs() {
+                (inc_delta, inc_name, inc_bucket)
+            } else {
+                (dec_delta, dec_name, dec_bucket)
+            }
+        }
+        (Some((delta, name, bucket)), None) => (delta, name, bucket),
+        (None, Some((delta, name, bucket))) => (delta, name, bucket),
+        (None, None) => return "none".to_string(),
+    };
+
+    // Format: "+9.2pp resolve_type (AST)" or "-9.2pp resolve_type (AST)"
+    let short_name = top.1.rsplit("::").next().unwrap_or(&top.1);
+    format!("{:+.1}pp {} ({})", top.0, short_name, top.2)
 }
 
 #[cfg(test)]

@@ -850,11 +850,16 @@ build_runtime_rows || -> String:
     ~fold_cost.bump(8)
 
     metrics ~= {latency}
-    ~metrics.push(throughput)
-    ~metrics.push(cache_hit)
-    ~metrics.push(render_cost)
-    ~metrics.push(node_count)
-    ~metrics.push(fold_cost)
+    ~metrics.push(throughput) catch:
+    ;
+    ~metrics.push(cache_hit) catch:
+    ;
+    ~metrics.push(render_cost) catch:
+    ;
+    ~metrics.push(node_count) catch:
+    ;
+    ~metrics.push(fold_cost) catch:
+    ;
 
     rows ~= [:
         <div class="runtime-table">
@@ -909,8 +914,10 @@ build_runtime_summary || -> String:
 
 build_mutation_probe || -> String:
     numbers ~= {3, 5, 8, 13, 21}
-    ~numbers.push(34)
-    ~numbers.push(55)
+    ~numbers.push(34) catch:
+    ;
+    ~numbers.push(55) catch:
+    ;
     ~numbers.set(1, 7) catch:
     ;
     removed = ~numbers.remove(3) catch:

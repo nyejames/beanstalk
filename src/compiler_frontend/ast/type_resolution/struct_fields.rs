@@ -22,6 +22,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use rustc_hash::FxHashSet;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use super::resolve_named_signature_type;
 
@@ -267,8 +268,9 @@ fn inline_visible_constant_references_impl(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
                 Rc::clone(declaration_table),
-                ExternalPackageRegistry::new(),
+                Arc::new(ExternalPackageRegistry::new()),
                 Vec::new(),
+                0,
             );
 
             if let Some(visible) = visible_declaration_ids {

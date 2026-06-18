@@ -25,6 +25,17 @@ just bench-frontend
 
 Each suite uses one warmup iteration and ten measured iterations per case.
 
+### Profiling commands
+
+```bash
+just profile                  # default terse filter across all cases
+just profile <filter>         # named filter: terse, normal, deep, raw-index
+just profile-case <case-name> [filter]   # profile one specific case
+just profile-build            # build the profiling binary (target/profiling/bean)
+```
+
+Run `just bench-report` first to identify which case and stage are worth profiling.
+
 ## Measurement Model
 
 CLI wall-clock time is the public rough regression signal. It measures the built `bean` binary as a subprocess, so it includes command startup, project loading, frontend compilation, backend work where relevant, and output handling.
@@ -83,6 +94,16 @@ Monthly summaries show absolute average times for `all` cases and for each group
 
 `case set changed` means cases were added or removed, so only shared cases are directly comparable.
 
+## Optimization Phase Protocol
+
+For compiler optimization phases, run both focused frontend and end-to-end suites five independent
+times and compare the benchmark-system medians. Keep the suite's normal warmup/measured iteration
+model; repeat the whole recorded command rather than changing per-case iteration counts.
+
+Use `just bench-report` and targeted `just profile-case <case-name>` runs for attribution. Record
+only concise conclusions in `benchmarks/frontend-optimization-results.md` and the tracked monthly
+summary. Raw benchmark history, raw profiles, and expanded counter tables stay local-only.
+
 ## Stage Movement Interpretation
 
 `Stage movement: ast +22ms` suggests the change likely affected AST construction, but the benchmark is still rough. Confirm with frontend benchmarks or targeted profiling if the change matters.
@@ -107,16 +128,66 @@ Use it for compact per-case, stage, counter, and ratio detail during active opti
 
 ## Local Profiling
 
-Use `just bench-report` to choose a case and stage before profiling.
+Use `just bench-report` to choose a case and stage before profiling. Then run `just profile` or `just profile-case <case-name>` to collect Samply-backed stack samples alongside `detailed_timers` stage and counter observations.
 
-Build a profiling-friendly binary with `just profile-build`, then run an external profiler against `target/profiling/bean`. Do not commit profiler output.
+### Two-run model
 
-Example profiler commands, when those tools are installed:
+Each profiling case runs twice:
 
-```bash
-samply record target/profiling/bean check benchmarks/template-stress.bst
-perf record --call-graph dwarf target/profiling/bean check benchmarks/template-stress.bst
+1. **Observation pass** — a non-profiled run that collects `detailed_timers` stage timings and counter data.
+2. **Samply pass** — records stack samples into a raw profile.
+
+The observation pass provides reliable stage/counter attribution without profiler overhead. The Samply pass provides call-stack evidence.
+
+### Profiling binary
+
+The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with frame-pointer debug info and `detailed_timers`. Do not commit the binary.
+
+### Filter modes
+
+Filter modes control how much detail appears in summaries:
+
+| Mode | Purpose | Keeps |
+|---|---|---|
+| `terse` | agent-first default | top 8 Beanstalk-owned functions per case, top 3 cases in root summary |
+| `normal` | human + agent investigation | top 20 functions per case, top 8 cases in root summary |
+| `deep` | pre-refactor investigation | top 50 functions per case, all profiled cases, caller/callee context |
+| `raw-index` | artifact generation only | raw profile and observation logs, no parsed hotspots |
+
+`terse` is the default when no filter is specified.
+
+### Output layout
+
+```text
+benchmarks/local-data/
+├── profile-runs.jsonl              # derived local history (not raw profiles)
+└── profiles/
+    └── <run-id>/
+        ├── agent-summary.md        # start here
+        ├── profile-drift.md        # drift report when comparable history exists
+        ├── profile-hotspots.json   # aggregated hotspot metadata
+        └── cases/
+            └── <case-name>/
+                ├── summary.md
+                ├── detailed-observations.json
+                └── profile.json.gz
 ```
+
+### Drift thresholds
+
+When comparable profiling history exists, drift reports flag significant changes:
+
+- **Function drift**: at least 300 samples, at least 1.0% inclusive share, at least 2.0 percentage-point delta, and at least 20ms estimated delta.
+- **Stage drift**: at least 5% change and at least 10ms absolute delta.
+- **Counter drift**: at least 3% change with a meaningful absolute delta.
+
+Drift is attribution evidence. It does not prove an optimization or regression.
+
+### Rules
+
+- Do not commit raw profiles, `profile-runs.jsonl`, or anything under `benchmarks/local-data/`.
+- Profile evidence is attribution, not proof. Use benchmarks to validate or reject changes.
+- Public summary rules under `benchmarks/summaries/` are unchanged by profiling.
 
 ## Adding Cases
 
@@ -130,6 +201,11 @@ Project fixtures should commit only source inputs. Generated `dev/` and `release
 
 Keep the public group list short. Use existing groups unless a new group gives clearly better summary readability.
 
+Adversarial fixtures under `benchmarks/adversarial/` are compiler churn discovery workloads, not
+public language examples. They should remain valid successful programs or projects, but they may
+combine many surfaces in ways that are intentionally dense so profiling can expose frontend
+allocation, lookup, folding, import, and lowering pressure.
+
 ## Fixture List
 
 - `speed-test.bst`: broad baseline language and compiler exercise covering constant folding, templates, structs, receivers, collections, and control flow.
@@ -141,8 +217,26 @@ Keep the public group list short. Use existing groups unless a new group gives c
 - `environment-stress.bst`: AST environment building, type alias expansion, nominal structs and choices, receiver catalog construction, generic declarations and instantiations, and body validation/type resolution.
 - `module-graph/`: small multi-file project with imports, facade exports, cross-file constants, and templates.
 - `import-fanout/`: multi-file project with repeated imports, aliases, facade wrapper declarations, and cross-file constants for string-table interning and module-graph resolution.
-- `external-js-imports/`: HTML project with annotated JavaScript imports, runtime helper imports, opaque external types, namespace imports, and external receiver methods.
+- `external-js-imports/`: HTML project with annotated JavaScript imports, runtime helper imports, opaque external types, namespace imports, and external free functions.
 - `borrow-stress.bst`: valid mutable/exclusive access and borrow-validation coverage.
+- `adversarial/one-module-kitchen-sink.bst`: dense single-module churn across imports, constants,
+  aliases, nominal types, choices, traits, generics, templates, collections, maps, receivers, and
+  external package calls.
+- `adversarial/deep-scope-churn.bst`: nested functions, control blocks, loop scopes, and local
+  declaration pressure for scope-frame creation and ancestor lookup.
+- `adversarial/template-render-plan-churn.bst`: nested template composition, slots, inserts,
+  `$children` wrappers, repeated slot replay, and runtime template rebuilding.
+- `adversarial/constant-dag-churn.bst`: large compile-time constant dependency DAGs, arithmetic
+  folding, const records, and folded templates.
+- `adversarial/expression-rpn-churn.bst`: expression parsing and RPN lowering pressure through
+  choice matching, mutable stacks, checked operators, and value recovery.
+- `adversarial/generic-trait-churn.bst`: generic structs/functions, trait declarations, explicit
+  conformances, bound-provided receiver calls, and concrete instantiations.
+- `adversarial/collection-map-borrow-churn.bst`: valid collection/map mutation, fallible
+  operations, mutable receiver calls, and borrow-checker side-table pressure.
+- `adversarial/import-external-churn/`: HTML project fixture with import fanout, cross-file
+  constants/types/helpers, core package calls, and repeated external JavaScript free-function
+  usage.
 
 ## What Not To Do
 

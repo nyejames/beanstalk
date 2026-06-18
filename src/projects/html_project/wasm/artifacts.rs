@@ -24,6 +24,7 @@ use crate::projects::html_project::wasm::js_bootstrap::generate_wasm_bootstrap_j
 use crate::projects::html_project::wasm::request::build_wasm_backend_request;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const SHOW_HTML_WASM_PLAN: bool = false;
 const SHOW_HTML_WASM_JS: bool = false;
@@ -105,7 +106,7 @@ pub(crate) fn compile_html_module_wasm(
 
     let js_lowering_config = JsLoweringConfig::html_wasm_companion(
         input.release_build,
-        input.external_package_registry.clone(),
+        Arc::clone(&input.external_package_registry),
     );
     let js_module = lower_hir_to_js(
         input.hir_module,
@@ -121,7 +122,8 @@ pub(crate) fn compile_html_module_wasm(
 
     let mut build_plan = build_html_wasm_plan(input.hir_module, slot_ids)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-    build_plan.wasm_request.external_package_registry = input.external_package_registry.clone();
+    build_plan.wasm_request.external_package_registry =
+        Arc::clone(&input.external_package_registry);
 
     let wasm_result = lower_hir_to_wasm_module(
         input.hir_module,

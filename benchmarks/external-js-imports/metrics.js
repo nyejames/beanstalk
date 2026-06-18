@@ -19,7 +19,7 @@ export function metricLabel(metric) {
 }
 
 /**
- * @bst.sig set_metric_value |this ~MetricHandle, value Int|
+ * @bst.sig set_metric_value |metric ~MetricHandle, value Int|
  */
 export function setMetricValue(metric, value) {
     metric.value = value;

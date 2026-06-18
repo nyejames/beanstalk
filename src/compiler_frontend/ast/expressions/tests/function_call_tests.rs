@@ -24,6 +24,7 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, TokenizerEntryMode};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn parse_args(
     source: &str,
@@ -48,8 +49,9 @@ fn parse_args(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
 
     let mut type_environment = TypeEnvironment::new();
@@ -103,8 +105,9 @@ fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     );
 
     let mut type_environment = TypeEnvironment::new();

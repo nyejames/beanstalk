@@ -7,6 +7,7 @@
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::ids::FunctionId;
 use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WasmBackendRequest {
@@ -26,7 +27,7 @@ pub(crate) struct WasmBackendRequest {
     /// WHAT: lets Wasm lowering name unsupported host calls accurately.
     /// WHY: dynamic external package IDs are synthetic today, so diagnostics need registry
     /// metadata to avoid reporting only `<synthetic>`.
-    pub external_package_registry: ExternalPackageRegistry,
+    pub external_package_registry: Arc<ExternalPackageRegistry>,
     /// Selects which HIR functions are lowered into this Wasm module.
     pub function_emission_policy: WasmFunctionEmissionPolicy,
 }

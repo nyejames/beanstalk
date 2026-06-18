@@ -9,7 +9,7 @@ import @./formatters.js as fmt
 import @core/math { PI }
 
 metric ~MetricHandle = create_metric("alpha", 7)
-~metric.set_metric_value(21)
+set_metric_value(~metric, 21)
 
 direct_label = metric_label(metric)
 fallback_label = load_metric_label("") catch:

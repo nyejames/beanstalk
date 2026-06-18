@@ -23,6 +23,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn interned_path(parts: &[&str], string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_components(parts.iter().map(|part| string_table.intern(part)).collect())
@@ -53,8 +54,9 @@ fn context_for_source_file(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationTable::new(vec![])),
-        ExternalPackageRegistry::new(),
+        Arc::new(ExternalPackageRegistry::new()),
         vec![],
+        0,
     )
     .with_source_file_scope(source_file)
     .with_receiver_methods(Rc::new(receiver_methods))

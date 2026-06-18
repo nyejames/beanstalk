@@ -22,6 +22,7 @@ use rayon::prelude::*;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use super::frontend_orchestration::FrontendModuleBuildContext;
 use super::module_inventory;
@@ -113,6 +114,10 @@ pub(crate) fn compile_single_file_frontend(
         string_table,
     )?;
 
+    // Share the effective external package registry immutably for the rest of the frontend
+    // pipeline so each stage does not need its own deep clone.
+    let external_packages = Arc::new(libraries.external_packages.clone());
+
     // 5. Run the module compilation pipeline with a local string-table delta.
     let string_table_fork = string_table.fork_for_module();
     let (local_table, base_len) = string_table_fork.into_parts();
@@ -121,7 +126,7 @@ pub(crate) fn compile_single_file_frontend(
         build_profile,
         project_path_resolver: Some(project_path_resolver),
         style_directives,
-        external_packages: &libraries.external_packages,
+        external_packages: Arc::clone(&external_packages),
         external_import_resolution_table: &libraries.external_import_resolution_table,
         builder_runtime_packages: &libraries.builder_runtime_packages,
     }
@@ -190,6 +195,10 @@ pub(crate) fn compile_directory_frontend(
         string_table,
     )?;
 
+    // Share the effective external package registry immutably across all module compilations;
+    // directory modules compile in parallel and can safely read the same Arc.
+    let external_packages = Arc::new(libraries.external_packages.clone());
+
     // 3. Compile modules in parallel, each with its own local string-table delta.
     //
     // The fork source owns one shared base snapshot for the whole batch. Individual module forks
@@ -205,7 +214,7 @@ pub(crate) fn compile_directory_frontend(
                 build_profile,
                 project_path_resolver: Some(project_path_resolver.clone()),
                 style_directives,
-                external_packages: &libraries.external_packages,
+                external_packages: Arc::clone(&external_packages),
                 external_import_resolution_table: &libraries.external_import_resolution_table,
                 builder_runtime_packages: &libraries.builder_runtime_packages,
             }

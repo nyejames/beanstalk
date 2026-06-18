@@ -15,6 +15,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic,
 };
+use std::sync::Arc;
 
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -48,7 +49,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub choice_variant_shells_by_path: Rc<FxHashMap<InternedPath, Vec<ChoiceVariant>>>,
     pub type_environment: &'a mut TypeEnvironment,
     pub nominal_type_ids_by_path: Rc<FxHashMap<InternedPath, TypeId>>,
-    pub external_package_registry: &'a ExternalPackageRegistry,
+    pub external_package_registry: &'a Arc<ExternalPackageRegistry>,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
@@ -112,8 +113,9 @@ pub(crate) fn parse_constant_header_declaration(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
         top_level_declarations,
-        external_package_registry.clone(),
+        Arc::clone(external_package_registry),
         vec![],
+        0,
     )
     .with_style_directives(style_directives)
     .with_build_profile(build_profile)
