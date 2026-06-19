@@ -31,6 +31,7 @@
 //! they must never re-resolve names globally through the registry.
 
 use crate::compiler_frontend::FrontendBuildProfile;
+use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionInstanceKey, GenericFunctionInstantiationRequest,
@@ -208,6 +209,14 @@ pub struct ScopeContext {
 
     // Control flow state.
     pub loop_depth: usize,
+
+    /// Per-template initial capacity policy inherited from the module estimate.
+    ///
+    /// WHAT: pre-sizes template content atom vectors during parsing without passing the
+    ///       whole `FrontendArenaCapacityEstimate` through every parser call.
+    /// WHY: keeps capacity policy narrow and stage-local while still reaching nested
+    ///      template construction boundaries through the existing scope context flow.
+    pub(crate) template_capacity_policy: TemplateCapacityPolicy,
 }
 
 impl Clone for ScopeContext {
@@ -239,6 +248,7 @@ impl Clone for ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
+            template_capacity_policy: self.template_capacity_policy,
         }
     }
 }
@@ -438,6 +448,7 @@ impl ScopeContext {
             generic_template_validation: false,
             generic_function_instantiation_stack: Vec::new(),
             loop_depth: 0,
+            template_capacity_policy: TemplateCapacityPolicy::default(),
         }
     }
 
@@ -499,6 +510,7 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth,
+            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -539,6 +551,7 @@ impl ScopeContext {
             generic_template_validation: false,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: 0,
+            template_capacity_policy: self.template_capacity_policy,
         };
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
@@ -573,6 +586,7 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
+            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -612,6 +626,7 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
+            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -649,6 +664,7 @@ impl ScopeContext {
                 .generic_function_instantiation_stack
                 .clone(),
             loop_depth: parent.loop_depth,
+            template_capacity_policy: parent.template_capacity_policy,
         }
     }
 }

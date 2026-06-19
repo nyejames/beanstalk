@@ -19,7 +19,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -94,6 +94,21 @@ impl TemplateRenderPlan {
             piece.remap_string_ids(remap);
         }
     }
+
+    /// Cheap estimate of the folded output byte count for this plan.
+    ///
+    /// WHAT: sums the byte lengths of all resolved text pieces. Non-text pieces
+    /// contribute zero because their folded size is not known without recursive
+    /// work. The estimate is always a lower bound; folding may record a miss
+    /// counter when nested templates or dynamic expressions add extra bytes.
+    /// WHY: gives the folding stage a cheap, safe capacity hint for its output
+    /// buffer without changing which plans are foldable or how they are folded.
+    pub(crate) fn estimate_output_bytes(&self, string_table: &StringTable) -> usize {
+        self.pieces
+            .iter()
+            .map(|piece| piece.estimate_output_bytes(string_table))
+            .sum()
+    }
 }
 
 impl RenderPiece {
@@ -122,6 +137,28 @@ impl RenderPiece {
             }
 
             RenderPiece::RuntimeSlotSite(_) => {}
+        }
+    }
+
+    /// Cheap estimate of how many bytes this piece will contribute if folded.
+    ///
+    /// WHAT: counts only cheap, already-resolved text bytes. Non-text pieces
+    /// (child templates, dynamic expressions, loop-control markers, slots) are
+    /// counted as zero because estimating their folded output would require
+    /// recursive folding or expensive traversal.
+    /// WHY: lets folding pre-size output buffers for the common case where a
+    /// plan is mostly literal text, without adding allocation cost to complex plans.
+    pub(crate) fn estimate_output_bytes(&self, string_table: &StringTable) -> usize {
+        match self {
+            RenderPiece::Text(text) | RenderPiece::HeadContent(text) => {
+                string_table.resolve(text.text).len()
+            }
+
+            RenderPiece::ChildTemplate(_)
+            | RenderPiece::DynamicExpression(_)
+            | RenderPiece::LoopControl(_)
+            | RenderPiece::Slot(_)
+            | RenderPiece::RuntimeSlotSite(_) => 0,
         }
     }
 }

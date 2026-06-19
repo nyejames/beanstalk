@@ -202,6 +202,53 @@ impl FrontendArenaCapacityEstimate {
         estimate.capped_field_count = capped_count;
         estimate
     }
+
+    /// Returns a narrow, per-template capacity policy derived from this module estimate.
+    ///
+    /// WHAT: translates module-level template and atom estimates into a clamped initial
+    ///       `Vec` capacity for one template's content atoms.
+    /// WHY: parser contexts need a small policy object, not the full module estimate.
+    pub(crate) fn template_capacity_policy(&self) -> TemplateCapacityPolicy {
+        TemplateCapacityPolicy::from_estimate(self)
+    }
+}
+
+/// Per-template initial capacity policy.
+///
+/// WHAT: a small, copyable bundle that turns module-level estimates into conservative per-template
+///       `Vec` capacities.
+/// WHY: keeps capacity decisions local to template construction boundaries without
+///      threading the whole `FrontendArenaCapacityEstimate` through parser calls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TemplateCapacityPolicy {
+    initial_atom_capacity: usize,
+}
+
+impl TemplateCapacityPolicy {
+    /// Maximum initial atom capacity for any single template.
+    ///
+    /// WHAT: prevents tiny nested templates from reserving huge vectors when the module
+    ///       estimate is large.
+    const PER_TEMPLATE_ATOM_CLAMP: usize = 64;
+
+    pub(crate) fn from_estimate(estimate: &FrontendArenaCapacityEstimate) -> Self {
+        let initial_atom_capacity = if estimate.templates == 0 {
+            0
+        } else {
+            estimate
+                .template_atoms
+                .div_ceil(estimate.templates)
+                .min(Self::PER_TEMPLATE_ATOM_CLAMP)
+        };
+
+        Self {
+            initial_atom_capacity,
+        }
+    }
+
+    pub(crate) fn initial_atom_capacity(self) -> usize {
+        self.initial_atom_capacity
+    }
 }
 
 /// Multiply a base estimate by the configured over-allocation factor.

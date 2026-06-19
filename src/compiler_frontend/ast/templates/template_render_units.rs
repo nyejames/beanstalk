@@ -112,15 +112,19 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_template_render_unit
     })
 }
 
-/// Builds parsed content for a branch by prefixing it with the shared template
-/// head chain. Template `if` uses this for each selectable branch; no-else
-/// remains structural `NoOutput` and therefore never gets a synthetic unit.
-pub(crate) fn content_with_shared_head_prefix(
+/// Builds parsed content by prefixing an owned body with the shared template
+/// head chain. Takes ownership of `body_content` to avoid one clone per call.
+///
+/// WHY: control-flow branch and loop preparation already owns the body content
+/// after parsing. Moving it instead of cloning saves one allocation per
+/// control-flow arm.
+fn content_with_head_prefix_owned_body(
     head_prefix: &TemplateContent,
-    body_content: &TemplateContent,
+    body_content: TemplateContent,
 ) -> TemplateContent {
+    add_ast_counter(AstCounter::TemplateContentClonesForRenderUnits, 1);
     let mut content = head_prefix.to_owned();
-    content.extend(body_content.to_owned());
+    content.extend(body_content);
     content
 }
 
@@ -143,47 +147,70 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     match control_flow {
         TemplateControlFlow::BranchChain(branch_chain) => {
             for branch in &mut branch_chain.branches {
-                let branch_content =
-                    content_with_shared_head_prefix(shared_head_prefix, &branch.content);
-                let branch_unit = prepare_template_render_unit(
-                    branch_content,
+                // Move branch content instead of cloning — the branch no longer
+                // needs its original parsed content after preparation.
+                let branch_content = std::mem::take(&mut branch.content);
+                let prefixed =
+                    content_with_head_prefix_owned_body(shared_head_prefix, branch_content);
+                let PreparedTemplateRenderUnit {
+                    content,
+                    render_plan,
+                    ..
+                } = prepare_template_render_unit(
+                    prefixed,
                     style,
                     context,
                     can_fold,
                     string_table,
                     slot_resolution_mode,
                 )?;
-                branch.content = branch_unit.content.clone();
-                branch.render_plan = Some(branch_unit.render_plan);
+                // Move prepared content back instead of cloning.
+                branch.content = content;
+                branch.render_plan = Some(render_plan);
             }
 
             if let Some(fallback) = &mut branch_chain.fallback {
-                let fallback_content =
-                    content_with_shared_head_prefix(shared_head_prefix, &fallback.content);
-                let fallback_unit = prepare_template_render_unit(
-                    fallback_content,
+                // Move fallback content instead of cloning.
+                let fallback_content = std::mem::take(&mut fallback.content);
+                let prefixed =
+                    content_with_head_prefix_owned_body(shared_head_prefix, fallback_content);
+                let PreparedTemplateRenderUnit {
+                    content,
+                    render_plan,
+                    ..
+                } = prepare_template_render_unit(
+                    prefixed,
                     style,
                     context,
                     can_fold,
                     string_table,
                     slot_resolution_mode,
                 )?;
-                fallback.content = fallback_unit.content.clone();
-                fallback.render_plan = Some(fallback_unit.render_plan);
+                // Move prepared content back instead of cloning.
+                fallback.content = content;
+                fallback.render_plan = Some(render_plan);
             }
         }
 
         TemplateControlFlow::Loop(template_loop) => {
-            let body_unit = prepare_template_render_unit(
-                template_loop.body_content.to_owned(),
+            // Move body content instead of cloning — the loop no longer needs
+            // its original parsed body after preparation.
+            let body_content = std::mem::take(&mut template_loop.body_content);
+            let PreparedTemplateRenderUnit {
+                content,
+                render_plan,
+                ..
+            } = prepare_template_render_unit(
+                body_content,
                 style,
                 context,
                 can_fold,
                 string_table,
                 slot_resolution_mode,
             )?;
-            template_loop.body_content = body_unit.content.clone();
-            template_loop.body_render_plan = Some(body_unit.render_plan);
+            // Move prepared content back instead of cloning.
+            template_loop.body_content = content;
+            template_loop.body_render_plan = Some(render_plan);
             template_loop.aggregate_render_plan = Some(prepare_template_aggregate_render_plan(
                 shared_head_prefix,
                 string_table,
@@ -200,6 +227,8 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_template_aggregate_r
     shared_head_prefix: &TemplateContent,
     string_table: &StringTable,
 ) -> Result<TemplateAggregateRenderPlan, TemplateError> {
+    add_ast_counter(AstCounter::TemplateAggregatePlanBuilds, 1);
+    add_ast_counter(AstCounter::TemplateContentClonesForRenderUnits, 1);
     let mut content = shared_head_prefix.to_owned();
     content.atoms.push(aggregate_placeholder_atom());
 
@@ -215,7 +244,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_template_aggregate_r
         SlotResolutionMode::ComposeOnly,
     )?;
     let plan = TemplateRenderPlan::from_content(&composed);
-    let mut pieces = Vec::new();
+    let mut pieces = Vec::with_capacity(plan.pieces.len());
     for piece in plan.pieces {
         pieces.extend(aggregate_pieces_from_render_piece(piece));
     }
@@ -227,6 +256,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_conditional_child_wr
     child_wrappers: &[Template],
     string_table: &StringTable,
 ) -> Result<TemplateAggregateRenderPlan, TemplateSlotError> {
+    add_ast_counter(AstCounter::TemplateAggregatePlanBuilds, 1);
     add_ast_counter(
         AstCounter::TemplateWrapperApplications,
         child_wrappers.len(),
@@ -242,7 +272,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_conditional_child_wr
     let plan = TemplateRenderPlan::from_content(&TemplateContent {
         atoms: vec![wrapped_atom],
     });
-    let mut pieces = Vec::new();
+    let mut pieces = Vec::with_capacity(child_wrappers.len().saturating_add(1));
 
     for piece in plan.pieces {
         pieces.extend(aggregate_pieces_from_render_piece(piece));
@@ -306,8 +336,15 @@ fn is_aggregate_placeholder(slot: &SlotPlaceholder) -> bool {
 }
 
 fn aggregate_pieces_from_template(template: &Template) -> Vec<TemplateAggregatePiece> {
-    let plan = TemplateRenderPlan::from_content(&template.content);
-    let mut pieces = Vec::new();
+    // Use the existing authoritative render plan when available instead of
+    // rebuilding from content. This avoids a full `from_content` traversal
+    // for templates that were already prepared.
+    let plan = if let Some(existing_plan) = &template.render_plan {
+        existing_plan.clone_recording_template_churn()
+    } else {
+        TemplateRenderPlan::from_content(&template.content)
+    };
+    let mut pieces = Vec::with_capacity(plan.pieces.len());
 
     for piece in plan.pieces {
         pieces.extend(aggregate_pieces_from_render_piece(piece));
@@ -366,6 +403,7 @@ fn build_unformatted_template_content(
     slot_resolution_mode: SlotResolutionMode,
 ) -> Result<TemplateContent, TemplateError> {
     if !requires_post_format_recomposition {
+        add_ast_counter(AstCounter::TemplateContentClonesForRenderUnits, 1);
         return Ok(parsed_content.to_owned());
     }
 
@@ -373,6 +411,7 @@ fn build_unformatted_template_content(
         AstCounter::TemplateWrapperApplications,
         style.child_templates.len(),
     );
+    add_ast_counter(AstCounter::TemplateContentClonesForRenderUnits, 1);
 
     let mut content = apply_inherited_child_templates_to_content(
         parsed_content.to_owned(),
@@ -429,6 +468,7 @@ fn finalize_render_unit_after_formatting(
     input: RenderUnitFinalizationInput<'_>,
 ) -> Result<(TemplateContent, TemplateRenderPlan), TemplateError> {
     if input.content_changed || input.requires_post_format_recomposition {
+        add_ast_counter(AstCounter::TemplateContentRebuildsAfterFormatting, 1);
         let mut content = input.render_plan.rebuild_content();
 
         if input.requires_post_format_recomposition {

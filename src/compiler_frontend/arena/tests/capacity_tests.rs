@@ -167,3 +167,29 @@ fn templates_scale_with_fragments() {
     assert!(capacity.template_atoms >= capacity.templates);
     assert!(capacity.render_pieces >= capacity.templates);
 }
+
+#[test]
+fn template_capacity_policy_uses_average_atoms_per_template() {
+    let estimate = FrontendArenaCapacityEstimate {
+        templates: 10,
+        template_atoms: 51,
+        ..Default::default()
+    };
+
+    let policy = estimate.template_capacity_policy();
+
+    assert_eq!(policy.initial_atom_capacity(), 6);
+}
+
+#[test]
+fn template_capacity_policy_clamps_large_average_templates() {
+    let estimate = FrontendArenaCapacityEstimate {
+        templates: 2,
+        template_atoms: 10_000,
+        ..Default::default()
+    };
+
+    let policy = estimate.template_capacity_policy();
+
+    assert_eq!(policy.initial_atom_capacity(), 64);
+}

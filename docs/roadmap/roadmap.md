@@ -8,12 +8,16 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md)
-  — initial frontend stats, adversarial fixtures, external package clone reduction, scope-frame
-  arenas, and capacity tuning are complete; broader expression/template/HIR arena migrations are
-  deferred until profiling justifies them.
+- [Optimisation plan](docs/roadmap/plans/template-optimisation-and-tir-implementation-plan.md)
+
 
 # Follow up notes and possible TODOs for future plans
+
+- [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md):
+  template churn/capacity/clone-reduction work has been split out into the active
+  [`template-optimisation-and-tir-implementation-plan.md`](docs/roadmap/plans/template-optimisation-and-tir-implementation-plan.md).
+  Broad template-to-TIR arena migration remains deferred until Plan A measurement and Plan B
+  scaffolding justify it.
 
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::template::{
@@ -2013,6 +2014,7 @@ fn parse_control_flow_template_after_body_parse(source: &str) -> (Template, Stri
             control_context: TemplateBodyControlContext::normal(),
             foldable: &mut can_fold,
             string_table: &mut string_table,
+            capacity_policy: TemplateCapacityPolicy::default(),
         },
     )
     .expect("template body should parse");

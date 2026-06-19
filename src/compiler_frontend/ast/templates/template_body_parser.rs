@@ -8,6 +8,7 @@
 
 #![allow(clippy::result_large_err)]
 use crate::ast_log;
+use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::if_headers::{ParsedIfHeader, parse_if_header};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -37,7 +38,8 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -65,7 +67,15 @@ pub(crate) fn parse_template_body(
         control_context,
         foldable,
         string_table,
+        capacity_policy,
     } = input;
+
+    // Pre-intern common single-character literals used on every newline and
+    // bracket token. These IDs are stable for the lifetime of the string table,
+    // so caching them once per body parse avoids repeated hash lookups.
+    let newline_id = string_table.intern("\n");
+    let open_bracket_id = string_table.intern("[");
+    let close_bracket_id = string_table.intern("]");
 
     let mut parser = TemplateBodyParser {
         token_stream,
@@ -74,6 +84,10 @@ pub(crate) fn parse_template_body(
         control_flow_validation,
         foldable,
         string_table,
+        capacity_policy,
+        newline_id,
+        open_bracket_id,
+        close_bracket_id,
     };
 
     match body_mode {
@@ -109,6 +123,11 @@ pub(crate) struct TemplateBodyParseRequest<'a, 'types> {
     pub(crate) control_context: TemplateBodyControlContext,
     pub(crate) foldable: &'a mut bool,
     pub(crate) string_table: &'a mut StringTable,
+    /// Per-template capacity policy inherited from the parsing context.
+    ///
+    /// WHAT: lets branch/loop body templates pre-size their atom vectors without
+    ///       threading the whole module estimate through recursive body parsing.
+    pub(crate) capacity_policy: TemplateCapacityPolicy,
 }
 
 /// Options that stay stable for one template node while its head and body are parsed.
@@ -149,6 +168,14 @@ struct TemplateBodyParser<'a, 'types> {
     control_flow_validation: TemplateControlFlowValidationMode,
     foldable: &'a mut bool,
     string_table: &'a mut StringTable,
+    capacity_policy: TemplateCapacityPolicy,
+
+    // Cached interned IDs for common single-character literals that appear on
+    // every newline and bracket token. Interning once per body parse avoids
+    // repeated hash lookups in the hot parsing loop.
+    newline_id: StringId,
+    open_bracket_id: StringId,
+    close_bracket_id: StringId,
 }
 
 impl<'a, 'types> TemplateBodyParser<'a, 'types> {
@@ -162,13 +189,15 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         // The tokenizer only allows for strings, templates or slots inside the template body.
         let mut last_known_location = self.token_stream.current_location();
         while self.token_stream.index < self.token_stream.tokens.len() {
+            add_ast_counter(AstCounter::TemplateBodyTokenVisits, 1);
             last_known_location = self.token_stream.current_location();
-            let token_kind = self.token_stream.current_token_kind().clone();
 
-            match token_kind {
+            // Match by reference to avoid cloning the token kind on every iteration.
+            // Only the error fallback arm needs an owned clone for the diagnostic payload.
+            match self.token_stream.current_token_kind() {
                 TokenKind::Eof => {
                     return Err(CompilerDiagnostic::unexpected_end_of_file(
-                        Some(self.string_table.intern("]")),
+                        Some(self.close_bracket_id),
                         self.token_stream.current_location(),
                     ));
                 }
@@ -205,6 +234,9 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                             self.token_stream,
                             template,
                             self.string_table,
+                            self.newline_id,
+                            self.open_bracket_id,
+                            self.close_bracket_id,
                         );
                         continue;
                     }
@@ -219,17 +251,24 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 }
 
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        add_ast_counter(
+                            AstCounter::TemplateTextBytesParsed,
+                            self.string_table.resolve(*content).len(),
+                        );
+                    }
                     template.content.add(Expression::string_slice(
-                        content,
+                        *content,
                         self.token_stream.current_location(),
                         ValueMode::ImmutableOwned,
                     ));
                 }
 
                 TokenKind::Newline => {
-                    let newline_id = self.string_table.intern("\n");
+                    add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                     template.content.add(Expression::string_slice(
-                        newline_id,
+                        self.newline_id,
                         self.token_stream.current_location(),
                         ValueMode::ImmutableOwned,
                     ));
@@ -237,7 +276,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
                 found => {
                     return Err(CompilerDiagnostic::unexpected_token(
-                        found,
+                        found.clone(),
                         self.token_stream.current_location(),
                     ));
                 }
@@ -247,7 +286,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         }
 
         Err(CompilerDiagnostic::unexpected_end_of_file(
-            Some(self.string_table.intern("]")),
+            Some(self.close_bracket_id),
             last_known_location,
         ))
     }
@@ -266,7 +305,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         let fallback;
 
         loop {
-            let mut branch_template = empty_body_template_from(template);
+            let mut branch_template = empty_body_template_from(template, self.capacity_policy);
 
             let boundary = self.parse_content(
                 &branch_context,
@@ -341,7 +380,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
     ) -> Result<TemplateFallbackBranch, CompilerDiagnostic> {
         ensure_else_boundary_after_sentinel(self.token_stream, &location, self.string_table)?;
 
-        let mut else_template = empty_body_template_from(owner);
+        let mut else_template = empty_body_template_from(owner, self.capacity_policy);
         self.parse_content(
             fallback_context,
             &mut else_template,
@@ -425,7 +464,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         input: TemplateLoopBodyParseInput,
         control_context: TemplateBodyControlContext,
     ) -> Result<(), CompilerDiagnostic> {
-        let mut body_template = empty_body_template_from(template);
+        let mut body_template = empty_body_template_from(template, self.capacity_policy);
 
         self.parse_content(
             &input.body_context,
@@ -457,6 +496,9 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         control_context: TemplateBodyControlContext,
         inherited_wrappers: InheritedChildWrapperPolicy,
     ) -> Result<(), CompilerDiagnostic> {
+        add_ast_counter(AstCounter::TemplateNestedTemplateParses, 1);
+        add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
+
         let nested_inheritance = TemplateInheritance {
             direct_child_wrappers: template.style.child_templates.to_owned(),
         };
@@ -542,10 +584,14 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
             TemplateType::SlotDefinition(slot_key) => {
                 let inherited_direct_child_wrappers = match inherited_wrappers {
-                    InheritedChildWrapperPolicy::Apply => self.direct_child_wrappers.to_owned(),
+                    InheritedChildWrapperPolicy::Apply => {
+                        add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
+                        self.direct_child_wrappers.to_owned()
+                    }
                     InheritedChildWrapperPolicy::Skip => Vec::new(),
                 };
 
+                add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
                 template.content.push_slot_with_wrappers(
                     slot_key.to_owned(),
                     inherited_direct_child_wrappers,
@@ -586,7 +632,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         ensure_loop_control_boundary_before_sentinel(self.token_stream, marker, self.string_table)?;
         trim_trailing_whitespace_atoms(&mut template.content, self.string_table);
 
-        let mut control_template = empty_body_template_from(template);
+        let mut control_template = empty_body_template_from(template, self.capacity_policy);
         control_template.control_flow = Some(TemplateControlFlow::LoopControl(
             TemplateLoopControlSignal {
                 kind: loop_control_kind(marker),
@@ -680,8 +726,9 @@ enum InheritedChildWrapperPolicy {
     Skip,
 }
 
-fn empty_body_template_from(owner: &Template) -> Template {
-    let mut template = Template::empty();
+fn empty_body_template_from(owner: &Template, capacity_policy: TemplateCapacityPolicy) -> Template {
+    let mut template =
+        Template::empty_with_content_capacity(capacity_policy.initial_atom_capacity());
     template.kind = owner.kind.to_owned();
     template.style = owner.style.to_owned();
     template.location = owner.location.to_owned();
@@ -695,13 +742,19 @@ fn empty_body_template_from(owner: &Template) -> Template {
 /// Consumes a `[...]` bracketed region as literal text when child templates are
 /// suppressed (e.g. in `$doc` bodies). Tracks bracket nesting depth so balanced
 /// brackets are included in the literal output.
+///
+/// Accepts pre-interned `StringId`s for newline and bracket literals so the
+/// caller can reuse cached IDs rather than re-interning on every token.
 fn consume_balanced_brackets_as_literal_text(
     token_stream: &mut FileTokens,
     template: &mut Template,
     string_table: &mut StringTable,
+    newline_id: StringId,
+    open_bracket_id: StringId,
+    close_bracket_id: StringId,
 ) {
     // Emit the opening bracket as literal text.
-    let open_bracket_id = string_table.intern("[");
+    add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
     template.content.add(Expression::string_slice(
         open_bracket_id,
         token_stream.current_location(),
@@ -713,24 +766,31 @@ fn consume_balanced_brackets_as_literal_text(
         token_stream,
         |token, token_kind| match token_kind {
             TokenKind::TemplateHead => {
-                let bracket_id = string_table.intern("[");
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 template.content.add(Expression::string_slice(
-                    bracket_id,
+                    open_bracket_id,
                     token.location.clone(),
                     ValueMode::ImmutableOwned,
                 ));
             }
 
             TokenKind::TemplateClose => {
-                let bracket_id = string_table.intern("]");
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 template.content.add(Expression::string_slice(
-                    bracket_id,
+                    close_bracket_id,
                     token.location.clone(),
                     ValueMode::ImmutableOwned,
                 ));
             }
 
             TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
+                #[cfg(feature = "detailed_timers")]
+                {
+                    add_ast_counter(
+                        AstCounter::TemplateTextBytesParsed,
+                        string_table.resolve(*content).len(),
+                    );
+                }
                 template.content.add(Expression::string_slice(
                     *content,
                     token.location.clone(),
@@ -739,7 +799,7 @@ fn consume_balanced_brackets_as_literal_text(
             }
 
             TokenKind::Newline => {
-                let newline_id = string_table.intern("\n");
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 template.content.add(Expression::string_slice(
                     newline_id,
                     token.location.clone(),
@@ -755,6 +815,7 @@ fn consume_balanced_brackets_as_literal_text(
                 };
                 let name = string_table.resolve(*id).to_owned();
                 let literal = format!("{prefix}{name}");
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, literal.len());
                 let literal_id = string_table.intern(&literal);
                 template.content.add(Expression::string_slice(
                     literal_id,
@@ -764,6 +825,7 @@ fn consume_balanced_brackets_as_literal_text(
             }
 
             TokenKind::StartTemplateBody | TokenKind::Colon => {
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let colon_id = string_table.intern(":");
                 template.content.add(Expression::string_slice(
                     colon_id,
@@ -773,6 +835,7 @@ fn consume_balanced_brackets_as_literal_text(
             }
 
             TokenKind::Comma => {
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let comma_id = string_table.intern(",");
                 template.content.add(Expression::string_slice(
                     comma_id,
@@ -782,6 +845,7 @@ fn consume_balanced_brackets_as_literal_text(
             }
 
             TokenKind::OpenParenthesis => {
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let paren_id = string_table.intern("(");
                 template.content.add(Expression::string_slice(
                     paren_id,
@@ -791,6 +855,7 @@ fn consume_balanced_brackets_as_literal_text(
             }
 
             TokenKind::CloseParenthesis => {
+                add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let paren_id = string_table.intern(")");
                 template.content.add(Expression::string_slice(
                     paren_id,

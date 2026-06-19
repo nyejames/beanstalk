@@ -16,6 +16,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -196,7 +197,7 @@ impl SlotPlaceholder {
 // -------------------------
 
 /// The structural content of a template: a sequence of atoms.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TemplateContent {
     /// Atoms are stored in authored order.
     /// Slots are represented structurally, so template composition can preserve the
@@ -220,8 +221,20 @@ impl TemplateContent {
         }
     }
 
-    pub fn default() -> Self {
-        Self { atoms: Vec::new() }
+    /// Creates content with a pre-sized atom vector.
+    ///
+    /// WHAT: records the estimated capacity so benchmarks can compare it against the actual
+    ///       atom count parsed later.
+    /// WHY: avoids an immediate reallocation for templates that are likely to contain several
+    ///      atoms, while keeping the estimate visible for counter validation.
+    pub(crate) fn with_capacity(atom_capacity: usize) -> Self {
+        add_ast_counter(
+            AstCounter::TemplateContentEstimatedAtomCapacity,
+            atom_capacity,
+        );
+        Self {
+            atoms: Vec::with_capacity(atom_capacity),
+        }
     }
 
     pub fn is_empty(&self) -> bool {

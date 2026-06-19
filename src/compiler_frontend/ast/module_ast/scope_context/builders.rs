@@ -14,6 +14,24 @@ use super::*;
 
 impl ScopeContext {
     // --------------------------
+    //  Template capacity policy
+    // --------------------------
+
+    /// Set the per-template capacity policy derived from module-level estimates.
+    ///
+    /// WHAT: lets the AST emitter inject the narrow policy after creating the root
+    ///       scope context, without changing `ScopeContext::new`'s signature.
+    /// WHY: keeps the policy optional for test contexts while still wiring it into
+    ///      production emission paths.
+    pub(crate) fn with_template_capacity_policy(
+        mut self,
+        policy: TemplateCapacityPolicy,
+    ) -> ScopeContext {
+        self.template_capacity_policy = policy;
+        self
+    }
+
+    // --------------------------
     //  Build profile
     // --------------------------
 

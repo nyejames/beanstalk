@@ -183,7 +183,13 @@ impl Template {
 
         // These are variables or special keywords passed into the template head.
         // Nested templates do not inherit formatter/style state by default.
-        let mut template = Self::empty();
+        //
+        // Pre-size the content atom vector using the narrow per-template policy; the
+        // estimate is already clamped so tiny nested templates do not reserve huge
+        // vectors from the module-level heuristic.
+        let mut template = Self::empty_with_content_capacity(
+            context.template_capacity_policy.initial_atom_capacity(),
+        );
 
         // Capture the opening token location early so style/directive errors can
         // still point at the template even if parsing later advances deeply.
@@ -224,6 +230,7 @@ impl Template {
                 control_context,
                 foldable: &mut can_fold,
                 string_table,
+                capacity_policy: context.template_capacity_policy,
             },
         )?;
 

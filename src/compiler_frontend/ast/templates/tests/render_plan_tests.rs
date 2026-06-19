@@ -208,4 +208,61 @@ mod tests {
             _ => panic!("Expected escaped text"),
         }
     }
+
+    #[test]
+    fn estimate_output_bytes_counts_body_text() {
+        let mut string_table = StringTable::new();
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            create_text_segment("Hello ", TemplateSegmentOrigin::Body, &mut string_table)
+                .expression,
+            TemplateSegmentOrigin::Body,
+        );
+        content.add_with_origin(
+            create_text_segment("world", TemplateSegmentOrigin::Body, &mut string_table).expression,
+            TemplateSegmentOrigin::Body,
+        );
+
+        let plan = TemplateRenderPlan::from_content(&content);
+        assert_eq!(plan.estimate_output_bytes(&string_table), 11);
+    }
+
+    #[test]
+    fn estimate_output_bytes_counts_head_content() {
+        let mut string_table = StringTable::new();
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            create_text_segment("head", TemplateSegmentOrigin::Head, &mut string_table).expression,
+            TemplateSegmentOrigin::Head,
+        );
+
+        let plan = TemplateRenderPlan::from_content(&content);
+        assert_eq!(plan.estimate_output_bytes(&string_table), 4);
+    }
+
+    #[test]
+    fn estimate_output_bytes_ignores_non_text_pieces() {
+        let mut content = TemplateContent::default();
+        let expression = Expression::int(42, SourceLocation::default(), ValueMode::ImmutableOwned);
+        content.add_with_origin(expression, TemplateSegmentOrigin::Body);
+
+        let string_table = StringTable::new();
+        let plan = TemplateRenderPlan::from_content(&content);
+        assert_eq!(plan.estimate_output_bytes(&string_table), 0);
+    }
+
+    #[test]
+    fn estimate_output_bytes_counts_only_resolved_text() {
+        let mut string_table = StringTable::new();
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            create_text_segment("abc", TemplateSegmentOrigin::Body, &mut string_table).expression,
+            TemplateSegmentOrigin::Body,
+        );
+        let expression = Expression::int(42, SourceLocation::default(), ValueMode::ImmutableOwned);
+        content.add_with_origin(expression, TemplateSegmentOrigin::Body);
+
+        let plan = TemplateRenderPlan::from_content(&content);
+        assert_eq!(plan.estimate_output_bytes(&string_table), 3);
+    }
 }

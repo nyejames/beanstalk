@@ -10,6 +10,7 @@
 //! Constants and choices are handled in earlier passes; they do not emit nodes here.
 //! Struct node emission reads the resolved field table produced by environment construction.
 
+use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::{
@@ -94,6 +95,7 @@ struct BaseScopeContextInput<'scope> {
     visibility: Rc<FileVisibility>,
     source_file_scope: InternedPath,
     scope_frame_capacity: usize,
+    template_capacity_policy: TemplateCapacityPolicy,
 }
 
 /// AST-local spender for module-level scope-frame capacity estimates.
@@ -193,6 +195,14 @@ pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'en
 }
 
 impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environment> {
+    /// Narrow per-template capacity policy derived from the module estimate.
+    ///
+    /// WHAT: avoids threading the whole `FrontendArenaCapacityEstimate` through the
+    ///       emission helpers while still giving every root parse context the same policy.
+    fn template_capacity_policy(&self) -> TemplateCapacityPolicy {
+        self.context.capacity_estimate.template_capacity_policy()
+    }
+
     pub(in crate::compiler_frontend::ast) fn new(
         context: &'context AstPhaseContext<'services>,
         environment: &'environment mut AstModuleEnvironment,
@@ -227,6 +237,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Vec::<TypeId>::new(),
             input.scope_frame_capacity,
         )
+        .with_template_capacity_policy(input.template_capacity_policy)
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_file_visibility(input.visibility)
@@ -368,6 +379,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         visibility,
                         source_file_scope,
                         scope_frame_capacity: scope_frame_capacity_budget.next_root_capacity(),
+                        template_capacity_policy: self.template_capacity_policy(),
                     });
 
                     #[cfg(feature = "detailed_timers")]
@@ -669,6 +681,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope: template.source_file.clone(),
                 scope_frame_capacity: 0,
+                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations)
             .with_active_generic_type_context(generic_type_context)
@@ -807,6 +820,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope,
                 scope_frame_capacity,
+                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations);
         let generic_type_context = self.build_active_generic_type_context(
@@ -879,6 +893,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope,
                 scope_frame_capacity,
+                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations);
         let expected_result_type_ids = resolved_signature.signature.success_return_type_ids();
@@ -949,6 +964,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             visibility,
             source_file_scope,
             scope_frame_capacity,
+            template_capacity_policy: self.template_capacity_policy(),
         });
 
         let mut token_stream = header.tokens;

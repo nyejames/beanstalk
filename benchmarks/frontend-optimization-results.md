@@ -574,3 +574,443 @@ preparation, tokenization/header parsing, string-table merge/remap, and docs AST
 - Final decision for this optimization pass: keep the implemented scope/external clone work, keep
   the conservative scope capacity formulas, and defer broader arena migrations until a future
   profile shows a specific hotspot.
+
+## Template Optimisation Phase A0 Baseline - 2026-06-19
+
+### Scope
+
+Phase A0 captured the baseline for
+`docs/roadmap/plans/template-optimisation-and-tir-implementation-plan.md` before adding new
+template churn counters or changing template code.
+
+Baseline branch and commit:
+
+- Branch: `main`
+- Commit: `a994e0ec7738295295c0ffb858153615072d7ad5`
+- Starting worktree: clean
+
+### Validation And Benchmark Baseline
+
+- `just validate`: passed. This covered clippy, 2686 unit tests, 1707 integration cases, docs
+  check, and validation-safe benchmark check.
+- Five recorded `just bench-frontend` invocations completed. The latest focused frontend run
+  reported `no measurable change: avg 0ms; 16/16 cases`, with `ast +3ms` and
+  `ast env +1ms` stage movement.
+- Five recorded `just bench` invocations completed. The latest end-to-end run reported
+  `no measurable change: avg -1ms; 25/25 cases`, with `ast -16ms`,
+  `file prep +12ms`, and `ast emit -10ms` stage movement.
+- The tracked monthly summary was updated by the recorded benchmark commands. Raw local history
+  and profile artifacts remain local-only under `benchmarks/local-data/`.
+
+### Template-Heavy Baseline Cases
+
+`just bench-report` identified `check_docs` as the slowest end-to-end case. The report still points
+at docs AST and file preparation as the largest current signal rather than a single isolated
+template fixture.
+
+Latest observed template-heavy end-to-end cases:
+
+| Case | Median | AST | Templates | Const templates | Render plans | Fallback plans |
+|---|---:|---:|---:|---:|---:|---:|
+| `check_docs` | `~163ms` | `~380ms` | `4788` | `4783` | `~14223` | `~5635` |
+| `check_benchmarks_template-stress_bst` | `~36ms` | `~9ms` | `213` | `153` | `439` | `10` |
+| `check_benchmarks_adversarial_template-render-plan-churn_bst` | `~11ms` | `~4ms` | `128` | `112` | `237` | `8` |
+
+Targeted `just profile-case check_docs normal` wrote observation artifacts under
+`benchmarks/local-data/profiles/2026-06-19T03-17-41-a994e0ec/`, but Samply failed with
+`Unknown(1100)`. Because no stack samples were produced, the useful evidence is the observation
+pass only: `check_docs` measured about `166ms` wall time with `ast=399ms`,
+`ast_build_environment=116ms`, `ast_emit_nodes=228ms`, `ast_finalize=47ms`,
+`file_prepare=50ms`, `hir=13ms`, and `borrow=7ms`.
+
+Key `check_docs` counters from the observation pass:
+
+- `template_count=4788`
+- `const_template_count=4783`
+- `runtime_template_count=5`
+- `ast_template_atoms_parsed=10229`
+- `ast_template_composition_passes=7083`
+- `ast_template_render_plans_built=16181`
+- `ast_template_fold_fallback_plan_builds=6846`
+- `ast_template_fold_plan_pieces_visited=35664`
+- `ast_template_render_pieces_built=44946`
+- `ast_templates_folded_during_finalization=1253`
+
+### Decision
+
+Baseline accepted for Phase A1. The next slice should add targeted counters before changing
+template behavior or reducing churn, because docs carries the large template count and fallback
+plan signal while the dedicated template stress fixtures are much smaller.
+
+## Template Optimisation Phase A1 Counters - 2026-06-19
+
+Baseline: `bc9be0c3` (`A0`).
+
+Change: Phase A1 counter instrumentation slice.
+
+Suites:
+
+- `cargo test instrumentation`
+- `cargo test instrumentation --features detailed_timers`
+- `cargo test compiler_frontend::ast::templates`
+- `cargo test compiler_frontend::ast::templates --features detailed_timers`
+- `just bench-frontend-check`
+- `cargo run --features detailed_timers -- check benchmarks/adversarial/template-render-plan-churn.bst`
+- `just validate`
+
+Phase A1 adds stable AST benchmark counters only. It does not change template semantics, HIR,
+backend behavior, diagnostics, or the progress matrix.
+
+### Validation And Benchmark Check
+
+- `just bench-frontend-check`: passed with `+6ms avg`; `0 faster`, `5 slower`, `16/16 cases`.
+  Stage movement was `ast +17ms`, `ast emit +7ms`, and `ast env +7ms`.
+- `just validate`: passed. Its validation-safe `bench-check` reported
+  `no measurable change: avg 0ms; 25/25 cases`, with `ast +15ms`, `file prep -14ms`, and
+  `ast emit +7ms`.
+
+The small AST movement is accepted for this instrumentation phase because it adds only no-op
+normal-build counter calls plus detailed-timer atomics/byte-counting, and because the full
+validation-safe benchmark suite stayed inside the benchmark noise threshold.
+
+### New Counter Baseline
+
+The detailed-timers check on `benchmarks/adversarial/template-render-plan-churn.bst` confirmed all
+new stable metric names and produced these baseline values:
+
+| Counter | Value |
+|---|---:|
+| `ast_template_nested_template_parses` | `76` |
+| `ast_template_body_token_visits` | `331` |
+| `ast_template_text_bytes_parsed` | `1257` |
+| `ast_template_fold_output_bytes` | `2840` |
+| `ast_template_fold_string_intern_calls` | `62` |
+| `ast_template_fold_expression_clone_requests` | `24` |
+| `ast_template_fold_binding_substitutions` | `0` |
+| `ast_template_content_clones_for_render_units` | `128` |
+| `ast_template_content_rebuilds_after_formatting` | `39` |
+| `ast_template_wrapper_vector_clones` | `170` |
+| `ast_template_aggregate_plan_builds` | `0` |
+
+Decision: accepted. Phase A2 should use these counters to distinguish capacity and render-unit
+clone reductions from timing noise.
+
+## Template Optimisation Phase A2 Capacity Hints - 2026-06-19
+
+Baseline: `ba1a79fd` on `main`.
+
+Change: Phase A2 capacity-threading slice.
+
+Suites:
+
+- `cargo test compiler_frontend::arena`
+- `cargo test compiler_frontend::ast::templates`
+- `cargo test instrumentation --features detailed_timers`
+- `just bench-frontend-check`
+- `just validate`
+- five recorded `just bench-frontend` invocations
+- five recorded `just bench` invocations
+- `just bench-report`
+
+Phase A2 adds a narrow `TemplateCapacityPolicy` derived from `FrontendArenaCapacityEstimate`.
+Template parsing contexts now pre-size initial `TemplateContent` atom vectors from the average
+estimated atoms per estimated template, clamped to `64` atoms per template. Exact local capacities,
+such as `TemplateRenderPlan::from_content(content.atoms.len())`, remain unchanged. Aggregate
+render-unit helper vectors now use exact local plan lengths instead of starting from `Vec::new()`.
+
+The slice also adds `ast_template_content_estimated_atom_capacity` so detailed benchmark runs can
+compare reserved template atom capacity against existing template atom counters without adding a
+new traversal.
+
+### Validation And Benchmark Check
+
+- Focused tests passed:
+  - `cargo test compiler_frontend::arena`: `18/18`.
+  - `cargo test compiler_frontend::ast::templates`: `299/299`.
+  - `cargo test instrumentation --features detailed_timers`: `1/1`.
+- `just bench-frontend-check`: passed with `no measurable change: avg +1ms; 16/16 cases`.
+- `just validate`: passed. Clippy passed on native, Linux, and Windows targets; unit tests passed
+  `2688/2688`; integration tests passed `1707/1707`; docs check passed; embedded `bench-check`
+  reported `no measurable change: avg +1ms; 25/25 cases`.
+
+### Five-Run Benchmark Results
+
+Recorded frontend run summaries:
+
+- `+3ms avg`; `0 faster`, `2 slower`.
+- `+1ms avg`; `0 faster`, `2 slower`.
+- `-3ms avg`; `1 faster`, `0 slower`.
+- `no measurable change: avg +2ms`.
+- `+3ms avg`; `0 faster`, `2 slower`.
+
+The rough five-run frontend median movement was about `+2ms`, which is inside benchmark noise for
+this suite. The latest frontend report showed `ast_emit_nodes_ms +4ms`, `ast_ms +3ms`, and
+`file_prepare_ms +1ms`.
+
+Recorded end-to-end run summaries:
+
+- `+3ms avg`; `0 faster`, `5 slower`.
+- `no measurable change: avg -1ms`.
+- `no measurable change: avg +1ms`.
+- `no measurable change: avg -1ms`.
+- `+2ms avg`; `0 faster`, `1 slower`.
+
+The rough five-run end-to-end median movement was about `+1ms`, also inside benchmark noise. The
+latest end-to-end report showed `ast_ms +91ms`, `ast_emit_nodes_ms +61ms`, and
+`file_prepare_ms +37ms` spread across many cases. The movement alternated direction across
+independent runs, so no targeted profile was taken for this phase.
+
+Decision: accepted. The change is policy-only, validation passed, and five-run timing stayed
+neutral enough for the allocation cleanup. No progress-matrix update was needed because template
+language support and backend behavior did not change.
+
+## Template Optimisation Phase A3 Fold Output Capacity Hints - 2026-06-19
+
+Baseline: `f76eddaf` on `main`.
+
+Change: Phase A3 fold-output capacity slice.
+
+Suites:
+
+- `cargo test compiler_frontend::ast::templates --lib`
+- `cargo test instrumentation --features detailed_timers --lib`
+- `just bench-frontend-check`
+- `just validate`
+- five recorded `just bench-frontend` invocations
+- five recorded `just bench` invocations
+- `just bench-report`
+
+Phase A3 adds cheap render-plan output byte estimates for already-resolved text pieces and uses
+those estimates to pre-size fold output buffers. The estimator counts `RenderPiece::Text` and
+`RenderPiece::HeadContent`, uses known aggregate output bytes when folding aggregate wrapper plans,
+and deliberately treats dynamic expressions, child templates, slots, loop-control markers, and
+runtime slot sites as zero unless their output is already known. The fold path records
+`ast_template_estimated_fold_output_bytes` and
+`ast_template_fold_output_estimate_miss_bytes`.
+
+Const-loop aggregate reservation is bounded: collection loops use their known const item count,
+while streaming numeric range loops cap the reservation hint so the configured loop expansion limit
+cannot become a large eager allocation. Formatter output builders were left unchanged because no
+clean exact capacity was available without adding noisy formatter plumbing.
+
+### Validation And Benchmark Check
+
+- `cargo test compiler_frontend::ast::templates --lib`: `303/303`.
+- `cargo test instrumentation --features detailed_timers --lib`: `1/1`.
+- `just bench-frontend-check`: passed with `-4ms avg`; `2 faster`, `0 slower`, `16/16 cases`.
+- `just validate`: passed. Clippy passed on native, Linux, and Windows targets; unit tests passed
+  `2692/2692`; integration tests passed `1707/1707`; docs check passed; embedded `bench-check`
+  reported `-5ms avg`; `10 faster`, `0 slower`, `25/25 cases`.
+
+### Five-Run Benchmark Results
+
+Recorded frontend run summaries:
+
+- `-6ms avg`; `7 faster`, `0 slower`.
+- `no measurable change: avg 0ms`.
+- `no measurable change: avg -1ms`.
+- `no measurable change: avg 0ms`.
+- `no measurable change: avg +1ms`.
+
+The rough five-run frontend median movement was about `0ms`, inside benchmark noise. The latest
+frontend report showed `no measurable change: avg +1ms; 16/16 cases` with `ast_ms -1ms`.
+
+Recorded end-to-end run summaries:
+
+- `-5ms avg`; `10 faster`, `0 slower`.
+- `no measurable change: avg 0ms`.
+- `no measurable change: avg 0ms`.
+- `no measurable change: avg 0ms`.
+- `no measurable change: avg 0ms`.
+
+The rough five-run end-to-end median movement was also about `0ms`, inside benchmark noise. The
+latest end-to-end report showed `no measurable change: avg 0ms; 25/25 cases`, with only small
+stage movement (`ast_emit_nodes_ms -1ms`, `ast_finalize_ms +1ms`, `dependency_sort_ms +1ms`).
+
+The latest local report showed fold output byte and estimate-miss counters moving down in the
+most recent comparison, but the decision is based on neutral five-run timing plus bounded capacity
+hints rather than a claimed wall-time win.
+
+Decision: accepted. The change is behavior-preserving, validation passed, and five-run timing
+stayed neutral while giving template folding explicit capacity and estimate-miss instrumentation.
+No progress-matrix update was needed because template language support and backend behavior did not
+change.
+
+## Phase A6 - Parser-Loop Cleanup - 2026-06-19
+
+### Scope
+
+Phase A6 reduced hot-loop overhead in `template_body_parser.rs` by matching token kinds by
+reference instead of cloning, and by caching pre-interned `StringId`s for the `"\n"`, `"["`, and
+`"]`" literals that appear on every newline and bracket token.
+
+### Files
+
+- `src/compiler_frontend/ast/templates/template_body_parser.rs`
+
+### Validation Status
+
+- `cargo fmt`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --lib compiler_frontend::ast::templates`: passed, `310/310`.
+- `cargo test --lib instrumentation --features detailed_timers`: passed.
+- `cargo test --quiet`: passed, `2699/2699`.
+- `cargo run -- tests`: passed, `1707/1707`.
+- `cargo run -- check docs`: passed, no errors or warnings.
+- `just validate`: passed.
+- `just bench-frontend-check`: passed, `**-4ms avg**; 6 faster, 0 slower; 16/16 cases`.
+
+### Benchmark Results
+
+Five recorded `just bench-frontend` runs:
+
+- `**-4ms avg**; 6 faster, 0 slower`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+
+The first focused-frontend run shows a measurable `-4ms` improvement; the remaining four runs are
+inside benchmark noise. The `just bench-frontend-check` result also reported `**-4ms avg**`.
+
+End-to-end `just validate` benchmark check reported `**-6ms avg**; 10 faster, 0 slower; 25/25 cases`
+with stage movement `ast -14ms`, `ast emit -14ms`, `file prep +6ms`.
+
+### Decision
+
+Accepted. The change is behaviour-preserving, validation passed, and the consistent small
+improvements in the first focused-frontend run and validation-safe checks justify the low-risk
+borrow-reference and cached-intern cleanup. No new counters were added because the existing
+`TemplateBodyTokenVisits` and `TemplateTextBytesParsed` counters already cover hot-loop volume.
+
+No progress-matrix update was needed because template language support and backend behavior did not
+change.
+
+## Phase A5 - Render-Unit Rebuild and Clone Reduction - 2026-06-19
+
+### Scope
+
+Phase A5 reduced avoidable `TemplateContent` cloning and fallback render-plan builds in
+`template_render_units.rs`. Control-flow branch, fallback, and loop body content are now moved
+through `prepare_template_render_unit` rather than cloned, and aggregate piece preparation reuses
+an existing authoritative render plan when one is available.
+
+### Files
+
+- `src/compiler_frontend/ast/templates/template_render_units.rs`
+- `src/compiler_frontend/ast/templates/template.rs`
+
+### Validation Status
+
+- `cargo fmt`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --lib compiler_frontend::ast::templates`: passed, `310/310`.
+- `cargo test --lib instrumentation --features detailed_timers`: passed.
+- `cargo test --quiet`: passed, `2699/2699`.
+- `cargo run -- tests`: passed, `1707/1707`.
+- `cargo run -- check docs`: passed, no errors or warnings.
+- `just validate`: passed.
+- `just bench-frontend-check`: passed, `**-3ms avg**; 2 faster, 0 slower; 16/16 cases`.
+
+### Benchmark Results
+
+Five recorded `just bench-frontend` runs:
+
+- `**-3ms avg**; 3 faster, 0 slower`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+
+The five-run median is inside benchmark noise. The latest `just bench-report` comparison for the
+focused frontend suite showed `no measurable change: avg 0ms; 16/16 cases`, with only
+`borrow_ms -1ms` as a non-noise stage movement.
+
+Counter movement in the latest focused-frontend comparison:
+
+- `ast_template_fold_output_bytes +25%`
+- `ast_template_estimated_fold_output_bytes +25%`
+- `ast_template_fold_output_estimate_miss_bytes +24%`
+
+These output-byte counters move with normal fixture variance and are not driven by the render-unit
+changes.
+
+End-to-end `just validate` benchmark check reported `**-4ms avg**; 9 faster, 0 slower; 25/25 cases`.
+
+The adversarial `template-render-plan-churn.bst` fixture still reports
+`ast_template_content_clones_for_render_units=128`, which is expected because that fixture does not
+exercise control-flow content cloning.
+
+### Decision
+
+Accepted. The change is behaviour-preserving, validation passed, focused timing stayed neutral, and
+the clone-reduction paths remove obvious duplicated work in control-flow render-unit preparation.
+Wrapper-vector clones were intentionally deferred to the TIR migration because replacing them cleanly
+requires wrapper-set IDs.
+
+No progress-matrix update was needed because template language support and backend behavior did not
+change.
+
+## Phase A4 - Borrow-First Fold Binding Resolution - 2026-06-19
+
+### Scope
+
+Phase A4 reduced fold-time expression cloning in `template_folding.rs` by introducing a
+borrow-first resolver. The common case where a template expression contains no foldable bindings
+now returns a borrowed reference instead of cloning the entire expression tree.
+
+### Files
+
+- `src/compiler_frontend/ast/templates/template_folding.rs`
+- `src/compiler_frontend/ast/templates/template_folding_tests.rs` (new)
+- `src/compiler_frontend/instrumentation/ast_counters.rs`
+- `src/compiler_frontend/instrumentation/tests.rs`
+- `src/compiler_frontend/ast/templates/mod.rs`
+
+### Validation Status
+
+- `cargo fmt`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test --lib compiler_frontend::ast::templates`: passed, `310/310`.
+- `cargo test --lib instrumentation --features detailed_timers`: passed.
+- `cargo test --quiet`: passed, `2699/2699`.
+- `cargo run -- tests`: passed, `1707/1707`.
+- `cargo run -- check docs`: passed, no errors or warnings.
+- `just validate`: passed.
+- `just bench-frontend-check`: passed, `mixed: avg 0ms; 1 faster, 5 slower; 16/16 cases`.
+
+### Benchmark Results
+
+Five recorded `just bench-frontend` runs:
+
+- `mixed: avg +1ms; 2 faster, 9 slower`
+- `no measurable change: avg -1ms`
+- `**+2ms avg**; 0 faster, 2 slower`
+- `**-2ms avg**; 1 faster, 0 slower`
+- `**0ms avg**; 0 faster, 1 slower`
+
+The rough five-run median movement is inside benchmark noise. The latest `just bench-report`
+comparison for the focused frontend suite showed `0ms avg; 0 faster, 1 slower; 16/16 cases`, with
+small stage movements (`ast_ms +6ms`, `ast_emit_nodes_ms +2ms`, `borrow_ms +2ms`,
+`hir_ms +2ms`, `ast_build_environment_ms +2ms`).
+
+Counter movement in the latest focused-frontend comparison:
+
+- `ast_template_fold_output_estimate_miss_bytes +30%`
+- `ast_template_fold_output_bytes +27%`
+- `ast_template_estimated_fold_output_bytes +24%`
+
+These output-byte counters move with normal fixture variance; they are not driven by the resolver
+change. The new `ast_template_fold_expression_owned_rewrites` counter reads `0` on the
+`template-render-plan-churn.bst` fixture, which exercises render-plan churn rather than binding
+substitution.
+
+### Decision
+
+Accepted. The change is behavior-preserving, validation passed, focused timing stayed neutral,
+and the borrow-first path gives the intended clone-reduction semantics with a new counter to
+measure actual rewrites against clone requests. Tests were moved to a separate file to follow the
+project style guide.
+
+No progress-matrix update was needed because template language support and backend behavior did
+not change.

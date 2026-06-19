@@ -113,8 +113,23 @@ impl TemplateInheritance {
 impl Template {
     /// Creates an empty template with default style and no content.
     pub fn empty() -> Template {
+        Self::build_empty(TemplateContent::default())
+    }
+
+    /// Creates an empty template whose content vector is pre-sized for parsing.
+    ///
+    /// WHAT: parsing starts with a conservative, clamped capacity estimate so the first few
+    ///       atom pushes avoid immediate reallocation.
+    /// WHY: keeps the capacity policy narrow and local to template construction boundaries;
+    ///      the estimate is already clamped per-template so nested templates do not inherit
+    ///      the full module heuristic.
+    pub(crate) fn empty_with_content_capacity(atom_capacity: usize) -> Template {
+        Self::build_empty(TemplateContent::with_capacity(atom_capacity))
+    }
+
+    fn build_empty(content: TemplateContent) -> Template {
         Template {
-            content: TemplateContent::default(),
+            content,
             control_flow: None,
             unformatted_content: TemplateContent::default(),
             content_needs_formatting: false,

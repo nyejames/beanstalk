@@ -35,6 +35,19 @@
 //!                               - mutation/reference analysis for runtime capture plans
 //! ```
 //!
+//! ## TIR — staged internal path (Plan B)
+//!
+//! The `tir/` submodule introduces a Template IR that will become the authoritative
+//! internal representation for parsed and finalized templates. TIR is currently
+//! scaffolding; production paths still use the `Template` → `TemplateContent` route.
+//!
+//! TIR is AST-local: it does not own HIR or backend data, uses typed IDs for store
+//! references, and is designed for a staged migration where each phase proves parity
+//! before the old path is removed. There is no feature flag — migration happens
+//! directly on `main` once each phase is validated.
+//!
+//! See `tir/mod.rs` for the full TIR module layout and ownership contract.
+//!
 //! ## Module responsibilities at a glance
 //!
 //! | File / submodule | Owns |
@@ -53,6 +66,7 @@
 //! | `template_folding.rs` | Constant-time folding of pure templates |
 //! | `top_level_templates.rs` | Entry-file fragment synthesis and capture planning |
 //! | `template_formatting.rs` | Shared formatting helpers |
+//! | `tir/` | Template IR: typed store, nodes, summaries, validation (staged internal path) |
 
 // -------------------------
 //  Public Modules
@@ -76,6 +90,15 @@ pub(crate) mod template_types;
 pub(crate) mod top_level_templates;
 
 // -------------------------
+//  Template IR (staged internal path)
+// -------------------------
+//
+// TIR is the future authoritative internal representation for parsed templates.
+// Currently scaffolding only — production paths still use Template/TemplateContent.
+
+pub(crate) mod tir;
+
+// -------------------------
 //  Reactive metadata traversal
 // -------------------------
 //
@@ -90,3 +113,6 @@ pub(crate) mod reactive_template_metadata;
 
 mod doc_fragments;
 pub(crate) mod error;
+
+#[cfg(test)]
+mod template_folding_tests;
