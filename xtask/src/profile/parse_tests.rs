@@ -83,6 +83,54 @@ fn beanstalk_function_names_resolve_through_tables() {
 }
 
 #[test]
+fn profile_shape_dump_reports_top_level_and_first_thread_shape() {
+    let json = r#"{
+        "meta": {"product": "samply", "version": "0.13.1"},
+        "libs": [
+            {"debugName": "bean"},
+            {"name": "libsystem_kernel.dylib"}
+        ],
+        "resourceTable": {"lib": [0], "name": [1]},
+        "nativeSymbols": {"0": []},
+        "threads": [{
+            "name": "main",
+            "stringArray": ["0x1000", "beanstalk::compiler_frontend::ast::build"],
+            "funcTable": {"name": [0, 1], "resource": [0, 0]},
+            "frameTable": {"func": [0, 1]},
+            "stackTable": {"prefix": [null, 0], "frame": [0, 1]},
+            "samples": {"stack": [1]}
+        }]
+    }"#;
+
+    let dump = profile_shape_dump_from_json(json, Path::new("test")).expect("shape dump");
+
+    assert_eq!(dump.meta_product, "samply");
+    assert_eq!(dump.meta_version, "0.13.1");
+    assert_eq!(dump.thread_count, 1);
+    assert_eq!(
+        dump.first_thread_func_table_keys,
+        vec!["name".to_string(), "resource".to_string()]
+    );
+    assert_eq!(
+        dump.first_20_func_names,
+        vec![
+            "0x1000".to_string(),
+            "beanstalk::compiler_frontend::ast::build".to_string()
+        ]
+    );
+    assert_eq!(
+        dump.resource_table_keys,
+        vec!["lib".to_string(), "name".to_string()]
+    );
+    assert_eq!(dump.libs_count, Some(2));
+    assert_eq!(
+        dump.first_10_libs,
+        vec!["bean".to_string(), "libsystem_kernel.dylib".to_string()]
+    );
+    assert!(dump.native_symbols_present);
+}
+
+#[test]
 fn std_function_name_resolves() {
     let summary = parse_fixture();
     let alloc = find_function(&summary, "std::alloc::alloc");

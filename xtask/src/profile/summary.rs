@@ -623,6 +623,10 @@ fn format_enriched_case_summary(data: &CaseSummaryData<'_>, run_paths: &ProfileR
             "Function hotspots are raw addresses only; use stage timings and counters from this run, not function names, until symbolication is fixed."
                 .to_string(),
         );
+        lines.push(format!(
+            "Profile shape dump: `cases/{}/profile-shape.txt`",
+            obs.case_name
+        ));
         lines.push(String::new());
     } else if !hotspots.functions.is_empty() {
         lines.push("## Hot functions".to_string());

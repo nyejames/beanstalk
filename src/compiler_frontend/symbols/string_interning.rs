@@ -32,6 +32,13 @@ pub struct StringIdRemap {
 
     /// Remapped IDs for the source table suffix after `identity_prefix_len`.
     mapped_suffix: Vec<StringId>,
+
+    /// Cached identity result for the full remap.
+    ///
+    /// WHY: file preparation often creates identity delta remaps, and detailed-timer builds query
+    /// this property from counters and payload remap fast paths. Keeping it with the remap avoids
+    /// repeatedly scanning the whole suffix after merge construction already compared each entry.
+    is_identity: bool,
 }
 
 impl StringIdRemap {
@@ -46,14 +53,15 @@ impl StringIdRemap {
 
     /// Returns true when every source ID maps to the same numeric ID in the target table.
     pub fn is_identity(&self) -> bool {
-        self.mapped_suffix
-            .iter()
-            .enumerate()
-            .all(|(offset, mapped)| mapped.0 as usize == self.identity_prefix_len + offset)
+        self.is_identity
     }
 
     /// Returns true when any ID at or after `base_len` changes during remapping.
     pub fn has_non_identity_after(&self, base_len: usize) -> bool {
+        if self.is_identity {
+            return false;
+        }
+
         let remap_len = self.identity_prefix_len + self.mapped_suffix.len();
         if base_len >= remap_len {
             return false;
@@ -397,8 +405,12 @@ impl StringTable {
         );
 
         let mut old_to_new = Vec::with_capacity(other.len());
+        let mut is_identity = true;
         for (old_id, s) in other.iter() {
             let new_id = self.intern(s);
+            if new_id != old_id {
+                is_identity = false;
+            }
             old_to_new.push(new_id);
             debug_assert_eq!(old_id.0 as usize, old_to_new.len() - 1);
         }
@@ -406,6 +418,7 @@ impl StringTable {
         StringIdRemap {
             identity_prefix_len: 0,
             mapped_suffix: old_to_new,
+            is_identity,
         }
     }
 
@@ -433,22 +446,27 @@ impl StringTable {
         add_frontend_counter(FrontendCounter::StringTableDeltaEntriesScanned, delta_len);
 
         let mut mapped_suffix = Vec::with_capacity(delta_len);
+        let mut is_identity = true;
+        #[cfg(feature = "detailed_timers")]
+        let mut non_identity_entries = 0usize;
         for (old_id, string) in other.iter().skip(base_len) {
             let expected_old_index = base_len + mapped_suffix.len();
             debug_assert_eq!(old_id.0 as usize, expected_old_index);
 
             let new_id = self.intern(string);
+            if new_id.0 as usize != expected_old_index {
+                is_identity = false;
+                #[cfg(feature = "detailed_timers")]
+                {
+                    non_identity_entries += 1;
+                }
+            }
             mapped_suffix.push(new_id);
         }
 
         #[cfg(feature = "detailed_timers")]
         {
-            let non_identity_entries = mapped_suffix
-                .iter()
-                .enumerate()
-                .filter(|(offset, mapped)| mapped.0 as usize != base_len + *offset)
-                .count();
-            if non_identity_entries == 0 {
+            if is_identity {
                 increment_frontend_counter(FrontendCounter::StringTableDeltaIdentityRemaps);
             } else {
                 increment_frontend_counter(FrontendCounter::StringTableDeltaNonIdentityRemaps);
@@ -462,6 +480,7 @@ impl StringTable {
         StringIdRemap {
             identity_prefix_len: base_len,
             mapped_suffix,
+            is_identity,
         }
     }
 

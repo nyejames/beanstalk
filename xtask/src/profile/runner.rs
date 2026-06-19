@@ -30,6 +30,45 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+#[derive(Debug, Clone)]
+pub(crate) struct SamplyRecordCapabilities {
+    /// `samply --version` stdout, trimmed for diagnostics.
+    pub(crate) version: String,
+    /// The presymbolication flag supported by this Samply install.
+    pub(crate) presymbolication_flag: PresymbolicationFlag,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PresymbolicationFlag {
+    Stable,
+    Unstable,
+    Unavailable,
+}
+
+impl PresymbolicationFlag {
+    pub(crate) fn from_record_help(help: &str) -> Self {
+        if help.contains("--presymbolicate") {
+            Self::Stable
+        } else if help.contains("--unstable-presymbolicate") {
+            Self::Unstable
+        } else {
+            Self::Unavailable
+        }
+    }
+
+    pub(crate) fn command_flag(self) -> Option<&'static str> {
+        match self {
+            Self::Stable => Some("--presymbolicate"),
+            Self::Unstable => Some("--unstable-presymbolicate"),
+            Self::Unavailable => None,
+        }
+    }
+
+    pub(crate) fn display_label(self) -> &'static str {
+        self.command_flag().unwrap_or("unavailable")
+    }
+}
+
 /// Input configuration for a single Samply profiling run.
 ///
 /// WHAT: Encapsulates the command, arguments, output path, and Samply
@@ -50,6 +89,8 @@ pub(crate) struct SamplyRunInput {
     pub(crate) samply_rate_hz: Option<f64>,
     /// Whether to pass `--presymbolicate` to Samply.
     pub(crate) presymbolicate: bool,
+    /// Version-specific Samply flag to use when presymbolication is requested.
+    pub(crate) presymbolication_flag: PresymbolicationFlag,
     /// Symbol directories to pass to Samply in deterministic order.
     pub(crate) symbol_dirs: Vec<PathBuf>,
 }
@@ -77,6 +118,8 @@ pub(crate) struct ProfileProcessRun {
     /// Used by tests now and will be used by Phase 4 hotspot extraction.
     #[allow(dead_code)]
     pub(crate) output_path: PathBuf,
+    /// Version-specific Samply presymbolication flag selected for this run.
+    pub(crate) presymbolication_flag: PresymbolicationFlag,
 }
 
 /// Check whether `samply` is available on the system PATH.
@@ -84,8 +127,8 @@ pub(crate) struct ProfileProcessRun {
 /// WHAT: Runs `samply --version` and checks for a successful exit.
 /// WHY: Fail early with a clear message if Samply is not installed,
 /// rather than failing mid-run with a confusing spawn error.
-pub(crate) fn check_samply_available() -> Result<(), String> {
-    let output = Command::new("samply")
+pub(crate) fn check_samply_available() -> Result<SamplyRecordCapabilities, String> {
+    let version_output = Command::new("samply")
         .arg("--version")
         .output()
         .map_err(|_| {
@@ -95,15 +138,37 @@ pub(crate) fn check_samply_available() -> Result<(), String> {
                 .to_string()
         })?;
 
-    if !output.status.success() {
+    if !version_output.status.success() {
         return Err(format!(
             "Samply --version returned a non-zero exit code ({}).\n\
              Samply may be installed but not functioning correctly.",
-            output.status.code().unwrap_or(-1)
+            version_output.status.code().unwrap_or(-1)
         ));
     }
 
-    Ok(())
+    let help_output = Command::new("samply")
+        .args(["record", "--help"])
+        .output()
+        .map_err(|e| format!("Failed to execute 'samply record --help': {}", e))?;
+
+    if !help_output.status.success() {
+        return Err(format!(
+            "Samply record --help returned a non-zero exit code ({}).\n\
+             Samply may be installed but the record subcommand is not usable.",
+            help_output.status.code().unwrap_or(-1)
+        ));
+    }
+
+    let version = String::from_utf8_lossy(&version_output.stdout)
+        .trim()
+        .to_string();
+    let help = String::from_utf8_lossy(&help_output.stdout);
+    let presymbolication_flag = PresymbolicationFlag::from_record_help(&help);
+
+    Ok(SamplyRecordCapabilities {
+        version,
+        presymbolication_flag,
+    })
 }
 
 /// Build the `samply record` command without executing it.
@@ -126,11 +191,12 @@ pub(crate) fn build_samply_command(input: &SamplyRunInput) -> Command {
         cmd.arg("--rate").arg(rate.to_string());
     }
 
-    // Optional symbolication.
-    // Samply 0.13.1 exposes this as `--unstable-presymbolicate`; the xtask
-    // CLI uses the stable name `--presymbolicate` for forward compatibility.
+    // Optional symbolication. The exact flag changed across Samply versions,
+    // so command construction uses the capability probe from `samply record --help`.
     if input.presymbolicate {
-        cmd.arg("--unstable-presymbolicate");
+        if let Some(flag) = input.presymbolication_flag.command_flag() {
+            cmd.arg(flag);
+        }
     }
 
     for symbol_dir in &input.symbol_dirs {
@@ -179,6 +245,7 @@ pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, St
             stderr,
             command_line,
             output_path: input.output_path.clone(),
+            presymbolication_flag: input.presymbolication_flag,
         });
     }
 
@@ -204,6 +271,7 @@ pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, St
         stderr,
         command_line,
         output_path: input.output_path.clone(),
+        presymbolication_flag: input.presymbolication_flag,
     })
 }
 

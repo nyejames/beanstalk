@@ -4,6 +4,7 @@ use super::*;
 use crate::bench_types::{BenchmarkCaseObservations, BenchmarkMetric};
 use crate::profile::observations::ProfileObservation;
 use crate::profile::options::ProfileFilterMode;
+use crate::profile::parse::ProfileShapeDump;
 use std::path::Path;
 
 /// Build a test observation with sample data.
@@ -63,6 +64,12 @@ fn profile_case_paths_has_expected_fields() {
             .to_str()
             .unwrap()
             .ends_with("profile.json.gz")
+    );
+    assert!(
+        case.profile_shape_txt
+            .to_str()
+            .unwrap()
+            .ends_with("profile-shape.txt")
     );
 }
 
@@ -223,6 +230,33 @@ fn format_metric_array_json_single_item() {
 }
 
 #[test]
+fn format_profile_shape_dump_lists_symbolication_diagnostics() {
+    let shape = ProfileShapeDump {
+        meta_product: "samply".to_string(),
+        meta_version: "0.13.1".to_string(),
+        thread_count: 1,
+        first_thread_func_table_keys: vec!["name".to_string(), "resource".to_string()],
+        first_20_func_names: vec!["0x1000".to_string(), "beanstalk::ast::emit".to_string()],
+        resource_table_keys: vec!["lib".to_string()],
+        libs_count: Some(2),
+        first_10_libs: vec!["bean".to_string(), "libsystem_kernel.dylib".to_string()],
+        native_symbols_present: true,
+    };
+
+    let text = format_profile_shape_dump(&shape);
+
+    assert!(text.contains("meta.product: samply"));
+    assert!(text.contains("meta.version: 0.13.1"));
+    assert!(text.contains("threads: 1"));
+    assert!(text.contains("first thread funcTable keys: name, resource"));
+    assert!(text.contains("  - 0x1000"));
+    assert!(text.contains("  - beanstalk::ast::emit"));
+    assert!(text.contains("resourceTable keys: lib"));
+    assert!(text.contains("libs count: 2"));
+    assert!(text.contains("nativeSymbols present: yes"));
+}
+
+#[test]
 fn create_run_paths_in_temp_directory() {
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let profiles_root = temp_dir.path().join("profiles");
@@ -291,6 +325,36 @@ fn write_observations_json_creates_valid_file() {
         std::fs::read_to_string(&case_paths.observations_json).expect("read observations");
     assert!(content.contains(r#""format_version": 1"#));
     assert!(content.contains(r#""case": "test_case_bst""#));
+}
+
+#[test]
+fn write_profile_shape_dump_creates_diagnostic_file() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let profiles_root = temp_dir.path().join("profiles");
+
+    let run_paths =
+        ProfileRunPaths::create(&profiles_root, Some("abc1234")).expect("create run paths");
+    let case_paths = run_paths.case_paths("test_case");
+    case_paths.create_dir().expect("create case dir");
+
+    let shape = ProfileShapeDump {
+        meta_product: "samply".to_string(),
+        meta_version: "0.13.1".to_string(),
+        thread_count: 0,
+        first_thread_func_table_keys: Vec::new(),
+        first_20_func_names: Vec::new(),
+        resource_table_keys: Vec::new(),
+        libs_count: None,
+        first_10_libs: Vec::new(),
+        native_symbols_present: false,
+    };
+
+    write_profile_shape_dump(&case_paths, &shape).expect("write profile shape dump");
+
+    let content =
+        std::fs::read_to_string(&case_paths.profile_shape_txt).expect("read profile shape");
+    assert!(content.contains("first thread funcTable keys: none"));
+    assert!(content.contains("nativeSymbols present: no"));
 }
 
 #[test]

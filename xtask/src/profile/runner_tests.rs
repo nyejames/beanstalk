@@ -26,6 +26,59 @@ fn write_plain_file(path: &Path, content: &[u8]) {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn presymbolication_flag_prefers_stable_help_flag() {
+    let help = "\
+Options:
+      --presymbolicate
+      --unstable-presymbolicate
+";
+
+    assert_eq!(
+        PresymbolicationFlag::from_record_help(help),
+        PresymbolicationFlag::Stable
+    );
+    assert_eq!(
+        PresymbolicationFlag::Stable.command_flag(),
+        Some("--presymbolicate")
+    );
+}
+
+#[test]
+fn presymbolication_flag_falls_back_to_unstable_help_flag() {
+    let help = "\
+Options:
+      --unstable-presymbolicate
+";
+
+    assert_eq!(
+        PresymbolicationFlag::from_record_help(help),
+        PresymbolicationFlag::Unstable
+    );
+    assert_eq!(
+        PresymbolicationFlag::Unstable.command_flag(),
+        Some("--unstable-presymbolicate")
+    );
+}
+
+#[test]
+fn presymbolication_flag_reports_unavailable_when_help_has_no_flag() {
+    let help = "\
+Options:
+      --save-only
+";
+
+    assert_eq!(
+        PresymbolicationFlag::from_record_help(help),
+        PresymbolicationFlag::Unavailable
+    );
+    assert_eq!(PresymbolicationFlag::Unavailable.command_flag(), None);
+    assert_eq!(
+        PresymbolicationFlag::Unavailable.display_label(),
+        "unavailable"
+    );
+}
+
+#[test]
 fn build_samply_command_has_required_flags() {
     let input = SamplyRunInput {
         bean_path: PathBuf::from("/usr/bin/bean"),
@@ -34,6 +87,7 @@ fn build_samply_command_has_required_flags() {
         output_path: PathBuf::from("/tmp/profile.json.gz"),
         samply_rate_hz: None,
         presymbolicate: false,
+        presymbolication_flag: PresymbolicationFlag::Unavailable,
         symbol_dirs: Vec::new(),
     };
 
@@ -62,6 +116,7 @@ fn build_samply_command_with_rate() {
         output_path: PathBuf::from("/tmp/profile.json.gz"),
         samply_rate_hz: Some(500.0),
         presymbolicate: false,
+        presymbolication_flag: PresymbolicationFlag::Unavailable,
         symbol_dirs: Vec::new(),
     };
 
@@ -91,6 +146,26 @@ fn build_samply_command_with_presymbolicate() {
         output_path: PathBuf::from("/tmp/profile.json.gz"),
         samply_rate_hz: None,
         presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Stable,
+        symbol_dirs: Vec::new(),
+    };
+
+    let cmd = build_samply_command(&input);
+    let args: Vec<_> = cmd.get_args().collect();
+
+    assert!(args.iter().any(|a| a.to_str() == Some("--presymbolicate")));
+}
+
+#[test]
+fn build_samply_command_with_unstable_presymbolicate() {
+    let input = SamplyRunInput {
+        bean_path: PathBuf::from("/usr/bin/bean"),
+        command: "check".to_string(),
+        args: vec![],
+        output_path: PathBuf::from("/tmp/profile.json.gz"),
+        samply_rate_hz: None,
+        presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Unstable,
         symbol_dirs: Vec::new(),
     };
 
@@ -112,6 +187,7 @@ fn build_samply_command_with_rate_and_presymbolicate() {
         output_path: PathBuf::from("/tmp/out/profile.json.gz"),
         samply_rate_hz: Some(1000.0),
         presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Stable,
         symbol_dirs: Vec::new(),
     };
 
@@ -120,10 +196,7 @@ fn build_samply_command_with_rate_and_presymbolicate() {
 
     // Both optional flags must be present.
     assert!(args.iter().any(|a| a.to_str() == Some("--rate")));
-    assert!(
-        args.iter()
-            .any(|a| a.to_str() == Some("--unstable-presymbolicate"))
-    );
+    assert!(args.iter().any(|a| a.to_str() == Some("--presymbolicate")));
 
     // Multiple args must follow `--`.
     let separator_pos = args
@@ -145,6 +218,7 @@ fn build_samply_command_with_symbol_dirs() {
         output_path: PathBuf::from("/tmp/profile.json.gz"),
         samply_rate_hz: None,
         presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Unstable,
         symbol_dirs: vec![
             PathBuf::from("/tmp/target/profiling"),
             PathBuf::from("/tmp/target/profiling/bean.dSYM"),
@@ -187,6 +261,7 @@ fn build_samply_command_rate_appears_before_separator() {
         output_path: PathBuf::from("/tmp/p.json.gz"),
         samply_rate_hz: Some(250.0),
         presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Stable,
         symbol_dirs: Vec::new(),
     };
 
@@ -204,7 +279,7 @@ fn build_samply_command_rate_appears_before_separator() {
         .unwrap();
     let presym_pos = args
         .iter()
-        .position(|a| a.to_str() == Some("--unstable-presymbolicate"))
+        .position(|a| a.to_str() == Some("--presymbolicate"))
         .unwrap();
     let sep_pos = args.iter().position(|a| a.to_str() == Some("--")).unwrap();
 
@@ -333,8 +408,9 @@ fn verify_profile_format_rejects_empty_file() {
 #[test]
 fn check_samply_available_succeeds_when_installed() {
     match check_samply_available() {
-        Ok(()) => {
+        Ok(capabilities) => {
             // Samply is installed; this is the expected path on developer machines.
+            assert!(!capabilities.version.is_empty());
         }
         Err(_) => {
             // Samply is not installed; skip rather than fail.
@@ -356,6 +432,7 @@ fn profile_process_run_struct_fields() {
         stderr: "samply errors".to_string(),
         command_line: "samply record --save-only".to_string(),
         output_path: PathBuf::from("/tmp/profile.json.gz"),
+        presymbolication_flag: PresymbolicationFlag::Unstable,
     };
 
     assert_eq!(run.duration_ms, 1234.5);
@@ -364,6 +441,7 @@ fn profile_process_run_struct_fields() {
     assert_eq!(run.stderr, "samply errors");
     assert_eq!(run.command_line, "samply record --save-only");
     assert_eq!(run.output_path, PathBuf::from("/tmp/profile.json.gz"));
+    assert_eq!(run.presymbolication_flag, PresymbolicationFlag::Unstable);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +457,7 @@ fn samply_run_input_struct_fields() {
         output_path: PathBuf::from("/tmp/profile.json.gz"),
         samply_rate_hz: Some(500.0),
         presymbolicate: true,
+        presymbolication_flag: PresymbolicationFlag::Stable,
         symbol_dirs: vec![PathBuf::from("/tmp/target/profiling")],
     };
 
@@ -388,6 +467,7 @@ fn samply_run_input_struct_fields() {
     assert_eq!(input.output_path, PathBuf::from("/tmp/profile.json.gz"));
     assert_eq!(input.samply_rate_hz, Some(500.0));
     assert!(input.presymbolicate);
+    assert_eq!(input.presymbolication_flag, PresymbolicationFlag::Stable);
     assert_eq!(
         input.symbol_dirs,
         vec![PathBuf::from("/tmp/target/profiling")]

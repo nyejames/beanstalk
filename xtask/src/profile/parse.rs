@@ -49,6 +49,27 @@ pub(crate) struct ParsedProfileSummary {
     pub(crate) warnings: Vec<String>,
 }
 
+/// Small structural diagnostic for profiles whose hot functions are raw addresses.
+///
+/// WHAT: Captures the top-level metadata and the first thread's table shape
+/// without trying to reinterpret the profile.
+/// WHY: When function names are raw addresses, the next question is whether
+/// the saved profile lacks symbol names or whether the parser is looking in
+/// the wrong place. This dump makes that distinction easier without changing
+/// hotspot extraction.
+#[derive(Debug, Clone)]
+pub(crate) struct ProfileShapeDump {
+    pub(crate) meta_product: String,
+    pub(crate) meta_version: String,
+    pub(crate) thread_count: usize,
+    pub(crate) first_thread_func_table_keys: Vec<String>,
+    pub(crate) first_20_func_names: Vec<String>,
+    pub(crate) resource_table_keys: Vec<String>,
+    pub(crate) libs_count: Option<usize>,
+    pub(crate) first_10_libs: Vec<String>,
+    pub(crate) native_symbols_present: bool,
+}
+
 /// Sample accounting for a single function across all threads.
 ///
 /// WHAT: Tracks inclusive/self sample counts, thread presence, and
@@ -386,6 +407,11 @@ pub(crate) fn parse_profile(path: &Path) -> Result<ParsedProfileSummary, String>
     parse_profile_json(&json, path)
 }
 
+pub(crate) fn parse_profile_shape_dump(path: &Path) -> Result<ProfileShapeDump, String> {
+    let json = read_profile_json(path)?;
+    profile_shape_dump_from_json(&json, path)
+}
+
 /// Read and decompress a gzip-compressed profile file into a JSON string.
 fn read_profile_json(path: &Path) -> Result<String, String> {
     let file = File::open(path)
@@ -423,6 +449,143 @@ pub(crate) fn parse_profile_json(
     let mut accumulator = ProfileAccumulator::new();
     parse_all_threads(&mut accumulator, &root, path)?;
     Ok(accumulator.build_summary())
+}
+
+pub(crate) fn profile_shape_dump_from_json(
+    json_string: &str,
+    path: &Path,
+) -> Result<ProfileShapeDump, String> {
+    let root: Value = serde_json::from_str(json_string).map_err(|e| {
+        format!(
+            "Failed to parse profile JSON from '{}': {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    Ok(build_profile_shape_dump(&root))
+}
+
+fn build_profile_shape_dump(root: &Value) -> ProfileShapeDump {
+    let meta = root.get("meta").and_then(|value| value.as_object());
+    let meta_product = meta_string(meta, "product");
+    let meta_version = meta_string(meta, "version");
+
+    let threads = root
+        .get("threads")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let first_thread = threads.first();
+
+    let first_thread_func_table_keys = first_thread
+        .and_then(|thread| thread.get("funcTable"))
+        .and_then(|table| table.as_object())
+        .map(sorted_object_keys)
+        .unwrap_or_default();
+    let first_20_func_names = first_thread
+        .map(first_thread_function_names)
+        .unwrap_or_default();
+
+    let resource_table_keys = root
+        .get("resourceTable")
+        .or_else(|| first_thread.and_then(|thread| thread.get("resourceTable")))
+        .and_then(|table| table.as_object())
+        .map(sorted_object_keys)
+        .unwrap_or_default();
+
+    let libs = root.get("libs").and_then(|value| value.as_array());
+    let libs_count = libs.map(|items| items.len());
+    let first_10_libs = libs
+        .map(|items| items.iter().take(10).map(display_lib_entry).collect())
+        .unwrap_or_default();
+
+    ProfileShapeDump {
+        meta_product,
+        meta_version,
+        thread_count: threads.len(),
+        first_thread_func_table_keys,
+        first_20_func_names,
+        resource_table_keys,
+        libs_count,
+        first_10_libs,
+        native_symbols_present: contains_key_recursive(root, "nativeSymbols"),
+    }
+}
+
+fn meta_string(meta: Option<&serde_json::Map<String, Value>>, key: &str) -> String {
+    meta.and_then(|map| map.get(key))
+        .and_then(|value| value.as_str())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+fn sorted_object_keys(map: &serde_json::Map<String, Value>) -> Vec<String> {
+    let mut keys = map.keys().cloned().collect::<Vec<_>>();
+    keys.sort();
+    keys
+}
+
+fn first_thread_function_names(thread: &Value) -> Vec<String> {
+    let strings = thread
+        .get("stringArray")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let names = thread
+        .get("funcTable")
+        .and_then(|table| table.get("name"))
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    names
+        .iter()
+        .take(20)
+        .map(|name_index| {
+            name_index
+                .as_u64()
+                .and_then(|index| strings.get(index as usize))
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .collect()
+}
+
+fn display_lib_entry(value: &Value) -> String {
+    let Some(object) = value.as_object() else {
+        return truncate_shape_text(&value.to_string());
+    };
+
+    for key in ["debugName", "name", "path"] {
+        if let Some(text) = object.get(key).and_then(|entry| entry.as_str()) {
+            return truncate_shape_text(text);
+        }
+    }
+
+    truncate_shape_text(&value.to_string())
+}
+
+fn truncate_shape_text(text: &str) -> String {
+    const LIMIT: usize = 140;
+    let mut chars = text.chars();
+    let truncated = chars.by_ref().take(LIMIT - 3).collect::<String>();
+    if chars.next().is_some() {
+        format!("{truncated}...")
+    } else {
+        text.to_string()
+    }
+}
+
+fn contains_key_recursive(value: &Value, key: &str) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.contains_key(key) || map.values().any(|child| contains_key_recursive(child, key))
+        }
+        Value::Array(items) => items.iter().any(|child| contains_key_recursive(child, key)),
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------

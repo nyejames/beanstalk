@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 use super::hotspots::HotspotExtractionResult;
 use super::observations::ProfileObservation;
 use super::options::ProfileFilterMode;
+use super::parse::ProfileShapeDump;
 
 /// Current on-disk format version for profiling artifacts.
 const FORMAT_VERSION: u32 = 1;
@@ -76,6 +77,11 @@ pub(crate) struct ProfileCasePaths {
     /// Written by Phase 4 after parsing the Samply profile. Contains
     /// ranked function hotspots with percentage and millisecond estimates.
     pub(crate) hotspots_json: PathBuf,
+    /// Path to profile-shape.txt within the case directory.
+    ///
+    /// Written only when symbolication fails so the next investigation can
+    /// inspect the profile's structural tables without opening the raw JSON.
+    pub(crate) profile_shape_txt: PathBuf,
 }
 
 /// Manifest data for one case, written into the root run-manifest.json.
@@ -150,6 +156,7 @@ impl ProfileRunPaths {
             summary_md: case_dir.join("summary.md"),
             profile_json: case_dir.join("profile.json.gz"),
             hotspots_json: case_dir.join("hotspots.json"),
+            profile_shape_txt: case_dir.join("profile-shape.txt"),
         }
     }
 }
@@ -221,6 +228,20 @@ pub(crate) fn write_hotspots_json(
         format!(
             "Failed to write hotspots.json '{}': {}",
             case_paths.hotspots_json.display(),
+            e
+        )
+    })
+}
+
+pub(crate) fn write_profile_shape_dump(
+    case_paths: &ProfileCasePaths,
+    shape: &ProfileShapeDump,
+) -> Result<(), String> {
+    let text = format_profile_shape_dump(shape);
+    fs::write(&case_paths.profile_shape_txt, text).map_err(|e| {
+        format!(
+            "Failed to write profile-shape.txt '{}': {}",
+            case_paths.profile_shape_txt.display(),
             e
         )
     })
@@ -311,6 +332,62 @@ fn format_metric_array_json(metrics: &[BenchmarkMetric]) -> String {
         .collect();
 
     format!("[\n{}\n  ]", items.join(",\n"))
+}
+
+fn format_profile_shape_dump(shape: &ProfileShapeDump) -> String {
+    let mut lines = Vec::new();
+
+    lines.push(format!("meta.product: {}", shape.meta_product));
+    lines.push(format!("meta.version: {}", shape.meta_version));
+    lines.push(format!("threads: {}", shape.thread_count));
+    lines.push(format!(
+        "first thread funcTable keys: {}",
+        format_inline_list(&shape.first_thread_func_table_keys)
+    ));
+    lines.push("first 20 func names:".to_string());
+    append_bullets(&mut lines, &shape.first_20_func_names);
+    lines.push(format!(
+        "resourceTable keys: {}",
+        format_inline_list(&shape.resource_table_keys)
+    ));
+    lines.push(format!(
+        "libs count: {}",
+        shape
+            .libs_count
+            .map(|count| count.to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    ));
+    lines.push("first 10 libs:".to_string());
+    append_bullets(&mut lines, &shape.first_10_libs);
+    lines.push(format!(
+        "nativeSymbols present: {}",
+        if shape.native_symbols_present {
+            "yes"
+        } else {
+            "no"
+        }
+    ));
+
+    lines.join("\n")
+}
+
+fn format_inline_list(items: &[String]) -> String {
+    if items.is_empty() {
+        "none".to_string()
+    } else {
+        items.join(", ")
+    }
+}
+
+fn append_bullets(lines: &mut Vec<String>, items: &[String]) {
+    if items.is_empty() {
+        lines.push("  - none".to_string());
+        return;
+    }
+
+    for item in items {
+        lines.push(format!("  - {item}"));
+    }
 }
 
 /// Format run-manifest.json as manual JSON.

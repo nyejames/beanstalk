@@ -40,7 +40,7 @@ pub(crate) use options::{ProfileOptions, ProfileParseResult, parse_profile_args}
 use crate::bench_history::get_commit_hash;
 use crate::bench_time::BenchmarkTimestamp;
 use crate::case_parser::parse_cases;
-use crate::compiler_binary::build_profiling_compiler_with_timers;
+use crate::compiler_binary::{CompilerBinary, build_profiling_compiler_with_timers};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -53,8 +53,8 @@ use history::{HistoryCaseRecord, HistoryHotFunction, PROFILE_RUNS_JSONL_PATH};
 use hotspots::{HotspotExtractionResult, extract_hotspots};
 use observations::{run_observation, run_warmup};
 use options::ProfileFilterMode;
-use parse::parse_profile;
-use runner::{SamplyRunInput, check_samply_available, run_samply};
+use parse::{parse_profile, parse_profile_shape_dump};
+use runner::{SamplyRecordCapabilities, SamplyRunInput, check_samply_available, run_samply};
 use summary::{
     CaseSummaryData, append_drift_to_agent_summary, generate_agent_summary, generate_case_summary,
     generate_root_hotspots_json,
@@ -92,10 +92,20 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
         ));
     }
 
-    // Verify Samply is available before doing any work.
-    check_samply_available()?;
+    // Verify Samply is available and learn the version-specific record flags before doing work.
+    let samply_capabilities = check_samply_available()?;
+    if options.presymbolicate
+        && samply_capabilities
+            .presymbolication_flag
+            .command_flag()
+            .is_none()
+    {
+        eprintln!(
+            "Warning: --presymbolicate was requested, but this Samply build exposes no presymbolication flag; function hotspots are likely to remain raw addresses."
+        );
+    }
 
-    // Build the profiling compiler with frame pointers for Samply.
+    // Build the profiling compiler with debug info and frame pointers for Samply.
     println!("Building profiling compiler...");
     let profiling_binary = build_profiling_compiler_with_timers()?;
     let bean_path = profiling_binary.as_path();
@@ -151,21 +161,34 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
             output_path: case_paths.profile_json.clone(),
             samply_rate_hz: options.samply_rate_hz,
             presymbolicate: options.presymbolicate,
+            presymbolication_flag: samply_capabilities.presymbolication_flag,
             symbol_dirs: symbol_dirs.clone(),
         };
 
         let samply_run = run_samply(&samply_input)?;
 
         if !samply_run.success {
+            let smoke_diagnostic = format_symbolication_smoke_diagnostic(
+                &samply_capabilities,
+                &profiling_binary,
+                options.presymbolicate,
+                samply_run.presymbolication_flag.display_label(),
+                &case_paths.profile_json,
+                None,
+                None,
+                "samply_failed",
+            );
             return Err(format!(
                 "Samply recording failed for case '{}'.\n\
                  Command: {}\n\
                  Observation artifacts were written under '{}' before Samply failed.\n\
+                 {}\n\
                  Stdout: {}\n\
                  Stderr: {}",
                 case.name,
                 samply_run.command_line,
                 case_paths.case_dir.display(),
+                smoke_diagnostic,
                 samply_run.stdout.trim(),
                 samply_run.stderr.trim()
             ));
@@ -179,7 +202,28 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
             let parsed = parse_profile(&case_paths.profile_json)
                 .map_err(|e| format!("Failed to parse profile for case '{}': {}", case.name, e))?;
 
-            let result = extract_hotspots(&parsed, options.filter, observation.wall_ms);
+            let mut result = extract_hotspots(&parsed, options.filter, observation.wall_ms);
+            if result.symbolication.is_failed() {
+                match parse_profile_shape_dump(&case_paths.profile_json) {
+                    Ok(shape) => {
+                        artifacts::write_profile_shape_dump(&case_paths, &shape)?;
+                    }
+                    Err(error) => {
+                        result
+                            .warnings
+                            .push(format!("Profile shape dump failed: {error}"));
+                    }
+                }
+            }
+
+            print_symbolication_smoke_diagnostic(
+                &samply_capabilities,
+                &profiling_binary,
+                options.presymbolicate,
+                samply_run.presymbolication_flag.display_label(),
+                &case_paths.profile_json,
+                &result,
+            );
             artifacts::write_hotspots_json(&case_paths, &result)?;
             print!("[{} hotspots] ", result.functions.len());
             Some(result)
@@ -438,4 +482,89 @@ fn filter_cases(
     } else {
         Ok(matched)
     }
+}
+
+fn print_symbolication_smoke_diagnostic(
+    samply: &SamplyRecordCapabilities,
+    profiling_binary: &CompilerBinary,
+    presymbolicate_requested: bool,
+    selected_presymbolication_flag: &str,
+    profile_path: &std::path::Path,
+    hotspots: &HotspotExtractionResult,
+) {
+    let text = format_symbolication_smoke_diagnostic(
+        samply,
+        profiling_binary,
+        presymbolicate_requested,
+        selected_presymbolication_flag,
+        profile_path,
+        Some(hotspots.symbolication.hot_function_count),
+        Some(hotspots.symbolication.raw_address_function_count),
+        hotspots.symbolication.status.as_str(),
+    );
+
+    println!();
+    println!("{text}");
+}
+
+fn format_symbolication_smoke_diagnostic(
+    samply: &SamplyRecordCapabilities,
+    profiling_binary: &CompilerBinary,
+    presymbolicate_requested: bool,
+    selected_presymbolication_flag: &str,
+    profile_path: &std::path::Path,
+    hot_function_count: Option<usize>,
+    raw_address_function_count: Option<usize>,
+    symbolication_status: &str,
+) -> String {
+    let profiling_symbols = profiling_binary.profiling_symbols.as_ref();
+    let debug_info_setting = profiling_symbols
+        .map(|symbols| symbols.debug_info_setting)
+        .unwrap_or("unknown");
+    let dsym_path = profiling_symbols
+        .map(|symbols| symbols.dsym_path.display().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let dsym_uuid_match = profiling_symbols
+        .map(|symbols| symbols.dsym_uuid_match.as_str())
+        .unwrap_or("unknown");
+
+    let selected_flag = if presymbolicate_requested {
+        selected_presymbolication_flag.to_string()
+    } else {
+        format!(
+            "not requested (available: {})",
+            samply.presymbolication_flag.display_label()
+        )
+    };
+
+    let hot_functions = hot_function_count
+        .map(|count| count.to_string())
+        .unwrap_or_else(|| "unavailable".to_string());
+    let raw_address_hot_functions = raw_address_function_count
+        .map(|count| count.to_string())
+        .unwrap_or_else(|| "unavailable".to_string());
+
+    format!(
+        "Symbolication smoke diagnostic:\n\
+           Samply version: {}\n\
+           Presymbolication flag: {}\n\
+           Profiling binary: {}\n\
+           Debug info setting: {}\n\
+           dSYM path: {}\n\
+           dSYM UUID matches binary: {}\n\
+           Profile file: {}\n\
+           Hot functions: {}\n\
+           Raw-address hot functions: {}\n\
+           Symbolication status: {}",
+        samply.version,
+        selected_flag,
+        profiling_binary.path.display(),
+        debug_info_setting,
+        dsym_path,
+        dsym_uuid_match,
+        profile_path.display(),
+        hot_functions,
+        raw_address_hot_functions,
+        symbolication_status,
+    )
 }

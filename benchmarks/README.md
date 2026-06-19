@@ -143,9 +143,9 @@ The observation pass provides reliable stage/counter attribution without profile
 
 ### Profiling binary
 
-The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with frame-pointer debug info and `detailed_timers`. Profile runs prepare symbol directories for the profiling binary where available; on macOS the xtask path also tries to materialize `target/profiling/bean.dSYM` with `dsymutil`. Do not commit the binary or `.dSYM` bundle.
+The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with full debug info and `detailed_timers`. Profile runs prepare symbol directories for the profiling binary where available; on macOS the xtask path also tries to materialize `target/profiling/bean.dSYM` with `dsymutil` and reports whether its UUID matches the binary when `dwarfdump` is available. Do not commit the binary or `.dSYM` bundle.
 
-`--presymbolicate` remains an explicit profiling option. Use `just profile-symbolicated` or `just profile-case-symbolicated <case-name>` when a normal profile reports raw-address function names.
+`--presymbolicate` remains an explicit profiling option. Use `just profile-symbolicated` or `just profile-case-symbolicated <case-name>` when a normal profile reports raw-address function names. xtask maps that request to the Samply flag supported by the installed CLI (`--presymbolicate` or `--unstable-presymbolicate`) and warns when neither flag is available.
 
 ### Filter modes
 
@@ -174,10 +174,11 @@ benchmarks/local-data/
             └── <case-name>/
                 ├── summary.md
                 ├── detailed-observations.json
+                ├── profile-shape.txt      # written when symbolication fails
                 └── profile.json.gz
 ```
 
-Profile summaries include symbolication health. If most hot function names are raw `0x...` addresses, the summary marks symbolication as failed and function hotspots should not be treated as actionable. Stage timings and counters from the observation pass are still useful in that state.
+Profile summaries include symbolication health. If most hot function names are raw `0x...` addresses, the summary marks symbolication as failed and function hotspots should not be treated as actionable. A failed-symbolication case also writes `profile-shape.txt`, which records the profile table shape, first function names, libraries, and native-symbol metadata for parser/debug-info investigation. Stage timings and counters from the observation pass are still useful in that state.
 
 ### Drift thresholds
 

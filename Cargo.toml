@@ -57,7 +57,7 @@ strip = true
 
 [profile.profiling]
 inherits = "release"
-debug = "line-tables-only"
+debug = true
 strip = false
 lto = "thin"
 codegen-units = 1

@@ -162,7 +162,7 @@ just profile-case <case-name> normal       # profile one case with more detail
 just profile-case-symbolicated <case-name> # retry with explicit presymbolication
 ```
 
-The profiling build prepares symbol directories for `target/profiling/bean` where available and passes them to Samply. Profile summaries mark raw-address-heavy function lists as symbolication failures; treat those function hotspots as non-actionable and use stage/counter data until symbolication succeeds. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
+The profiling build uses full debug info and prepares symbol directories for `target/profiling/bean` where available. When presymbolication is requested, xtask probes `samply record --help` and uses the supported flag (`--presymbolicate` or `--unstable-presymbolicate`). Profile summaries print symbolication smoke diagnostics, including macOS dSYM UUID status when available, and mark raw-address-heavy function lists as symbolication failures. Treat those function hotspots as non-actionable and use stage/counter data until symbolication succeeds. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
 
 All profiling outputs are local-only under `benchmarks/local-data/`. Do not commit them.
 
