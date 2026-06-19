@@ -31,6 +31,8 @@ Each suite uses one warmup iteration and ten measured iterations per case.
 just profile                  # default terse filter across all cases
 just profile <filter>         # named filter: terse, normal, deep, raw-index
 just profile-case <case-name> [filter]   # profile one specific case
+just profile-symbolicated [filter]       # request Samply presymbolication
+just profile-case-symbolicated <case-name> [filter] # request presymbolication for one case
 just profile-build            # build the profiling binary (target/profiling/bean)
 ```
 
@@ -141,7 +143,9 @@ The observation pass provides reliable stage/counter attribution without profile
 
 ### Profiling binary
 
-The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with frame-pointer debug info and `detailed_timers`. Do not commit the binary.
+The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with frame-pointer debug info and `detailed_timers`. Profile runs prepare symbol directories for the profiling binary where available; on macOS the xtask path also tries to materialize `target/profiling/bean.dSYM` with `dsymutil`. Do not commit the binary or `.dSYM` bundle.
+
+`--presymbolicate` remains an explicit profiling option. Use `just profile-symbolicated` or `just profile-case-symbolicated <case-name>` when a normal profile reports raw-address function names.
 
 ### Filter modes
 
@@ -172,6 +176,8 @@ benchmarks/local-data/
                 ├── detailed-observations.json
                 └── profile.json.gz
 ```
+
+Profile summaries include symbolication health. If most hot function names are raw `0x...` addresses, the summary marks symbolication as failed and function hotspots should not be treated as actionable. Stage timings and counters from the observation pass are still useful in that state.
 
 ### Drift thresholds
 

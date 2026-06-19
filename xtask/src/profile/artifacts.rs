@@ -409,6 +409,12 @@ fn format_hotspots_json(result: &HotspotExtractionResult) -> String {
         "total_sample_weight": round_2dp(result.total_sample_weight),
         "wall_time_ms": round_2dp(result.wall_time_ms),
         "hot_function_count": result.functions.len(),
+        "symbolication": {
+            "status": result.symbolication.status.as_str(),
+            "raw_address_function_count": result.symbolication.raw_address_function_count,
+            "hot_function_count": result.symbolication.hot_function_count,
+            "raw_address_ratio": round_2dp(result.symbolication.raw_address_ratio),
+        },
         "functions": functions_json,
         "warnings": result.warnings,
     });

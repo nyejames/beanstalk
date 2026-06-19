@@ -19,6 +19,7 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
 use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -239,6 +240,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         trait_environment: &TraitEnvironment,
         string_table: &StringTable,
     ) -> Result<(), CompilerMessages> {
+        increment_ast_counter(AstCounter::PublicSurfaceValidationChecks);
+
         let mut visited_types = FxHashSet::default();
         if self.public_type_id_is_nameable(
             type_id,

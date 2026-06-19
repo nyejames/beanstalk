@@ -29,6 +29,7 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::headers::import_environment::NamespaceTypeMember;
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -48,6 +49,8 @@ pub(super) fn visible_type_alias_annotation(
     name: StringId,
     context: &TypeResolutionContext<'_>,
 ) -> Option<(InternedPath, ResolvedTypeAnnotation)> {
+    increment_ast_counter(AstCounter::VisibleTypeAliasLookupAttempts);
+
     let alias_path = context.visible_type_aliases?.get(&name)?;
     let annotation = context.resolved_type_aliases?.get(alias_path)?.clone();
 
@@ -63,6 +66,8 @@ pub(super) fn visible_namespaced_type_alias_annotation(
     name: StringId,
     context: &TypeResolutionContext<'_>,
 ) -> Option<(InternedPath, ResolvedTypeAnnotation)> {
+    increment_ast_counter(AstCounter::VisibleTypeAliasLookupAttempts);
+
     let alias_path = context
         .visible_namespace_records?
         .get(&namespace)

@@ -87,6 +87,7 @@ pub(crate) struct BorrowCheckStats {
     pub statements_analyzed: usize,
     pub terminators_analyzed: usize,
     pub worklist_iterations: usize,
+    pub state_joins: usize,
     pub conflicts_checked: usize,
 }
 

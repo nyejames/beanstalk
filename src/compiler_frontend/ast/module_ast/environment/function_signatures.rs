@@ -39,6 +39,7 @@ use crate::compiler_frontend::datatypes::ids::{
     GenericParameterId, GenericParameterListId, TypeId,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -309,6 +310,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) -> Result<Rc<ReceiverMethodCatalog>, CompilerMessages> {
+        add_ast_counter(
+            AstCounter::ReceiverCatalogHeadersScanned,
+            sorted_headers.len(),
+        );
+
         let catalog = build_receiver_method_catalog(BuildReceiverMethodCatalogInput {
             sorted_headers,
             resolved_function_signatures_by_path: &self.resolved_function_signatures_by_path,
@@ -326,6 +332,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.error_messages(error, string_table)
             }
         })?;
+        add_ast_counter(
+            AstCounter::ReceiverMethodsRegistered,
+            catalog.by_function_path.len(),
+        );
 
         #[cfg(feature = "detailed_timers")]
         if detailed_timer_output_enabled() {

@@ -87,6 +87,9 @@ pub(crate) struct RootCaseHotspots {
     pub(crate) hot_functions: Vec<RootHotFunction>,
     pub(crate) bucket_summary: Vec<BucketSummaryEntry>,
     pub(crate) warnings: Vec<String>,
+    pub(crate) symbolication_status: String,
+    pub(crate) raw_address_function_count: usize,
+    pub(crate) hot_function_count: usize,
     pub(crate) profile_path: String,
     pub(crate) summary_path: String,
 }
@@ -315,6 +318,9 @@ fn build_root_case_hotspots(data: &CaseSummaryData<'_>) -> RootCaseHotspots {
         hot_functions,
         bucket_summary,
         warnings: hotspots.warnings.clone(),
+        symbolication_status: hotspots.symbolication.status.as_str().to_string(),
+        raw_address_function_count: hotspots.symbolication.raw_address_function_count,
+        hot_function_count: hotspots.symbolication.hot_function_count,
         profile_path: data.profile_relative_path.clone(),
         summary_path: format!("cases/{}/summary.md", obs.case_name),
     }
@@ -407,6 +413,11 @@ fn format_root_hotspots_json(root: &RootProfileHotspots) -> String {
                 "hot_functions": functions_json,
                 "bucket_summary": buckets_json,
                 "warnings": case.warnings,
+                "symbolication": {
+                    "status": case.symbolication_status,
+                    "raw_address_function_count": case.raw_address_function_count,
+                    "hot_function_count": case.hot_function_count,
+                },
                 "profile_path": case.profile_path,
                 "summary_path": case.summary_path,
             })
@@ -516,7 +527,15 @@ fn append_agent_case_entry(lines: &mut Vec<String>, data: &CaseSummaryData<'_>, 
     }
 
     // Top hot function
-    if let Some(top_func) = hotspots.functions.first() {
+    if hotspots.symbolication.is_failed() {
+        lines.push(format!(
+            "- Symbolication: failed ({}/{} hot functions are raw addresses)",
+            hotspots.symbolication.raw_address_function_count,
+            hotspots.symbolication.hot_function_count
+        ));
+        lines.push("- Top function: unavailable (raw addresses only)".to_string());
+        lines.push("- Bucket: unavailable".to_string());
+    } else if let Some(top_func) = hotspots.functions.first() {
         let display_name = truncate_function_name(&top_func.name, 80);
         lines.push(format!("- Top function: `{}`", display_name));
         lines.push(format!(
@@ -568,6 +587,12 @@ fn format_enriched_case_summary(data: &CaseSummaryData<'_>, run_paths: &ProfileR
     lines.push(format!("Filter: {}", filter.display_label()));
     lines.push(format!("Wall time: ~{:.0}ms", obs.wall_ms));
     lines.push(format!("Sample count: {}", hotspots.total_sample_count));
+    lines.push(format!(
+        "Symbolication: {} ({}/{} raw-address hot functions)",
+        hotspots.symbolication.status.as_str(),
+        hotspots.symbolication.raw_address_function_count,
+        hotspots.symbolication.hot_function_count
+    ));
     lines.push(String::new());
 
     // Stage timings
@@ -591,7 +616,15 @@ fn format_enriched_case_summary(data: &CaseSummaryData<'_>, run_paths: &ProfileR
     }
 
     // Hot functions
-    if !hotspots.functions.is_empty() {
+    if hotspots.symbolication.is_failed() {
+        lines.push("## Hot functions".to_string());
+        lines.push(String::new());
+        lines.push(
+            "Function hotspots are raw addresses only; use stage timings and counters from this run, not function names, until symbolication is fixed."
+                .to_string(),
+        );
+        lines.push(String::new());
+    } else if !hotspots.functions.is_empty() {
         lines.push("## Hot functions".to_string());
         lines.push(String::new());
 
@@ -627,7 +660,11 @@ fn format_enriched_case_summary(data: &CaseSummaryData<'_>, run_paths: &ProfileR
     }
 
     // Bucket summary
-    let bucket_summary = build_bucket_summary(&hotspots.functions);
+    let bucket_summary = if hotspots.symbolication.is_failed() {
+        Vec::new()
+    } else {
+        build_bucket_summary(&hotspots.functions)
+    };
     if !bucket_summary.is_empty() {
         lines.push("## Buckets".to_string());
         lines.push(String::new());
@@ -699,14 +736,13 @@ fn generate_hint(data: &CaseSummaryData<'_>) -> String {
             .to_string();
     }
 
-    let top_func = &hotspots.functions[0];
-
-    // Check for unsymbolicated function names (raw hex addresses).
-    if is_unsymbolicated(&top_func.name) {
+    if hotspots.symbolication.is_failed() {
         return "Function names appear to be raw addresses (not symbolicated); \
-                try `--presymbolicate` or check the Samply `.syms.json` sidecar."
+                use stage/counter data and retry with symbol dirs or `--presymbolicate` before treating function hotspots as actionable."
             .to_string();
     }
+
+    let top_func = &hotspots.functions[0];
 
     // Check if alloc dominates self time.
     if top_func.bucket.label == "alloc" && top_func.self_pct > 10.0 {
@@ -817,22 +853,6 @@ fn generate_hint(data: &CaseSummaryData<'_>) -> String {
     }
 
     "Inspect the profile with `samply load` for detailed call stacks.".to_string()
-}
-
-/// Check whether a function name appears to be an unsymbolicated address.
-///
-/// WHAT: Detects raw hex addresses like `0x7fff20304050` that appear when
-/// Samply cannot resolve symbols.
-///
-/// WHY: Unsymbolicated profiles are less actionable; the hint should
-/// recommend symbolication rather than trying to interpret raw addresses.
-fn is_unsymbolicated(name: &str) -> bool {
-    let trimmed = name.trim();
-    if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
-        // Check if the rest is hex digits (allowing for some Samply formatting).
-        return trimmed[2..].chars().all(|c| c.is_ascii_hexdigit());
-    }
-    false
 }
 
 /// Check whether a hot function is Beanstalk-owned (not std/alloc/rayon/unknown).

@@ -51,6 +51,11 @@ pub(crate) enum FrontendCounter {
     BorrowBlockCount,
     BorrowConflictCheckCount,
     BorrowStateSnapshotCount,
+    BorrowStatementVisitCount,
+    BorrowTerminatorVisitCount,
+    BorrowWorklistIterationCount,
+    BorrowStateJoinCount,
+    BorrowPlaceAccessCount,
     BorrowStatementFactCount,
     BorrowTerminatorFactCount,
     BorrowValueFactCount,
@@ -69,7 +74,21 @@ pub(crate) enum FrontendCounter {
     TypeCompatibilityCacheMisses,
     StringTableFullClones,
     StringTableMergeFromSourceEntriesScanned,
+    StringTableDeltaMergeCalls,
+    StringTableDeltaEntriesScanned,
+    // These identity/non-identity counters are emitted only by detailed-timer
+    // identity scans so default builds avoid extra remap traversal cost.
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    StringTableDeltaIdentityRemaps,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    StringTableDeltaNonIdentityRemaps,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    StringTableDeltaNonIdentityEntries,
     ModuleRemapStringIdsCalls,
+    FilePrepareOutputRemapCalls,
+    FilePrepareErrorRemapCalls,
+    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    FilePrepareNonIdentityPayloadRemaps,
 
     // Arena capacity-estimate counters (Phase 1).
     EstimatedScopeFrames,
@@ -164,9 +183,22 @@ mod detailed {
     static BORROW_BLOCK_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BORROW_CONFLICT_CHECK_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BORROW_STATE_SNAPSHOT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BORROW_STATEMENT_VISIT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BORROW_TERMINATOR_VISIT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BORROW_WORKLIST_ITERATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BORROW_STATE_JOIN_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BORROW_PLACE_ACCESS_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BORROW_STATEMENT_FACT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BORROW_TERMINATOR_FACT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BORROW_VALUE_FACT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STRING_TABLE_DELTA_MERGE_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static STRING_TABLE_DELTA_ENTRIES_SCANNED: AtomicUsize = AtomicUsize::new(0);
+    static STRING_TABLE_DELTA_IDENTITY_REMAPS: AtomicUsize = AtomicUsize::new(0);
+    static STRING_TABLE_DELTA_NON_IDENTITY_REMAPS: AtomicUsize = AtomicUsize::new(0);
+    static STRING_TABLE_DELTA_NON_IDENTITY_ENTRIES: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARE_OUTPUT_REMAP_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARE_ERROR_REMAP_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARE_NON_IDENTITY_PAYLOAD_REMAPS: AtomicUsize = AtomicUsize::new(0);
 
     pub(crate) fn reset_frontend_counters() {
         for counter in all_counters() {
@@ -200,7 +232,7 @@ mod detailed {
         }
     }
 
-    fn all_counters() -> [FrontendCounter; 63] {
+    fn all_counters() -> [FrontendCounter; 76] {
         [
             FrontendCounter::ModuleCount,
             FrontendCounter::SourceFileCount,
@@ -235,6 +267,11 @@ mod detailed {
             FrontendCounter::BorrowBlockCount,
             FrontendCounter::BorrowConflictCheckCount,
             FrontendCounter::BorrowStateSnapshotCount,
+            FrontendCounter::BorrowStatementVisitCount,
+            FrontendCounter::BorrowTerminatorVisitCount,
+            FrontendCounter::BorrowWorklistIterationCount,
+            FrontendCounter::BorrowStateJoinCount,
+            FrontendCounter::BorrowPlaceAccessCount,
             FrontendCounter::BorrowStatementFactCount,
             FrontendCounter::BorrowTerminatorFactCount,
             FrontendCounter::BorrowValueFactCount,
@@ -251,7 +288,15 @@ mod detailed {
             FrontendCounter::TypeCompatibilityCacheMisses,
             FrontendCounter::StringTableFullClones,
             FrontendCounter::StringTableMergeFromSourceEntriesScanned,
+            FrontendCounter::StringTableDeltaMergeCalls,
+            FrontendCounter::StringTableDeltaEntriesScanned,
+            FrontendCounter::StringTableDeltaIdentityRemaps,
+            FrontendCounter::StringTableDeltaNonIdentityRemaps,
+            FrontendCounter::StringTableDeltaNonIdentityEntries,
             FrontendCounter::ModuleRemapStringIdsCalls,
+            FrontendCounter::FilePrepareOutputRemapCalls,
+            FrontendCounter::FilePrepareErrorRemapCalls,
+            FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
             FrontendCounter::EstimatedScopeFrames,
             FrontendCounter::ActualScopeFrames,
             FrontendCounter::ScopeArenaCapacity,
@@ -336,6 +381,16 @@ mod detailed {
 
             FrontendCounter::BorrowStateSnapshotCount => &BORROW_STATE_SNAPSHOT_COUNT,
 
+            FrontendCounter::BorrowStatementVisitCount => &BORROW_STATEMENT_VISIT_COUNT,
+
+            FrontendCounter::BorrowTerminatorVisitCount => &BORROW_TERMINATOR_VISIT_COUNT,
+
+            FrontendCounter::BorrowWorklistIterationCount => &BORROW_WORKLIST_ITERATION_COUNT,
+
+            FrontendCounter::BorrowStateJoinCount => &BORROW_STATE_JOIN_COUNT,
+
+            FrontendCounter::BorrowPlaceAccessCount => &BORROW_PLACE_ACCESS_COUNT,
+
             FrontendCounter::BorrowStatementFactCount => &BORROW_STATEMENT_FACT_COUNT,
 
             FrontendCounter::BorrowTerminatorFactCount => &BORROW_TERMINATOR_FACT_COUNT,
@@ -382,7 +437,29 @@ mod detailed {
                 &STRING_TABLE_MERGE_FROM_SOURCE_ENTRIES_SCANNED
             }
 
+            FrontendCounter::StringTableDeltaMergeCalls => &STRING_TABLE_DELTA_MERGE_CALLS,
+
+            FrontendCounter::StringTableDeltaEntriesScanned => &STRING_TABLE_DELTA_ENTRIES_SCANNED,
+
+            FrontendCounter::StringTableDeltaIdentityRemaps => &STRING_TABLE_DELTA_IDENTITY_REMAPS,
+
+            FrontendCounter::StringTableDeltaNonIdentityRemaps => {
+                &STRING_TABLE_DELTA_NON_IDENTITY_REMAPS
+            }
+
+            FrontendCounter::StringTableDeltaNonIdentityEntries => {
+                &STRING_TABLE_DELTA_NON_IDENTITY_ENTRIES
+            }
+
             FrontendCounter::ModuleRemapStringIdsCalls => &MODULE_REMAP_STRING_IDS_CALLS,
+
+            FrontendCounter::FilePrepareOutputRemapCalls => &FILE_PREPARE_OUTPUT_REMAP_CALLS,
+
+            FrontendCounter::FilePrepareErrorRemapCalls => &FILE_PREPARE_ERROR_REMAP_CALLS,
+
+            FrontendCounter::FilePrepareNonIdentityPayloadRemaps => {
+                &FILE_PREPARE_NON_IDENTITY_PAYLOAD_REMAPS
+            }
 
             FrontendCounter::EstimatedScopeFrames => &ESTIMATED_SCOPE_FRAMES,
 
@@ -490,6 +567,16 @@ mod detailed {
 
             FrontendCounter::BorrowStateSnapshotCount => "borrow/state snapshot count",
 
+            FrontendCounter::BorrowStatementVisitCount => "borrow/statement visit count",
+
+            FrontendCounter::BorrowTerminatorVisitCount => "borrow/terminator visit count",
+
+            FrontendCounter::BorrowWorklistIterationCount => "borrow/worklist iteration count",
+
+            FrontendCounter::BorrowStateJoinCount => "borrow/state join count",
+
+            FrontendCounter::BorrowPlaceAccessCount => "borrow/place access count",
+
             FrontendCounter::BorrowStatementFactCount => "borrow/statement fact count",
 
             FrontendCounter::BorrowTerminatorFactCount => "borrow/terminator fact count",
@@ -540,7 +627,29 @@ mod detailed {
                 "StringTable/merge_from source entries scanned"
             }
 
+            FrontendCounter::StringTableDeltaMergeCalls => "StringTable/delta merge calls",
+
+            FrontendCounter::StringTableDeltaEntriesScanned => "StringTable/delta entries scanned",
+
+            FrontendCounter::StringTableDeltaIdentityRemaps => "StringTable/delta identity remaps",
+
+            FrontendCounter::StringTableDeltaNonIdentityRemaps => {
+                "StringTable/delta non-identity remaps"
+            }
+
+            FrontendCounter::StringTableDeltaNonIdentityEntries => {
+                "StringTable/delta non-identity entries"
+            }
+
             FrontendCounter::ModuleRemapStringIdsCalls => "Module/remap_string_ids count",
+
+            FrontendCounter::FilePrepareOutputRemapCalls => "file prepare/output remap calls",
+
+            FrontendCounter::FilePrepareErrorRemapCalls => "file prepare/error remap calls",
+
+            FrontendCounter::FilePrepareNonIdentityPayloadRemaps => {
+                "file prepare/non-identity payload remaps"
+            }
 
             FrontendCounter::EstimatedScopeFrames => "arena/estimated scope frames",
 
@@ -648,6 +757,16 @@ mod detailed {
 
             FrontendCounter::BorrowStateSnapshotCount => "borrow_state_snapshot_count",
 
+            FrontendCounter::BorrowStatementVisitCount => "borrow_statement_visit_count",
+
+            FrontendCounter::BorrowTerminatorVisitCount => "borrow_terminator_visit_count",
+
+            FrontendCounter::BorrowWorklistIterationCount => "borrow_worklist_iteration_count",
+
+            FrontendCounter::BorrowStateJoinCount => "borrow_state_join_count",
+
+            FrontendCounter::BorrowPlaceAccessCount => "borrow_place_access_count",
+
             FrontendCounter::BorrowStatementFactCount => "borrow_statement_fact_count",
 
             FrontendCounter::BorrowTerminatorFactCount => "borrow_terminator_fact_count",
@@ -696,7 +815,29 @@ mod detailed {
                 "string_table_merge_source_entries_scanned"
             }
 
+            FrontendCounter::StringTableDeltaMergeCalls => "string_table_delta_merge_calls",
+
+            FrontendCounter::StringTableDeltaEntriesScanned => "string_table_delta_entries_scanned",
+
+            FrontendCounter::StringTableDeltaIdentityRemaps => "string_table_delta_identity_remaps",
+
+            FrontendCounter::StringTableDeltaNonIdentityRemaps => {
+                "string_table_delta_non_identity_remaps"
+            }
+
+            FrontendCounter::StringTableDeltaNonIdentityEntries => {
+                "string_table_delta_non_identity_entries"
+            }
+
             FrontendCounter::ModuleRemapStringIdsCalls => "module_remap_string_ids_calls",
+
+            FrontendCounter::FilePrepareOutputRemapCalls => "file_prepare_output_remap_calls",
+
+            FrontendCounter::FilePrepareErrorRemapCalls => "file_prepare_error_remap_calls",
+
+            FrontendCounter::FilePrepareNonIdentityPayloadRemaps => {
+                "file_prepare_non_identity_payload_remaps"
+            }
 
             FrontendCounter::EstimatedScopeFrames => "estimated_scope_frames",
 

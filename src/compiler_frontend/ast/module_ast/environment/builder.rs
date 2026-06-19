@@ -39,6 +39,7 @@ use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationMetadata, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::parse_file_headers::Header;
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -386,6 +387,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &mut self,
         declaration: Declaration,
     ) -> Result<(), CompilerError> {
+        increment_ast_counter(AstCounter::DeclarationTableReplacements);
+
         if self
             .declaration_table_mut()?
             .replace_by_path(declaration)

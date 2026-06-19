@@ -30,6 +30,7 @@ use std::process::Command;
 #[derive(Debug, Clone)]
 pub struct CompilerBinary {
     pub path: PathBuf,
+    pub symbol_dirs: Vec<PathBuf>,
 }
 
 impl CompilerBinary {
@@ -66,7 +67,10 @@ pub fn build_release_compiler_with_timers() -> Result<CompilerBinary, String> {
         ));
     }
 
-    Ok(CompilerBinary { path: bean_path })
+    Ok(CompilerBinary {
+        path: bean_path,
+        symbol_dirs: Vec::new(),
+    })
 }
 
 /// Build the compiler with profiling profile, detailed timers, and forced frame pointers
@@ -114,7 +118,10 @@ pub fn build_profiling_compiler_with_timers() -> Result<CompilerBinary, String> 
         ));
     }
 
-    Ok(CompilerBinary { path: bean_path })
+    Ok(CompilerBinary {
+        symbol_dirs: prepare_profiling_symbol_dirs(&bean_path),
+        path: bean_path,
+    })
 }
 
 /// Build the release compiler path for the current platform suffix.
@@ -151,6 +158,76 @@ fn compiler_path_with_suffix(base: &str, exe_suffix: &str) -> PathBuf {
 
     bean_path
 }
+
+/// Prepare symbol lookup directories for the profiling binary.
+///
+/// WHAT: On macOS, asks `dsymutil` to materialize a `.dSYM` bundle when the
+/// tool is available, then returns deterministic symbol directories for Samply.
+/// WHY: Samply can record useful stage data without symbols, but raw-address
+/// function names are not actionable for optimization decisions.
+fn prepare_profiling_symbol_dirs(bean_path: &Path) -> Vec<PathBuf> {
+    generate_macos_dsym_if_available(bean_path);
+    candidate_symbol_dirs_for_binary(bean_path)
+}
+
+fn candidate_symbol_dirs_for_binary(bean_path: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Some(parent) = bean_path.parent() {
+        push_existing_dir(&mut dirs, parent.to_path_buf());
+    }
+
+    let dsym_bundle = dsym_bundle_path(bean_path);
+    push_existing_dir(&mut dirs, dsym_bundle.clone());
+    push_existing_dir(&mut dirs, dsym_bundle.join("Contents/Resources/DWARF"));
+
+    dirs
+}
+
+fn push_existing_dir(dirs: &mut Vec<PathBuf>, dir: PathBuf) {
+    if dir.is_dir() && !dirs.iter().any(|existing| existing == &dir) {
+        dirs.push(dir);
+    }
+}
+
+fn dsym_bundle_path(bean_path: &Path) -> PathBuf {
+    let mut bundle_name = bean_path
+        .file_name()
+        .map(|name| name.to_os_string())
+        .unwrap_or_else(|| "bean".into());
+    bundle_name.push(".dSYM");
+
+    bean_path.with_file_name(bundle_name)
+}
+
+#[cfg(target_os = "macos")]
+fn generate_macos_dsym_if_available(bean_path: &Path) {
+    let dsym_bundle = dsym_bundle_path(bean_path);
+    let output = Command::new("dsymutil")
+        .arg(bean_path)
+        .arg("-o")
+        .arg(&dsym_bundle)
+        .output();
+
+    let Ok(output) = output else {
+        eprintln!(
+            "Warning: dsymutil was not available; Samply symbolication will use binary symbols only."
+        );
+        return;
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!(
+            "Warning: dsymutil failed while preparing '{}': {}",
+            bean_path.display(),
+            stderr.trim()
+        );
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn generate_macos_dsym_if_available(_bean_path: &Path) {}
 
 #[cfg(test)]
 mod tests;

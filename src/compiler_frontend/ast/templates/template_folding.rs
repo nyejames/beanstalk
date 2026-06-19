@@ -6,6 +6,8 @@
 //! WHY: Keeps compile-time folding on the same AST-prepared render-plan shapes
 //! that runtime lowering consumes, without entangling parser or HIR code.
 
+use std::borrow::Cow;
+
 use crate::ast_log;
 use crate::compiler_frontend::ast::const_eval::constant_fold;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -34,6 +36,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticSeverity, InvalidTemplateStructureReason,
 };
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -131,7 +134,7 @@ impl Template {
                 &self.style,
                 fold_context.string_table,
             )
-            .map(|result| result.plan)
+            .map(|result| Cow::Owned(result.plan))
             .map_err(|messages| {
                 messages
                     .into_diagnostics()
@@ -146,13 +149,11 @@ impl Template {
                     })
             })?
         } else {
-            self.render_plan
-                .clone()
-                .unwrap_or_else(|| TemplateRenderPlan::from_content(&self.content))
+            render_plan_for_folding(self.render_plan.as_ref(), &self.content)
         };
 
         // 2. Recursively fold the plan into a final string.
-        fold_plan(&plan, fold_context)
+        fold_plan(plan.as_ref(), fold_context)
     }
 
     pub(crate) fn fold_to_emission(
@@ -227,12 +228,9 @@ fn fold_conditional_branch(
     branch: &TemplateConditionalBranch,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let branch_plan = branch
-        .render_plan
-        .clone()
-        .unwrap_or_else(|| TemplateRenderPlan::from_content(&branch.content));
+    let branch_plan = render_plan_for_folding(branch.render_plan.as_ref(), &branch.content);
 
-    fold_plan_to_emission(&branch_plan, fold_context)
+    fold_plan_to_emission(branch_plan.as_ref(), fold_context)
 }
 
 fn fold_selected_branch_with_bindings<const N: usize>(
@@ -270,11 +268,8 @@ fn fold_fallback_branch(
         return Ok(TemplateEmission::NoOutput);
     };
 
-    let fallback_plan = fallback
-        .render_plan
-        .clone()
-        .unwrap_or_else(|| TemplateRenderPlan::from_content(&fallback.content));
-    fold_plan_to_emission(&fallback_plan, fold_context)
+    let fallback_plan = render_plan_for_folding(fallback.render_plan.as_ref(), &fallback.content);
+    fold_plan_to_emission(fallback_plan.as_ref(), fold_context)
 }
 
 enum ConstOptionPresence {
@@ -326,10 +321,10 @@ fn fold_template_loop(
     template_loop: &TemplateLoopControlFlow,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let body_plan = template_loop
-        .body_render_plan
-        .clone()
-        .unwrap_or_else(|| TemplateRenderPlan::from_content(&template_loop.body_content));
+    let body_plan = render_plan_for_folding(
+        template_loop.body_render_plan.as_ref(),
+        &template_loop.body_content,
+    );
 
     let mut aggregate = String::new();
     let mut emitted_output = false;
@@ -357,10 +352,11 @@ fn fold_template_loop(
             )?;
 
             while let Some(counter) = cursor.next_counter()? {
+                add_ast_counter(AstCounter::TemplateFoldLoopIterations, 1);
                 let iteration_bindings =
                     build_range_iteration_bindings(bindings, counter, cursor.iteration_count() - 1);
                 let (did_emit, signal) = fold_template_loop_iteration(
-                    &body_plan,
+                    body_plan.as_ref(),
                     iteration_bindings,
                     fold_context,
                     &template_loop.location,
@@ -380,6 +376,7 @@ fn fold_template_loop(
         TemplateLoopHeader::Collection { bindings, iterable } => {
             let items = const_collection_items(iterable)?;
             for (index, item) in items.iter().enumerate() {
+                add_ast_counter(AstCounter::TemplateFoldLoopIterations, 1);
                 if index >= fold_context.template_const_loop_iteration_limit {
                     return Err(CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded {
@@ -392,7 +389,7 @@ fn fold_template_loop(
 
                 let iteration_bindings = build_collection_iteration_bindings(bindings, item, index);
                 let (did_emit, signal) = fold_template_loop_iteration(
-                    &body_plan,
+                    body_plan.as_ref(),
                     iteration_bindings,
                     fold_context,
                     &template_loop.location,
@@ -604,6 +601,10 @@ fn apply_conditional_child_wrappers(
             signal_kind,
         ));
     }
+    add_ast_counter(
+        AstCounter::TemplateWrapperApplications,
+        template.conditional_child_wrappers.len(),
+    );
 
     let output_expression =
         crate::compiler_frontend::ast::expressions::expression::Expression::string_slice(
@@ -851,6 +852,8 @@ fn fold_plan_to_emission(
     plan: &TemplateRenderPlan,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
+    add_ast_counter(AstCounter::TemplateFoldPlanPiecesVisited, plan.pieces.len());
+
     let mut output_buffer = String::new();
     let mut emitted_output = false;
 
@@ -875,4 +878,16 @@ fn fold_plan_to_emission(
     Ok(TemplateEmission::Output(
         fold_context.string_table.intern(&output_buffer),
     ))
+}
+
+fn render_plan_for_folding<'a>(
+    existing_plan: Option<&'a TemplateRenderPlan>,
+    content: &'a TemplateContent,
+) -> Cow<'a, TemplateRenderPlan> {
+    if let Some(plan) = existing_plan {
+        return Cow::Borrowed(plan);
+    }
+
+    add_ast_counter(AstCounter::TemplateFoldFallbackPlanBuilds, 1);
+    Cow::Owned(TemplateRenderPlan::from_content(content))
 }

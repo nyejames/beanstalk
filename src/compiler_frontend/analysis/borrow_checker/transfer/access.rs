@@ -25,6 +25,7 @@ use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 mod conflicts;
 mod move_decision;
@@ -467,6 +468,8 @@ fn roots_for_place(
     location: SourceLocation,
     diagnostics: &BorrowDiagnostics<'_>,
 ) -> Result<RootSet, BorrowCheckError> {
+    increment_frontend_counter(FrontendCounter::BorrowPlaceAccessCount);
+
     match place {
         HirPlace::Local(local_id) => {
             let Some(local_index) = layout.index_of(*local_id) else {

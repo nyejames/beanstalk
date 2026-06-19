@@ -417,6 +417,7 @@ impl StringTable {
     pub fn merge_delta_from(&mut self, other: &StringTable, base_len: usize) -> StringIdRemap {
         debug_assert!(base_len <= self.len());
         debug_assert!(base_len <= other.len());
+        increment_frontend_counter(FrontendCounter::StringTableDeltaMergeCalls);
 
         #[cfg(debug_assertions)]
         for index in 0..base_len {
@@ -429,6 +430,7 @@ impl StringTable {
             FrontendCounter::StringTableMergeFromSourceEntriesScanned,
             delta_len,
         );
+        add_frontend_counter(FrontendCounter::StringTableDeltaEntriesScanned, delta_len);
 
         let mut mapped_suffix = Vec::with_capacity(delta_len);
         for (old_id, string) in other.iter().skip(base_len) {
@@ -437,6 +439,24 @@ impl StringTable {
 
             let new_id = self.intern(string);
             mapped_suffix.push(new_id);
+        }
+
+        #[cfg(feature = "detailed_timers")]
+        {
+            let non_identity_entries = mapped_suffix
+                .iter()
+                .enumerate()
+                .filter(|(offset, mapped)| mapped.0 as usize != base_len + *offset)
+                .count();
+            if non_identity_entries == 0 {
+                increment_frontend_counter(FrontendCounter::StringTableDeltaIdentityRemaps);
+            } else {
+                increment_frontend_counter(FrontendCounter::StringTableDeltaNonIdentityRemaps);
+                add_frontend_counter(
+                    FrontendCounter::StringTableDeltaNonIdentityEntries,
+                    non_identity_entries,
+                );
+            }
         }
 
         StringIdRemap {

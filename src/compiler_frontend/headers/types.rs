@@ -495,6 +495,12 @@ impl FileFrontendPrepareOutput {
     ///      stages resolve names through the global table.
     // Called when merging per-file frontend outputs into the module-wide compilation.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        // Per-file merges frequently append strings without changing numeric IDs; avoid walking
+        // the full token/header/template payload when those IDs already target the merged table.
+        if remap.is_identity() {
+            return;
+        }
+
         self.source_file.remap_string_ids(remap);
 
         for import in &mut self.file_imports {
@@ -524,6 +530,11 @@ impl FileFrontendPrepareError {
     ///      emitted warnings before the error, and those strings must resolve through the global table.
     // Called when merging per-file frontend outputs into the module-wide compilation.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        // Keep failed-file diagnostics on the same identity fast path as successful outputs.
+        if remap.is_identity() {
+            return;
+        }
+
         for warning in &mut self.warnings {
             warning.remap_string_ids(remap);
         }

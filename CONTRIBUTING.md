@@ -34,6 +34,8 @@ New code contributions must follow the [codebase style guide](docs/codebase-styl
 | `just profile` | Profiling a case with Samply (default terse filter) | No — all outputs local-only |
 | `just profile <filter>` | Profiling with a specific filter (terse, normal, deep, raw-index) | No — all outputs local-only |
 | `just profile-case <case> [filter]` | Profiling one specific benchmark case | No — all outputs local-only |
+| `just profile-symbolicated [filter]` | Profiling with Samply presymbolication requested | No — all outputs local-only |
+| `just profile-case-symbolicated <case> [filter]` | Profiling one case with Samply presymbolication requested | No — all outputs local-only |
 | `just profile-build` | Building a profiling binary after a benchmark report identifies a target | No tracked output |
 
 ---
@@ -157,9 +159,10 @@ Use `just bench-report` first to identify which case and stage are worth investi
 just bench-report                          # find the target case and stage
 just profile                               # profile all cases, default terse filter
 just profile-case <case-name> normal       # profile one case with more detail
+just profile-case-symbolicated <case-name> # retry with explicit presymbolication
 ```
 
-Read `benchmarks/local-data/profiles/<run-id>/agent-summary.md` first. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
+The profiling build prepares symbol directories for `target/profiling/bean` where available and passes them to Samply. Profile summaries mark raw-address-heavy function lists as symbolication failures; treat those function hotspots as non-actionable and use stage/counter data until symbolication succeeds. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
 
 All profiling outputs are local-only under `benchmarks/local-data/`. Do not commit them.
 

@@ -47,6 +47,12 @@ profile filter="terse":
 profile-case case filter="terse":
     cargo run --package xtask --bin xtask -- bench-profile --case {{case}} --filter {{filter}}
 
+profile-symbolicated filter="terse":
+    cargo run --package xtask --bin xtask -- bench-profile --filter {{filter}} --presymbolicate
+
+profile-case-symbolicated case filter="terse":
+    cargo run --package xtask --bin xtask -- bench-profile --case {{case}} --filter {{filter}} --presymbolicate
+
 profile-build:
     RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --features detailed_timers --bin bean
 

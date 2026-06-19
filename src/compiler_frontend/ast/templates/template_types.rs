@@ -227,7 +227,7 @@ impl Template {
 
         if let Some(plan) = &mut self.runtime_slot_application {
             // Runtime slot application templates use the wrapper plan directly.
-            self.render_plan = Some(plan.wrapper_plan.clone());
+            self.render_plan = Some(plan.wrapper_plan.clone_recording_template_churn());
             return;
         }
 

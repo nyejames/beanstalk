@@ -9,7 +9,7 @@
 //! most relevant functions without noise.
 
 use super::*;
-use crate::profile::parse::{ParsedProfileSummary, parse_profile_json};
+use crate::profile::parse::{ParsedProfileSummary, ProfileFunctionSamples, parse_profile_json};
 use std::path::Path;
 
 /// Path to the minimal test fixture profile.
@@ -194,6 +194,47 @@ fn terse_mode_excludes_edges() {
             "Terse mode should not populate callee edges"
         );
     }
+}
+
+#[test]
+fn raw_address_functions_mark_symbolication_failed() {
+    let summary = ParsedProfileSummary {
+        total_sample_count: 200,
+        total_sample_weight: 200.0,
+        functions: vec![
+            ProfileFunctionSamples {
+                name: "0x1234abcd".to_string(),
+                inclusive_samples: 120.0,
+                self_samples: 60.0,
+                thread_names: vec!["Main".to_string()],
+                callers: Vec::new(),
+                callees: Vec::new(),
+            },
+            ProfileFunctionSamples {
+                name: "0x5678abcd".to_string(),
+                inclusive_samples: 80.0,
+                self_samples: 40.0,
+                thread_names: vec!["Main".to_string()],
+                callers: Vec::new(),
+                callees: Vec::new(),
+            },
+        ],
+        warnings: Vec::new(),
+    };
+
+    let result = extract_hotspots(&summary, ProfileFilterMode::Terse, 100.0);
+
+    assert_eq!(
+        result.symbolication.status,
+        SymbolicationStatus::AddressOnly
+    );
+    assert!(result.symbolication.is_failed());
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Symbolication failed"))
+    );
 }
 
 // ----------------------------

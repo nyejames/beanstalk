@@ -691,6 +691,46 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     assert_location_resolves_to(&warning.primary_location, "test.bst", &global);
 }
 
+#[test]
+fn file_frontend_prepare_output_identity_remap_preserves_payload() {
+    let mut local = StringTable::new();
+    let mut global = StringTable::new();
+
+    let source_file = InternedPath::from_single_str("src/main.bst", &mut local);
+    let warning = make_unknown_name_diagnostic("warn_name", &mut local);
+
+    let mut output = FileFrontendPrepareOutput {
+        source_file,
+        file_id: None,
+        token_count: 0,
+        token_stats: TokenStats::default(),
+        file_role: FileRole::Normal,
+        file_imports: Vec::new(),
+        canonical_os_path: None,
+        headers: Vec::new(),
+        top_level_const_fragments: Vec::new(),
+        const_template_count: 0,
+        runtime_fragment_count: 0,
+        warnings: vec![warning],
+    };
+
+    let remap = global.merge_from(&local);
+    assert!(remap.is_identity());
+
+    output.remap_string_ids(&remap);
+
+    assert_eq!(
+        output.source_file.to_portable_string(&global),
+        "src/main.bst"
+    );
+
+    let DiagnosticPayload::UnknownName { name, .. } = &output.warnings[0].payload else {
+        panic!("expected UnknownName payload");
+    };
+    assert_eq!(global.resolve(*name), "warn_name");
+    assert_location_resolves_to(&output.warnings[0].primary_location, "test.bst", &global);
+}
+
 // -----------------------------------------------------------
 //  FileFrontendPrepareError remapping tests
 // -----------------------------------------------------------
@@ -732,6 +772,40 @@ fn file_frontend_prepare_error_remaps_warnings_and_diagnostic() {
     assert_location_resolves_to(&error.warnings[1].primary_location, "test.bst", &global);
 
     // Primary diagnostic remapped.
+    let DiagnosticPayload::UnknownName {
+        name: error_name, ..
+    } = &error.diagnostic.payload
+    else {
+        panic!("expected UnknownName payload");
+    };
+    assert_eq!(global.resolve(*error_name), "error_name");
+    assert_location_resolves_to(&error.diagnostic.primary_location, "test.bst", &global);
+}
+
+#[test]
+fn file_frontend_prepare_error_identity_remap_preserves_payload() {
+    let mut local = StringTable::new();
+    let mut global = StringTable::new();
+
+    let warning = make_unknown_name_diagnostic("warn_name", &mut local);
+    let diagnostic = make_unknown_name_diagnostic("error_name", &mut local);
+
+    let mut error = FileFrontendPrepareError {
+        warnings: vec![warning],
+        diagnostic: Box::new(diagnostic),
+    };
+
+    let remap = global.merge_from(&local);
+    assert!(remap.is_identity());
+
+    error.remap_string_ids(&remap);
+
+    let DiagnosticPayload::UnknownName { name, .. } = &error.warnings[0].payload else {
+        panic!("expected UnknownName payload");
+    };
+    assert_eq!(global.resolve(*name), "warn_name");
+    assert_location_resolves_to(&error.warnings[0].primary_location, "test.bst", &global);
+
     let DiagnosticPayload::UnknownName {
         name: error_name, ..
     } = &error.diagnostic.payload

@@ -354,6 +354,8 @@ impl FrontendModuleBuildContext<'_> {
             let remap = compiler
                 .string_table
                 .merge_delta_from(&local_string_table, base_len);
+            #[cfg(feature = "detailed_timers")]
+            let remap_is_identity = remap.is_identity();
 
             match result {
                 Ok(mut output) => {
@@ -363,11 +365,27 @@ impl FrontendModuleBuildContext<'_> {
                     if output.runtime_fragment_count > 0 {
                         runtime_fragment_source_count += 1;
                     }
+                    add_frontend_counter(FrontendCounter::FilePrepareOutputRemapCalls, 1);
+                    #[cfg(feature = "detailed_timers")]
+                    if !remap_is_identity {
+                        add_frontend_counter(
+                            FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
+                            1,
+                        );
+                    }
                     output.remap_string_ids(&remap);
                     warnings.append(&mut output.warnings);
                     prepared_outputs.push(output);
                 }
                 Err(mut error) => {
+                    add_frontend_counter(FrontendCounter::FilePrepareErrorRemapCalls, 1);
+                    #[cfg(feature = "detailed_timers")]
+                    if !remap_is_identity {
+                        add_frontend_counter(
+                            FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
+                            1,
+                        );
+                    }
                     error.remap_string_ids(&remap);
                     warnings.extend(error.warnings);
                     diagnostics.push(*error.diagnostic);
@@ -576,6 +594,22 @@ fn record_borrow_counters(report: &BorrowCheckReport) {
     add_frontend_counter(
         FrontendCounter::BorrowStateSnapshotCount,
         state_snapshot_count,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowStatementVisitCount,
+        report.stats.statements_analyzed,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowTerminatorVisitCount,
+        report.stats.terminators_analyzed,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowWorklistIterationCount,
+        report.stats.worklist_iterations,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowStateJoinCount,
+        report.stats.state_joins,
     );
 
     add_frontend_counter(

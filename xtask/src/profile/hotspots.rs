@@ -56,6 +56,66 @@ pub(crate) struct HotspotExtractionResult {
     pub(crate) total_sample_weight: f64,
     /// Observation pass wall time in milliseconds (for ms estimation).
     pub(crate) wall_time_ms: f64,
+    /// Whether hot function names were symbolicated enough to be actionable.
+    pub(crate) symbolication: SymbolicationHealth,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SymbolicationHealth {
+    pub(crate) status: SymbolicationStatus,
+    pub(crate) hot_function_count: usize,
+    pub(crate) raw_address_function_count: usize,
+    pub(crate) raw_address_ratio: f64,
+}
+
+impl SymbolicationHealth {
+    fn from_functions(functions: &[ProfileHotFunction]) -> Self {
+        let hot_function_count = functions.len();
+        let raw_address_function_count = functions
+            .iter()
+            .filter(|function| is_raw_address_function_name(&function.name))
+            .count();
+        let raw_address_ratio = if hot_function_count == 0 {
+            0.0
+        } else {
+            raw_address_function_count as f64 / hot_function_count as f64
+        };
+        let status = if hot_function_count == 0 {
+            SymbolicationStatus::NoFunctions
+        } else if raw_address_ratio >= 0.5 {
+            SymbolicationStatus::AddressOnly
+        } else {
+            SymbolicationStatus::Healthy
+        };
+
+        Self {
+            status,
+            hot_function_count,
+            raw_address_function_count,
+            raw_address_ratio,
+        }
+    }
+
+    pub(crate) fn is_failed(&self) -> bool {
+        matches!(self.status, SymbolicationStatus::AddressOnly)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SymbolicationStatus {
+    Healthy,
+    AddressOnly,
+    NoFunctions,
+}
+
+impl SymbolicationStatus {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Healthy => "healthy",
+            Self::AddressOnly => "failed_raw_addresses",
+            Self::NoFunctions => "no_functions",
+        }
+    }
 }
 
 /// A single hot function with percentage and estimated millisecond values.
@@ -202,13 +262,32 @@ pub(crate) fn extract_hotspots(
         }
     }
 
+    let symbolication = SymbolicationHealth::from_functions(&candidates);
+    if symbolication.is_failed() {
+        warnings.push(format!(
+            "Symbolication failed: {}/{} hot functions are raw addresses; function hotspots are not actionable.",
+            symbolication.raw_address_function_count, symbolication.hot_function_count
+        ));
+    }
+
     HotspotExtractionResult {
         functions: candidates,
         warnings,
         total_sample_count: summary.total_sample_count,
         total_sample_weight: summary.total_sample_weight,
         wall_time_ms,
+        symbolication,
     }
+}
+
+/// Detect raw hexadecimal address names emitted when Samply cannot resolve symbols.
+pub(crate) fn is_raw_address_function_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
+        return trimmed[2..].chars().all(|c| c.is_ascii_hexdigit());
+    }
+
+    false
 }
 
 /// Calculate a percentage of total weight, returning 0.0 for zero total.

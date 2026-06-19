@@ -3,7 +3,10 @@
 use super::*;
 use crate::bench_types::{BenchmarkCaseObservations, BenchmarkMetric};
 use crate::profile::buckets::ProfileOwnerBucketMatch;
-use crate::profile::hotspots::{HotspotExtractionResult, ProfileHotFunction};
+use crate::profile::hotspots::{
+    HotspotExtractionResult, ProfileHotFunction, SymbolicationHealth, SymbolicationStatus,
+    is_raw_address_function_name,
+};
 use crate::profile::observations::ProfileObservation;
 use crate::profile::options::ProfileFilterMode;
 
@@ -36,12 +39,36 @@ fn make_hotspots(
     functions: Vec<ProfileHotFunction>,
     warnings: Vec<String>,
 ) -> HotspotExtractionResult {
+    let hot_function_count = functions.len();
+    let raw_address_function_count = functions
+        .iter()
+        .filter(|function| is_raw_address_function_name(&function.name))
+        .count();
+    let raw_address_ratio = if hot_function_count == 0 {
+        0.0
+    } else {
+        raw_address_function_count as f64 / hot_function_count as f64
+    };
+    let status = if hot_function_count == 0 {
+        SymbolicationStatus::NoFunctions
+    } else if raw_address_ratio >= 0.5 {
+        SymbolicationStatus::AddressOnly
+    } else {
+        SymbolicationStatus::Healthy
+    };
+
     HotspotExtractionResult {
         functions,
         warnings,
         total_sample_count: 1000,
         total_sample_weight: 1000.0,
         wall_time_ms: 100.0,
+        symbolication: SymbolicationHealth {
+            status,
+            hot_function_count,
+            raw_address_function_count,
+            raw_address_ratio,
+        },
     }
 }
 
@@ -249,19 +276,21 @@ fn hint_non_beanstalk_dominant() {
 
 #[test]
 fn unsymbolicated_hex_address() {
-    assert!(is_unsymbolicated("0x7fff20304050"));
-    assert!(is_unsymbolicated("0x10abcdef"));
-    assert!(is_unsymbolicated("0X1234"));
+    assert!(is_raw_address_function_name("0x7fff20304050"));
+    assert!(is_raw_address_function_name("0x10abcdef"));
+    assert!(is_raw_address_function_name("0X1234"));
 }
 
 #[test]
 fn unsymbolicated_normal_names() {
-    assert!(!is_unsymbolicated(
+    assert!(!is_raw_address_function_name(
         "beanstalk::compiler_frontend::ast::build"
     ));
-    assert!(!is_unsymbolicated("std::collections::HashMap::insert"));
-    assert!(!is_unsymbolicated("unknown"));
-    assert!(!is_unsymbolicated(""));
+    assert!(!is_raw_address_function_name(
+        "std::collections::HashMap::insert"
+    ));
+    assert!(!is_raw_address_function_name("unknown"));
+    assert!(!is_raw_address_function_name(""));
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ use crate::compiler_frontend::ast::templates::template_slots::{
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 // Source-authored positional slots are one-based. Index zero is therefore a
@@ -72,6 +73,8 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_template_render_unit
     string_table: &mut StringTable,
     slot_resolution_mode: SlotResolutionMode,
 ) -> Result<PreparedTemplateRenderUnit, TemplateError> {
+    add_ast_counter(AstCounter::TemplateCompositionPasses, 1);
+
     let requires_post_format_recomposition =
         content_requires_post_format_recomposition(&parsed_content, style);
 
@@ -224,6 +227,11 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_conditional_child_wr
     child_wrappers: &[Template],
     string_table: &StringTable,
 ) -> Result<TemplateAggregateRenderPlan, TemplateSlotError> {
+    add_ast_counter(
+        AstCounter::TemplateWrapperApplications,
+        child_wrappers.len(),
+    );
+
     let aggregate_atom = aggregate_placeholder_atom();
     let wrapped_atom = wrap_direct_child_atom(
         &aggregate_atom,
@@ -361,6 +369,11 @@ fn build_unformatted_template_content(
         return Ok(parsed_content.to_owned());
     }
 
+    add_ast_counter(
+        AstCounter::TemplateWrapperApplications,
+        style.child_templates.len(),
+    );
+
     let mut content = apply_inherited_child_templates_to_content(
         parsed_content.to_owned(),
         &style.child_templates,
@@ -419,6 +432,11 @@ fn finalize_render_unit_after_formatting(
         let mut content = input.render_plan.rebuild_content();
 
         if input.requires_post_format_recomposition {
+            add_ast_counter(
+                AstCounter::TemplateWrapperApplications,
+                input.style.child_templates.len(),
+            );
+
             content = apply_inherited_child_templates_to_content(
                 content,
                 &input.style.child_templates,

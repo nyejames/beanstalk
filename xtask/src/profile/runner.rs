@@ -50,6 +50,8 @@ pub(crate) struct SamplyRunInput {
     pub(crate) samply_rate_hz: Option<f64>,
     /// Whether to pass `--presymbolicate` to Samply.
     pub(crate) presymbolicate: bool,
+    /// Symbol directories to pass to Samply in deterministic order.
+    pub(crate) symbol_dirs: Vec<PathBuf>,
 }
 
 /// Result of executing a Samply profiling run.
@@ -68,6 +70,8 @@ pub(crate) struct ProfileProcessRun {
     pub(crate) stdout: String,
     /// Captured Samply stderr.
     pub(crate) stderr: String,
+    /// Display form of the Samply command that was executed.
+    pub(crate) command_line: String,
     /// Path where the profile was written.
     ///
     /// Used by tests now and will be used by Phase 4 hotspot extraction.
@@ -129,6 +133,10 @@ pub(crate) fn build_samply_command(input: &SamplyRunInput) -> Command {
         cmd.arg("--unstable-presymbolicate");
     }
 
+    for symbol_dir in &input.symbol_dirs {
+        cmd.arg("--symbol-dir").arg(symbol_dir);
+    }
+
     // The `--` separator followed by the bean command and its arguments.
     cmd.arg("--")
         .arg(&input.bean_path)
@@ -148,10 +156,15 @@ pub(crate) fn build_samply_command(input: &SamplyRunInput) -> Command {
 /// calls for each benchmark case after the observation pass.
 pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, String> {
     let start = Instant::now();
+    let mut command = build_samply_command(input);
+    let command_line = format_command_line(&command);
 
-    let output = build_samply_command(input)
-        .output()
-        .map_err(|e| format!("Failed to spawn Samply: {}", e))?;
+    let output = command.output().map_err(|e| {
+        format!(
+            "Failed to spawn Samply.\nCommand: {}\nError: {}",
+            command_line, e
+        )
+    })?;
 
     let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -164,6 +177,7 @@ pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, St
             success: false,
             stdout,
             stderr,
+            command_line,
             output_path: input.output_path.clone(),
         });
     }
@@ -172,8 +186,10 @@ pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, St
     if !input.output_path.exists() {
         return Err(format!(
             "Samply exited successfully but the profile file was not created at '{}'.\n\
+             Command: {}\n\
              Samply stderr: {}",
             input.output_path.display(),
+            command_line,
             stderr.trim()
         ));
     }
@@ -186,8 +202,25 @@ pub(crate) fn run_samply(input: &SamplyRunInput) -> Result<ProfileProcessRun, St
         success,
         stdout,
         stderr,
+        command_line,
         output_path: input.output_path.clone(),
     })
+}
+
+fn format_command_line(command: &Command) -> String {
+    std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|arg| shell_display_arg(arg.to_string_lossy().as_ref()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_display_arg(arg: &str) -> String {
+    if arg.is_empty() || arg.chars().any(char::is_whitespace) {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    } else {
+        arg.to_string()
+    }
 }
 
 /// Peek the first non-whitespace byte of a gzip-compressed profile file.

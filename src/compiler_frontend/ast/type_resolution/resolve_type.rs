@@ -46,6 +46,7 @@ use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parsed_ref_to_data_type,
 };
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
 
@@ -486,6 +487,8 @@ pub(crate) fn resolve_type(
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> TypeResolutionResult<DataType> {
+    increment_ast_counter(AstCounter::TypeResolutionCalls);
+
     match data_type {
         DataType::NamedType(type_name) => {
             resolve_named_type_from_context(*type_name, location, context, string_table)

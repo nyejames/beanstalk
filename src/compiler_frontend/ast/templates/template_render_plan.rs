@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -75,6 +76,17 @@ pub struct RenderExpressionPiece {
 }
 
 impl TemplateRenderPlan {
+    /// Clone this AST-owned render plan while recording clone pressure for profiling.
+    ///
+    /// WHY: folding and runtime slot metadata sometimes need an owned plan even
+    /// when an authoritative plan already exists. Keeping the counter at the
+    /// clone owner makes render-plan churn visible without changing ownership.
+    pub(crate) fn clone_recording_template_churn(&self) -> Self {
+        add_ast_counter(AstCounter::TemplateRenderPlanCloneCalls, 1);
+        add_ast_counter(AstCounter::TemplateRenderPiecesCloned, self.pieces.len());
+        self.clone()
+    }
+
     /// Remap all pieces in this render plan recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
@@ -295,6 +307,9 @@ impl TemplateRenderPlan {
                 }
             }
         }
+
+        add_ast_counter(AstCounter::TemplateRenderPlansBuilt, 1);
+        add_ast_counter(AstCounter::TemplateRenderPiecesBuilt, pieces.len());
 
         Self { pieces }
     }

@@ -10,3 +10,6 @@ pub(crate) mod frontend_counters;
 
 pub(crate) use ast_counters::*;
 pub(crate) use frontend_counters::*;
+
+#[cfg(test)]
+mod tests;

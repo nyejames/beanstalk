@@ -19,6 +19,7 @@ use super::error::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::template::TemplateContent;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) use types::{
@@ -57,6 +58,12 @@ pub(in crate::compiler_frontend::ast::templates) fn resolve_slot_application(
         let wrapper_content = sources::content_prepared_for_runtime_rendering(&wrapper.content);
         let sources = sources::build_runtime_contribution_sources(&routed, location, string_table);
         let wrapper = sites::build_runtime_wrapper_site_plan(&wrapper_content, &sources, location)?;
+        add_ast_counter(AstCounter::RuntimeSlotApplicationPlansBuilt, 1);
+        add_ast_counter(AstCounter::RuntimeSlotSourcesPlanned, sources.len());
+        add_ast_counter(
+            AstCounter::RuntimeSlotSitesPlanned,
+            wrapper.slot_sites.len(),
+        );
 
         return Ok(SlotResolutionOutcome::Runtime(RuntimeSlotApplicationPlan {
             wrapper_plan: wrapper.wrapper_plan,

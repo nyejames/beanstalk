@@ -265,7 +265,10 @@ impl<'a> BorrowChecker<'a> {
                 }
 
                 let next_state = match in_states.get(&successor) {
-                    Some(existing) => existing.join(&successor_input),
+                    Some(existing) => {
+                        report.stats.state_joins += 1;
+                        existing.join(&successor_input)
+                    }
                     None => successor_input,
                 };
 

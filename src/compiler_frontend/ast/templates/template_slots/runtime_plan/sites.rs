@@ -25,6 +25,7 @@ use crate::compiler_frontend::ast::templates::template_slots::composition::{
 use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
+use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 
 pub(super) struct RuntimeWrapperSitePlan {
     pub(super) wrapper_plan: TemplateRenderPlan,
@@ -178,6 +179,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         child_wrappers: &[Template],
     ) -> Result<RuntimeSlotSiteRenderPlan, TemplateSlotError> {
         for wrapper in child_wrappers.iter().rev() {
+            add_ast_counter(AstCounter::TemplateWrapperApplications, 1);
             plan = self.wrap_site_plan_in_child_wrapper(plan, routing_atom, wrapper)?;
         }
 

@@ -99,6 +99,7 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
     println!("Building profiling compiler...");
     let profiling_binary = build_profiling_compiler_with_timers()?;
     let bean_path = profiling_binary.as_path();
+    let symbol_dirs = profiling_binary.symbol_dirs.clone();
 
     // Get the short commit hash for the run id.
     let commit = get_commit_hash();
@@ -150,14 +151,21 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
             output_path: case_paths.profile_json.clone(),
             samply_rate_hz: options.samply_rate_hz,
             presymbolicate: options.presymbolicate,
+            symbol_dirs: symbol_dirs.clone(),
         };
 
         let samply_run = run_samply(&samply_input)?;
 
         if !samply_run.success {
             return Err(format!(
-                "Samply recording failed for case '{}'.\nStdout: {}\nStderr: {}",
+                "Samply recording failed for case '{}'.\n\
+                 Command: {}\n\
+                 Observation artifacts were written under '{}' before Samply failed.\n\
+                 Stdout: {}\n\
+                 Stderr: {}",
                 case.name,
+                samply_run.command_line,
+                case_paths.case_dir.display(),
                 samply_run.stdout.trim(),
                 samply_run.stderr.trim()
             ));

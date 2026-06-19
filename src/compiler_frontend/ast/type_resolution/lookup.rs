@@ -46,6 +46,7 @@ use crate::compiler_frontend::headers::import_environment::{
     NamespaceMemberLookup, NamespaceRecordSource, NamespaceTypeMember, lookup_namespace_member,
 };
 use crate::compiler_frontend::headers::module_symbols::GenericDeclarationKind;
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
@@ -65,6 +66,8 @@ pub(super) fn resolve_named_type_from_context(
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> TypeResolutionResult<DataType> {
+    increment_ast_counter(AstCounter::VisibleTypeLookupAttempts);
+
     // 1) Generic parameter scope.
     if let Some(generic_scope) = context.generic_parameters
         && let Some(parameter) = generic_scope.resolve(type_name)
@@ -98,6 +101,7 @@ pub(super) fn resolve_named_type_from_context(
     }
 
     // 3) Visible source declarations (path-based first, then name fallback).
+    increment_ast_counter(AstCounter::VisibleSourceTypeLookupAttempts);
     if let Some(visible_source_bindings) = context.visible_source_bindings
         && let Some(canonical_path) = visible_source_bindings.get(&type_name)
         && let Some(declaration) = resolve_declaration_by_path(
@@ -185,6 +189,8 @@ pub(super) fn resolve_namespaced_type_from_context(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
 ) -> TypeResolutionResult<DataType> {
+    increment_ast_counter(AstCounter::VisibleTypeLookupAttempts);
+
     let Some(root_name) = path.first().copied() else {
         return Err(Box::new(CompilerDiagnostic::invalid_type_annotation(
             TypeAnnotationContext::DeclarationTarget,
@@ -255,6 +261,7 @@ pub(super) fn resolve_namespaced_type_from_context(
     }
 
     // The final segment must resolve to a type member of the namespace record we reached.
+    increment_ast_counter(AstCounter::VisibleSourceTypeLookupAttempts);
     match current_record.type_members.get(&final_name) {
         Some(NamespaceTypeMember::SourceDeclaration(canonical_path)) => {
             if let Some(declaration) =
