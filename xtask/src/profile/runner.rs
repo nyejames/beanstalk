@@ -193,10 +193,10 @@ pub(crate) fn build_samply_command(input: &SamplyRunInput) -> Command {
 
     // Optional symbolication. The exact flag changed across Samply versions,
     // so command construction uses the capability probe from `samply record --help`.
-    if input.presymbolicate {
-        if let Some(flag) = input.presymbolication_flag.command_flag() {
-            cmd.arg(flag);
-        }
+    if input.presymbolicate
+        && let Some(flag) = input.presymbolication_flag.command_flag()
+    {
+        cmd.arg(flag);
     }
 
     for symbol_dir in &input.symbol_dirs {

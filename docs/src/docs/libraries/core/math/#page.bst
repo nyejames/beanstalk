@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE MATH]
 
-#[section, $markdown:
+#[section, $md:
     `@core/math` provides common `Float` constants and helper functions.
 
     Constants include `PI`, `TAU`, and `E`.

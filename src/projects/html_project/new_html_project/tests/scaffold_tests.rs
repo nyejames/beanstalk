@@ -34,10 +34,10 @@ fn existing_scaffold_directories_are_not_conflicts() {
 fn existing_config_file_is_conflict() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"old").unwrap();
+    fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
     let conflicts = find_scaffold_conflicts(&project_dir);
-    assert_eq!(conflicts, vec!["#config.bst"]);
+    assert_eq!(conflicts, vec!["config.bst"]);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn gitignore_is_not_a_conflict() {
 fn preflight_fails_without_force_when_conflicts_exist() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"old").unwrap();
+    fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
     let target = empty_target(project_dir.clone());
     let mut prompt = ScriptedPrompt::new(Vec::new());
@@ -87,7 +87,7 @@ fn preflight_fails_without_force_when_conflicts_exist() {
     let error = run_preflight_checks(&target, false, &mut prompt).unwrap_err();
 
     assert!(error.contains("Cannot create project"));
-    assert!(error.contains("#config.bst"));
+    assert!(error.contains("config.bst"));
     assert!(error.contains("--force"));
 }
 
@@ -106,21 +106,21 @@ fn preflight_succeeds_when_no_conflicts_exist() {
 fn preflight_with_force_asks_second_confirmation() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"old").unwrap();
+    fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
     let target = empty_target(project_dir);
     let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
 
     assert!(run_preflight_checks(&target, true, &mut prompt).is_ok());
     assert!(prompt.messages[0].contains("WARNING: --force"));
-    assert!(prompt.messages[0].contains("#config.bst"));
+    assert!(prompt.messages[0].contains("config.bst"));
 }
 
 #[test]
 fn preflight_with_force_cancels_on_decline() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"old").unwrap();
+    fs::write(project_dir.join("config.bst"), b"old").unwrap();
 
     let target = empty_target(project_dir);
     let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
@@ -167,7 +167,7 @@ fn preflight_non_empty_cancelled_performs_no_writes() {
 fn end_to_end_conflict_without_force_performs_no_writes() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"original").unwrap();
+    fs::write(project_dir.join("config.bst"), b"original").unwrap();
 
     let options = NewHtmlProjectOptions {
         raw_path: Some(project_dir.to_string_lossy().to_string()),
@@ -178,7 +178,7 @@ fn end_to_end_conflict_without_force_performs_no_writes() {
     let error = create_html_project_template_with_prompt(options, &mut prompt).unwrap_err();
     assert!(error.contains("Cannot create project"));
 
-    let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+    let content = fs::read_to_string(project_dir.join("config.bst")).unwrap();
     assert_eq!(content, "original");
 }
 
@@ -186,7 +186,7 @@ fn end_to_end_conflict_without_force_performs_no_writes() {
 fn end_to_end_force_overwrites_scaffold_owned_files_only() {
     let temp = tempfile::tempdir().unwrap();
     let project_dir = temp.path().to_path_buf();
-    fs::write(project_dir.join("#config.bst"), b"original").unwrap();
+    fs::write(project_dir.join("config.bst"), b"original").unwrap();
     fs::write(project_dir.join("user-file.txt"), b"keep me").unwrap();
 
     let options = NewHtmlProjectOptions {
@@ -203,7 +203,7 @@ fn end_to_end_force_overwrites_scaffold_owned_files_only() {
     let result = create_html_project_template_with_prompt(options, &mut prompt);
     assert!(result.is_ok(), "expected success, got: {result:?}");
 
-    let config_content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+    let config_content = fs::read_to_string(project_dir.join("config.bst")).unwrap();
     assert!(config_content.contains("name #= "));
 
     let user_content = fs::read_to_string(project_dir.join("user-file.txt")).unwrap();
@@ -223,14 +223,14 @@ fn creates_full_default_scaffold_in_empty_temp_dir() {
 
     let report = write_scaffold(&target, false, &mut prompt).unwrap();
 
-    assert!(project_dir.join("#config.bst").exists());
+    assert!(project_dir.join("config.bst").exists());
     assert!(project_dir.join("src/#page.bst").exists());
     assert!(project_dir.join("lib").exists());
     assert!(project_dir.join("dev/.beanstalk_manifest").exists());
     assert!(project_dir.join("release/.beanstalk_manifest").exists());
     assert!(project_dir.join(".gitignore").exists());
 
-    assert!(report.created.contains(&PathBuf::from("#config.bst")));
+    assert!(report.created.contains(&PathBuf::from("config.bst")));
     assert!(report.created.contains(&PathBuf::from("src/#page.bst")));
     assert!(report.created.contains(&PathBuf::from("lib")));
     assert!(
@@ -259,7 +259,7 @@ fn generated_config_exactly_matches_expected_content() {
 
     write_scaffold(&target, false, &mut prompt).unwrap();
 
-    let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+    let content = fs::read_to_string(project_dir.join("config.bst")).unwrap();
     assert_eq!(
         content,
         super::start_page_scaffolding::config_template("Test Site")
@@ -424,7 +424,7 @@ fn project_name_is_escaped_in_config() {
 
     write_scaffold(&target, false, &mut prompt).unwrap();
 
-    let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+    let content = fs::read_to_string(project_dir.join("config.bst")).unwrap();
     assert!(content.contains(r#"name #= "Say \"hello\"\\back""#));
 }
 
@@ -436,7 +436,7 @@ fn force_replaces_scaffold_owned_files_only() {
     fs::create_dir(project_dir.join("src")).unwrap();
     fs::create_dir(project_dir.join("dev")).unwrap();
     fs::create_dir(project_dir.join("release")).unwrap();
-    fs::write(project_dir.join("#config.bst"), b"old config").unwrap();
+    fs::write(project_dir.join("config.bst"), b"old config").unwrap();
     fs::write(project_dir.join("src/#page.bst"), b"old page").unwrap();
     fs::write(project_dir.join("dev/.beanstalk_manifest"), b"old manifest").unwrap();
     fs::write(
@@ -455,7 +455,7 @@ fn force_replaces_scaffold_owned_files_only() {
 
     let report = write_scaffold(&target, true, &mut prompt).unwrap();
 
-    assert!(report.replaced.contains(&PathBuf::from("#config.bst")));
+    assert!(report.replaced.contains(&PathBuf::from("config.bst")));
     assert!(report.replaced.contains(&PathBuf::from("src/#page.bst")));
     assert!(
         report

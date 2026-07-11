@@ -35,7 +35,6 @@ pub use datatype::DataType;
 pub(crate) use datatype::diagnostic_type_spelling;
 
 pub use environment::TypeEnvironment;
-pub(crate) use fallible_carrier::fallible_carrier_constructor;
 pub use ids::*;
 
 use crate::compiler_frontend::external_packages::ExternalTypeId;

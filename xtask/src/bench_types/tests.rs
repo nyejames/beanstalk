@@ -601,8 +601,33 @@ fn test_friendly_stage_label_maps_known_names() {
     assert_eq!(friendly_stage_label("ast_build_environment_ms"), "ast env");
     assert_eq!(friendly_stage_label("ast_emit_nodes_ms"), "ast emit");
     assert_eq!(friendly_stage_label("ast_finalize_ms"), "ast finalize");
+    assert_eq!(
+        friendly_stage_label("ast_function_body_parse_ms"),
+        "ast func bodies"
+    );
+    assert_eq!(
+        friendly_stage_label("ast_start_body_parse_ms"),
+        "ast start body"
+    );
+    assert_eq!(
+        friendly_stage_label("ast_const_template_parse_ms"),
+        "ast const parse"
+    );
+    assert_eq!(
+        friendly_stage_label("ast_const_template_fold_ms"),
+        "ast const fold"
+    );
     assert_eq!(friendly_stage_label("hir_ms"), "hir");
     assert_eq!(friendly_stage_label("borrow_ms"), "borrow");
+    assert_eq!(
+        friendly_stage_label("command.check.compile_project_frontend"),
+        "check frontend"
+    );
+    assert_eq!(
+        friendly_stage_label("stage0.module_root_discovery.total"),
+        "module roots"
+    );
+    assert_eq!(friendly_stage_label("backend.js.lower_hir"), "js lower");
     assert_eq!(friendly_stage_label("unknown_ms"), "unknown_ms");
 }
 

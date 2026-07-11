@@ -18,32 +18,90 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent};
+use crate::compiler_frontend::ast::templates::runtime_handoff::OwnedRuntimeSlotSiteRenderPlan;
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateBranchSelector, TemplateLoopHeader,
+};
+use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    FinalizedTirViewAttempt, TemplateIrRegistry, TemplateIrStore, TirExpressionPayloadVisitor,
+    current_same_store_tir_roots_for_template, finalized_tir_view_for_template,
+    walk_tir_expression_payloads, walk_tir_view_expression_payloads,
+};
+use crate::compiler_frontend::ast::templates::{
+    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody,
+    OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
+};
 use crate::compiler_frontend::datatypes::definitions::{
     ChoiceVariantPayloadDefinition, TypeDefinition,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use std::convert::Infallible;
+
+/// Context shared by every helper in this debug validation pass.
+///
+/// WHAT: bundles the final module `TypeEnvironment` with the module-scoped
+///       `TemplateIrStore` and `TemplateIrRegistry` so template-expression
+///       payload validation can prefer a finalized `TirView` before falling
+///       back to raw same-store TIR roots.
+/// WHY: debug validation is read-only and short-lived; a small context struct
+///      keeps the recursive walk signatures focused.
+struct DebugTypeValidationContext<'a> {
+    type_environment: &'a TypeEnvironment,
+    template_ir_store: &'a TemplateIrStore,
+    template_ir_registry: &'a TemplateIrRegistry,
+}
+
+/// Visitor that debug-validates expression payloads reachable from same-store
+/// TIR roots.
+///
+/// WHAT: adapts the shared TIR expression-payload walker to the debug TypeId
+///       validator by delegating each expression to the existing
+///       `debug_validate_expression_type_id` helper.
+/// WHY: keeps the structural TIR walk in one TIR-owned helper while this file
+///      retains ownership of the actual debug TypeId assertion policy.
+struct DebugTemplateExpressionPayloadTypeValidator<'a> {
+    context: &'a DebugTypeValidationContext<'a>,
+}
+
+impl TirExpressionPayloadVisitor for DebugTemplateExpressionPayloadTypeValidator<'_> {
+    type Error = Infallible;
+
+    fn visit_expression_payload(&mut self, expression: &Expression) -> Result<(), Self::Error> {
+        debug_validate_expression_type_id(expression, self.context);
+        Ok(())
+    }
+}
 
 /// Entry point for debug TypeId validation before HIR lowering.
 ///
-/// WHAT: recursively walks every AST node, module constant, and choice definition to verify
-/// that all referenced `TypeId`s resolve to real, non-generic definitions in the module
-/// `TypeEnvironment`.
-/// WHY: catches frontend bugs where unresolved or stale type identities leak across the AST→HIR
-/// boundary, where they would cause opaque failures in later stages.
+/// WHAT: recursively walks every AST node, module constant, and choice
+/// definition to verify that all referenced `TypeId`s resolve to real,
+/// non-generic definitions in the module `TypeEnvironment`.
+/// WHY: catches frontend bugs where unresolved or stale type identities leak
+/// across the AST→HIR boundary, where they would cause opaque failures in later
+/// stages.
 pub(super) fn debug_validate_type_ids_for_hir(
     nodes: &[AstNode],
     module_constants: &[Declaration],
     choice_definitions: &[AstChoiceDefinition],
     type_environment: &TypeEnvironment,
+    template_ir_store: &TemplateIrStore,
+    template_ir_registry: &TemplateIrRegistry,
 ) {
+    let context = DebugTypeValidationContext {
+        type_environment,
+        template_ir_store,
+        template_ir_registry,
+    };
+
     for node in nodes {
-        debug_validate_node_type_ids(node, type_environment);
+        debug_validate_node_type_ids(node, &context);
     }
 
     for module_constant in module_constants {
-        debug_validate_declaration_type_id(module_constant, type_environment);
+        debug_validate_declaration_type_id(module_constant, &context);
     }
 
     // Choice definitions are collected separately from the AST node tree.
@@ -85,23 +143,23 @@ pub(super) fn debug_validate_type_ids_for_hir(
     }
 }
 
-fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironment) {
+fn debug_validate_node_type_ids(node: &AstNode, context: &DebugTypeValidationContext) {
     match &node.kind {
         NodeKind::Return(values) => {
-            debug_validate_expressions_type_ids(values, type_environment);
+            debug_validate_expressions_type_ids(values, context);
         }
 
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
         | NodeKind::ExpressionStatement(value) => {
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_expression_type_id(value, context);
         }
 
         NodeKind::If(condition, then_body, else_body) => {
-            debug_validate_expression_type_id(condition, type_environment);
-            debug_validate_nodes_type_ids(then_body, type_environment);
+            debug_validate_expression_type_id(condition, context);
+            debug_validate_nodes_type_ids(then_body, context);
             if let Some(else_body) = else_body {
-                debug_validate_nodes_type_ids(else_body, type_environment);
+                debug_validate_nodes_type_ids(else_body, context);
             }
         }
 
@@ -109,7 +167,7 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             condition,
             message: _,
         } => {
-            debug_validate_expression_type_id(condition, type_environment);
+            debug_validate_expression_type_id(condition, context);
         }
 
         NodeKind::Match {
@@ -118,21 +176,21 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             default,
             ..
         } => {
-            debug_validate_expression_type_id(scrutinee, type_environment);
+            debug_validate_expression_type_id(scrutinee, context);
             for arm in arms {
-                debug_validate_match_pattern_type_ids(&arm.pattern, type_environment);
+                debug_validate_match_pattern_type_ids(&arm.pattern, context);
                 if let Some(guard) = &arm.guard {
-                    debug_validate_expression_type_id(guard, type_environment);
+                    debug_validate_expression_type_id(guard, context);
                 }
-                debug_validate_nodes_type_ids(&arm.body, type_environment);
+                debug_validate_nodes_type_ids(&arm.body, context);
             }
             if let Some(default) = default {
-                debug_validate_nodes_type_ids(default, type_environment);
+                debug_validate_nodes_type_ids(default, context);
             }
         }
 
         NodeKind::ScopedBlock { body } => {
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         NodeKind::RangeLoop {
@@ -140,13 +198,13 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             range,
             body,
         } => {
-            debug_validate_loop_bindings_type_ids(bindings, type_environment);
-            debug_validate_expression_type_id(&range.start, type_environment);
-            debug_validate_expression_type_id(&range.end, type_environment);
+            debug_validate_loop_bindings_type_ids(bindings, context);
+            debug_validate_expression_type_id(&range.start, context);
+            debug_validate_expression_type_id(&range.end, context);
             if let Some(step) = &range.step {
-                debug_validate_expression_type_id(step, type_environment);
+                debug_validate_expression_type_id(step, context);
             }
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         NodeKind::CollectionLoop {
@@ -154,67 +212,75 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             iterable,
             body,
         } => {
-            debug_validate_loop_bindings_type_ids(bindings, type_environment);
-            debug_validate_expression_type_id(iterable, type_environment);
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_loop_bindings_type_ids(bindings, context);
+            debug_validate_expression_type_id(iterable, context);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         NodeKind::WhileLoop(condition, body) => {
-            debug_validate_expression_type_id(condition, type_environment);
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_expression_type_id(condition, context);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         NodeKind::VariableDeclaration(declaration) => {
-            debug_validate_declaration_type_id(declaration, type_environment);
+            debug_validate_declaration_type_id(declaration, context);
         }
 
         NodeKind::StructDefinition(_, fields) => {
-            debug_validate_declarations_type_ids(fields, type_environment);
+            debug_validate_declarations_type_ids(fields, context);
         }
 
         NodeKind::Function(_, signature, body) => {
-            debug_validate_declarations_type_ids(&signature.parameters, type_environment);
+            debug_validate_declarations_type_ids(&signature.parameters, context);
             debug_validate_type_ids(
                 &signature.success_return_type_ids(),
-                type_environment,
+                context.type_environment,
                 "function success return",
             );
             if let Some(error_return) = signature.error_return_type_id() {
-                debug_validate_type_id(error_return, type_environment, "function error return");
+                debug_validate_type_id(
+                    error_return,
+                    context.type_environment,
+                    "function error return",
+                );
             }
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         NodeKind::Assignment { target, value } => {
-            debug_validate_place_expression_type_ids(target, type_environment);
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_place_expression_type_ids(target, context);
+            debug_validate_expression_type_id(value, context);
         }
 
         NodeKind::MultiBind { targets, value } => {
             for target in targets {
-                debug_validate_type_id(target.type_id, type_environment, "multi-bind target");
+                debug_validate_type_id(
+                    target.type_id,
+                    context.type_environment,
+                    "multi-bind target",
+                );
             }
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_expression_type_id(value, context);
         }
 
         // Terminal nodes that carry no type identities.
         NodeKind::Break | NodeKind::Continue => {}
 
         NodeKind::ThenValue(produced_values) => {
-            debug_validate_expressions_type_ids(&produced_values.expressions, type_environment);
+            debug_validate_expressions_type_ids(&produced_values.expressions, context);
         }
     }
 }
 
 fn debug_validate_place_expression_type_ids(
     place: &PlaceExpression,
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
-    debug_validate_type_id(place.type_id, type_environment, "place expression");
+    debug_validate_type_id(place.type_id, context.type_environment, "place expression");
     match &place.kind {
         PlaceExpressionKind::Local(_) => {}
         PlaceExpressionKind::Field { base, .. } => {
-            debug_validate_place_expression_type_ids(base, type_environment)
+            debug_validate_place_expression_type_ids(base, context)
         }
     }
 }
@@ -225,27 +291,30 @@ enum ExpressionValidationContext {
     ValueCatchHandledValue,
 }
 
-fn debug_validate_expression_type_id(expression: &Expression, type_environment: &TypeEnvironment) {
+fn debug_validate_expression_type_id(
+    expression: &Expression,
+    context: &DebugTypeValidationContext,
+) {
     debug_validate_expression_type_id_with_context(
         expression,
-        type_environment,
+        context,
         ExpressionValidationContext::Ordinary,
     );
 }
 
 fn debug_validate_expression_type_id_with_context(
     expression: &Expression,
-    type_environment: &TypeEnvironment,
-    context: ExpressionValidationContext,
+    context: &DebugTypeValidationContext,
+    expression_context: ExpressionValidationContext,
 ) {
-    debug_validate_type_id(expression.type_id, type_environment, "expression");
+    debug_validate_type_id(expression.type_id, context.type_environment, "expression");
 
     match &expression.kind {
         ExpressionKind::Runtime(rpn) => {
             for item in &rpn.items {
                 match item {
                     ExpressionRpnItem::Operand(expression) => {
-                        debug_validate_expression_type_id(expression, type_environment);
+                        debug_validate_expression_type_id(expression, context);
                     }
                     ExpressionRpnItem::Operator { .. } => {}
                 }
@@ -253,31 +322,31 @@ fn debug_validate_expression_type_id_with_context(
         }
 
         ExpressionKind::Copy(place) => {
-            debug_validate_place_expression_type_ids(place, type_environment);
+            debug_validate_place_expression_type_ids(place, context);
         }
 
         ExpressionKind::FieldAccess { base, .. } => {
-            debug_validate_expression_type_id(base, type_environment);
+            debug_validate_expression_type_id(base, context);
         }
 
         ExpressionKind::MethodCall { receiver, args, .. }
         | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
         | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
-            debug_validate_expression_type_id(receiver, type_environment);
-            debug_validate_call_arguments_type_ids(args, type_environment);
+            debug_validate_expression_type_id(receiver, context);
+            debug_validate_call_arguments_type_ids(args, context);
         }
 
         ExpressionKind::Function(signature) => {
-            debug_validate_declarations_type_ids(&signature.parameters, type_environment);
+            debug_validate_declarations_type_ids(&signature.parameters, context);
             debug_validate_type_ids(
                 &signature.success_return_type_ids(),
-                type_environment,
+                context.type_environment,
                 "function expression success return",
             );
             if let Some(error_return) = signature.error_return_type_id() {
                 debug_validate_type_id(
                     error_return,
-                    type_environment,
+                    context.type_environment,
                     "function expression error return",
                 );
             }
@@ -293,8 +362,12 @@ fn debug_validate_expression_type_id_with_context(
             result_type_ids,
             ..
         } => {
-            debug_validate_call_arguments_type_ids(args, type_environment);
-            debug_validate_type_ids(result_type_ids, type_environment, "expression call result");
+            debug_validate_call_arguments_type_ids(args, context);
+            debug_validate_type_ids(
+                result_type_ids,
+                context.type_environment,
+                "expression call result",
+            );
         }
 
         ExpressionKind::HandledFallibleFunctionCall {
@@ -303,11 +376,15 @@ fn debug_validate_expression_type_id_with_context(
             handling,
             ..
         } => {
-            debug_validate_recover_marker_context(*handling, context, "fallible function call");
-            debug_validate_call_arguments_type_ids(args, type_environment);
+            debug_validate_recover_marker_context(
+                *handling,
+                expression_context,
+                "fallible function call",
+            );
+            debug_validate_call_arguments_type_ids(args, context);
             debug_validate_type_ids(
                 result_type_ids,
-                type_environment,
+                context.type_environment,
                 "fallible-handled expression call result",
             );
         }
@@ -321,103 +398,119 @@ fn debug_validate_expression_type_id_with_context(
         } => {
             debug_validate_recover_marker_context(
                 *handling,
-                context,
+                expression_context,
                 "fallible external function call",
             );
-            debug_validate_call_arguments_type_ids(args, type_environment);
+            debug_validate_call_arguments_type_ids(args, context);
             debug_validate_type_ids(
                 result_type_ids,
-                type_environment,
+                context.type_environment,
                 "fallible-handled external expression call result",
             );
-            debug_validate_type_ids(&[*error_type_id], type_environment, "external call error");
+            debug_validate_type_ids(
+                &[*error_type_id],
+                context.type_environment,
+                "external call error",
+            );
         }
 
         ExpressionKind::Cast(cast) => {
             if matches!(&cast.handling, CastHandling::Recover)
-                && context != ExpressionValidationContext::ValueCatchHandledValue
+                && expression_context != ExpressionValidationContext::ValueCatchHandledValue
             {
                 debug_assert!(
                     false,
                     "recovering cast expression reached AST finalization outside ValueBlock::Catch"
                 );
             }
-            debug_validate_expression_type_id(&cast.source, type_environment);
-            debug_validate_type_id(cast.target_type_id, type_environment, "cast target");
-            debug_validate_type_id(cast.source_type_id, type_environment, "cast source");
+            debug_validate_expression_type_id(&cast.source, context);
+            debug_validate_type_id(cast.target_type_id, context.type_environment, "cast target");
+            debug_validate_type_id(cast.source_type_id, context.type_environment, "cast source");
         }
 
-        ExpressionKind::FallibleCarrierConstruct { value, .. }
-        | ExpressionKind::OptionPropagation { value } => {
-            debug_validate_expression_type_id(value, type_environment);
+        #[cfg(test)]
+        ExpressionKind::FallibleCarrierConstruct { value, .. } => {
+            debug_validate_expression_type_id(value, context);
+        }
+
+        ExpressionKind::OptionPropagation { value } => {
+            debug_validate_expression_type_id(value, context);
         }
 
         ExpressionKind::HandledFallibleExpression { value, handling } => {
-            debug_validate_recover_marker_context(*handling, context, "fallible result expression");
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_recover_marker_context(
+                *handling,
+                expression_context,
+                "fallible result expression",
+            );
+            debug_validate_expression_type_id(value, context);
         }
 
         ExpressionKind::Template(template) => {
-            debug_validate_template_content_type_ids(&template.content, type_environment);
-            debug_validate_template_content_type_ids(
-                &template.unformatted_content,
-                type_environment,
-            );
-            if let Some(render_plan) = &template.render_plan {
-                for expression in render_plan.flatten_expressions() {
-                    debug_validate_expression_type_id(&expression, type_environment);
-                }
-            }
-            for child in &template.doc_children {
-                debug_validate_template_content_type_ids(&child.content, type_environment);
-            }
+            // Prefer same-store TIR roots for nested expression payload traversal.
+            // The owned runtime handoffs below remain the authoritative source for
+            // finalized HIR-bound runtime templates; this TIR walk only validates
+            // expression payloads that may not have reached the handoff yet.
+            debug_validate_template_expression_payloads(template, context);
+
+            // The finalizer materializes the TIR-derived owned wrapper node
+            // before this debug check runs, so it is an authoritative expression
+            // source for conditional wrapper output.
+        }
+
+        ExpressionKind::RuntimeTemplateHandoff(handoff) => {
+            debug_validate_runtime_template_handoff_type_ids(handoff, context);
+        }
+
+        ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => {
+            debug_validate_runtime_slot_application_handoff_type_ids(handoff, context);
         }
 
         ExpressionKind::Collection(items) => {
-            debug_validate_expressions_type_ids(items, type_environment);
+            debug_validate_expressions_type_ids(items, context);
         }
 
         ExpressionKind::MapLiteral(entries) => {
             for entry in entries {
-                debug_validate_expression_type_id(&entry.key, type_environment);
-                debug_validate_expression_type_id(&entry.value, type_environment);
+                debug_validate_expression_type_id(&entry.key, context);
+                debug_validate_expression_type_id(&entry.value, context);
             }
         }
 
         ExpressionKind::StructDefinition(fields) | ExpressionKind::StructInstance(fields) => {
-            debug_validate_declarations_type_ids(fields, type_environment);
+            debug_validate_declarations_type_ids(fields, context);
         }
 
         ExpressionKind::Range(start, end) => {
-            debug_validate_expression_type_id(start, type_environment);
-            debug_validate_expression_type_id(end, type_environment);
+            debug_validate_expression_type_id(start, context);
+            debug_validate_expression_type_id(end, context);
         }
 
         ExpressionKind::Coerced { value, to_type } => {
-            debug_validate_expression_type_id(value, type_environment);
-            debug_validate_type_id(*to_type, type_environment, "coercion target");
+            debug_validate_expression_type_id(value, context);
+            debug_validate_type_id(*to_type, context.type_environment, "coercion target");
         }
 
         ExpressionKind::ChoiceConstruct { fields, .. } => {
-            debug_validate_declarations_type_ids(fields, type_environment);
+            debug_validate_declarations_type_ids(fields, context);
         }
 
         ExpressionKind::ValueBlock { block } => match block.as_ref() {
             ValueBlock::If(value_if) => {
-                debug_validate_expression_type_id(&value_if.condition, type_environment);
-                debug_validate_nodes_type_ids(&value_if.then_body, type_environment);
-                debug_validate_nodes_type_ids(&value_if.else_body, type_environment);
+                debug_validate_expression_type_id(&value_if.condition, context);
+                debug_validate_nodes_type_ids(&value_if.then_body, context);
+                debug_validate_nodes_type_ids(&value_if.else_body, context);
             }
             ValueBlock::Match(value_match) => {
-                debug_validate_expression_type_id(&value_match.scrutinee, type_environment);
+                debug_validate_expression_type_id(&value_match.scrutinee, context);
                 for arm in &value_match.arms {
                     if let Some(guard) = &arm.guard {
-                        debug_validate_expression_type_id(guard, type_environment);
+                        debug_validate_expression_type_id(guard, context);
                     }
-                    debug_validate_nodes_type_ids(&arm.body, type_environment);
+                    debug_validate_nodes_type_ids(&arm.body, context);
                 }
                 if let Some(default_body) = &value_match.default {
-                    debug_validate_nodes_type_ids(default_body, type_environment);
+                    debug_validate_nodes_type_ids(default_body, context);
                 }
             }
             ValueBlock::Catch(value_catch) => {
@@ -431,10 +524,10 @@ fn debug_validate_expression_type_id_with_context(
                 );
                 debug_validate_expression_type_id_with_context(
                     &value_catch.handled_value,
-                    type_environment,
+                    context,
                     ExpressionValidationContext::ValueCatchHandledValue,
                 );
-                debug_validate_fallible_handling_type_ids(&value_catch.handler, type_environment);
+                debug_validate_fallible_handling_type_ids(&value_catch.handler, context);
             }
         },
 
@@ -446,8 +539,10 @@ fn debug_validate_expression_type_id_with_context(
         | ExpressionKind::StringSlice(_)
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_)
-        | ExpressionKind::Path(_)
         | ExpressionKind::Reference(_) => {}
+
+        #[cfg(test)]
+        ExpressionKind::Path(_) => {}
     }
 }
 
@@ -482,108 +577,313 @@ fn debug_validate_recover_marker_context(
 
 fn debug_validate_match_pattern_type_ids(
     pattern: &MatchPattern,
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
     match pattern {
         MatchPattern::Literal(expression) => {
-            debug_validate_expression_type_id(expression, type_environment);
+            debug_validate_expression_type_id(expression, context);
         }
 
         MatchPattern::OptionValue { value, .. } => {
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_expression_type_id(value, context);
         }
 
         MatchPattern::Relational { value, .. } => {
-            debug_validate_expression_type_id(value, type_environment);
+            debug_validate_expression_type_id(value, context);
         }
 
         MatchPattern::ChoiceVariant { captures, .. } => {
             for capture in captures {
-                debug_validate_type_id(capture.type_id, type_environment, "choice capture");
+                debug_validate_type_id(capture.type_id, context.type_environment, "choice capture");
             }
         }
 
         // Patterns that carry no nested type identities.
         MatchPattern::OptionNone { .. }
-        | MatchPattern::Wildcard { .. }
         | MatchPattern::Capture { .. }
         | MatchPattern::OptionPresentCapture { .. } => {}
+
+        #[cfg(test)]
+        MatchPattern::Wildcard { .. } => {}
     }
 }
 
 fn debug_validate_fallible_handling_type_ids(
     handling: &FallibleHandling,
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
     match handling {
         FallibleHandling::Handler { body, .. } => {
-            debug_validate_nodes_type_ids(body, type_environment);
+            debug_validate_nodes_type_ids(body, context);
         }
 
         FallibleHandling::Propagate => {}
     }
 }
 
-fn debug_validate_template_content_type_ids(
-    content: &TemplateContent,
-    type_environment: &TypeEnvironment,
+/// Validates a template's nested expression payloads through same-store TIR.
+///
+/// WHAT: prefers a finalized registry-backed `TirView` so effective
+///       expression overlays are authoritative for dynamic-expression splices,
+///       branch selectors, and loop headers. If the template lacks a usable
+///       view identity, falls back to raw same-store TIR roots. A template
+///       without TIR roots after normalization is an internal compiler invariant
+///       violation.
+/// WHY: debug validation should consume the same effective TIR representation
+///      that later phases consume.
+fn debug_validate_template_expression_payloads(
+    template: &Template,
+    context: &DebugTypeValidationContext,
 ) {
-    for atom in &content.atoms {
-        if let TemplateAtom::Content(segment) = atom {
-            debug_validate_expression_type_id(&segment.expression, type_environment);
+    // Prefer a finalized registry-backed `TirView` so effective expression
+    // overlays are authoritative for dynamic-expression splices, branch
+    // selectors, and loop headers.
+    match finalized_tir_view_for_template(
+        template,
+        context.template_ir_store,
+        context.template_ir_registry,
+    ) {
+        FinalizedTirViewAttempt::Available(view) => {
+            let result = walk_tir_view_expression_payloads(&view, &mut |expression| {
+                debug_validate_expression_type_id(expression, context);
+                Ok(())
+            });
+            debug_assert!(
+                result.is_ok(),
+                "TIR view expression-payload walk failed during debug TypeId validation: {:?}",
+                result.err()
+            );
+            return;
+        }
+
+        FinalizedTirViewAttempt::Invalid(error) => {
+            debug_assert!(
+                false,
+                "TIR view construction failed during debug TypeId validation: {error:?}"
+            );
+            return;
+        }
+
+        FinalizedTirViewAttempt::Unavailable => {}
+    }
+
+    if let Some(roots) =
+        current_same_store_tir_roots_for_template(template, context.template_ir_store, None)
+    {
+        let mut visitor = DebugTemplateExpressionPayloadTypeValidator { context };
+        let result = walk_tir_expression_payloads(context.template_ir_store, &roots, &mut visitor);
+        match result {
+            Ok(()) => {}
+            Err(error) => match error {},
+        }
+        return;
+    }
+
+    unreachable!(
+        "Template reached debug type validation without same-store TIR roots. This indicates a parser or normalization bug.",
+    );
+}
+fn debug_validate_loop_bindings_type_ids(
+    bindings: &LoopBindings,
+    context: &DebugTypeValidationContext,
+) {
+    if let Some(item) = &bindings.item {
+        debug_validate_declaration_type_id(item, context);
+    }
+    if let Some(index) = &bindings.index {
+        debug_validate_declaration_type_id(index, context);
+    }
+}
+
+// -------------------------
+//  Owned runtime-template handoff traversal
+// -------------------------
+//
+// These helpers walk the owned runtime handoff shapes that the finalizer
+// materializes before this debug check runs. They mirror the recursive
+// structure of `remap_string_ids` in `runtime_handoff` so that every dynamic
+// expression payload carried by finalized HIR-bound templates is validated.
+
+fn debug_validate_runtime_template_handoff_type_ids(
+    handoff: &OwnedRuntimeTemplateHandoff,
+    context: &DebugTypeValidationContext,
+) {
+    debug_validate_runtime_template_body_type_ids(&handoff.body, context);
+}
+
+fn debug_validate_runtime_template_body_type_ids(
+    body: &OwnedRuntimeTemplateBody,
+    context: &DebugTypeValidationContext,
+) {
+    match body {
+        OwnedRuntimeTemplateBody::Render(node) => {
+            debug_validate_runtime_template_node_type_ids(node, context);
+        }
+
+        OwnedRuntimeTemplateBody::RuntimeSlotApplication(slot_handoff) => {
+            debug_validate_runtime_slot_application_handoff_type_ids(slot_handoff, context);
         }
     }
 }
 
-fn debug_validate_loop_bindings_type_ids(
-    bindings: &LoopBindings,
-    type_environment: &TypeEnvironment,
+fn debug_validate_runtime_template_node_type_ids(
+    node: &OwnedRuntimeTemplateNode,
+    context: &DebugTypeValidationContext,
 ) {
-    if let Some(item) = &bindings.item {
-        debug_validate_declaration_type_id(item, type_environment);
-    }
-    if let Some(index) = &bindings.index {
-        debug_validate_declaration_type_id(index, type_environment);
+    match node {
+        OwnedRuntimeTemplateNode::Sequence { children, .. } => {
+            for child in children {
+                debug_validate_runtime_template_node_type_ids(child, context);
+            }
+        }
+
+        OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } => {
+            debug_validate_expression_type_id(expression, context);
+        }
+
+        OwnedRuntimeTemplateNode::ChildTemplate { template, .. } => {
+            debug_validate_runtime_template_handoff_type_ids(template, context);
+        }
+
+        OwnedRuntimeTemplateNode::ConditionalWrapper { child, wrapper, .. } => {
+            debug_validate_runtime_template_node_type_ids(child, context);
+            debug_validate_runtime_template_node_type_ids(wrapper, context);
+        }
+
+        OwnedRuntimeTemplateNode::BranchChain {
+            branches, fallback, ..
+        } => {
+            for branch in branches {
+                debug_validate_template_branch_selector_type_ids(&branch.selector, context);
+                debug_validate_runtime_template_node_type_ids(&branch.body, context);
+            }
+            if let Some(fallback) = fallback {
+                debug_validate_runtime_template_node_type_ids(fallback, context);
+            }
+        }
+
+        OwnedRuntimeTemplateNode::Loop {
+            header,
+            body,
+            aggregate_wrapper,
+            ..
+        } => {
+            debug_validate_template_loop_header_type_ids(header, context);
+            debug_validate_runtime_template_node_type_ids(body, context);
+            if let Some(aggregate_wrapper) = aggregate_wrapper {
+                debug_validate_runtime_template_node_type_ids(aggregate_wrapper, context);
+            }
+        }
+
+        OwnedRuntimeTemplateNode::Text { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::LoopControl { .. }
+        | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
+        | OwnedRuntimeTemplateNode::Slot { .. } => {}
     }
 }
 
-fn debug_validate_nodes_type_ids(nodes: &[AstNode], type_environment: &TypeEnvironment) {
+fn debug_validate_template_branch_selector_type_ids(
+    selector: &TemplateBranchSelector,
+    context: &DebugTypeValidationContext,
+) {
+    match selector {
+        TemplateBranchSelector::Bool(condition) => {
+            debug_validate_expression_type_id(condition, context);
+        }
+
+        TemplateBranchSelector::OptionPresentCapture { scrutinee, .. } => {
+            debug_validate_expression_type_id(scrutinee, context);
+        }
+    }
+}
+
+fn debug_validate_template_loop_header_type_ids(
+    header: &TemplateLoopHeader,
+    context: &DebugTypeValidationContext,
+) {
+    match header {
+        TemplateLoopHeader::Conditional { condition } => {
+            debug_validate_expression_type_id(condition, context);
+        }
+
+        TemplateLoopHeader::Range { range, .. } => {
+            debug_validate_expression_type_id(&range.start, context);
+            debug_validate_expression_type_id(&range.end, context);
+            if let Some(step) = &range.step {
+                debug_validate_expression_type_id(step, context);
+            }
+        }
+
+        TemplateLoopHeader::Collection { iterable, .. } => {
+            debug_validate_expression_type_id(iterable, context);
+        }
+    }
+}
+
+fn debug_validate_runtime_slot_application_handoff_type_ids(
+    handoff: &OwnedRuntimeSlotApplicationHandoff,
+    context: &DebugTypeValidationContext,
+) {
+    debug_validate_runtime_template_node_type_ids(&handoff.wrapper, context);
+
+    for source in &handoff.contribution_sources {
+        debug_validate_runtime_template_node_type_ids(&source.render_root, context);
+    }
+
+    for site in &handoff.slot_sites {
+        debug_validate_runtime_slot_site_render_plan_type_ids(&site.render_plan, context);
+    }
+}
+
+fn debug_validate_runtime_slot_site_render_plan_type_ids(
+    render_plan: &OwnedRuntimeSlotSiteRenderPlan,
+    context: &DebugTypeValidationContext,
+) {
+    for piece in &render_plan.pieces {
+        if let OwnedRuntimeSlotSiteRenderPiece::Render(node) = piece {
+            debug_validate_runtime_template_node_type_ids(node, context);
+        }
+    }
+}
+
+fn debug_validate_nodes_type_ids(nodes: &[AstNode], context: &DebugTypeValidationContext) {
     for node in nodes {
-        debug_validate_node_type_ids(node, type_environment);
+        debug_validate_node_type_ids(node, context);
     }
 }
 
 fn debug_validate_expressions_type_ids(
     expressions: &[Expression],
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
     for expression in expressions {
-        debug_validate_expression_type_id(expression, type_environment);
+        debug_validate_expression_type_id(expression, context);
     }
 }
 
 fn debug_validate_declarations_type_ids(
     declarations: &[Declaration],
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
     for declaration in declarations {
-        debug_validate_declaration_type_id(declaration, type_environment);
+        debug_validate_declaration_type_id(declaration, context);
     }
 }
 
 fn debug_validate_declaration_type_id(
     declaration: &Declaration,
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
-    debug_validate_expression_type_id(&declaration.value, type_environment);
+    debug_validate_expression_type_id(&declaration.value, context);
 }
 
 fn debug_validate_call_arguments_type_ids(
     args: &[CallArgument],
-    type_environment: &TypeEnvironment,
+    context: &DebugTypeValidationContext,
 ) {
     for argument in args {
-        debug_validate_expression_type_id(&argument.value, type_environment);
+        debug_validate_expression_type_id(&argument.value, context);
     }
 }
 

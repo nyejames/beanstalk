@@ -1,7 +1,7 @@
 //! Tokenization, header parsing, dependency sorting, and AST construction for Stage 0 project
 //! config files.
 //!
-//! WHAT: loads `#config.bst` and any reachable builder/core source-library files through the normal
+//! WHAT: loads `config.bst` and any reachable builder/core source-library files through the normal
 //! frontend pipeline up to AST, then hands the folded AST off to config validation.
 //! WHY: config uses normal Beanstalk syntax, so reusing tokenizer → headers → dependency sort →
 //! AST keeps Stage 0 aligned with the rest of the language and lets config values benefit from
@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 pub(super) struct ParsedConfigFile {
     pub(super) ast: Ast,
     pub(super) errors: Vec<CompilerDiagnostic>,
-    /// The source identity used when tokenizing the authored `#config.bst` file.
+    /// The source identity used when tokenizing the authored `config.bst` file.
     ///
     /// WHY: validation must distinguish declarations authored in config from imported support
     /// declarations so only authored declarations are treated as config keys.
@@ -49,7 +49,7 @@ pub(super) struct ParsedConfigFile {
 //  Config Parsing Entry
 // -------------------------
 
-/// Parse `#config.bst` through tokenizer → headers → dependency sort → AST.
+/// Parse `config.bst` through tokenizer → headers → dependency sort → AST.
 ///
 /// WHY: value validation happens later, but the pipeline must surface all structural errors before
 /// Stage 0 tries to apply any settings.
@@ -58,18 +58,27 @@ pub(super) fn parse_config_file(
     services: &ProjectConfigParseServices<'_>,
     string_table: &mut StringTable,
 ) -> Result<ParsedConfigFile, CompilerMessages> {
+    let parse_total_start = crate::timing::start_pipeline_timing();
     let mut errors = Vec::new();
 
-    let canonical_config = std::fs::canonicalize(config_path).map_err(|error| {
-        CompilerMessages::from_error(
-            CompilerError::file_error(
-                config_path,
-                format!("Failed to canonicalize config path: {error}"),
-                string_table,
-            ),
-            string_table.clone(),
-        )
-    })?;
+    let canonicalize_start = crate::timing::start_pipeline_timing();
+    let canonical_config = match std::fs::canonicalize(config_path) {
+        Ok(canonical_config) => canonical_config,
+        Err(error) => {
+            log_config_stage_timing("config.parse.canonicalize", canonicalize_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
+
+            return Err(CompilerMessages::from_error(
+                CompilerError::file_error(
+                    config_path,
+                    format!("Failed to canonicalize config path: {error}"),
+                    string_table,
+                ),
+                string_table.clone(),
+            ));
+        }
+    };
+    log_config_stage_timing("config.parse.canonicalize", canonicalize_start);
 
     // -------------------------
     //  Config Path Resolver
@@ -78,6 +87,7 @@ pub(super) fn parse_config_file(
     let canonical_dir =
         std::fs::canonicalize(config_dir).unwrap_or_else(|_| config_dir.to_path_buf());
 
+    let path_resolver_start = crate::timing::start_pipeline_timing();
     let project_path_resolver = match ProjectPathResolver::new(
         canonical_dir.clone(),
         canonical_dir,
@@ -87,24 +97,37 @@ pub(super) fn parse_config_file(
         Ok(resolver) => resolver
             .with_import_root_policy(ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly),
         Err(error) => {
+            log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
             return Err(CompilerMessages::from_error(error, string_table.clone()));
         }
     };
+    log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
 
     // -------------------------
     //  Build Config Source Set
     // -------------------------
-    let source_set = build_config_source_set(
+    let source_set_start = crate::timing::start_pipeline_timing();
+    let source_set = match build_config_source_set(
         &canonical_config,
         services,
         &project_path_resolver,
         &mut errors,
         string_table,
-    )?;
+    ) {
+        Ok(source_set) => source_set,
+        Err(messages) => {
+            log_config_stage_timing("config.parse.source_set", source_set_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            return Err(messages);
+        }
+    };
+    log_config_stage_timing("config.parse.source_set", source_set_start);
 
     // -------------------------
     //  Tokenize and Prepare All Files
     // -------------------------
+    let prepare_files_start = crate::timing::start_pipeline_timing();
     let mut prepared_outputs = Vec::with_capacity(source_set.len());
 
     for file_path in &source_set {
@@ -114,28 +137,49 @@ pub(super) fn parse_config_file(
         let scope_path = if file_path == &canonical_config {
             config_path
         } else {
-            logical_scope_path = project_path_resolver
-                .logical_path_for_canonical_file(file_path, string_table)
-                .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-            logical_scope_path.as_path()
+            match project_path_resolver.logical_path_for_canonical_file(file_path, string_table) {
+                Ok(path) => {
+                    logical_scope_path = path;
+                    logical_scope_path.as_path()
+                }
+                Err(error) => {
+                    log_config_stage_timing(
+                        "config.parse.prepare_files_total",
+                        prepare_files_start,
+                    );
+                    log_config_stage_timing("config.parse.total", parse_total_start);
+                    return Err(CompilerMessages::from_error(error, string_table.clone()));
+                }
+            }
         };
 
-        let output = match prepare_one_config_file(
+        let prepared_output = match prepare_one_config_file(
             file_path,
             scope_path,
             &canonical_config,
             services,
             &mut errors,
             string_table,
-        )? {
+        ) {
+            Ok(output) => output,
+            Err(messages) => {
+                log_config_stage_timing("config.parse.prepare_files_total", prepare_files_start);
+                log_config_stage_timing("config.parse.total", parse_total_start);
+                return Err(messages);
+            }
+        };
+
+        let output = match prepared_output {
             Some(output) => output,
             None => continue,
         };
 
         prepared_outputs.push(output);
     }
+    log_config_stage_timing("config.parse.prepare_files_total", prepare_files_start);
 
     if !errors.is_empty() {
+        log_config_stage_timing("config.parse.total", parse_total_start);
         return Err(CompilerMessages::from_diagnostics(
             errors,
             string_table.clone(),
@@ -145,6 +189,7 @@ pub(super) fn parse_config_file(
     // -------------------------
     //  Header Aggregation
     // -------------------------
+    let headers_start = crate::timing::start_pipeline_timing();
     let bag_result = parse_headers(
         prepared_outputs,
         &services.libraries.external_packages,
@@ -167,16 +212,20 @@ pub(super) fn parse_config_file(
                     errors.push(diagnostic.clone());
                 }
             }
+            log_config_stage_timing("config.parse.headers", headers_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
             return Err(CompilerMessages::from_diagnostics(
                 errors,
                 string_table.clone(),
             ));
         }
     };
+    log_config_stage_timing("config.parse.headers", headers_start);
 
     // -------------------------
     //  Dependency Sorting
     // -------------------------
+    let dependency_sort_start = crate::timing::start_pipeline_timing();
     let headers_for_sort = Headers {
         headers: parsed_headers.headers,
         top_level_const_fragments: parsed_headers.top_level_const_fragments,
@@ -191,21 +240,25 @@ pub(super) fn parse_config_file(
         Ok(sorted) => sorted,
         Err(bag) => {
             errors.extend(bag.into_diagnostics());
+            log_config_stage_timing("config.parse.dependency_sort", dependency_sort_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
             return Err(CompilerMessages::from_diagnostics(
                 errors,
                 string_table.clone(),
             ));
         }
     };
+    log_config_stage_timing("config.parse.dependency_sort", dependency_sort_start);
 
     // -------------------------
     //  AST Construction
     // -------------------------
+    let ast_start = crate::timing::start_pipeline_timing();
     let interned_path = InternedPath::from_path_buf(config_path, string_table);
 
     let external_package_registry = Arc::new(services.libraries.external_packages.clone());
 
-    let ast = Ast::new(
+    let ast_result = Ast::new(
         AstBuildInput {
             headers: sorted.headers,
             module_symbols: sorted.module_symbols,
@@ -223,7 +276,18 @@ pub(super) fn parse_config_file(
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             capacity_estimate: Default::default(),
         },
-    )?;
+    );
+    log_config_stage_timing("config.parse.ast", ast_start);
+
+    let ast = match ast_result {
+        Ok(ast) => ast,
+        Err(messages) => {
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            return Err(messages);
+        }
+    };
+
+    log_config_stage_timing("config.parse.total", parse_total_start);
 
     Ok(ParsedConfigFile {
         ast,
@@ -232,13 +296,25 @@ pub(super) fn parse_config_file(
     })
 }
 
+/// Record a config-parse stage timing through the central `timers` substrate.
+///
+/// WHAT: delegates to `timing::record_started_pipeline_timing`, which stores the
+///      observation in the active collection scope and emits the stable
+///      `BST_BENCH timing` line when the output mode permits.
+/// WHY:  config parsing uses dotted `config.parse.*` metric names. The start
+///      token is zero-sized when `timers` is off, so regular builds do not read
+///      clocks for instrumentation-only measurements.
+fn log_config_stage_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
+    crate::timing::record_started_pipeline_timing(metric, start);
+}
+
 // -------------------------
 //  Config Source Set
 // -------------------------
 
 /// Build the set of source files that config parsing must compile.
 ///
-/// WHAT: starts from the authored `#config.bst` and BFS-follows imports into builder/core
+/// WHAT: starts from the authored `config.bst` and BFS-follows imports into builder/core
 /// source-library files only. External package imports are tracked but do not add files.
 /// WHY: config expressions may reference imported library constants, so those files must be
 /// parsed and folded, but project-local files and relative imports are rejected by policy.
@@ -304,7 +380,7 @@ fn build_config_source_set(
                 ) {
                 Ok(resolved) => resolved.path,
                 Err(ImportPathResolutionError::Diagnostic(diagnostic)) => {
-                    errors.push(diagnostic);
+                    errors.push(*diagnostic);
                     continue;
                 }
                 Err(ImportPathResolutionError::Infrastructure(error)) => {
@@ -351,7 +427,7 @@ fn prepare_one_config_file(
     ) {
         Ok(tokens) => tokens,
         Err(error) => {
-            errors.push(error);
+            errors.push(*error);
             return Ok(None);
         }
     };
@@ -409,7 +485,7 @@ fn prepare_one_config_file(
 //  Structural Validation
 // -------------------------
 
-/// Reject unsupported surfaces in the authored `#config.bst` file after header parsing has
+/// Reject unsupported surfaces in the authored `config.bst` file after header parsing has
 /// normalized declaration shapes.
 ///
 /// WHY: Stage 0 config uses frontend parsing for expression semantics, but config is not a normal

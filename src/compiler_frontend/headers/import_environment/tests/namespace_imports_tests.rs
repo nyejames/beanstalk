@@ -222,7 +222,7 @@ fn duplicate_external_namespace_value_and_type_slot_is_rejected() {
         )
         .expect_err("value/type slot collision should fail");
 
-    assert_duplicate_import_surface_member(error);
+    assert_duplicate_import_surface_member(*error);
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn duplicate_external_namespace_and_value_slot_is_rejected() {
         )
         .expect_err("namespace/value slot collision should fail");
 
-    assert_duplicate_import_surface_member(error);
+    assert_duplicate_import_surface_member(*error);
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn duplicate_external_namespace_and_type_slot_is_rejected() {
         )
         .expect_err("namespace/type slot collision should fail");
 
-    assert_duplicate_import_surface_member(error);
+    assert_duplicate_import_surface_member(*error);
 }
 
 #[test]

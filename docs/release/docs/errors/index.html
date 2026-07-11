@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -335,12 +338,15 @@ body {
     ;
     </code></pre><p>In this example:</p><ul><li><code>Int</code> is the success value</li><li><code>Error!</code> is the error slot</li><li><code>return!</code> returns through the error slot</li><li>normal <code>return</code> returns through the success path</li></ul><p>The <code>!</code> marker does not mean panic.</p><p>It means this function has a typed error path that callers must handle. Expected failures should use <code>Error!</code> and <code>catch</code>. Assertions are for unrecoverable invariants and are the current explicit panic path.</p><p><code>catch:</code> and <code>catch |err|:</code> are the supported result recovery forms. <code>then</code> produces local values for a surrounding value-receiving site. Value-producing <code>if</code> and full match receivers reuse that mechanism now; catch recovery still uses it inside catch handlers until catch is refactored onto the shared value-block model. Public first-class <code>Result</code> values and raw fallible carrier storage remain deferred; use <code>!</code> return slots and call-site handling instead.</p></section>
     <section class="container"><h1>The Error type</h1><p><code>Error</code> is a builtin language type.</p><p>It carries a human-readable message and an integer code.</p><p>Publicly, <code>Error</code> contains:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Field</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Field</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>message</code> </td>
@@ -354,7 +360,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Stable numeric error code. Defaults to <code>0</code>. </td>
         </tr>
 
-        
+            
+
     </table><p><code>Error</code> is the only reserved builtin name in this family. <code>ErrorKind</code>, <code>ErrorLocation</code>, and <code>StackFrame</code> are ordinary user-available names.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -484,12 +491,15 @@ body {
     ;
     </code></pre><p>The <code>then</code> fallback values must match the success return list.</p><p>If the success path returns two values, the recovery path must provide two fallback values.</p></section>
     <section class="container"><h1>Error handling forms</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>parse_number(text)!</code> </td>
@@ -515,7 +525,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>return!</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Return an error from the current function's error slot. </td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Collection errors</h1><p>Collection operations use structured errors for invalid runtime cases.</p><p>By default, <code>get(index)</code> returns a result-like value that must be handled.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -588,12 +599,15 @@ body {
     ;
     </code></pre></section>
     <section class="container"><h1>Errors, options, and assertions</h1><p>Errors, options, and assertions solve different problems.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use when</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use when</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>T?</code> </td>
@@ -612,7 +626,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> A required invariant is false and execution must stop. </td>
      <td style="padding: 0.2em 0.5em;  "> An index must already be in bounds before unsafe work continues. </td>
         </tr>
-        
+            
+
     </table><p>Use <code>?</code> when missing data is ordinary.</p><p>Use <code>Error!</code> when failure details matter.</p><p>Use <code>assert</code> for broken assumptions, not regular failures.</p></section>
     <section class="container"><h1>Assertions</h1><p>Assertions are different from recoverable errors.</p><p>A failed assertion means the program should not continue.</p><p>Assertions are intended for cases such as:</p><ul><li>impossible states</li><li>critical invariant violations</li><li>debugging unexpected state</li><li>stopping before unsafe or invalid behavior could continue</li></ul><p>Assertion syntax:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -627,12 +642,15 @@ body {
     assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;unimplemented backend path&quot;</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p><code>assert</code> is a language-owned statement intrinsic, not a function. It returns no value, cannot be assigned or passed as an argument, and cannot be used in template interpolation.</p><p>Assertions are always checked in development and release builds.</p><p>Failed assertions are unrecoverable in Beanstalk source. They do not return <code>Error!</code>, and <code>catch</code> cannot catch them.</p><p><code>assert(false, &quot;message&quot;)</code> is the only explicit source-level spelling for an intentional unrecoverable stop for now.</p><p>Assertion messages currently must be string literals. Runtime message expressions and compile-time constant messages are deferred until failure-only message evaluation is designed.</p><p>Most expected failures should use <code>Error!</code> instead.</p></section>
     <section class="container"><h1>Assertion diagnostics</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Invalid form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Diagnostic direction</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Invalid form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Diagnostic direction</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>assert(1)</code> </td>
@@ -658,7 +676,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>assert(true) catch:</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Assertion failure is not a recoverable <code>Error!</code> path. </td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Full example</h1><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

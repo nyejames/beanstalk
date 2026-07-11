@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -330,12 +333,15 @@ body {
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> build .
     </code></pre></section>
     <section class="container"><h1>Current commands</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Command</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Command</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>help</code> </td>
@@ -378,15 +384,19 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Runs the compiler integration test suite.</td>
      <td style="padding: 0.2em 0.5em;  "> Mainly useful when working on the compiler itself. Use <code>--backend html</code> or <code>--backend html_wasm</code> to focus one backend profile.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Current flags</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Flag</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Applies to</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Effect</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Flag</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Applies to</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Effect</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>--release</code> </td>
@@ -429,9 +439,10 @@ body {
      <td style="padding: 0.2em 0.5em;  "> <code>dev</code> only</td>
      <td style="padding: 0.2em 0.5em;  "> Configures the local dev server. Defaults are <code>127.0.0.1</code>, <code>6342</code>, and <code>300</code>.</td>
         </tr>
-        
+            
+
     </table></section>
-    <section class="container"><h1>Create a new HTML project</h1><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../html-project-builder">the HTML project builder guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
+    <section class="container"><h1>Create a new HTML project</h1><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../project-structure">the project structure guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -634,12 +645,15 @@ body {
       <span class='bst-code-struct'>Use</span> an <span class='bst-code-struct'>Int</span> value here, or change the declaration type.
     </code></pre><p>Read diagnostics from top to bottom:</p><ol><li>The kind tells you which part of the compiler rejected the program.</li><li>The message tells you the actual rule that failed.</li><li>The file/line/column points to the primary source location.</li><li>The caret shows the token or expression the compiler is complaining about.</li><li>The guidance lines are suggestions, not a separate error.</li></ol></section>
     <section class="container"><h1>Error kinds</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Usual fix</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Usual fix</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Syntax Error</td>
@@ -688,7 +702,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> The compiler hit an internal invariant or unsupported backend path.</td>
      <td style="padding: 0.2em 0.5em;  "> Reduce the input if practical and report it. User code should receive structured errors instead of compiler bugs.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Warnings and future suggestions</h1><p>Warnings are for code that can still compile but deserves attention. Current warnings include things like malformed CSS/HTML template content, large tracked assets, naming convention issues, and import alias case mismatches.</p><p>Beanstalk deliberately separates correctness from style pressure. The future <code>suggest</code> command is planned to become the pedantic style and cleanup pass: closer to a full Clippy-style assistant for Beanstalk code. That is where noisy suggestions such as unused variables, unused imports, unused declarations, and more specific style improvements should live.</p><p>The intended workflow will be:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

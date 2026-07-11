@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::reactive_template_metadata;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;
 
@@ -21,19 +22,20 @@ pub(super) fn metadata_for_expression(
     expression: &Expression,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
+    store: &TemplateIrStore,
 ) -> Option<ReactiveTemplateMetadata> {
     match &expression.kind {
         ExpressionKind::Template(template) => {
-            metadata_for_template(template, flows, value_environment)
+            metadata_for_template(template, flows, value_environment, store)
         }
 
         ExpressionKind::FunctionCall { name, args, .. }
         | ExpressionKind::HandledFallibleFunctionCall { name, args, .. } => {
-            metadata_for_function_call(name, args, flows, value_environment)
+            metadata_for_function_call(name, args, flows, value_environment, store)
         }
 
         ExpressionKind::Coerced { value, .. } => {
-            metadata_for_expression(value, flows, value_environment)
+            metadata_for_expression(value, flows, value_environment, store)
                 .or_else(|| expression.reactive_template.clone())
         }
 
@@ -50,6 +52,7 @@ fn metadata_for_function_call(
     arguments: &[CallArgument],
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
+    store: &TemplateIrStore,
 ) -> Option<ReactiveTemplateMetadata> {
     let flow = flows.get(name)?;
     let metadata = flow.success_returns.first()?.as_ref()?;
@@ -58,7 +61,7 @@ fn metadata_for_function_call(
         .map(|argument| {
             let mut resolved_argument = argument.clone();
             resolved_argument.value.reactive_template =
-                metadata_for_expression(&argument.value, flows, value_environment);
+                metadata_for_expression(&argument.value, flows, value_environment, store);
             resolved_argument
         })
         .collect::<Vec<_>>();
@@ -70,13 +73,17 @@ fn metadata_for_template(
     template: &Template,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
+    store: &TemplateIrStore,
 ) -> Option<ReactiveTemplateMetadata> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
 
-    reactive_template_metadata::merge_reactive_template_metadata_with_resolver(
+    // Use the store-aware traversal so control-flow bodies are read from
+    // finalized same-store TIR body roots.
+    reactive_template_metadata::merge_reactive_template_metadata_with_store_and_resolver(
         template,
+        store,
         &mut metadata,
-        &mut |expression| metadata_for_expression(expression, flows, value_environment),
+        &mut |expression| metadata_for_expression(expression, flows, value_environment, store),
     );
 
     Some(metadata)

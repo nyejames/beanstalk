@@ -1,0 +1,70 @@
+
+The JS backend owns HIR-to-JavaScript lowering and JS runtime helper emission.
+
+The HTML JS path uses it to build page bundles.
+The direct JS backend path can emit a standalone bundle when configured to include every HIR function.
+
+## Main paths
+
+- `src/backends/js/`
+- `src/projects/html_project/js_path.rs`
+- `src/projects/html_project/external_js/`
+
+## HTML JS page path
+
+The HTML-JS path lowers HIR through the JS backend, then participates in the builder-owned fragment contract: const fragments render into the document, runtime fragment slots are emitted, the generated JS bundle is embedded or module-loaded, entry `start` is called once, and returned runtime fragments hydrate the slots in source order. The JS lowerer provides the execution artifact: the HTML builder owns the source-order fragment plan.
+
+For page bundles, it emits only the entry-reachable function set.
+It uses the JS backend's referenced external-function metadata to generate only the glue wrappers that the emitted bundle calls.
+
+Reactive runtime fragments are a JS-only concern. Ordinary runtime page-fragment assembly is shared with HTML-Wasm: reactive mounting isn't.
+
+## Direct JS path
+
+The direct JS backend path can emit a complete standalone JS bundle when configured to include every HIR function.
+
+That is a different root policy from the HTML page-bundle path.
+Don't accidentally make page bundles include the whole module just because standalone JS can.
+
+## Runtime semantics
+
+Language-owned HIR operations lower through JS runtime helpers or explicit JS code selected by the backend.
+
+Examples include:
+
+- checked numeric operations
+- Float formatting
+- external Float validation
+- runtime casts
+- map operations
+- string/template runtime construction
+- reactive mount/update hooks for supported HTML-JS behaviour
+
+The JS backend must preserve Beanstalk semantics even when JavaScript has different native behaviour.
+For example, Float formatting and checked numeric behaviour should not silently fall through to host-native quirks.
+
+## External calls and glue
+
+HIR carries stable external function IDs.
+JS lowering records which external functions are referenced by the emitted bundle.
+HTML module-level glue generation uses that metadata to emit only the wrappers and imports needed by that route.
+
+The backend should not regenerate imports from source syntax.
+The source import surface has already resolved to stable metadata.
+
+## Common mistakes
+
+- Emitting all module functions for a page bundle.
+- Generating glue for every registered external function instead of referenced ones.
+- Using JavaScript native formatting where Beanstalk requires stable formatting.
+- Re-reading source imports instead of HIR external IDs.
+- Letting direct JS bundle policy leak into HTML page-bundle policy.
+
+## Related reading
+
+- @../ (Backend overview): backend boundaries and shared fragment contract
+- @../html-project-assembly (HTML project assembly): the HTML builder route that uses JS lowering
+- @../external-js-and-runtime-assets (External JavaScript and runtime assets): referenced external functions and glue generation
+- @../../../memory-management/runtime-and-backend-lowering
+  (Runtime and backend memory lowering): JavaScript GC-baseline semantics
+- @../../stages/hir-generation (Stage 5: HIR generation): the IR that JS lowering consumes

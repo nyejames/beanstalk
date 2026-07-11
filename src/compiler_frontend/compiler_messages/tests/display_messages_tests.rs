@@ -5,6 +5,7 @@ use crate::compiler_frontend::compiler_errors::{
 };
 use crate::compiler_frontend::compiler_messages::render::{
     relative_display_path_from_root, resolve_source_file_path, resolved_display_path,
+    special_file_name_from_path,
 };
 use crate::compiler_frontend::compiler_messages::{DiagnosticKind, InfrastructureDiagnosticKind};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -72,6 +73,28 @@ fn guidance_lines_are_empty_when_metadata_is_missing() {
     let error = CompilerError::compiler_error("bad compiler state");
     let lines = format_error_guidance_lines(&error);
     assert!(lines.is_empty());
+}
+
+#[test]
+fn special_file_renderer_names_arbitrary_hash_roots() {
+    let mut string_table = StringTable::new();
+    let mut extensionless_path = InternedPath::new();
+    extensionless_path.push_str("input", &mut string_table);
+    extensionless_path.push_str("#home", &mut string_table);
+
+    assert_eq!(
+        special_file_name_from_path(&extensionless_path, &string_table),
+        "#home.bst"
+    );
+
+    let mut explicit_path = InternedPath::new();
+    explicit_path.push_str("input", &mut string_table);
+    explicit_path.push_str("#home.bst", &mut string_table);
+
+    assert_eq!(
+        special_file_name_from_path(&explicit_path, &string_table),
+        "#home.bst"
+    );
 }
 
 #[test]

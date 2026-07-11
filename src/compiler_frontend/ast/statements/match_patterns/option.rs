@@ -15,6 +15,15 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 
 use super::types::MatchPattern;
 
+/// Boxed diagnostic result for the option pattern family.
+///
+/// WHAT: every function in this module returns errors as `Box<CompilerDiagnostic>`.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err`;
+/// boxing the error variant keeps the success path cheap and matches the
+/// already-boxed `LiteralPatternResult`, `MatchHeaderResult` and `IfHeaderResult`
+/// conventions used by the surrounding AST statement parsers.
+type OptionPatternResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parse a pattern for an optional scrutinee.
 ///
 /// `none =>` is a presence check and does not require equality support from
@@ -22,13 +31,12 @@ use super::types::MatchPattern;
 /// Literal present-value patterns compare the option payload for equality, so the
 /// inner type must support runtime equality. Relational present-value patterns are
 /// forwarded without additional validation.
-#[allow(clippy::result_large_err)]
 pub fn parse_option_pattern(
     token_stream: &mut FileTokens,
     option_inner_type_id: TypeId,
     string_table: &StringTable,
     type_environment: &TypeEnvironment,
-) -> Result<MatchPattern, CompilerDiagnostic> {
+) -> OptionPatternResult<MatchPattern> {
     if token_stream.current_token_kind() == &TokenKind::NoneLiteral {
         let location = token_stream.current_location();
         token_stream.advance();
@@ -41,6 +49,8 @@ pub fn parse_option_pattern(
 
     // Relational and literal patterns delegate to the non-choice parser so
     // option present-value checks reuse existing scalar pattern validation.
+    // `parse_non_choice_pattern` returns a boxed diagnostic that flows through
+    // directly without unboxing and reboxing.
     let pattern = parse_non_choice_pattern(
         token_stream,
         option_inner_type_id,
@@ -51,12 +61,12 @@ pub fn parse_option_pattern(
     match pattern {
         MatchPattern::Literal(value) => {
             if !type_environment.supports_runtime_equality(option_inner_type_id) {
-                return Err(CompilerDiagnostic::invalid_match_pattern(
+                return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                     InvalidMatchPatternReason::OptionValuePatternRequiresEquality,
                     None,
                     None,
                     value.location.clone(),
-                ));
+                )));
             }
 
             let location = value.location.clone();
@@ -79,12 +89,11 @@ pub fn parse_option_pattern(
 /// - `||` is rejected.
 /// - Multiple names are rejected.
 /// - Type annotations inside `|...|` are rejected.
-#[allow(clippy::result_large_err)]
 fn parse_option_present_capture(
     token_stream: &mut FileTokens,
     inner_type_id: TypeId,
     _string_table: &StringTable,
-) -> Result<MatchPattern, CompilerDiagnostic> {
+) -> OptionPatternResult<MatchPattern> {
     let location = token_stream.current_location();
     token_stream.advance(); // consume opening '|'
     token_stream.skip_newlines();
@@ -93,21 +102,21 @@ fn parse_option_present_capture(
         TokenKind::Symbol(name) => *name,
 
         TokenKind::TypeParameterBracket => {
-            return Err(CompilerDiagnostic::invalid_match_pattern(
+            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                 InvalidMatchPatternReason::EmptyOptionPresentCapture,
                 None,
                 None,
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         _ => {
-            return Err(CompilerDiagnostic::invalid_match_pattern(
+            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                 InvalidMatchPatternReason::ExpectedBindingInOptionPresentCapture,
                 None,
                 None,
                 token_stream.current_location(),
-            ));
+            )));
         }
     };
     let binding_location = token_stream.current_location();
@@ -115,23 +124,23 @@ fn parse_option_present_capture(
 
     // Reject type annotations such as `|name String|`.
     if matches!(token_stream.current_token_kind(), TokenKind::Symbol(_)) {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::OptionPresentCaptureTypeAnnotation,
             None,
             None,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     token_stream.skip_newlines();
 
     if token_stream.current_token_kind() != &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::MissingClosingPipe,
             None,
             None,
             token_stream.current_location(),
-        ));
+        )));
     }
     token_stream.advance(); // consume closing '|'
 

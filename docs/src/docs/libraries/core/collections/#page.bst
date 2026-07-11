@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE COLLECTIONS]
 
-#[section, $markdown:
+#[section, $md:
     Collections are ordered, zero-indexed groups of one element type.
     Non-empty literals infer their element type from their items.
     Empty literals need an explicit collection type.

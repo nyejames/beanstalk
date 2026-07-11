@@ -24,12 +24,47 @@ export small #String = [$html:<small style="[$slot("style")]">[$slot]</small>]
 export large #String = [$html:<large style="[$slot("style")]">[$slot]</large>]
 
 -- Formatting helpers
+export bold #String = [$html:<b style="[$slot("style")]">[$slot]</b>]
+export italic #String = [$html:<i style="[$slot("style")]">[$slot]</i>]
 export underline #String = [$html:<u style="[$slot("style")]">[$slot]</u>]
 export strikethrough #String = [$html:<s style="[$slot("style")]">[$slot]</s>]
+
+-- Structure
+export div #String = [$html:<div style="[$slot("style")]">[$slot]</div>]
+export span #String = [$html:<span style="[$slot("style")]">[$slot]</span>]
+
+-- Code blocks
+export codeblock #= [$html:
+    <pre style="[$slot("style")]">[$slot]</pre>
+]
+
+-- Basic table components
 export table #String = [$html:
   <table style="[$slot("style")]">
-    [$slot]
+    [$note: The first row can be styled differently to the rest of the table rows.]
+    <tr style="[$slot("header_style")]">
+        [$slot(1)]
+    </tr>
+
+    [$note: Each remaining row can be styled differently.]
+    [$children([$html:<tr style="[$slot("row_style")]">[$slot]</tr>]):
+        [$slot]
+    ]
   </table>
+]
+
+export td #= [$html:
+    [$children([$html: <td style="[$slot("style")]">[$slot]</td>]):
+        [$slot]
+    ]
+]
+
+export th #= [$html:
+    [$children([$html:
+        <th scope="col" style="[$slot("style")]">[$slot]</th>
+    ]):
+        [$slot]
+    ]
 ]
 
 -- Utility style inserts

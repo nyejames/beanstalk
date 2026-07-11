@@ -318,6 +318,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 SignatureTypeFallbackPolicy::StrictCapacity,
                 false,
             )?;
+            let template_ir_registry = Rc::clone(&self.context.template_ir_registry);
+            let template_ir_store = Rc::clone(&self.context.template_ir_store);
             let mut type_resolution_context = self.type_resolution_context_for_with_traits(
                 &visibility,
                 generic_parameter_scope.as_ref(),
@@ -328,6 +330,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &header.tokens.src_path,
                 &unresolved_fields,
                 &mut type_resolution_context,
+                &template_ir_registry,
+                &template_ir_store,
                 string_table,
             )
             .map_err(|error| match error {
@@ -806,7 +810,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
 
         validate_nominal_generic_bound_evidence(type_id, location, &evidence_context)
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))
     }
 
     /// Resolve struct field and choice variant types needed for constant constructor parsing.
@@ -1011,6 +1015,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     template_const_loop_iteration_limit: self
                         .context
                         .template_const_loop_iteration_limit,
+                    template_ir_registry: Rc::clone(&self.context.template_ir_registry),
+                    template_ir_store_id: self.context.template_ir_store_id,
+                    template_ir_store: Rc::clone(&self.context.template_ir_store),
                     build_profile: self.context.build_profile,
                     warnings: &mut self.warnings,
                     rendered_path_usages: self.rendered_path_usages.clone(),
@@ -1059,7 +1066,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         // Parse each field inside a temporary scope so that type-resolution errors
         // can be remapped to the appropriate diagnostic for struct defaults vs choice payloads.
-        let conversion_result = (|| -> Result<Vec<Declaration>, CompilerDiagnostic> {
+        let conversion_result = (|| -> Result<Vec<Declaration>, Box<CompilerDiagnostic>> {
             let mut compatibility_cache = TypeCompatibilityCache::new();
             let mut type_interner =
                 AstTypeInterner::new(&mut self.type_environment, &mut compatibility_cache);
@@ -1074,7 +1081,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     fallback_policy,
                 )
                 .map_err(|diagnostic| {
-                    member_shell_diagnostic_for_context(diagnostic, member_context)
+                    Box::new(member_shell_diagnostic_for_context(
+                        *diagnostic,
+                        member_context,
+                    ))
                 })?;
                 declarations.push(declaration);
             }
@@ -1083,7 +1093,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         })();
 
         let declarations = conversion_result
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
         if emit_warnings {
             self.warnings.extend(field_context.take_emitted_warnings());
@@ -1158,6 +1168,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             Arc::clone(&self.context.external_package_registry),
             vec![],
             0,
+        )
+        .with_template_ir_registry(
+            Rc::clone(&self.context.template_ir_registry),
+            self.context.template_ir_store_id,
+            Rc::clone(&self.context.template_ir_store),
         )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)

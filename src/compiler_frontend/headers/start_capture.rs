@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Implicit entry-start body capture.
 //!
 //! WHAT: collects non-header top-level tokens into the module entry file's implicit `start` body.
@@ -15,7 +13,7 @@ pub(super) fn push_runtime_template_tokens_to_start_function(
     token_stream: &mut FileTokens,
     start_function_body: &mut Vec<Token>,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     start_function_body.push(opening_template_token);
 
     // Mutation: EOF diagnostics for unclosed templates intern the expected closing delimiter
@@ -26,6 +24,11 @@ pub(super) fn push_runtime_template_tokens_to_start_function(
         |token, _token_kind| {
             start_function_body.push(token);
         },
-        |location| CompilerDiagnostic::unexpected_end_of_file(Some(closing_bracket), location),
+        |location| {
+            Box::new(CompilerDiagnostic::unexpected_end_of_file(
+                Some(closing_bracket),
+                location,
+            ))
+        },
     )
 }

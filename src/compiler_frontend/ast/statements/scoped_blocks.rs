@@ -10,6 +10,17 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ReservedNa
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: `parse_scoped_block_statement` returns `Result<T, Box<CompilerDiagnostic>>` through
+/// this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when stored
+/// directly in a `Result` variant. Boxing the error at the owner boundary keeps the `Result`
+/// envelope small without changing `DiagnosticBag`, `CompilerMessages`, or any shared error
+/// type. The existing boxed `StatementDispatchResult` caller boundary in `body_dispatch.rs`
+/// receives this result directly with no unbox/rebox adapter.
+type ScopedBlockResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Build a diagnostic for using a reserved block keyword (e.g. `block`) as a variable name.
 ///
 /// `string_table` is accepted to keep the signature consistent with callers in
@@ -22,14 +33,13 @@ pub(crate) fn reserved_block_keyword_as_name_error(
     CompilerDiagnostic::reserved_name_collision(keyword, ReservedNameOwner::Keyword, location)
 }
 
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_scoped_block_statement(
     token_stream: &mut FileTokens,
     parent_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompilerDiagnostic> {
+) -> ScopedBlockResult<AstNode> {
     let statement_location = token_stream.current_location();
     token_stream.advance();
 
@@ -38,19 +48,19 @@ pub(crate) fn parse_scoped_block_statement(
 
         operator_token if operator_token.is_assignment_operator() => {
             let block_keyword_id = string_table.intern("block");
-            return Err(reserved_block_keyword_as_name_error(
+            return Err(Box::new(reserved_block_keyword_as_name_error(
                 block_keyword_id,
                 string_table,
                 statement_location,
-            ));
+            )));
         }
 
         unexpected_token_kind => {
-            return Err(CompilerDiagnostic::expected_token(
+            return Err(Box::new(CompilerDiagnostic::expected_token(
                 TokenKind::Colon,
                 Some(unexpected_token_kind.clone()),
                 token_stream.current_location(),
-            ));
+            )));
         }
     }
 

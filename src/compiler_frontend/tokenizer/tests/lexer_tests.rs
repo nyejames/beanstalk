@@ -44,7 +44,7 @@ fn tokenize_source_error(source: &str) -> (CompilerDiagnostic, StringTable) {
         None,
     )
     .expect_err("tokenization should fail");
-    (diagnostic, string_table)
+    (*diagnostic, string_table)
 }
 
 fn tokenize_source_with_registry(
@@ -116,7 +116,7 @@ fn tokenize_beandown_error(source: &str) -> (CompilerDiagnostic, StringTable) {
         None,
     )
     .expect_err("Beandown tokenization should fail");
-    (diagnostic, string_table)
+    (*diagnostic, string_table)
 }
 
 fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) -> usize {
@@ -1101,14 +1101,14 @@ fn tokenizes_none_question_mark_bang_and_catch_markers() {
 
 #[test]
 fn tokenizes_style_directives_inside_template_heads() {
-    let (file_tokens, string_table) = tokenize_source("[$markdown, $fresh: body]");
+    let (file_tokens, string_table) = tokenize_source("[$md, $fresh: body]");
 
     let outer_head = find_token_index(&file_tokens.tokens, |kind| {
         matches!(kind, TokenKind::TemplateHead)
     });
     let markdown = find_token_index(
         &file_tokens.tokens,
-        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "markdown"),
+        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "md"),
     );
     let fresh = find_token_index(
         &file_tokens.tokens,
@@ -1152,9 +1152,20 @@ fn rejects_legacy_reset_style_directive_name() {
 }
 
 #[test]
+fn rejects_unknown_style_directive_name() {
+    let (error, string_table) = tokenize_source_error("[$unknown_formatter: body]");
+
+    match &error.payload {
+        DiagnosticPayload::InvalidStyleDirective { directive_name, .. } => {
+            assert_eq!(string_table.resolve(*directive_name), "unknown_formatter");
+        }
+        payload => panic!("expected invalid style directive payload, found {payload:?}"),
+    }
+}
+
+#[test]
 fn tokenizes_children_directive_with_template_argument() {
-    let (file_tokens, string_table) =
-        tokenize_source("[$children([:prefix]), $markdown:\nhello\n]");
+    let (file_tokens, string_table) = tokenize_source("[$children([:prefix]), $md:\nhello\n]");
 
     let outer_head = find_token_index(&file_tokens.tokens, |kind| {
         matches!(kind, TokenKind::TemplateHead)
@@ -1202,10 +1213,10 @@ fn tokenizes_children_directive_with_template_argument() {
         .enumerate()
         .skip(comma + 1)
         .find_map(|(index, token)| {
-            matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "markdown")
+            matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "md")
                 .then_some(index)
         })
-        .expect("expected the outer head to continue with '$markdown'");
+        .expect("expected the outer head to continue with '$md'");
 
     assert!(outer_head < children);
     assert!(children < open_paren);
@@ -1223,7 +1234,7 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
-        "[$[:prefix], $markdown:\nhello\n]",
+        "[$[:prefix], $md:\nhello\n]",
         &source_path,
         TokenizerEntryMode::SourceFile,
         &style_directives,

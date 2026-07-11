@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: BRANCHING]
 
-#[section, $markdown:
+#[section, $md:
 
     # If  Statements
     [codeblock, $code("bst"):
@@ -31,7 +31,7 @@ page_head #= theme_head
     so there is only one semicolon at the end to close the statement.
 ]
 
-#[section, $markdown:
+#[section, $md:
 
     # Pattern  Matching
     Pattern matching is a control-flow tool for checking one value against multiple patterns.

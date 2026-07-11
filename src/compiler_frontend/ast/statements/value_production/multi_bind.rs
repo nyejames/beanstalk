@@ -9,13 +9,13 @@ use super::receiver::{
     current_if_header_is_full_match, emit_collected_warnings, same_logical_line,
     try_parse_value_block_at_receiver, validate_value_match_completeness,
 };
-use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
+use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::statements::branching::parse_match_block;
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
@@ -26,7 +26,7 @@ use crate::compiler_frontend::ast::statements::value_production::types::{
     ValueMatchBlock, ValueReceiverKind,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::ast::{ContextKind, function_body_to_ast};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidControlFlowStatementReason, InvalidReturnShapeReason,
     TypeMismatchContext,
@@ -41,6 +41,18 @@ use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: every local helper in this module returns `Result<T, Box<CompilerDiagnostic>>` through
+/// this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when stored
+/// directly in a `Result` variant. Boxing the error at the owner boundary keeps the `Result`
+/// envelope small without changing `DiagnosticBag`, `CompilerMessages`, or any shared error type.
+/// Already-boxed helpers (condition validation, match-header dispatch, statement dispatch) flow
+/// through unchanged; still-plain external helpers (value-block receiver parsing, completeness
+/// validation, inferred-value parsing, expression parsing) are adapted at their narrow call sites.
+type MultiBindValueResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 // ----------------------------
 //  Multi-bind value blocks
 // ----------------------------
@@ -54,7 +66,6 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// WHY: multi-bind target inference means some slot types may not be known before
 /// the RHS is parsed, so the standard `try_parse_value_block_at_receiver` (which
 /// requires all expected types upfront) cannot handle every case.
-#[allow(clippy::result_large_err)]
 pub fn try_parse_multi_bind_value_block(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -62,7 +73,7 @@ pub fn try_parse_multi_bind_value_block(
     target_count: usize,
     known_slot_types: &[Option<TypeId>],
     string_table: &mut StringTable,
-) -> Option<Result<Expression, CompilerDiagnostic>> {
+) -> Option<MultiBindValueResult<Expression>> {
     if token_stream.current_token_kind() != &TokenKind::If {
         return None;
     }
@@ -75,7 +86,8 @@ pub fn try_parse_multi_bind_value_block(
             &expected_types,
             ValueReceiverKind::MultiBind,
             string_table,
-        );
+        )
+        .map(|result| result.map_err(Box::new));
     }
 
     Some(parse_inferred_multi_bind_value_block(
@@ -95,7 +107,7 @@ fn parse_inferred_multi_bind_value_block(
     target_count: usize,
     known_slot_types: &[Option<TypeId>],
     string_table: &mut StringTable,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let location = token_stream.current_location();
     token_stream.advance(); // consume `if`
 
@@ -123,7 +135,8 @@ fn parse_inferred_multi_bind_value_block(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let condition = create_expression_until(input, &[TokenKind::Then, TokenKind::Colon])?;
+    let condition = create_expression_until(input, &[TokenKind::Then, TokenKind::Colon])
+        .map_err(|err| Box::new(err.into()))?;
     ensure_if_statement_condition(&condition, type_interner.environment())?;
 
     if token_stream.current_token_kind() == &TokenKind::Then {
@@ -152,9 +165,11 @@ fn parse_inferred_multi_bind_value_block(
         });
     }
 
-    Err(CompilerDiagnostic::invalid_control_flow_statement(
-        InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-        token_stream.current_location(),
+    Err(Box::new(
+        CompilerDiagnostic::invalid_control_flow_statement(
+            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+            token_stream.current_location(),
+        ),
     ))
 }
 
@@ -191,7 +206,7 @@ struct InferredMultiBindValueMatchInput<'a, 'b> {
 
 fn parse_inferred_multi_bind_value_match(
     input: InferredMultiBindValueMatchInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let InferredMultiBindValueMatchInput {
         token_stream,
         context,
@@ -214,12 +229,15 @@ fn parse_inferred_multi_bind_value_match(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
+    let scrutinee =
+        create_expression_until(input, &[TokenKind::Is]).map_err(|err| Box::new(err.into()))?;
 
     if token_stream.current_token_kind() != &TokenKind::Is {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+                token_stream.current_location(),
+            ),
         ));
     }
     token_stream.advance();
@@ -250,9 +268,11 @@ fn parse_inferred_multi_bind_value_match(
     let produced_value_sets =
         collect_match_multi_produced_values(&parsed_match.arms, parsed_match.default.as_deref());
     if produced_value_sets.is_empty() {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         ));
     }
 
@@ -295,7 +315,7 @@ fn parse_inferred_multi_bind_value_match(
 
 fn parse_inferred_inline_multi_bind_value_if(
     input: InferredMultiBindValueIfInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let InferredMultiBindValueIfInput {
         token_stream,
         context,
@@ -311,9 +331,11 @@ fn parse_inferred_inline_multi_bind_value_if(
     token_stream.advance(); // consume `then`
 
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -324,33 +346,41 @@ fn parse_inferred_inline_multi_bind_value_if(
         target_count,
         string_table,
     )
-    .map_err(|err| -> CompilerDiagnostic { err.into() })?;
+    .map_err(|err| Box::new(err.into()))?;
 
     if token_stream.current_token_kind() != &TokenKind::Else {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfMissingElse,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfMissingElse,
+                token_stream.current_location(),
+            ),
         ));
     }
     if !same_logical_line(&then_location, &token_stream.current_location()) {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 
     token_stream.advance(); // consume `else`
 
     if token_stream.current_token_kind() == &TokenKind::Then {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfElseThen,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfElseThen,
+                token_stream.current_location(),
+            ),
         ));
     }
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -361,7 +391,7 @@ fn parse_inferred_inline_multi_bind_value_if(
         target_count,
         string_table,
     )
-    .map_err(|err| -> CompilerDiagnostic { err.into() })?;
+    .map_err(|err| Box::new(err.into()))?;
 
     let result_type_ids = unify_and_validate_inferred_slots(
         &then_values,
@@ -389,7 +419,7 @@ fn parse_inferred_inline_multi_bind_value_if(
 
 fn parse_inferred_block_multi_bind_value_if(
     input: InferredMultiBindValueIfInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let InferredMultiBindValueIfInput {
         token_stream,
         context,
@@ -412,7 +442,7 @@ fn parse_inferred_block_multi_bind_value_if(
     let mut then_context = context.new_child_control_flow(ContextKind::Branch, string_table);
     then_context.active_value_target = Some(active_target.clone());
     let mut then_warnings = Vec::new();
-    let mut then_body = function_body_to_ast(
+    let mut then_body = parse_function_body_statements(
         token_stream,
         then_context,
         type_interner,
@@ -422,9 +452,11 @@ fn parse_inferred_block_multi_bind_value_if(
     emit_collected_warnings(context, then_warnings);
 
     if token_stream.current_token_kind() != &TokenKind::Else {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfMissingElse,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfMissingElse,
+                token_stream.current_location(),
+            ),
         ));
     }
     token_stream.advance(); // consume `else`
@@ -432,7 +464,7 @@ fn parse_inferred_block_multi_bind_value_if(
     let mut else_context = context.new_child_control_flow(ContextKind::Branch, string_table);
     else_context.active_value_target = Some(active_target);
     let mut else_warnings = Vec::new();
-    let mut else_body = function_body_to_ast(
+    let mut else_body = parse_function_body_statements(
         token_stream,
         else_context,
         type_interner,
@@ -450,21 +482,27 @@ fn parse_inferred_block_multi_bind_value_if(
     let else_terminates = matches!(else_flow, BranchFlow::Terminates);
 
     if !then_produces && !then_terminates {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                location.clone(),
+            ),
         ));
     }
     if !else_produces && !else_terminates {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                location.clone(),
+            ),
         ));
     }
     if !then_produces && !else_produces {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         ));
     }
 
@@ -521,7 +559,7 @@ fn unify_and_validate_inferred_slots(
     known_slot_types: &[Option<TypeId>],
     type_environment: &TypeEnvironment,
     location: &SourceLocation,
-) -> Result<Vec<TypeId>, CompilerDiagnostic> {
+) -> MultiBindValueResult<Vec<TypeId>> {
     let mut result_types = Vec::with_capacity(known_slot_types.len());
 
     for ((then_expr, else_expr), known_type) in then_values
@@ -533,32 +571,32 @@ fn unify_and_validate_inferred_slots(
             if then_expr.type_id != *known
                 && !is_declaration_compatible(*known, then_expr.type_id, type_environment)
             {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     *known,
                     then_expr.type_id,
                     TypeMismatchContext::Assignment,
                     then_expr.location.clone(),
-                ));
+                )));
             }
             if else_expr.type_id != *known
                 && !is_declaration_compatible(*known, else_expr.type_id, type_environment)
             {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     *known,
                     else_expr.type_id,
                     TypeMismatchContext::Assignment,
                     else_expr.location.clone(),
-                ));
+                )));
             }
             *known
         } else {
             if then_expr.type_id != else_expr.type_id {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     then_expr.type_id,
                     else_expr.type_id,
                     TypeMismatchContext::Assignment,
                     location.clone(),
-                ));
+                )));
             }
             then_expr.type_id
         };
@@ -580,11 +618,13 @@ fn infer_multi_bind_result_slots(
     known_slot_types: &[Option<TypeId>],
     type_environment: &TypeEnvironment,
     location: &SourceLocation,
-) -> Result<Vec<TypeId>, CompilerDiagnostic> {
+) -> MultiBindValueResult<Vec<TypeId>> {
     if then_values.is_none() && else_values.is_none() {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         ));
     }
 
@@ -634,7 +674,7 @@ fn infer_multi_bind_match_result_slots(
     known_slot_types: &[Option<TypeId>],
     type_environment: &TypeEnvironment,
     location: &SourceLocation,
-) -> Result<Vec<TypeId>, CompilerDiagnostic> {
+) -> MultiBindValueResult<Vec<TypeId>> {
     let mut result_types = Vec::with_capacity(known_slot_types.len());
 
     for (slot_index, known_type) in known_slot_types.iter().enumerate() {
@@ -662,25 +702,27 @@ fn infer_unknown_match_slot_type(
     produced_value_sets: &[Vec<Expression>],
     slot_index: usize,
     location: &SourceLocation,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> MultiBindValueResult<TypeId> {
     let mut inferred_type: Option<TypeId> = None;
 
     for values in produced_value_sets {
         let Some(expression) = values.get(slot_index) else {
-            return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-                location.clone(),
+            return Err(Box::new(
+                CompilerDiagnostic::invalid_control_flow_statement(
+                    InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                    location.clone(),
+                ),
             ));
         };
 
         if let Some(existing) = inferred_type {
             if existing != expression.type_id {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     existing,
                     expression.type_id,
                     TypeMismatchContext::Assignment,
                     location.clone(),
-                ));
+                )));
             }
         } else {
             inferred_type = Some(expression.type_id);
@@ -688,10 +730,10 @@ fn infer_unknown_match_slot_type(
     }
 
     inferred_type.ok_or_else(|| {
-        CompilerDiagnostic::invalid_control_flow_statement(
+        Box::new(CompilerDiagnostic::invalid_control_flow_statement(
             InvalidControlFlowStatementReason::ValueIfNoProducingPath,
             location.clone(),
-        )
+        ))
     })
 }
 
@@ -699,16 +741,16 @@ fn infer_unknown_slot_type(
     then_expr: Option<&Expression>,
     else_expr: Option<&Expression>,
     location: &SourceLocation,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> MultiBindValueResult<TypeId> {
     match (then_expr, else_expr) {
         (Some(then_expr), Some(else_expr)) => {
             if then_expr.type_id != else_expr.type_id {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     then_expr.type_id,
                     else_expr.type_id,
                     TypeMismatchContext::Assignment,
                     location.clone(),
-                ));
+                )));
             }
 
             Ok(then_expr.type_id)
@@ -716,9 +758,11 @@ fn infer_unknown_slot_type(
 
         (Some(expression), None) | (None, Some(expression)) => Ok(expression.type_id),
 
-        (None, None) => Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        (None, None) => Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         )),
     }
 }
@@ -728,7 +772,7 @@ fn validate_expression_against_slot(
     expected_type: TypeId,
     type_environment: &TypeEnvironment,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindValueResult<()> {
     let Some(expression) = expression else {
         return Ok(());
     };
@@ -739,19 +783,19 @@ fn validate_expression_against_slot(
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::type_mismatch(
+    Err(Box::new(CompilerDiagnostic::type_mismatch(
         expected_type,
         expression.type_id,
         TypeMismatchContext::Assignment,
         location.clone(),
-    ))
+    )))
 }
 
 fn validate_optional_produced_arity(
     values: Option<&[Expression]>,
     target_count: usize,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindValueResult<()> {
     let Some(values) = values else {
         return Ok(());
     };
@@ -761,21 +805,21 @@ fn validate_optional_produced_arity(
     }
 
     if values.len() > target_count {
-        return Err(CompilerDiagnostic::invalid_return_shape(
+        return Err(Box::new(CompilerDiagnostic::invalid_return_shape(
             InvalidReturnShapeReason::TooManyReturnValues {
                 expected_count: target_count,
             },
             location.clone(),
-        ));
+        )));
     }
 
-    Err(CompilerDiagnostic::invalid_return_shape(
+    Err(Box::new(CompilerDiagnostic::invalid_return_shape(
         InvalidReturnShapeReason::TooFewReturnValues {
             expected_count: target_count,
             provided_count: values.len(),
         },
         location.clone(),
-    ))
+    )))
 }
 
 /// Wraps expressions in `Coerced` nodes where the target type differs from the natural type.
@@ -843,7 +887,7 @@ fn coerce_produced_values_in_body(
     body: &mut [AstNode],
     expected_types: &[TypeId],
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindValueResult<()> {
     for node in body {
         match &mut node.kind {
             NodeKind::ThenValue(produced_values) => {
@@ -865,12 +909,12 @@ fn coerce_produced_values_in_body(
                     }
 
                     if !is_declaration_compatible(*expected_type, expr.type_id, type_environment) {
-                        return Err(CompilerDiagnostic::type_mismatch(
+                        return Err(Box::new(CompilerDiagnostic::type_mismatch(
                             *expected_type,
                             expr.type_id,
                             TypeMismatchContext::Assignment,
                             expr.location.clone(),
-                        ));
+                        )));
                     }
 
                     *expr = Expression::coerced(expr.clone(), *expected_type);
@@ -917,7 +961,7 @@ fn build_multi_bind_value_if_expression(
     type_interner: &mut AstTypeInterner<'_>,
     location: SourceLocation,
     context: &ScopeContext,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let result_type_id = type_interner
         .environment_mut_for_derived_types()
         .intern_tuple(result_type_ids.clone());
@@ -967,7 +1011,7 @@ fn build_multi_bind_value_match_expression(
     result_type_ids: Vec<TypeId>,
     type_interner: &mut AstTypeInterner<'_>,
     location: SourceLocation,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindValueResult<Expression> {
     let result_type_id = type_interner
         .environment_mut_for_derived_types()
         .intern_tuple(result_type_ids.clone());

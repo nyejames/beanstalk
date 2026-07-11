@@ -9,8 +9,6 @@
 //! - Keeps the main head parser readable while preserving strict control of which
 //!   token kinds are valid in the head grammar.
 
-#![allow(clippy::result_large_err)]
-
 use super::control_flow_suffix::{parse_if_suffix, parse_loop_suffix};
 use super::core_directives::{
     mark_template_body_whitespace_style_controlled, maybe_parse_slot_or_insert_helper_directive,
@@ -18,17 +16,22 @@ use super::core_directives::{
 };
 use super::handler_directives::apply_handler_style_directive;
 use super::head_expressions::{
-    handle_template_value_in_template_head, push_template_head_expression,
-    push_template_head_path_expression,
+    TemplateHeadExpressionContext, handle_template_value_in_template_head,
+    push_template_head_expression, push_template_head_path_expression,
 };
 use super::reactive_subscriptions::parse_reactive_subscription;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBodyParseMode, TemplateControlFlowValidationMode,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateConstructionContext, TemplateIrRegistry, TemplateOverlaySetId, TemplateRef,
+    TemplateTirPhase, TirView, walk_tir_view_expression_payloads,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 
 use crate::ast_log;
@@ -43,33 +46,53 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, path_to
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Boxed diagnostic result for template-head parsing and local dispatch.
+///
+/// Head compatibility, item parsing and directive dispatch propagate through
+/// one owner into the already boxed template-construction boundary.
+type TemplateHeadResult<T> = Result<T, Box<CompilerDiagnostic>>;
 use crate::projects::settings::BS_VAR_PREFIX;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 /// Result of parsing a template head.
 pub(crate) struct ParsedTemplateHead {
     pub(crate) body_mode: TemplateBodyParseMode,
+    pub(crate) has_explicit_template_directive: bool,
+}
+
+pub(crate) struct TemplateHeadParseRequest<'a, 'types> {
+    pub(crate) context: &'a ScopeContext,
+    pub(crate) type_interner: &'a mut AstTypeInterner<'types>,
+    pub(crate) template: &'a mut Template,
+    pub(crate) construction_context: &'a mut TemplateConstructionContext,
+    pub(crate) foldable: &'a mut bool,
+    pub(crate) control_flow_validation: TemplateControlFlowValidationMode,
+    pub(crate) string_table: &'a mut StringTable,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 struct TemplateHeadState {
     seen_tags: TemplateHeadTag,
     blocked_future_tags: TemplateHeadTag,
+    has_explicit_template_directive: bool,
 }
 
 fn enforce_head_compatibility(
     state: &TemplateHeadState,
     incoming: &TemplateHeadCompatibility,
     token_stream: &FileTokens,
-) -> Result<(), CompilerDiagnostic> {
+) -> TemplateHeadResult<()> {
     if !state.blocked_future_tags.intersects(incoming.presence_tags)
         && !state.seen_tags.intersects(incoming.required_absent_tags)
     {
         Ok(())
     } else {
-        Err(CompilerDiagnostic::invalid_template_structure(
+        Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::IncompatibleHeadItem,
             token_stream.current_location(),
-        ))
+        )))
     }
 }
 
@@ -79,6 +102,139 @@ fn apply_head_compatibility(
 ) {
     state.seen_tags |= compatibility.presence_tags;
     state.blocked_future_tags |= compatibility.blocks_future_tags;
+}
+
+fn parsed_template_head(
+    body_mode: TemplateBodyParseMode,
+    head_state: &TemplateHeadState,
+) -> ParsedTemplateHead {
+    ParsedTemplateHead {
+        body_mode,
+        has_explicit_template_directive: head_state.has_explicit_template_directive,
+    }
+}
+
+fn should_inline_template_head_reference(
+    token_stream: &FileTokens,
+    context: &ScopeContext,
+    declaration: &Declaration,
+) -> bool {
+    if token_stream.peek_next_token() != Some(&TokenKind::TemplateClose) {
+        return true;
+    }
+
+    if context.kind.is_constant_context() {
+        return true;
+    }
+
+    // Head-only runtime template references are value reads, not receiver
+    // applications. Runtime slot handoffs already carry the composition-owned
+    // wrapper/source plan, so copying the stale compatibility mirror would lose
+    // that plan when the surrounding template is later materialized for HIR.
+    !expression_contains_runtime_slot_handoff(&declaration.value, context)
+}
+
+fn expression_contains_runtime_slot_handoff(
+    expression: &Expression,
+    context: &ScopeContext,
+) -> bool {
+    let registry = context.template_ir_registry.borrow();
+    let mut visited_templates = HashSet::new();
+    expression_contains_runtime_slot_handoff_in_registry(
+        expression,
+        &registry,
+        &mut visited_templates,
+    )
+}
+
+fn expression_contains_runtime_slot_handoff_in_registry(
+    expression: &Expression,
+    registry: &TemplateIrRegistry,
+    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
+) -> bool {
+    match &expression.kind {
+        ExpressionKind::RuntimeSlotApplicationHandoff(_) => true,
+
+        ExpressionKind::Template(template) => {
+            template_tir_contains_runtime_slot_handoff(template, registry, visited_templates)
+        }
+
+        ExpressionKind::Runtime(rpn) => rpn.items.iter().any(|item| match item {
+            crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem::Operand(
+                operand,
+            ) => expression_contains_runtime_slot_handoff_in_registry(
+                operand,
+                registry,
+                visited_templates,
+            ),
+            crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem::Operator {
+                ..
+            } => false,
+        }),
+
+        ExpressionKind::Coerced { value, .. } => {
+            expression_contains_runtime_slot_handoff_in_registry(
+                value,
+                registry,
+                visited_templates,
+            )
+        }
+
+        _ => false,
+    }
+}
+
+/// Reads runtime-slot handoff payloads from the template's effective TIR view.
+///
+/// WHAT: walks dynamic-expression, branch-selector and loop-header payloads,
+/// including template-valued dynamic head expressions in another registered
+/// store.
+/// WHY: head-only runtime template references must stay value reads. Inlining
+/// one as a wrapper receiver would discard its composition-owned runtime slot
+/// plan, and compatibility content is no longer an authority for that check.
+fn template_tir_contains_runtime_slot_handoff(
+    template: &Template,
+    registry: &TemplateIrRegistry,
+    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
+) -> bool {
+    let Some(reference) = template.tir_reference.as_ref() else {
+        // Without a TIR authority, inlining cannot prove that it preserves a
+        // composition-owned runtime slot plan.
+        return true;
+    };
+    let effective_identity = (reference.root, reference.phase, reference.overlay_set_id);
+    if !visited_templates.insert(effective_identity) {
+        return false;
+    }
+
+    let Some(store) = registry.store(reference.root.store_id) else {
+        return true;
+    };
+    if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
+        return true;
+    }
+    drop(store);
+
+    let Ok(view) = TirView::new(
+        registry,
+        reference.root,
+        reference.phase,
+        reference.overlay_set_id,
+    ) else {
+        return true;
+    };
+
+    let mut contains_runtime_slot_handoff = false;
+    let walk_result = walk_tir_view_expression_payloads(&view, &mut |expression| {
+        contains_runtime_slot_handoff |= expression_contains_runtime_slot_handoff_in_registry(
+            expression,
+            registry,
+            visited_templates,
+        );
+        Ok(())
+    });
+
+    walk_result.is_err() || contains_runtime_slot_handoff
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,13 +249,18 @@ enum TemplateHeadSeparatorState {
 /// state machine: each accepted boundary or diagnostic exits immediately.
 pub fn parse_template_head(
     token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    template: &mut Template,
-    foldable: &mut bool,
-    control_flow_validation: TemplateControlFlowValidationMode,
-    string_table: &mut StringTable,
-) -> Result<ParsedTemplateHead, CompilerDiagnostic> {
+    request: TemplateHeadParseRequest<'_, '_>,
+) -> TemplateHeadResult<ParsedTemplateHead> {
+    let TemplateHeadParseRequest {
+        context,
+        type_interner,
+        template,
+        construction_context,
+        foldable,
+        control_flow_validation,
+        string_table,
+    } = request;
+
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     // Each meaningful head item must be separated with a comma before another
@@ -126,17 +287,18 @@ pub fn parse_template_head(
         // closing ] delimiter. This is a malformed template, not a valid stream
         // boundary; the user needs a structured diagnostic.
         if token == TokenKind::Eof {
-            return Err(CompilerDiagnostic::unexpected_end_of_file(
+            return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
                 Some(string_table.intern("]")),
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         // A closing ] without a body is a valid empty template.
         if token == TokenKind::TemplateClose {
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
+            return Ok(parsed_template_head(
+                TemplateBodyParseMode::Normal,
+                &head_state,
+            ));
         }
 
         if token == TokenKind::StartTemplateBody {
@@ -144,43 +306,44 @@ pub fn parse_template_head(
                 .seen_tags
                 .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
             {
-                return Err(CompilerDiagnostic::invalid_template_structure(
+                return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                     InvalidTemplateStructureReason::SlotInHead,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             token_stream.advance();
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
+            return Ok(parsed_template_head(
+                TemplateBodyParseMode::Normal,
+                &head_state,
+            ));
         }
 
         if separator_state == TemplateHeadSeparatorState::ExpectItem
             && !matches!(token, TokenKind::If | TokenKind::Loop)
             && let Some(control_flow_location) = find_unseparated_control_flow_suffix(token_stream)
         {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::MissingCommaBeforeControlFlowSuffix,
                 control_flow_location,
-            ));
+            )));
         }
 
         // Make sure there is a comma before the next token.
         if separator_state == TemplateHeadSeparatorState::ExpectSeparatorOrBody {
             if matches!(token, TokenKind::If | TokenKind::Loop) {
-                return Err(CompilerDiagnostic::invalid_template_structure(
+                return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                     InvalidTemplateStructureReason::MissingCommaBeforeControlFlowSuffix,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             if token != TokenKind::Comma {
-                return Err(CompilerDiagnostic::expected_token(
+                return Err(Box::new(CompilerDiagnostic::expected_token(
                     TokenKind::Comma,
                     Some(token),
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             separator_state = TemplateHeadSeparatorState::ExpectItem;
@@ -196,10 +359,10 @@ pub fn parse_template_head(
                     .seen_tags
                     .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
                 {
-                    return Err(CompilerDiagnostic::invalid_template_structure(
+                    return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::SlotInHead,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 let body_mode = parse_if_suffix(
@@ -209,7 +372,7 @@ pub fn parse_template_head(
                     control_flow_validation,
                     string_table,
                 )?;
-                return Ok(ParsedTemplateHead { body_mode });
+                return Ok(parsed_template_head(body_mode, &head_state));
             }
 
             TokenKind::Loop => {
@@ -217,10 +380,10 @@ pub fn parse_template_head(
                     .seen_tags
                     .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
                 {
-                    return Err(CompilerDiagnostic::invalid_template_structure(
+                    return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::SlotInHead,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 let body_mode = parse_loop_suffix(
@@ -230,14 +393,14 @@ pub fn parse_template_head(
                     control_flow_validation,
                     string_table,
                 )?;
-                return Ok(ParsedTemplateHead { body_mode });
+                return Ok(parsed_template_head(body_mode, &head_state));
             }
 
             TokenKind::Else => {
-                return Err(CompilerDiagnostic::invalid_template_structure(
+                return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                     InvalidTemplateStructureReason::ElseInTemplateHead,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             TokenKind::Reactive => {
@@ -250,69 +413,90 @@ pub fn parse_template_head(
                     token_stream,
                     context,
                     type_interner.environment(),
-                    template,
+                    construction_context,
                     foldable,
+                    string_table,
                 )?;
                 defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
-            // Variable and template references
+            // Variable, template, and import-namespace references.
+            //
+            // Known template references that should be inlined preserve their
+            // wrapper/slot semantics. Everything else routes through the ordinary
+            // expression parser so that namespace member access (`intro.content`),
+            // bare import-record misuse (`intro`), field access, and unknown names
+            // all get structured diagnostics instead of generic `UnexpectedToken`.
             TokenKind::Symbol(name) => {
-                // Check if it's a regular template reference or variable reference.
-                // If this is a reference to a function or variable.
-                if let Some(reference) = context.get_reference(&name) {
-                    enforce_head_compatibility(
-                        &head_state,
-                        &meaningful_item_compatibility,
-                        token_stream,
-                    )?;
-                    let value_location = token_stream.current_location();
-                    match &reference.value.kind {
-                        // Direct template references should preserve wrapper/slot semantics.
-                        ExpressionKind::Template(inserted_template) => {
-                            handle_template_value_in_template_head(
-                                inserted_template.as_ref(),
-                                context,
-                                template,
-                                foldable,
-                                &value_location,
-                            )?;
-                        }
+                enforce_head_compatibility(
+                    &head_state,
+                    &meaningful_item_compatibility,
+                    token_stream,
+                )?;
+                let value_location = token_stream.current_location();
 
-                        // Otherwise this is a reference to some other variable:
-                        // string, number, bool, etc.
-                        _ => {
-                            let mut inferred = ExpectedType::Infer;
-                            let expression = create_expression(
+                // Extract an inlinable template before the mutable expression parse.
+                // The borrow from get_reference is released once the template is cloned.
+                let inlined_template = context.get_reference(&name).and_then(|reference| {
+                    let declaration = reference.as_declaration();
+                    match &declaration.value.kind {
+                        ExpressionKind::Template(inserted_template)
+                            if should_inline_template_head_reference(
                                 token_stream,
                                 context,
-                                type_interner,
-                                &mut inferred,
-                                &reference.value.value_mode,
-                                false,
-                                string_table,
-                            )?;
-
-                            push_template_head_expression(
-                                expression,
-                                context,
-                                type_interner.environment(),
-                                template,
-                                foldable,
-                                &value_location,
-                            )?;
-                            defer_comma_advance = true;
+                                declaration,
+                            ) =>
+                        {
+                            Some(inserted_template.as_ref().clone())
                         }
+                        _ => None,
                     }
+                });
 
-                    apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
+                if let Some(inserted_template) = inlined_template {
+                    handle_template_value_in_template_head(
+                        &inserted_template,
+                        context,
+                        construction_context,
+                        foldable,
+                        &value_location,
+                    )?;
                 } else {
-                    return Err(CompilerDiagnostic::unexpected_token(
-                        TokenKind::Symbol(name),
-                        token_stream.current_location(),
-                    ));
+                    // Resolve value_mode from the reference before the mutable
+                    // expression parse so the context borrow does not overlap.
+                    let value_mode = context
+                        .get_reference(&name)
+                        .map(|reference| reference.value.value_mode.to_owned())
+                        .unwrap_or(ValueMode::ImmutableOwned);
+
+                    let mut inferred = ExpectedType::Infer;
+                    let expression = create_expression(
+                        token_stream,
+                        context,
+                        type_interner,
+                        &mut inferred,
+                        &value_mode,
+                        false,
+                        string_table,
+                    )
+                    .map_err(CompilerDiagnostic::from)?;
+
+                    push_template_head_expression(
+                        expression,
+                        TemplateHeadExpressionContext {
+                            context,
+                            type_environment: type_interner.environment(),
+                            construction_context,
+                            foldable,
+                        },
+                        &value_location,
+                        string_table,
+                    )?;
+                    defer_comma_advance = true;
                 }
+
+                apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
             // Receiver self-reference
@@ -334,27 +518,31 @@ pub fn parse_template_head(
                         &reference.value.value_mode,
                         false,
                         string_table,
-                    )?;
+                    )
+                    .map_err(CompilerDiagnostic::from)?;
 
                     push_template_head_expression(
                         expression,
-                        context,
-                        type_interner.environment(),
-                        template,
-                        foldable,
+                        TemplateHeadExpressionContext {
+                            context,
+                            type_environment: type_interner.environment(),
+                            construction_context,
+                            foldable,
+                        },
                         &value_location,
+                        string_table,
                     )?;
                     defer_comma_advance = true;
                     apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
                 } else {
-                    return Err(CompilerDiagnostic::unexpected_token(
+                    return Err(Box::new(CompilerDiagnostic::unexpected_token(
                         TokenKind::This,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
             }
 
-            // Constants can be inserted directly into head content.
+            // Constants can be inserted directly into parser TIR.
             // Literal values
             TokenKind::NumericLiteral(_)
             | TokenKind::BoolLiteral(_)
@@ -375,15 +563,19 @@ pub fn parse_template_head(
                     &ValueMode::ImmutableOwned,
                     false,
                     string_table,
-                )?;
+                )
+                .map_err(CompilerDiagnostic::from)?;
 
                 push_template_head_expression(
                     expression,
-                    context,
-                    type_interner.environment(),
-                    template,
-                    foldable,
+                    TemplateHeadExpressionContext {
+                        context,
+                        type_environment: type_interner.environment(),
+                        construction_context,
+                        foldable,
+                    },
                     &value_location,
+                    string_table,
                 )?;
                 defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -397,17 +589,17 @@ pub fn parse_template_head(
                     token_stream,
                 )?;
                 if items.iter().any(|item| item.alias.is_some()) {
-                    return Err(CompilerDiagnostic::invalid_template_structure(
+                    return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::PathAliasInTemplateHead,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
                 let paths = path_token_paths(&items);
                 push_template_head_path_expression(
                     &paths,
                     token_stream,
                     context,
-                    template,
+                    construction_context,
                     string_table,
                 )?;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -430,15 +622,19 @@ pub fn parse_template_head(
                     &ValueMode::ImmutableOwned,
                     true,
                     string_table,
-                )?;
+                )
+                .map_err(CompilerDiagnostic::from)?;
 
                 push_template_head_expression(
                     expression,
-                    context,
-                    type_interner.environment(),
-                    template,
-                    foldable,
+                    TemplateHeadExpressionContext {
+                        context,
+                        type_environment: type_interner.environment(),
+                        construction_context,
+                        foldable,
+                    },
                     &value_location,
+                    string_table,
                 )?;
                 defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -448,13 +644,14 @@ pub fn parse_template_head(
             TokenKind::StyleDirective(directive) => {
                 // Template directives share the `$name` token shape with style directives.
                 // Parse `$slot` / `$insert` first, then fall back to style handling.
+                head_state.has_explicit_template_directive = true;
                 let directive_name = string_table.resolve(directive).to_owned();
                 let Some(spec) = context.style_directives.find(&directive_name) else {
-                    return Err(CompilerDiagnostic::invalid_template_directive(
+                    return Err(Box::new(CompilerDiagnostic::invalid_template_directive(
                         Some(directive),
                         InvalidTemplateDirectiveReason::UnknownDirective,
                         token_stream.current_location(),
-                    ));
+                    )));
                 };
 
                 enforce_head_compatibility(&head_state, &spec.head_compatibility, token_stream)?;
@@ -485,10 +682,10 @@ pub fn parse_template_head(
             // Separators
             TokenKind::Comma => {
                 // Multiple commas in succession.
-                return Err(CompilerDiagnostic::unexpected_token(
+                return Err(Box::new(CompilerDiagnostic::unexpected_token(
                     TokenKind::Comma,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             // Newlines / empty things in the template head are ignored.
@@ -499,39 +696,41 @@ pub fn parse_template_head(
             }
 
             _ => {
-                return Err(CompilerDiagnostic::unexpected_token(
+                return Err(Box::new(CompilerDiagnostic::unexpected_token(
                     token,
                     token_stream.current_location(),
-                ));
+                )));
             }
         }
 
         // Guard against malformed or truncated synthetic token streams.
         if token_stream.index >= token_stream.length {
-            return Err(CompilerDiagnostic::unexpected_end_of_file(
+            return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
                 Some(string_table.intern("]")),
                 last_known_location,
-            ));
+            )));
         }
 
         if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
             token_stream.advance();
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
-        }
-
-        if token_stream.current_token_kind() == &TokenKind::Eof {
-            return Err(CompilerDiagnostic::unexpected_end_of_file(
-                Some(string_table.intern("]")),
-                token_stream.current_location(),
+            return Ok(parsed_template_head(
+                TemplateBodyParseMode::Normal,
+                &head_state,
             ));
         }
 
+        if token_stream.current_token_kind() == &TokenKind::Eof {
+            return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
+                Some(string_table.intern("]")),
+                token_stream.current_location(),
+            )));
+        }
+
         if token_stream.current_token_kind() == &TokenKind::TemplateClose {
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
+            return Ok(parsed_template_head(
+                TemplateBodyParseMode::Normal,
+                &head_state,
+            ));
         }
 
         separator_state = TemplateHeadSeparatorState::ExpectSeparatorOrBody;
@@ -540,10 +739,10 @@ pub fn parse_template_head(
         }
     }
 
-    Err(CompilerDiagnostic::unexpected_end_of_file(
+    Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
         Some(string_table.intern("]")),
         last_known_location,
-    ))
+    )))
 }
 
 /// Dispatches a `$directive` token using the already-resolved registry spec.
@@ -557,7 +756,7 @@ fn parse_style_directive_from_spec(
     directive_name: &str,
     spec: &StyleDirectiveSpec,
     string_table: &mut StringTable,
-) -> Result<bool, CompilerDiagnostic> {
+) -> TemplateHeadResult<bool> {
     let directive_result = match &spec.kind {
         StyleDirectiveKind::Core(kind) => parse_core_style_directive(
             token_stream,

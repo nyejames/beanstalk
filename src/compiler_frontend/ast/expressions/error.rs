@@ -47,6 +47,15 @@ impl From<CompilerDiagnostic> for ExpressionParseError {
     }
 }
 
+/// Reuses an already-boxed diagnostic without re-allocating, so boundaries that return
+/// `Box<CompilerDiagnostic>` (such as receiver-access validation) thread directly into
+/// `ExpressionParseError` without an adapter that re-boxes the diagnostic.
+impl From<Box<CompilerDiagnostic>> for ExpressionParseError {
+    fn from(diagnostic: Box<CompilerDiagnostic>) -> Self {
+        ExpressionParseError::Diagnostic(diagnostic)
+    }
+}
+
 impl From<CompilerError> for ExpressionParseError {
     fn from(error: CompilerError) -> Self {
         ExpressionParseError::Infrastructure(Box::new(error))

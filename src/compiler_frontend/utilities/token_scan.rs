@@ -8,7 +8,6 @@
 //! This module owns generic scan mechanics only.
 //! It does NOT own statement/feature semantics or diagnostics policy.
 
-#![allow(clippy::result_large_err)]
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -190,10 +189,17 @@ impl TemplateBalance {
     }
 }
 
+/// Boxed diagnostic result for declaration-initializer token scanning.
+///
+/// WHAT: carries the scanner's single structured EOF diagnostic in the same shape as its owner.
+/// WHY: declaration-shell parsing already uses a boxed diagnostic family, so the scan result flows
+///      into that boundary directly without an unbox/rebox adapter.
+pub(crate) type TokenScanResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(crate) fn collect_declaration_initializer_tokens(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
-) -> Result<Vec<Token>, CompilerDiagnostic> {
+) -> TokenScanResult<Vec<Token>> {
     let mut collected = Vec::new();
     let mut depth = NestingDepth::default();
     let mut catch_block_depth = 0usize;
@@ -247,10 +253,10 @@ pub(crate) fn collect_declaration_initializer_tokens(
             };
             // Intern the expected delimiter so the EOF diagnostic can name it.
             // This is diagnostic-only string-table mutation.
-            return Err(CompilerDiagnostic::unexpected_end_of_file(
+            return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
                 Some(string_table.get_or_intern(expected_delimiter.to_owned())),
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         // Declaration initializers can end with receiver-owned statement blocks such as

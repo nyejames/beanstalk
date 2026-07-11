@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: TRAITS IN BEANSTALK]
 
-#[section, $markdown:
+#[section, $md:
     Traits define named behavioural contracts for types.
 
     Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares `Type must TRAIT`. Matching method shapes alone are not conformance.
@@ -16,7 +16,7 @@ page_head #= theme_head
     Trait names are static contracts. They can appear in trait declarations, explicit conformance declarations, and generic bounds. They are not ordinary value types.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Trait declarations
 
     Trait declarations use `must:` and contain method requirements.
@@ -37,7 +37,7 @@ page_head #= theme_head
     - default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are outside Beanstalk's trait design scope
 ]
 
-#[section, $markdown:
+#[section, $md:
     # This and mutable receivers
 
     `This` is valid only inside trait declarations. It means the concrete implementing type.
@@ -62,7 +62,7 @@ page_head #= theme_head
     - `This` outside trait declarations is rejected
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Explicit conformance
 
     A conformance declaration states that a type implements one or more traits.
@@ -90,7 +90,7 @@ page_head #= theme_head
     The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Canonical evidence
 
     Beanstalk stores explicit conformance as evidence selected by the frontend.
@@ -110,7 +110,7 @@ page_head #= theme_head
     by another file or package.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Static generic bounds
 
     Generic bounds use `is`, not `must`.
@@ -132,7 +132,7 @@ page_head #= theme_head
     Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. Trait names cannot be supplied as value types or concrete generic arguments.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Traits are not value types
 
     A trait name in a normal type annotation is rejected.
@@ -147,7 +147,7 @@ page_head #= theme_head
     Use `type T is TRAIT` when static reuse is intended. Use choices when runtime heterogeneity is needed.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Trait incompatibility
 
     `TRAIT must not TRAIT` records narrow incompatibility metadata for explicit conformance.
@@ -169,7 +169,7 @@ page_head #= theme_head
     requirements, imply negative conformance, compose traits, or create runtime dispatch.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core cast traits
 
     The compiler owns static cast traits such as `CASTABLE_TO_STRING` and
@@ -200,7 +200,7 @@ page_head #= theme_head
     compiler-owned `must not` metadata.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Runtime heterogeneity
 
     Runtime heterogeneity is represented with choices, not trait objects.
@@ -213,7 +213,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Dispatch and backends
 
     Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.
@@ -221,7 +221,7 @@ page_head #= theme_head
     Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # DISPLAYABLE scaffold
 
     `DISPLAYABLE` exists as compiler-owned trait metadata for conformance and generic-bound tests.
@@ -229,7 +229,7 @@ page_head #= theme_head
     It does not change `io.line(...)`, template interpolation, string coercion, equality, or operators. Implement `display |This| -> String` yourself and call it explicitly.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Outside trait design scope
 
     These surfaces are intentionally outside Beanstalk's trait design scope:
@@ -250,7 +250,7 @@ page_head #= theme_head
     - trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Deferred trait work
 
     Deferred trait work is limited to static non-method requirements, compiler-owned builtin

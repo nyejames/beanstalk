@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE LIBRARIES]
 
-#[section, $markdown:
+#[section, $md:
     Core libraries are small, typed packages provided by a builder.
     They are not ordinary source files in your project, but they are imported with the same `import` syntax.
 
@@ -20,7 +20,7 @@ page_head #= theme_head
     The HTML builder currently supports optional core packages on the JavaScript path.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Current pages
 
     - @./prelude (Prelude)

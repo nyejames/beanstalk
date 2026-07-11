@@ -1,5 +1,8 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::{
+    classify_template_effective_tir, classify_template_from_effective_tir,
+};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -50,8 +53,26 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
         .expect("wrapper template should parse");
 
     assert!(matches!(template.kind, TemplateType::String));
-    assert!(template.has_unresolved_slots());
-    assert!(Expression::template(template, ValueMode::ImmutableOwned).is_compile_time_constant());
+    assert!(
+        classify_template_effective_tir(&template, &context.template_ir_registry, &string_table,)
+            .expect("wrapper classification should succeed")
+            .has_unresolved_slots,
+        "wrapper template should have unresolved slots"
+    );
+    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+    assert!(
+        expression
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(
+                    template,
+                    &context.template_ir_registry,
+                    &string_table,
+                )
+            })
+            .expect("const classification should succeed")
+            .is_compile_time_value(),
+        "wrapper template with unfilled slots should be compile-time constant"
+    );
 }
 
 #[test]
@@ -78,7 +99,12 @@ fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strin
     }];
 
     let mut token_stream = template_tokens_from_source("[header]", &mut string_table);
-    let context = constant_template_context(&token_stream.src_path, &declarations);
+    let context = constant_template_context(&token_stream.src_path, &declarations)
+        .with_template_ir_registry(
+            Rc::clone(&wrapper_context.template_ir_registry),
+            wrapper_context.template_ir_store_id,
+            Rc::clone(&wrapper_context.template_ir_store),
+        );
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template using wrapper constant should parse");
 
@@ -102,8 +128,26 @@ fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
         .expect("runtime wrapper template should parse");
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
-    assert!(template.has_unresolved_slots());
-    assert!(!Expression::template(template, ValueMode::ImmutableOwned).is_compile_time_constant());
+    assert!(
+        classify_template_effective_tir(&template, &context.template_ir_registry, &string_table,)
+            .expect("runtime wrapper classification should succeed")
+            .has_unresolved_slots,
+        "runtime wrapper template should have unresolved slots"
+    );
+    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+    assert!(
+        !expression
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(
+                    template,
+                    &context.template_ir_registry,
+                    &string_table,
+                )
+            })
+            .expect("const classification should succeed")
+            .is_compile_time_value(),
+        "runtime wrapper template should not be compile-time constant"
+    );
 }
 
 #[test]
@@ -207,4 +251,45 @@ fn non_constant_context_template_head_keeps_runtime_template() {
     };
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
+}
+
+fn assert_slot_is_tir_only_and_const(source: &str, slot_name: &str) {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(source, &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template with slot should parse");
+
+    assert!(
+        classify_template_effective_tir(&template, &context.template_ir_registry, &string_table,)
+            .expect("slot classification should succeed")
+            .has_unresolved_slots,
+        "{slot_name} slot should be detected from TIR"
+    );
+
+    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+    assert!(
+        expression
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(
+                    template,
+                    &context.template_ir_registry,
+                    &string_table,
+                )
+            })
+            .expect("const classification should succeed")
+            .is_compile_time_value(),
+        "{slot_name} slot template should be compile-time constant from TIR"
+    );
+}
+
+#[test]
+fn default_slot_is_recorded_in_tir_and_const() {
+    assert_slot_is_tir_only_and_const("[: before [$slot] after]", "default");
+}
+
+#[test]
+fn named_slot_is_recorded_in_tir_and_const() {
+    assert_slot_is_tir_only_and_const("[: before [$slot(\"name\")] after]", "named");
 }

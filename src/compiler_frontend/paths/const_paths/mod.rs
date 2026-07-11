@@ -1,10 +1,8 @@
-#![allow(clippy::result_large_err)]
 //! Beanstalk path syntax parsing for path literals and imports.
 //!
 //! This parser sits directly on tokenizer tokens and returns typed `CompilerDiagnostic` values for
-//! user-authored path mistakes. The large-result lint is allowed at this file boundary because
-//! boxing diagnostics here would make the tokenizer-facing API less direct without reducing any
-//! stage-owned complexity.
+//! user-authored path mistakes. Connected helpers and the public `parse_file_path` entry point
+//! share one boxed diagnostic shape that flows directly into the tokenizer's result family.
 
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, ImportClauseKind, InvalidImportClauseReason, PathKind,
@@ -74,7 +72,7 @@ struct ParsedGroupedEntry {
 pub fn parse_file_path(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> Result<Token, Box<CompilerDiagnostic>> {
     // Path syntax accepted by the tokenizer.
     //
     // Canonical examples:
@@ -134,10 +132,10 @@ pub fn parse_file_path(
                     );
                 }
 
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::OnlyRootSlashSupported,
                     stream.new_location(),
-                ));
+                )));
             }
         }
     }
@@ -145,25 +143,25 @@ pub fn parse_file_path(
     let parsed_prefix = parse_path_prefix(stream, string_table)?;
 
     if parsed_prefix.components.is_empty() {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::Empty,
             stream.new_location(),
-        ));
+        )));
     }
 
     if parsed_prefix.ended_with_separator && parsed_prefix.stop_reason == PathStopReason::GroupStart
     {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::SlashBeforeGroup,
             stream.new_location(),
-        ));
+        )));
     }
 
     if parsed_prefix.ended_with_separator {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::TrailingSeparator,
             stream.new_location(),
-        ));
+        )));
     }
 
     let mut parsed_paths = Vec::with_capacity(1);
@@ -210,7 +208,7 @@ pub fn parse_file_path(
 fn parse_path_prefix(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<ParsedPathPrefix, CompilerDiagnostic> {
+) -> Result<ParsedPathPrefix, Box<CompilerDiagnostic>> {
     let mut components = Vec::with_capacity(2);
     let mut seen_non_relative_component = false;
     let mut ended_with_separator = false;
@@ -237,10 +235,10 @@ fn parse_path_prefix(
             }
 
             if matches!(next, '/' | '\\') {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::EmptyComponent,
                     stream.new_location(),
-                ));
+                )));
             }
 
             let parsed_component = components::parse_component(
@@ -300,16 +298,16 @@ fn parse_path_prefix(
         }
 
         if skipped_whitespace {
-            return Err(CompilerDiagnostic::invalid_path(
+            return Err(Box::new(CompilerDiagnostic::invalid_path(
                 PathKind::WhitespaceMustBeQuoted,
                 stream.new_location(),
-            ));
+            )));
         }
 
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::MissingSeparator,
             stream.new_location(),
-        ));
+        )));
     }
 }
 

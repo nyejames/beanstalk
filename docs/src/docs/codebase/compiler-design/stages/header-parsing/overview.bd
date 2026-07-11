@@ -1,0 +1,23 @@
+# Stage 2: Header parsing
+
+One owner for top-level discovery and dependency edges.
+
+## Contract
+
+- Input: tokens from Stage 1
+- Output: declaration shells, import environment and dependency edges
+- Decides: top-level declaration shape, import visibility, facade exports, dependency edges
+- Must not decide: body semantics, type resolution, template semantics
+- Invariant: header parsing is the only stage that discovers module-wide top-level declarations
+
+## Main paths
+
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- `src/compiler_frontend/headers/`
+- `src/compiler_frontend/declaration_syntax/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/stages/header-parsing/header-parsing.bd`
+- `docs/src/docs/codebase/compiler-design/stages/dependency-sorting/overview.bd`
+- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/overview.bd`

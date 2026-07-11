@@ -1,0 +1,106 @@
+
+Borrow validation reads HIR and writes side-table facts.
+It doesn't mutate HIR, compute exact lifetimes or decide final runtime ownership.
+
+HIR stays the semantic representation.
+Borrow facts sit beside it.
+
+## Main path
+
+`src/compiler_frontend/analysis/borrow_checker/`
+
+Borrow validation is mandatory for backend semantic parity.
+GC-only backends can ignore ownership-specific optimisation facts, but they still need the same source programs rejected for invalid aliasing or access.
+
+## What borrow validation rejects
+
+Borrow validation rejects:
+
+- invalid overlapping mutable/shared access
+- invalid overlapping mutable/mutable access
+- use-after-move and invalid access patterns
+- conservative hashmap aliasing violations
+- ordinary alias/exclusivity mistakes around reactive source mutations
+
+A hashmap `get` result aliases the receiver conservatively.
+Mutating the same map while that shared result is live is invalid.
+
+Borrow validation doesn't track per-field or per-projection aliasing yet.
+That keeps the current checker simpler and conservative.
+
+## Side-table facts
+
+Current borrow facts include:
+
+- function summaries
+- block state snapshots
+- statement state snapshots
+- statement access facts
+- terminator access facts
+- value access facts
+- conservative reactive invalidation facts
+- advisory drop sites for later ownership-aware lowering
+
+These facts are read-only side tables keyed by HIR/value IDs.
+They don't rewrite HIR.
+
+## GC baseline
+
+GC remains the semantic fallback.
+Ownership and deterministic destruction are optimisation layers.
+
+Valid programs may expose extra facts for ownership-aware lowerings.
+GC-only backends can ignore those facts and preserve semantics.
+
+That is the key split: borrow validation rejects invalid programs, but ownership lowering isn't required for correctness.
+
+## Reactive subscriptions
+
+Reactive subscriptions are not active borrows.
+
+Borrow validation records conservative invalidation facts for assignments, place writes, map mutations and mutable call arguments that may dirty reactive sources.
+Ordinary alias and exclusivity rules continue to apply to the underlying values.
+
+A subscription is a read-only source dependency.
+It isn't a hidden mutable borrow and it isn't a lifetime extension in the source language.
+
+## Fresh mutable call arguments
+
+HIR materialises fresh rvalues passed to mutable (`~T`) call slots into compiler-introduced hidden locals before borrow validation.
+
+Borrow validation then sees ordinary local access.
+There is no special temporary node kind and no source-level temporary reference category.
+
+## No-shadowing helps
+
+The language-level no-shadowing rule supports simpler name and borrow analysis.
+Each visible name maps to one binding, which makes access and last-use analysis easier to reason about.
+
+The rule itself belongs to the language reference.
+The compiler-design concern is that borrow validation can rely on a simpler visible-name model.
+
+## What borrow validation should not do
+
+Borrow validation should not:
+
+- mutate HIR
+- repair malformed HIR
+- compute exact lifetimes
+- decide final runtime ownership
+- lower drops to backend code
+- reinterpret source syntax
+- solve generics or traits
+- treat reactive subscriptions as active borrow lifetimes
+
+If a checker change needs source syntax or unresolved type data, the handoff into HIR is probably missing information.
+
+## Related reading
+
+- @../hir-generation (Stage 5: HIR generation): the HIR that borrow validation reads
+- @../backend-lowering (Stage 7: Backend lowering): consumers of borrow facts
+- @../../../memory-management (Memory-management overview): core semantic contract
+- @../../../memory-management/borrow-validation
+  (Memory borrow validation): roots, joins, move safety and facts
+- @../../../memory-management/ownership-and-drops
+  (Ownership and drops): consumers of advisory drop and move facts
+- @../../ast/templates-tir-and-reactivity (Templates, TIR and reactivity): reactive subscriptions and invalidation facts

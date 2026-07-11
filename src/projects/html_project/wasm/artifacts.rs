@@ -97,6 +97,9 @@ pub(crate) fn compile_html_module_wasm(
     string_table: &mut StringTable,
     logical_html_output_path: &Path,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
+    // Record the full Wasm build duration on every exit path (success or error).
+    let _total_guard = crate::timing::PipelineTimingGuard::new("backend.wasm.total");
+
     // Derive per-route artifact paths from the already-derived logical HTML path.
     // WHY: the builder has already computed the canonical route via derive_logical_html_path.
     //      This planner only places JS/Wasm artifacts beside that HTML output, so it never
@@ -125,13 +128,16 @@ pub(crate) fn compile_html_module_wasm(
     build_plan.wasm_request.external_package_registry =
         Arc::clone(&input.external_package_registry);
 
-    let wasm_result = lower_hir_to_wasm_module(
-        input.hir_module,
-        input.borrow_analysis.borrow_facts(),
-        &build_plan.wasm_request,
-        string_table,
-        input.type_environment,
-    )?;
+    let wasm_result = {
+        let _lower_wasm_guard = crate::timing::PipelineTimingGuard::new("backend.wasm.lower_wasm");
+        lower_hir_to_wasm_module(
+            input.hir_module,
+            input.borrow_analysis.borrow_facts(),
+            &build_plan.wasm_request,
+            string_table,
+            input.type_environment,
+        )?
+    };
     let wasm_bytes = wasm_result.wasm_bytes.ok_or_else(|| {
         CompilerMessages::from_error(
             CompilerError::compiler_error(
@@ -141,19 +147,23 @@ pub(crate) fn compile_html_module_wasm(
         )
     })?;
 
-    let artifacts = emit_html_wasm_artifacts(
-        &build_plan,
-        HtmlWasmArtifactEmitInput {
-            entry_fragment_html: &entry_fragment_html,
-            string_table,
-            logical_html_output_path,
-            project_name: input.project_name,
-            document_config: input.document_config,
-            hir_module: input.hir_module,
-            js_bundle: &js_module.source,
-            wasm_bytes,
-        },
-    )?;
+    let artifacts = {
+        let _assembly_guard =
+            crate::timing::PipelineTimingGuard::new("backend.wasm.artifact_assembly");
+        emit_html_wasm_artifacts(
+            &build_plan,
+            HtmlWasmArtifactEmitInput {
+                entry_fragment_html: &entry_fragment_html,
+                string_table,
+                logical_html_output_path,
+                project_name: input.project_name,
+                document_config: input.document_config,
+                hir_module: input.hir_module,
+                js_bundle: &js_module.source,
+                wasm_bytes,
+            },
+        )?
+    };
     let debug_outputs = build_debug_outputs(
         &build_plan,
         &artifacts,
@@ -221,12 +231,15 @@ pub(crate) fn emit_html_wasm_artifacts(
         wasm_bytes,
     } = &mut input;
 
-    let bootstrap_js = generate_wasm_bootstrap_js(
-        js_bundle,
-        &plan.js_entry_slot_ids,
-        &plan.js_start_invocation,
-    )
-    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let bootstrap_js = {
+        let _bootstrap_guard = crate::timing::PipelineTimingGuard::new("backend.wasm.bootstrap_js");
+        generate_wasm_bootstrap_js(
+            js_bundle,
+            &plan.js_entry_slot_ids,
+            &plan.js_start_invocation,
+        )
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?
+    };
     let page_metadata = extract_html_page_metadata(hir_module, string_table)
         .map_err(|diagnostic| CompilerMessages::from_diagnostic_ref(*diagnostic, string_table))?;
     let html = render_wasm_html_document(

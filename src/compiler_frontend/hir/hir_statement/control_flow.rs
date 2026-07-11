@@ -872,6 +872,7 @@ impl<'a> HirBuilder<'a> {
                 Ok(HirPattern::OptionValue { value: lowered })
             }
 
+            #[cfg(test)]
             MatchPattern::Wildcard { .. } => Ok(HirPattern::Wildcard),
 
             MatchPattern::Capture { .. } => Ok(HirPattern::Capture),

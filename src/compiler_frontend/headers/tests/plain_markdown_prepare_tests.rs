@@ -150,3 +150,38 @@ fn rendered_html_is_preserved_exactly() {
         "rendered HTML must be preserved exactly in the literal token"
     );
 }
+
+// -----------------------------------------------------------------------------
+// Plain Markdown must not use the template/TIR construction path
+// -----------------------------------------------------------------------------
+
+#[test]
+fn initializer_contains_no_template_tokens() {
+    let source = "# Heading\n\n[not_a_template]\n\n[:not_parsed]";
+    let (output, _string_table) = prepare(source);
+
+    let header = &output.headers[0];
+    let HeaderKind::Constant { declaration } = &header.kind else {
+        panic!("expected constant header");
+    };
+
+    assert_eq!(
+        declaration.initializer_tokens.len(),
+        1,
+        "plain Markdown must produce exactly one literal token"
+    );
+
+    let forbidden_template_token = declaration.initializer_tokens.iter().any(|token| {
+        matches!(
+            token.kind,
+            TokenKind::TemplateHead
+                | TokenKind::StartTemplateBody
+                | TokenKind::TemplateClose
+                | TokenKind::StyleDirective(_)
+        )
+    });
+    assert!(
+        !forbidden_template_token,
+        "plain Markdown initializer must not contain template construction tokens"
+    );
+}

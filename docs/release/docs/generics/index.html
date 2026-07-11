@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -319,12 +322,15 @@ body {
      <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
     <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>declaration-site generic parameters with <code>type</code> on top-level structs, choices, and free functions</li><li><code>of</code> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <code>{T}</code></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li><li>declaration-site trait bounds with <code>type T is TRAIT</code></li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
     <section class="container"><h1>Current status</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic structs</td>
@@ -385,7 +391,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Declaration-site <code>type T is TRAIT</code> and <code>type T is A and B, U is C</code> bounds are supported for generic functions, structs, and choices. <code>where</code> clauses and file-local evidence-backed generic-bound dispatch are outside scope.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Generic type syntax</h1><p>Generic parameters are introduced with <code>type</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

@@ -14,6 +14,12 @@ use crate::compiler_frontend::tokenizer::tokens::TokenStream;
 
 use super::{ParseComponentContext, PathComponents};
 
+/// Boxed diagnostic result for the connected path-component family.
+///
+/// Component parsing and validation feed boxed grouped and ordinary path helpers directly. The
+/// public path parser unboxes once when it returns the diagnostic to its tokenizer-facing caller.
+type ComponentResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// WHAT: Parsed result of one path component, with its raw text and whether it was quoted.
 /// WHY: downstream validation needs to know whether quotes were used to allow spaces.
 #[derive(Debug)]
@@ -28,7 +34,7 @@ pub(super) fn parse_component(
     stream: &mut TokenStream,
     context: ParseComponentContext,
     string_table: &StringTable,
-) -> Result<ParsedComponent, CompilerDiagnostic> {
+) -> ComponentResult<ParsedComponent> {
     if stream.peek() == Some(&'"') {
         return parse_quoted_component(stream, string_table);
     }
@@ -41,7 +47,7 @@ pub(super) fn parse_component(
 fn parse_quoted_component(
     stream: &mut TokenStream,
     _string_table: &StringTable,
-) -> Result<ParsedComponent, CompilerDiagnostic> {
+) -> ComponentResult<ParsedComponent> {
     assert_eq!(
         stream.peek().copied(),
         Some('"'),
@@ -53,10 +59,10 @@ fn parse_quoted_component(
 
     loop {
         let Some(next) = stream.peek().copied() else {
-            return Err(CompilerDiagnostic::invalid_path(
+            return Err(Box::new(CompilerDiagnostic::invalid_path(
                 PathKind::MissingClosingQuote,
                 stream.new_location(),
-            ));
+            )));
         };
 
         if next == '"' {
@@ -71,10 +77,10 @@ fn parse_quoted_component(
             stream.next();
 
             let Some(escaped) = stream.peek().copied() else {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::MissingClosingQuote,
                     stream.new_location(),
-                ));
+                )));
             };
 
             match escaped {
@@ -83,10 +89,10 @@ fn parse_quoted_component(
                     stream.next();
                 }
                 _ => {
-                    return Err(CompilerDiagnostic::invalid_path(
+                    return Err(Box::new(CompilerDiagnostic::invalid_path(
                         PathKind::InvalidEscape,
                         stream.new_location(),
-                    ));
+                    )));
                 }
             }
 
@@ -104,7 +110,7 @@ pub(super) fn parse_bare_component(
     stream: &mut TokenStream,
     context: ParseComponentContext,
     _string_table: &StringTable,
-) -> Result<ParsedComponent, CompilerDiagnostic> {
+) -> ComponentResult<ParsedComponent> {
     let mut value = String::new();
 
     while let Some(next) = stream.peek().copied() {
@@ -119,10 +125,10 @@ pub(super) fn parse_bare_component(
     }
 
     if value.is_empty() {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::EmptyComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     if stream
@@ -151,10 +157,10 @@ pub(super) fn parse_bare_component(
             {
                 // Return the component normally; `parse_path_prefix` will stop at `as`.
             } else {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::WhitespaceMustBeQuoted,
                     stream.new_location(),
-                ));
+                )));
             }
         }
     }
@@ -174,7 +180,7 @@ pub(super) fn push_validated_component(
     seen_non_relative_component: &mut bool,
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> ComponentResult<()> {
     let allow_relative_marker = allow_leading_relative_markers && !*seen_non_relative_component;
 
     validate_path_component(
@@ -199,12 +205,12 @@ fn validate_path_component(
     was_quoted: bool,
     stream: &mut TokenStream,
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> ComponentResult<()> {
     if component.is_empty() {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::EmptyComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     if component == "." || component == ".." {
@@ -212,34 +218,34 @@ fn validate_path_component(
             return Ok(());
         }
 
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::InvalidComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     if component.ends_with('.') {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::InvalidComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     if component
         .chars()
         .any(|character| !is_valid_component_char(character, was_quoted))
     {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::InvalidComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     if is_reserved_windows_name(component) {
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::InvalidComponent,
             stream.new_location(),
-        ));
+        )));
     }
 
     Ok(())

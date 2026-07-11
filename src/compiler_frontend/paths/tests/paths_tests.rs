@@ -49,7 +49,7 @@ fn tokenize_path_error(source: &str) -> CompilerDiagnostic {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
-    tokenize(
+    *tokenize(
         source,
         &source_path,
         TokenizerEntryMode::SourceFile,
@@ -339,11 +339,11 @@ fn parse_file_path_accepts_backslash_separator() {
 
 #[test]
 fn parse_file_path_accepts_hash_prefixed_file_names() {
-    let paths = first_path_token_values("import @docs { #config.bst, subfolder/#page.bst }\n");
+    let paths = first_path_token_values("import @docs { #asset.bst, subfolder/#page.bst }\n");
     assert_eq!(
         paths,
         vec![
-            "docs/#config.bst".to_string(),
+            "docs/#asset.bst".to_string(),
             "docs/subfolder/#page.bst".to_string(),
         ]
     );
@@ -698,7 +698,7 @@ fn reject_group_level_alias() {
     let result = parse_import_clause_items(&file_tokens.tokens, import_index, &string_table);
     assert!(result.is_err(), "group-level alias should be rejected");
     assert_import_clause_error(
-        result.expect_err("expected import clause error"),
+        *result.expect_err("expected import clause error"),
         ImportClauseKind::Grouped,
         InvalidImportClauseReason::GroupedWithTrailingAlias,
     );
@@ -729,7 +729,7 @@ fn reject_double_alias() {
     let result = parse_import_clause_items(&file_tokens.tokens, import_index, &string_table);
     assert!(result.is_err(), "double alias should be rejected");
     assert_import_clause_error(
-        result.expect_err("expected import clause error"),
+        *result.expect_err("expected import clause error"),
         ImportClauseKind::Grouped,
         InvalidImportClauseReason::GroupedWithTrailingAlias,
     );
@@ -785,7 +785,7 @@ fn reject_grouped_import_alias_that_is_a_keyword() {
     .expect_err("keyword alias should be rejected during tokenization");
 
     assert_import_clause_error(
-        diagnostic,
+        *diagnostic,
         ImportClauseKind::Alias,
         InvalidImportClauseReason::AliasIsKeyword,
     );

@@ -5,7 +5,7 @@ page_description #= "Introduction to the Beanstalk language and toolchain."
 page_head #= theme_head
 
 #[navbar]
-#[section, $markdown:
+#[section, $md:
     # What is Beanstalk?
     Beanstalk is a new programming language and toolchain.
 

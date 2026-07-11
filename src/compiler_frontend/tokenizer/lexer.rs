@@ -3,7 +3,6 @@
 //! WHAT: converts source text into token streams while switching modes for templates, strings, and directives.
 //! WHY: lexing owns the first precise source-location mapping and all delimiter-balancing rules;
 //! callers can run it against worker-local string tables before deterministic module aggregation.
-#![allow(clippy::result_large_err)]
 
 use crate::compiler_frontend::arena::TokenStats;
 use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
@@ -32,6 +31,16 @@ use crate::projects::settings;
 use crate::token_log;
 
 pub const END_SCOPE_CHAR: char = ';';
+
+/// Boxed diagnostic result shared by every lexer result boundary in this file.
+///
+/// WHAT: one file-local alias for the boxed `CompilerDiagnostic` error variant returned by
+/// `tokenize`, `get_token_kind`, `require_symbolic_binary_spacing`, `tokenize_style_directive`
+/// and `tokenize_identifier_or_keyword`.
+/// WHY: lexer dispatch propagates one diagnostic through several nested mode helpers and the
+/// production callers already own boxed diagnostic boundaries. Numeric and text-mode helpers
+/// remain separate owners, so their plain results are adapted only where they enter this family.
+type LexerResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 #[macro_export]
 macro_rules! return_token {
@@ -99,7 +108,7 @@ fn require_symbolic_binary_spacing(
     stream: &mut TokenStream<'_>,
     context: LexerTokenContext<'_>,
     whitespace_before_current: bool,
-) -> Result<(), CompilerDiagnostic> {
+) -> LexerResult<()> {
     if !context.previous_can_end_expression() {
         return Ok(());
     }
@@ -107,7 +116,7 @@ fn require_symbolic_binary_spacing(
     if !context.has_leading_whitespace(whitespace_before_current)
         || !next_char_is_whitespace_or_end(stream)
     {
-        return Err(symbolic_spacing_error(stream));
+        return Err(Box::new(symbolic_spacing_error(stream)));
     }
 
     Ok(())
@@ -174,7 +183,7 @@ pub fn tokenize(
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
     file_id: Option<FileId>,
-) -> Result<FileTokens, CompilerDiagnostic> {
+) -> LexerResult<FileTokens> {
     // WHY: Estimating token capacity reduces reallocations for large files.
     // Preliminary tests suggest a ratio of roughly 6 characters per token.
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
@@ -223,7 +232,7 @@ fn get_token_kind(
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
     context: LexerTokenContext<'_>,
-) -> Result<Token, CompilerDiagnostic> {
+) -> LexerResult<Token> {
     // WHY: Comments do not produce tokens. A labeled loop allows the comment handler
     // to restart tokenization with `continue` instead of a recursive call, preventing
     // stack overflow in files with deep comment blocks.
@@ -308,9 +317,11 @@ fn get_token_kind(
 
         if current_char == ']' {
             if let Some(source_kind) = stream.initial_template_close_rejection() {
-                return Err(CompilerDiagnostic::unescaped_implicit_template_close(
-                    source_kind,
-                    stream.new_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unescaped_implicit_template_close(
+                        source_kind,
+                        stream.new_location(),
+                    ),
                 ));
             }
 
@@ -373,9 +384,9 @@ fn get_token_kind(
                 return_token!(TokenKind::CharLiteral(c), stream);
             };
 
-            return Err(CompilerDiagnostic::invalid_char_literal(
+            return Err(Box::new(CompilerDiagnostic::invalid_char_literal(
                 stream.new_location(),
-            ));
+            )));
         }
 
         // -----------------
@@ -417,7 +428,7 @@ fn get_token_kind(
                     let missing_right_spacing = !next_char_is_whitespace_or_end(stream);
 
                     if missing_left_spacing || missing_right_spacing {
-                        return Err(symbolic_spacing_error(stream));
+                        return Err(Box::new(symbolic_spacing_error(stream)));
                     }
                 }
             }
@@ -496,7 +507,7 @@ fn get_token_kind(
 
             if next_char.is_numeric() {
                 if context.previous_can_end_expression() {
-                    return Err(symbolic_spacing_error(stream));
+                    return Err(Box::new(symbolic_spacing_error(stream)));
                 }
 
                 let first_digit = stream.advance_after_peek(
@@ -514,7 +525,7 @@ fn get_token_kind(
                 if !context.has_leading_whitespace(whitespace_before_current)
                     || !next_char_is_whitespace_or_end(stream)
                 {
-                    return Err(symbolic_spacing_error(stream));
+                    return Err(Box::new(symbolic_spacing_error(stream)));
                 }
 
                 return_token!(TokenKind::Subtract, stream);
@@ -524,7 +535,7 @@ fn get_token_kind(
                 return_token!(TokenKind::Negative, stream);
             }
 
-            return Err(unary_negation_spacing_error(stream));
+            return Err(Box::new(unary_negation_spacing_error(stream)));
         }
 
         // ------------------------
@@ -545,10 +556,10 @@ fn get_token_kind(
                 return_token!(TokenKind::Add, stream);
             }
 
-            return Err(CompilerDiagnostic::common_syntax_mistake(
+            return Err(Box::new(CompilerDiagnostic::common_syntax_mistake(
                 CommonSyntaxMistakeReason::UnsupportedUnaryPlus,
                 stream.new_location(),
-            ));
+            )));
         }
 
         if current_char == '*' {
@@ -676,7 +687,7 @@ fn get_token_kind(
                 && stream.peek() == Some(&'=')
                 && !context.has_leading_whitespace(whitespace_before_current)
             {
-                return Err(symbolic_spacing_error(stream));
+                return Err(Box::new(symbolic_spacing_error(stream)));
             }
 
             return_token!(TokenKind::Mutable, stream);
@@ -727,10 +738,10 @@ fn get_token_kind(
             return tokenize_identifier_or_keyword(&mut token_value, stream, string_table);
         }
 
-        return Err(CompilerDiagnostic::invalid_character(
+        return Err(Box::new(CompilerDiagnostic::invalid_character(
             current_char,
             stream.new_location(),
-        ));
+        )));
     } // 'next_token loop
 }
 
@@ -738,26 +749,26 @@ fn tokenize_style_directive(
     stream: &mut TokenStream<'_>,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> LexerResult<Token> {
     if stream.mode != TokenizeMode::TemplateHead {
-        return Err(CompilerDiagnostic::invalid_character(
+        return Err(Box::new(CompilerDiagnostic::invalid_character(
             '$',
             stream.new_location(),
-        ));
+        )));
     }
 
     let Some(&first_char) = stream.peek() else {
-        return Err(CompilerDiagnostic::unexpected_end_of_file(
+        return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
             None,
             stream.new_location(),
-        ));
+        )));
     };
 
     if !first_char.is_alphabetic() && first_char != '_' {
-        return Err(CompilerDiagnostic::invalid_character(
+        return Err(Box::new(CompilerDiagnostic::invalid_character(
             first_char,
             stream.new_location(),
-        ));
+        )));
     }
 
     let mut directive_text = String::new();
@@ -783,11 +794,11 @@ fn tokenize_style_directive(
         // This is diagnostic-only string-table mutation.
         let supported =
             string_table.intern(&style_directives.supported_directives_for_diagnostic());
-        return Err(CompilerDiagnostic::invalid_style_directive(
+        return Err(Box::new(CompilerDiagnostic::invalid_style_directive(
             directive,
             supported,
             stream.new_location(),
-        ));
+        )));
     };
 
     stream.mark_current_template_body_mode(body_mode);
@@ -802,7 +813,7 @@ pub(crate) fn tokenize_identifier_or_keyword(
     token_value: &mut String,
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> LexerResult<Token> {
     // WHY: Variable names and keywords can contain alphanumeric characters or underscores.
     // The loop keeps consuming identifier characters until a non-identifier boundary is
     // reached, then falls through to keyword and symbol matching.
@@ -833,9 +844,9 @@ pub(crate) fn tokenize_identifier_or_keyword(
             return_token!(TokenKind::Symbol(interned_symbol), stream);
         }
 
-        return Err(CompilerDiagnostic::invalid_identifier(
+        return Err(Box::new(CompilerDiagnostic::invalid_identifier(
             stream.new_location(),
-        ));
+        )));
     }
 }
 

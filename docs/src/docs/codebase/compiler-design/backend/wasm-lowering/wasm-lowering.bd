@@ -1,0 +1,68 @@
+
+The core Wasm backend owns HIR-to-Wasm-LIR lowering, Wasm runtime contracts, request validation, debug output and optional binary emission.
+
+The HTML-Wasm path is builder orchestration around that backend.
+It chooses exports, requests helpers, invokes Wasm lowering, generates bootstrap JS and assembles route artifacts.
+
+## Main paths
+
+- `src/backends/wasm/`
+- `src/projects/html_project/wasm/`
+- `src/backends/wasm/hir_to_lir/ownership.rs`
+
+## Core backend boundary
+
+The core Wasm backend should consume validated HIR and companion metadata.
+It should not rediscover frontend imports, source config, trait evidence, generic calls or template syntax.
+
+It owns target-specific lowering from HIR into Wasm-facing lower IR and final Wasm artifacts when requested.
+
+## HTML-Wasm path
+
+The HTML-Wasm path is project-builder orchestration around the core Wasm backend. It:
+
+- selects exported functions for the route artifact
+- requests helper exports
+- invokes core Wasm lowering
+- generates bootstrap JavaScript
+- assembles route HTML, JS and Wasm files using the same shared page-fragment contract as HTML-JS
+
+The builder owns fragment planning and route assembly: the core Wasm backend owns HIR-to-Wasm lowering. Don't mix HTML-Wasm bootstrap policy into core Wasm lowering.
+
+## Runtime contracts
+
+The Wasm backend owns runtime contracts needed by generated code.
+That includes helper exports and any target-specific runtime shape needed for strings, memory, calls or future ownership-aware lowering.
+
+Backend feature validation should reject unsupported reachable features before lowering.
+For example, builtin hashmap V1 targets HTML-JS, so HTML-Wasm rejects reachable map use before backend lowering until equivalent support exists.
+
+## Ownership hook point
+
+`src/backends/wasm/hir_to_lir/ownership.rs` is the ownership-fact projection
+seam for Wasm lowering.
+
+Ownership-aware lowering may use borrow facts and memory-model metadata for optimisation.
+It must preserve the GC semantic baseline.
+If ownership eligibility can't be proven, a value stays GC-managed.
+
+No source-visible lifetime syntax or move syntax should leak out of this backend work.
+
+## Common mistakes
+
+- Mixing HTML-Wasm bootstrap policy into core Wasm lowering.
+- Letting Wasm lowering accept features backend validation should reject.
+- Treating ownership lowering as required for correctness.
+- Reinterpreting source templates or imports in the Wasm backend.
+- Generating separate semantics for GC and ownership paths.
+
+## Related reading
+
+- @../ (Backend overview): backend boundaries and shared fragment contract
+- @../html-project-assembly (HTML project assembly): the HTML builder route that uses Wasm lowering
+- @../../stages/hir-generation (Stage 5: HIR generation): the IR that Wasm lowering consumes
+- @../../stages/borrow-validation (Stage 6: Borrow validation): borrow facts for ownership-aware lowering
+- @../../../memory-management/ownership-and-drops
+  (Ownership and drops): unified ABI, ownership metadata and conditional destruction
+- @../../../memory-management/runtime-and-backend-lowering
+  (Runtime and backend memory lowering): GC fallback and Wasm memory contracts

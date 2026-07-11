@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: REACTIVITY IN BEANSTALK TEMPLATES]
 
-#[section, $markdown:
+#[section, $md:
     Reactivity V1 is Beanstalk's constrained UI-oriented alternative to adding general closures, anonymous function values, generic function values, or higher-order polymorphism.
     It is built from explicit reactive sources, explicit template subscriptions, and backend-owned runtime updates.
 
@@ -23,7 +23,7 @@ page_head #= theme_head
     The current live backend sink is top-level runtime HTML fragments in the HTML-JS builder.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Reactive sources
 
     A reactive declaration creates stable mutation-capable storage in the declaring runtime scope.
@@ -45,7 +45,7 @@ page_head #= theme_head
     Reactive identity belongs to the binding/source metadata. It is not a separate `TypeId`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Reads and subscriptions
 
     Ordinary reads snapshot the current value. In templates, `["[source]"]` is still a normal snapshot capture.
@@ -58,7 +58,7 @@ page_head #= theme_head
     `["$(source)"]` captures stable source identity and dependency metadata. It does not capture a mutable borrow, copy the value, or run a computed expression.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Subscription restrictions
 
     V1 deliberately keeps subscriptions narrow.
@@ -87,7 +87,7 @@ page_head #= theme_head
     `["$(source)"]` is invalid in compile-time templates, constants, ordinary expression positions, and non-template syntax positions.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Function boundaries
 
     A function that needs to preserve reactive source identity asks for a reactive parameter.
@@ -105,7 +105,7 @@ page_head #= theme_head
     A non-reactive value cannot satisfy a `$T` parameter.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Mutation and invalidation
 
     Assignment to a reactive declaration updates the same stable source and invalidates subscribers.
@@ -126,7 +126,7 @@ page_head #= theme_head
     V1 has no field, item, or path-level invalidation. Those are follow-up backend and language work.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Relationship to borrowing
 
     Reactive subscriptions are not mutable borrows and should not block later ordinary mutable access.
@@ -136,7 +136,7 @@ page_head #= theme_head
     The borrow checker treats subscriptions as read-only source dependency metadata, not active borrow lifetimes.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Reactive template strings
 
     A runtime template containing a subscription still has language type `String`.
@@ -158,7 +158,7 @@ page_head #= theme_head
     Ordinary string operations do not preserve reactivity in V1. They either snapshot once or produce a structured diagnostic according to the sink or operation contract.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Runtime sinks
 
     V1 has one live sink: top-level runtime HTML fragments in the HTML-JS builder.
@@ -173,7 +173,7 @@ page_head #= theme_head
     - HTML-Wasm rejects reachable reactive runtime features before Wasm lowering
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Backend ownership
 
     Reactive runtime helpers are backend artifacts, not user-visible closures or function values.
@@ -183,7 +183,7 @@ page_head #= theme_head
     For the first HTML-JS implementation, whole-fragment rerendering is acceptable. Fine-grained text, attribute, style, keyed-loop, and nested-region updates are deferred optimizations.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Deferred follow-ups
 
     Future reactivity work includes:
@@ -205,7 +205,7 @@ page_head #= theme_head
     These are future UI and backend surfaces, not general function-value features.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Outside scope
 
     General closures, anonymous function values, generic function values, and higher-order polymorphism are outside the current Beanstalk language design scope.

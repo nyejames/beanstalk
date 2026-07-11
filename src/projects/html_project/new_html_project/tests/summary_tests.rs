@@ -5,7 +5,7 @@ fn dummy_report() -> CreateProjectReport {
     CreateProjectReport {
         project_path: PathBuf::from("/path/to/site"),
         project_name: String::from("site"),
-        created: vec![PathBuf::from("#config.bst"), PathBuf::from("src/#page.bst")],
+        created: vec![PathBuf::from("config.bst"), PathBuf::from("src/#page.bst")],
         updated: Vec::new(),
         skipped: Vec::new(),
         replaced: Vec::new(),
@@ -26,7 +26,7 @@ fn summary_shows_created_section() {
     let report = dummy_report();
     let summary = render_summary(&report, None);
     assert!(summary.contains("Created:"));
-    assert!(summary.contains("  #config.bst"));
+    assert!(summary.contains("  config.bst"));
     assert!(summary.contains("  src/#page.bst"));
 }
 
@@ -51,10 +51,10 @@ fn summary_shows_updated_section_when_present() {
 #[test]
 fn summary_shows_replaced_section_when_present() {
     let mut report = dummy_report();
-    report.replaced.push(PathBuf::from("#config.bst"));
+    report.replaced.push(PathBuf::from("config.bst"));
     let summary = render_summary(&report, None);
     assert!(summary.contains("Replaced:"));
-    assert!(summary.contains("  #config.bst"));
+    assert!(summary.contains("  config.bst"));
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn summary_omits_cd_when_current_dir() {
     let report = CreateProjectReport {
         project_path: current.to_path_buf(),
         project_name: String::from("site"),
-        created: vec![PathBuf::from("#config.bst")],
+        created: vec![PathBuf::from("config.bst")],
         updated: Vec::new(),
         skipped: Vec::new(),
         replaced: Vec::new(),

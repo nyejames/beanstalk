@@ -32,6 +32,12 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
+type BranchingResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
+fn branching_error(diagnostic: CompilerDiagnostic) -> Box<CompilerDiagnostic> {
+    Box::new(diagnostic)
+}
+
 /// Intermediate result of parsing a single match arm, carrying the arm itself
 /// plus metadata needed for duplicate and exhaustiveness checking.
 struct ParsedMatchArm {
@@ -82,7 +88,7 @@ fn peek_next_non_newline_token_index(token_stream: &FileTokens) -> Option<usize>
         .map(|(i, _)| i)
 }
 
-fn reject_same_line_else_if(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+fn reject_same_line_else_if(token_stream: &FileTokens) -> BranchingResult<()> {
     let else_location = token_stream.current_location();
     let Some(next_token) = token_stream.tokens.get(token_stream.index + 1) else {
         return Ok(());
@@ -94,9 +100,11 @@ fn reject_same_line_else_if(token_stream: &FileTokens) -> Result<(), CompilerDia
         && next_token.location.start_pos.line_number == else_location.start_pos.line_number;
 
     if next_token_is_same_line_if {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ElseIfUnsupported,
-            else_location,
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ElseIfUnsupported,
+                else_location,
+            ),
         ));
     }
 
@@ -109,14 +117,13 @@ fn reject_same_line_else_if(token_stream: &FileTokens) -> Result<(), CompilerDia
 /// falling back to normal `if`/`else` parsing or statement-style match parsing.
 /// WHY: the single-predicate and statement-match shapes share the `if` keyword,
 /// so this entry point disambiguates them early based on token lookahead.
-#[allow(clippy::result_large_err)]
 pub fn create_branch(
     token_stream: &mut FileTokens,
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+) -> BranchingResult<Vec<AstNode>> {
     let parsed_header = parse_if_header(token_stream, context, type_interner, string_table)?;
 
     let condition = match parsed_header {
@@ -154,9 +161,11 @@ pub fn create_branch(
 
     ast_log!("Creating If Statement");
     if token_stream.current_token_kind() != &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-            token_stream.current_location(),
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -193,7 +202,6 @@ pub fn create_branch(
     }])
 }
 
-#[allow(clippy::result_large_err)]
 fn create_option_present_capture_branch(
     parsed_header: OptionPresentCaptureBranch,
     token_stream: &mut FileTokens,
@@ -201,11 +209,13 @@ fn create_option_present_capture_branch(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+) -> BranchingResult<Vec<AstNode>> {
     if token_stream.current_token_kind() != &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-            token_stream.current_location(),
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+                token_stream.current_location(),
+            ),
         ));
     }
     token_stream.advance();
@@ -265,7 +275,6 @@ fn create_option_present_capture_branch(
 /// delegates exhaustiveness checking before returning the match node.
 /// WHY: all match-level invariants (at least one pattern arm before else, no duplicates,
 /// exhaustiveness) are enforced here so downstream HIR lowering can assume valid input.
-#[allow(clippy::result_large_err)]
 fn create_match_node(
     scrutinee: Expression,
     token_stream: &mut FileTokens,
@@ -273,7 +282,7 @@ fn create_match_node(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompilerDiagnostic> {
+) -> BranchingResult<AstNode> {
     let parsed_match = parse_match_block(
         scrutinee,
         token_stream,
@@ -303,7 +312,6 @@ fn create_match_node(
 /// WHY: statement matches and value-producing matches have identical pattern
 /// semantics; the value form only changes the active value target while parsing
 /// arm bodies.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_match_block(
     scrutinee: Expression,
     token_stream: &mut FileTokens,
@@ -312,13 +320,15 @@ pub(crate) fn parse_match_block(
     warnings: &mut Vec<CompilerDiagnostic>,
     active_value_target: Option<ActiveValueProductionTarget>,
     string_table: &mut StringTable,
-) -> Result<ParsedMatchBlock, CompilerDiagnostic> {
+) -> BranchingResult<ParsedMatchBlock> {
     ast_log!("Creating Match Statement");
 
     if token_stream.current_token_kind() != &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-            token_stream.current_location(),
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -354,19 +364,21 @@ pub(crate) fn parse_match_block(
                     };
 
                 if semicolon_separates_same_level_arms {
-                    return Err(CompilerDiagnostic::invalid_match_arm(
+                    return Err(branching_error(CompilerDiagnostic::invalid_match_arm(
                         InvalidMatchArmReason::SemicolonDelimiter,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
                 token_stream.advance();
                 break;
             }
 
             TokenKind::Eof => {
-                return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                    InvalidControlFlowStatementReason::UnexpectedEndOfFileInMatch,
-                    token_stream.current_location(),
+                return Err(branching_error(
+                    CompilerDiagnostic::invalid_control_flow_statement(
+                        InvalidControlFlowStatementReason::UnexpectedEndOfFileInMatch,
+                        token_stream.current_location(),
+                    ),
                 ));
             }
 
@@ -375,16 +387,20 @@ pub(crate) fn parse_match_block(
                     .get_or_insert(token_stream.current_location().start_pos.char_column);
 
                 if arms.is_empty() {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::CaseRequiredBeforeElse,
-                        token_stream.current_location(),
+                    return Err(branching_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::CaseRequiredBeforeElse,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
 
                 if seen_else {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::DuplicateElseArm,
-                        token_stream.current_location(),
+                    return Err(branching_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::DuplicateElseArm,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
                 seen_else = true;
@@ -444,15 +460,15 @@ pub(crate) fn parse_match_block(
                 if token_is_line_initial(token_stream, token_stream.index)
                     && current_line_contains_top_level_colon(token_stream)
                 {
-                    return Err(CompilerDiagnostic::invalid_match_arm(
+                    return Err(branching_error(CompilerDiagnostic::invalid_match_arm(
                         InvalidMatchArmReason::LegacyColonSyntax,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
-                return Err(CompilerDiagnostic::invalid_match_arm(
+                return Err(branching_error(CompilerDiagnostic::invalid_match_arm(
                     InvalidMatchArmReason::ExpectedArmHeader,
                     token_stream.current_location(),
-                ));
+                )));
             }
         }
     }
@@ -483,35 +499,36 @@ pub(crate) fn parse_match_block(
     })
 }
 
-#[allow(clippy::result_large_err)]
 fn parse_else_arm(
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+) -> BranchingResult<Vec<AstNode>> {
     token_stream.advance();
     token_stream.skip_newlines();
 
     if token_stream.current_token_kind() == &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_match_arm(
+        return Err(branching_error(CompilerDiagnostic::invalid_match_arm(
             InvalidMatchArmReason::LegacyElseSyntax,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     if token_stream.current_token_kind() == &TokenKind::Arrow {
-        return Err(CompilerDiagnostic::invalid_match_arm(
+        return Err(branching_error(CompilerDiagnostic::invalid_match_arm(
             InvalidMatchArmReason::InvalidArrow,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     if token_stream.current_token_kind() != &TokenKind::FatArrow {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedFatArrow,
-            token_stream.current_location(),
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedFatArrow,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -535,7 +552,6 @@ fn parse_else_arm(
 ///
 /// ENTRY INVARIANT: the token stream is already positioned at the first token of the
 /// pattern; this function does not advance before parsing.
-#[allow(clippy::result_large_err)]
 fn parse_match_arm(
     scrutinee: &Expression,
     token_stream: &mut FileTokens,
@@ -543,7 +559,7 @@ fn parse_match_arm(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<ParsedMatchArm, CompilerDiagnostic> {
+) -> BranchingResult<ParsedMatchArm> {
     let ParsedMatchArmHeader {
         pattern,
         guard,
@@ -560,9 +576,11 @@ fn parse_match_arm(
     )?;
 
     if token_stream.current_token_kind() != &TokenKind::FatArrow {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedFatArrow,
-            token_stream.current_location(),
+        return Err(branching_error(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedFatArrow,
+                token_stream.current_location(),
+            ),
         ));
     }
 

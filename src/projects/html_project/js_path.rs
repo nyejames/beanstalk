@@ -77,14 +77,17 @@ pub(crate) fn compile_html_module_js(
         Arc::clone(&input.external_package_registry),
     );
 
-    let js_module = lower_hir_to_js(
-        input.hir_module,
-        input.borrow_analysis,
-        string_table,
-        js_lowering_config,
-        input.type_environment,
-    )
-    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let js_module = {
+        let _lower_hir_guard = crate::timing::PipelineTimingGuard::new("backend.js.lower_hir");
+        lower_hir_to_js(
+            input.hir_module,
+            input.borrow_analysis,
+            string_table,
+            js_lowering_config,
+            input.type_environment,
+        )
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?
+    };
 
     let uses_reactive_runtime_fragments =
         html_module_uses_reactive_runtime_fragments(input.hir_module)
@@ -92,14 +95,18 @@ pub(crate) fn compile_html_module_js(
 
     // Generate glue modules and import preamble only for external module exports referenced by
     // emitted JS. In HTML page bundles, JS lowering has already filtered unreachable wrappers.
-    let glue_result = generate_module_glue(
-        module,
-        &js_module.referenced_external_functions,
-        input.external_package_registry.as_ref(),
-        &output_path,
-        input.release_build,
-    )
-    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let glue_result = {
+        let _glue_guard =
+            crate::timing::PipelineTimingGuard::new("backend.js.generate_module_glue");
+        generate_module_glue(
+            module,
+            &js_module.referenced_external_functions,
+            input.external_package_registry.as_ref(),
+            &output_path,
+            input.release_build,
+        )
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?
+    };
 
     let use_module_script = glue_result.bundle_import_preamble.is_some();
     let bundle_with_imports = if let Some(ref preamble) = glue_result.bundle_import_preamble {
@@ -108,20 +115,24 @@ pub(crate) fn compile_html_module_js(
         js_module.source.clone()
     };
 
-    let html = render_html_document(&mut HtmlDocumentRenderInput {
-        hir_module: input.hir_module,
-        const_fragments: input.const_fragments,
-        string_table,
-        document_config: input.document_config,
-        logical_html_path: &output_path,
-        project_name: input.project_name,
-        js_bundle: &bundle_with_imports,
-        function_names: &js_module.function_name_by_id,
-        entry_runtime_fragment_count: input.entry_runtime_fragment_count,
-        uses_reactive_runtime_fragments,
-        import_map_html: glue_result.import_map_html,
-        use_module_script,
-    })?;
+    let html = {
+        let _render_guard =
+            crate::timing::PipelineTimingGuard::new("backend.js.render_html_document");
+        render_html_document(&mut HtmlDocumentRenderInput {
+            hir_module: input.hir_module,
+            const_fragments: input.const_fragments,
+            string_table,
+            document_config: input.document_config,
+            logical_html_path: &output_path,
+            project_name: input.project_name,
+            js_bundle: &bundle_with_imports,
+            function_names: &js_module.function_name_by_id,
+            entry_runtime_fragment_count: input.entry_runtime_fragment_count,
+            uses_reactive_runtime_fragments,
+            import_map_html: glue_result.import_map_html,
+            use_module_script,
+        })?
+    };
 
     let mut output_files = Vec::with_capacity(1 + glue_result.glue_output_files.len());
     output_files.push(OutputFile::new(output_path.clone(), FileKind::Html(html)));

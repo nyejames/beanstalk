@@ -7,7 +7,8 @@ use super::error::ExpressionParseError;
 use super::expression::{Expression, ExpressionValueShape};
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_effective_tir;
+use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
@@ -60,7 +61,21 @@ pub(super) fn parse_template_expression(
         TemplateType::String => {
             maybe_consume_closing_parenthesis(token_stream, consume_closing_parenthesis);
 
-            if !template.is_const_renderable_string() || template.has_unresolved_slots() {
+            // Construction leaves foldable templates on the module registry's
+            // Composed-or-later effective root. Classify that exact view so
+            // slot, wrapper and expression overlays match the following fold.
+            let classification = classify_template_effective_tir(
+                &template,
+                &template_context.template_ir_registry,
+                string_table,
+            )?;
+            let const_value_kind = if classification.has_unresolved_slots {
+                TemplateConstValueKind::WrapperTemplate
+            } else {
+                classification.const_value_kind
+            };
+
+            if !matches!(const_value_kind, TemplateConstValueKind::RenderableString) {
                 return Ok(Some(Expression::template(template, value_mode.to_owned())));
             }
 

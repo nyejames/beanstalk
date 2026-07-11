@@ -16,6 +16,8 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
+type GenericFunctionBodyValidationResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Input bundle for generic body validation.
 ///
 /// WHAT: keeps the mutable parser services together while the caller owns construction of the
@@ -34,10 +36,9 @@ pub(crate) struct GenericFunctionBodyValidationInput<'a, 'environment> {
 ///
 /// The parsed nodes are intentionally discarded. Concrete instance emission reparses the same
 /// immutable template after call-site inference succeeds.
-#[allow(clippy::result_large_err)]
 pub(crate) fn validate_generic_function_body(
     input: GenericFunctionBodyValidationInput<'_, '_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> GenericFunctionBodyValidationResult<()> {
     let GenericFunctionBodyValidationInput {
         template,
         mut context,
@@ -62,7 +63,7 @@ pub(crate) fn validate_generic_function_body(
         policy,
         template.declaration_location.clone(),
     ) {
-        return Err(diagnostic);
+        return Err(Box::new(diagnostic));
     }
 
     Ok(())

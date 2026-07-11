@@ -1,0 +1,23 @@
+# Diagnostics, paths and symbols
+
+`CompilerDiagnostic` vs `CompilerError`, interned identity and render-boundary ownership.
+
+## Contract
+
+- Input: source locations, symbols, paths and structured reasons from any stage
+- Output: typed diagnostics durable across the whole build
+- Decides: user-facing diagnostic lanes, string-table identity, render boundaries
+- Must not decide: type semantics, AST validation, backend target policy
+- Invariant: user failures use `CompilerDiagnostic`: internal and infrastructure failures use `CompilerError`
+
+## Main paths
+
+- `src/compiler_frontend/compiler_messages/`
+- `src/compiler_frontend/symbols/`
+- `src/compiler_frontend/symbols/interned_path.rs`
+- `src/compiler_frontend/paths/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/diagnostics-paths-and-symbols/diagnostics-paths-and-symbols.bd`
+- `docs/src/docs/codebase/compiler-design/type-identity-and-coercion/overview.bd`

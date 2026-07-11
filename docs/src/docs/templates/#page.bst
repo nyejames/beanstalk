@@ -8,8 +8,8 @@ page_head #= theme_head
 #[navbar]
 #[title, center: TEMPLATES]
 
-#[section, $markdown:
-    Beanstalk has unique, superpowered templating strings. Templates use [$code:[]] exclusively - never confuse with collections [$code:{}].
+#[section, $md:
+    Beanstalk has unique, superpowered templating strings. Templates use `["[]"]` exclusively - never confuse with collections `{}``.
 
     These are the only way to create mutable strings, as double quotes are only used for string slices.
 
@@ -41,13 +41,13 @@ page_head #= theme_head
     `$` introduces **compiler-handled directives** (so they don't collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
 
     Directive availability is frontend-registry based:
-    - Frontend built-ins are available by default (`$markdown`, `$code`, `$raw`, `$slot`, etc.).
+    - Frontend built-ins are available by default (`$md`, `$code`, `$raw`, `$slot`, etc.).
     - Project builders can register additional project-specific directives using the same `$name` syntax. In the HTML project, that includes `$html`, `$css`, and `$escape_html`.
     - Unknown directives fail as syntax/rule errors unless they are registered.
 
     [codeblock, $code("bst"):
         -- Define a template style
-        [$markdown, $children([: All children start with this prefix! ]):
+        [$md, $children([: All children start with this prefix! ]):
             # Hello
             This template is parsed as markdown.
 
@@ -63,7 +63,7 @@ page_head #= theme_head
 
     - `$slot` / `$insert(..)` - See slots below!
     - `$fresh`              - Opts this child template out of wrappers applied by the immediate parent's `$children(..)` directive
-    - `$markdown`           - Parses the template bodies with a custom flavour of Markdown
+    - `$md`           - Parses the template bodies with a custom flavour of Markdown
     - `$code`               - Highlights code blocks using the compiler's built-in formatter
     - `$raw`                - Parses the template body as a raw string (no escaping, no formatting)
     - `$note / $todo`       - Comments (ignored by final output)
@@ -77,7 +77,9 @@ page_head #= theme_head
     - `$escape_html`        - Escapes HTML-sensitive characters in the template body
 
     Formatting directives do not automatically flow into nested child templates.
-    If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template's head.
+    If a child template should keep using a formatter such as `$md`, redeclare it in that child template's head.
+    Beandown `.bd` files are the exception: nested templates with no explicit directive default to `$md`,
+    and any explicit directive on that nested template overrides the Beandown default.
 
     `$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers:
 
@@ -98,11 +100,11 @@ page_head #= theme_head
 
     ## Markdown inline code
 
-    `$markdown` supports small inline code spans with paired isolated single backticks on one line.
+    `$md` supports small inline code spans with paired isolated single backticks on one line.
     Inline code renders as a normal HTML `code` element, preserves whitespace, escapes authored HTML-sensitive characters, and does not parse emphasis or links inside the span.
 
     [codeblock, $code("bst"):
-        [$markdown:
+        [$md:
             Use `copy` when you need an explicit copy.
             Write literal template syntax as `["[$slot]"]`.
         ]

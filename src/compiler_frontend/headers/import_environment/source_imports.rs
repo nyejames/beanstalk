@@ -19,6 +19,13 @@ use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
+/// Boxed diagnostic result for source import registration.
+///
+/// WHAT: gives source import registration one small error boundary.
+/// WHY: local-name derivation is already boxed, so registration can propagate it directly
+///      and adapt the plain visible-name registry once.
+type SourceImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 impl<'a> ImportEnvironmentBuilder<'a> {
     /// Auto-import receiver methods for a nominal type from the file where it is declared.
     ///
@@ -109,8 +116,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn register_source_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -118,7 +123,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         symbol_path: &InternedPath,
         import: &FileImport,
         access: SourceImportAccess,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> SourceImportResult<()> {
         let local_name = self.derive_import_local_name(import)?;
 
         if let Some(symbol_name) = symbol_path.name() {
@@ -135,10 +140,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         if is_receiver_method {
             // Source-authored receiver methods are not independently importable or aliasable.
             // They travel with their receiver type's visibility.
-            return Err(CompilerDiagnostic::invalid_receiver_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                 InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
                 import.location.clone(),
-            ));
+            )));
         }
 
         // Check export requirement after the source receiver-method guard so explicit method
@@ -149,10 +154,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .importable_source_symbol_paths
                 .contains(symbol_path);
             if !is_importable {
-                return Err(diagnostics::not_exported_by_source_file(
+                return Err(Box::new(diagnostics::not_exported_by_source_file(
                     symbol_path,
                     import.location.clone(),
-                ));
+                )));
             }
         }
 

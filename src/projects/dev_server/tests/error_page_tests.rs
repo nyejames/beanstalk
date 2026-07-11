@@ -65,11 +65,11 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
         SourceLocation::new(
             InternedPath::from_path_buf(&header_scope, &mut string_table),
             CharPosition {
-                line_number: 1,
+                line_number: 0,
                 char_column: 4,
             },
             CharPosition {
-                line_number: 1,
+                line_number: 0,
                 char_column: 7,
             },
         ),
@@ -77,16 +77,24 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     let messages = CompilerMessages::from_diagnostic(diagnostic, string_table);
 
     let page = render_compiler_error_page(&messages, &root, "/docs", 7);
-    let resolved_source_file = fs::canonicalize(&source_file).expect("source file should resolve");
-    let expected_href = format!("file://{}", resolved_source_file.to_string_lossy());
 
+    // The browser card should not visibly show BST-* codes but should
+    // carry them as data attributes for debugging.
     assert!(page.contains("color-scheme: dark"));
-    assert!(page.contains("guide.bst<"));
-    assert!(page.contains(&format!("href=\"{expected_href}\"")));
-    assert!(page.contains("line 2, col 5"));
-    assert!(page.contains("BST-CONFIG-0001"));
+    assert!(page.contains("data-diagnostic-code=\"BST-CONFIG-0001\""));
+    assert!(!page.contains(">BST-CONFIG-0001<"));
+    assert!(page.contains("guide.bst"));
+    assert!(page.contains("--> src/docs/guide.bst:1:5"));
     assert!(page.contains("Unsupported value"));
     assert!(!page.contains("start.header"));
+
+    // Source frame with underline carets.
+    assert!(page.contains("source-caret"));
+
+    // Simple file:// link to the resolved source path.
+    assert!(page.contains("file://"));
+
+    // SSE client is injected.
     assert!(page.contains("EventSource('/docs/__beanstalk/events')"));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

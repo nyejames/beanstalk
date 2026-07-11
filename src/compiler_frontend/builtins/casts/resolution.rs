@@ -28,6 +28,12 @@ use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::traits::ids::TraitId;
 
+/// Boxed diagnostic result for resolved casts.
+///
+/// Cast resolution returns directly into the expression parser's boxed diagnostic family, so
+/// both owners share one error shape without changing accumulation or rendering boundaries.
+type CastResolutionResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Inputs for resolving one explicit `cast` at a typed receiving boundary.
 ///
 /// WHAT: groups the semantic boundary facts, trait evidence stores, and type
@@ -60,7 +66,7 @@ pub(crate) struct CastResolutionInput<'a> {
 ///      duplicate the lookup logic.
 pub(crate) fn resolve_cast_expression(
     input: CastResolutionInput<'_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> CastResolutionResult<Expression> {
     let CastResolutionInput {
         source,
         target_type_id,
@@ -78,21 +84,21 @@ pub(crate) fn resolve_cast_expression(
     let source_type_id = source.type_id;
 
     if type_environment.is_option(source_type_id) {
-        return Err(CompilerDiagnostic::invalid_cast(
+        return Err(Box::new(CompilerDiagnostic::invalid_cast(
             InvalidCastReason::SourceIsOptional,
             Some(source_type_id),
             Some(target_type_id),
             source.location,
-        ));
+        )));
     }
 
     if source_type_id == target_type_id {
-        return Err(CompilerDiagnostic::invalid_cast(
+        return Err(Box::new(CompilerDiagnostic::invalid_cast(
             InvalidCastReason::SameSourceAndTarget,
             Some(source_type_id),
             Some(target_type_id),
             source.location,
-        ));
+        )));
     }
 
     let source_target =
@@ -117,12 +123,12 @@ pub(crate) fn resolve_cast_expression(
                 } else {
                     InvalidCastReason::NoEvidence
                 };
-                return Err(CompilerDiagnostic::invalid_cast(
+                return Err(Box::new(CompilerDiagnostic::invalid_cast(
                     reason,
                     Some(source_type_id),
                     Some(target_type_id),
                     source.location,
-                ));
+                )));
             }
         },
 
@@ -134,12 +140,12 @@ pub(crate) fn resolve_cast_expression(
                 } else {
                     InvalidCastReason::NoEvidence
                 };
-                return Err(CompilerDiagnostic::invalid_cast(
+                return Err(Box::new(CompilerDiagnostic::invalid_cast(
                     reason,
                     Some(source_type_id),
                     Some(target_type_id),
                     source.location,
-                ));
+                )));
             }
         },
     };

@@ -1,9 +1,17 @@
 //! Tests for CLI command parsing and validation.
 
-use super::{Command, get_command, integration_tests_exit_code};
+use super::{Command, build_warnings_messages, get_command, integration_tests_exit_code};
+use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, DiagnosticSeverity, RuleDiagnosticKind,
+};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_tests::integration_test_runner::IntegrationRunSummary;
 use crate::projects::dev_server::DevServerOptions;
 use crate::projects::html_project::new_html_project::NewHtmlProjectOptions;
+use crate::projects::settings::Config;
+use std::path::PathBuf;
 
 fn args(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| value.to_string()).collect()
@@ -308,4 +316,53 @@ fn integration_tests_exit_code_is_non_zero_when_suite_is_incorrect() {
     };
 
     assert_eq!(integration_tests_exit_code(summary), 1);
+}
+
+fn build_result_with_warnings(warnings: Vec<CompilerDiagnostic>) -> BuildResult {
+    BuildResult {
+        project: Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html></html>")),
+            )],
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::html(),
+            warnings: Vec::new(),
+        },
+        config: Config::new(PathBuf::from("main.bst")),
+        warnings,
+        string_table: StringTable::new(),
+    }
+}
+
+#[test]
+fn successful_build_without_warnings_has_no_warning_messages() {
+    let build_result = build_result_with_warnings(Vec::new());
+
+    assert!(
+        build_warnings_messages(&build_result).is_none(),
+        "a successful build with no warnings should not produce a CompilerMessages container"
+    );
+}
+
+#[test]
+fn successful_build_with_warnings_exposes_warning_messages() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("unused_value");
+    let warning = CompilerDiagnostic::with_severity(
+        DiagnosticKind::Rule(RuleDiagnosticKind::UnusedVariable),
+        DiagnosticSeverity::Warning,
+        SourceLocation::default(),
+        DiagnosticPayload::UnusedName { name },
+    );
+
+    let build_result = build_result_with_warnings(vec![warning]);
+    let messages = build_warnings_messages(&build_result).expect("warnings should be wrapped");
+
+    assert_eq!(messages.warning_count(), 1);
+    assert_eq!(messages.error_count(), 0);
+    assert!(
+        !messages.has_errors(),
+        "successful-build warnings must not be treated as errors"
+    );
 }

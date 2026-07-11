@@ -1,7 +1,9 @@
 use super::*;
 use crate::build_system::build::BackendBuilder;
 use crate::build_system::create_project_modules::resolve_project_entry_root;
-use crate::build_system::project_config::{ProjectConfigParseServices, parse_project_config_file};
+use crate::build_system::project_config::{
+    ProjectConfigParseServices, load_project_config, parse_project_config_file,
+};
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
 use crate::compiler_frontend::compiler_messages::{
@@ -14,9 +16,16 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
+use crate::libraries::external_import_providers::provider::{
+    ExternalFileExtension, ExternalImportProvider, ExternalImportProviderContext,
+    ExternalImportProviderKind, ExternalImportRequest, ResolvedExternalImport,
+};
+use crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     configured_resolver_with_source_file_kinds(
@@ -34,12 +43,21 @@ fn configured_resolver_with_source_file_kinds(
     let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
     let entry_root =
         fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
+    let mut index_string_table = StringTable::new();
+    let source_tree_index = super::source_tree_index::SourceTreeIndex::discover(
+        entry_root.clone(),
+        &project_root,
+        config,
+        &mut index_string_table,
+    )
+    .expect("source tree index should build");
 
-    ProjectPathResolver::new(
+    ProjectPathResolver::new_with_module_roots(
         project_root,
         entry_root,
         &crate::libraries::SourceLibraryRegistry::default(),
         source_file_kinds,
+        source_tree_index.module_roots().clone(),
     )
     .expect("project path resolver should build")
 }
@@ -97,6 +115,15 @@ fn discover_modules_for_test(
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
     let mut string_table = StringTable::new();
+    let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
+    let entry_root =
+        fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
+    let source_tree_index = super::source_tree_index::SourceTreeIndex::discover(
+        entry_root,
+        &project_root,
+        config,
+        &mut string_table,
+    )?;
     let mut external_packages = ExternalPackageRegistry::new();
     let external_import_providers =
         crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry::empty();
@@ -113,6 +140,45 @@ fn discover_modules_for_test(
     discover_all_modules_in_project(
         config,
         resolver,
+        &source_tree_index,
+        style_directives,
+        &mut external_imports,
+        &mut string_table,
+    )
+}
+
+fn discover_modules_for_test_with_providers(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+    external_import_providers: &ExternalImportProviderRegistry,
+) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+    let mut string_table = StringTable::new();
+    let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
+    let entry_root =
+        fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
+    let source_tree_index = super::source_tree_index::SourceTreeIndex::discover(
+        entry_root,
+        &project_root,
+        config,
+        &mut string_table,
+    )?;
+    let mut external_packages = ExternalPackageRegistry::new();
+    let mut external_import_cache =
+        crate::libraries::external_import_providers::cache::ExternalImportProviderCache::new();
+    let mut external_import_resolution_table =
+        crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
+    let mut external_imports = super::reachable_file_discovery::ExternalImportDiscoveryState {
+        external_packages: &mut external_packages,
+        providers: external_import_providers,
+        cache: &mut external_import_cache,
+        resolution_table: &mut external_import_resolution_table,
+    };
+
+    discover_all_modules_in_project(
+        config,
+        resolver,
+        &source_tree_index,
         style_directives,
         &mut external_imports,
         &mut string_table,
@@ -182,6 +248,190 @@ fn first_rendered_error_message(messages: &CompilerMessages) -> String {
 }
 
 #[test]
+fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
+    let root = temp_dir("source_tree_index_outputs");
+    let entry_root = root.clone();
+    let nested = entry_root.join("nested");
+    fs::create_dir_all(&nested).expect("should create nested module directory");
+
+    for directory_name in [
+        ".git",
+        "target",
+        "node_modules",
+        "release",
+        "dev",
+        "dist",
+        "build",
+        ".cache",
+        "generated",
+        "scratch",
+    ] {
+        let directory = entry_root.join(directory_name);
+        fs::create_dir_all(&directory).expect("should create skipped directory");
+        fs::write(directory.join("#skipped.bst"), "").expect("should write skipped root");
+    }
+
+    fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+    fs::write(entry_root.join("ordinary.bst"), "").expect("should write ordinary source");
+    fs::write(nested.join("#mod.bst"), "").expect("should write nested root");
+
+    let mut config = Config::new(root.clone());
+    config.dev_folder = PathBuf::from("scratch");
+    config.release_folder = PathBuf::from("generated");
+    let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+    let canonical_entry_root =
+        fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+    let mut string_table = StringTable::new();
+
+    let index = super::source_tree_index::SourceTreeIndex::discover(
+        canonical_entry_root.clone(),
+        &canonical_root,
+        &config,
+        &mut string_table,
+    )
+    .expect("source tree index should build");
+
+    assert_eq!(index.entry_root(), canonical_entry_root);
+    assert_eq!(index.entry_candidates().len(), 1);
+    assert!(index.entry_candidates()[0].ends_with("#page.bst"));
+    assert_eq!(index.stats().dirs_visited, 2);
+    assert_eq!(index.stats().dirs_skipped, 10);
+    assert_eq!(index.stats().files_seen, 3);
+    assert_eq!(index.stats().hash_root_files_seen, 2);
+    assert_eq!(index.stats().module_roots_found, 2);
+    assert_eq!(index.stats().duplicate_hash_root_dirs, 0);
+
+    let root_directories = index
+        .module_roots()
+        .root_directories()
+        .map(|path| path.file_name().and_then(OsStr::to_str).unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        root_directories[0],
+        canonical_entry_root
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap()
+    );
+    assert_eq!(root_directories[1], "nested");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_tree_index_records_duplicate_hash_root_files_for_role_migration() {
+    let root = temp_dir("source_tree_index_duplicate_roots");
+    let entry_root = root.join("src");
+    fs::create_dir_all(&entry_root).expect("should create entry root");
+    fs::write(entry_root.join("#page.bst"), "").expect("should write page root");
+    fs::write(entry_root.join("#layout.bst"), "").expect("should write layout root");
+
+    let config = Config::new(root.clone());
+    let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+    let canonical_entry_root =
+        fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+    let mut string_table = StringTable::new();
+    let index = super::source_tree_index::SourceTreeIndex::discover(
+        canonical_entry_root,
+        &canonical_root,
+        &config,
+        &mut string_table,
+    )
+    .expect("Phase 2 should record duplicates without changing current root roles");
+
+    assert_eq!(index.entry_candidates().len(), 2);
+    assert_eq!(index.stats().duplicate_hash_root_dirs, 1);
+    let duplicates = index.duplicate_hash_root_directories();
+    assert_eq!(duplicates.len(), 1);
+    assert_eq!(
+        duplicates[0].directory,
+        fs::canonicalize(&entry_root).unwrap()
+    );
+    assert_eq!(duplicates[0].files.len(), 2);
+    assert!(
+        duplicates[0]
+            .files
+            .iter()
+            .all(|path| { path.ends_with("#page.bst") || path.ends_with("#layout.bst") })
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn project_path_resolver_consumes_source_tree_module_roots() {
+    let root = temp_dir("source_tree_index_resolver_consumption");
+    let entry_root = root.join("src");
+    let nested = entry_root.join("nested");
+    fs::create_dir_all(&nested).expect("should create nested module directory");
+    fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+    fs::write(nested.join("#mod.bst"), "").expect("should write nested facade");
+
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+    let mut string_table = StringTable::new();
+    let setup = super::project_roots::build_project_path_resolver_with_index(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver setup should build from prepared roots");
+    let resolver = setup.resolver;
+
+    let mut import_path = crate::compiler_frontend::symbols::interned_path::InternedPath::new();
+    import_path.push_str("nested", &mut string_table);
+    import_path.push_str("identity", &mut string_table);
+    let resolved = resolver
+        .resolve_import_to_source_file_with_facade_fallback(
+            &import_path,
+            &entry_root.join("#page.bst"),
+            &mut string_table,
+        )
+        .expect("prepared nested module root should resolve its facade");
+    assert_eq!(
+        resolved.path,
+        fs::canonicalize(nested.join("#mod.bst")).unwrap()
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[derive(Debug)]
+struct CountingExternalImportProvider {
+    calls: Arc<AtomicUsize>,
+    extensions: Vec<ExternalFileExtension>,
+}
+
+impl CountingExternalImportProvider {
+    fn new(calls: Arc<AtomicUsize>) -> Self {
+        Self {
+            calls,
+            extensions: vec![ExternalFileExtension::from("js")],
+        }
+    }
+}
+
+impl ExternalImportProvider for CountingExternalImportProvider {
+    fn kind(&self) -> ExternalImportProviderKind {
+        ExternalImportProviderKind::new("counting-js")
+    }
+
+    fn supported_extensions(&self) -> &[ExternalFileExtension] {
+        &self.extensions
+    }
+
+    fn resolve_external_import(
+        &self,
+        _request: ExternalImportRequest,
+        _context: &mut ExternalImportProviderContext,
+    ) -> Result<Option<ResolvedExternalImport>, CompilerMessages> {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        Ok(None)
+    }
+}
+
+#[test]
 fn parses_config_constant_declarations() {
     let root = temp_dir("config_constants");
     fs::create_dir_all(&root).expect("should create root dir");
@@ -222,6 +472,83 @@ fn parses_config_constant_declarations() {
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn loads_canonical_config_file_from_project_root() {
+    let root = temp_dir("canonical_config_lookup");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    let services = ProjectConfigParseServices {
+        style_directives: &style_directives,
+        libraries: &libraries,
+    };
+    let mut string_table = StringTable::new();
+
+    load_project_config(&mut config, &services, &mut string_table)
+        .expect("canonical config should load");
+
+    assert_eq!(config.config_file_path(), root.join("config.bst"));
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove root dir");
+}
+
+#[test]
+fn rejects_direct_canonical_config_import_paths() {
+    let mut string_table = StringTable::new();
+
+    for import_path in ["config", "config.bst"] {
+        let path = crate::compiler_frontend::symbols::interned_path::InternedPath::from_single_str(
+            import_path,
+            &mut string_table,
+        );
+
+        assert!(
+            crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+                &path,
+                false,
+                &string_table,
+            ),
+            "direct config import should be treated as a special file: {import_path}"
+        );
+    }
+
+    let mut nested_source_path =
+        crate::compiler_frontend::symbols::interned_path::InternedPath::new();
+    nested_source_path.push_str("config", &mut string_table);
+    nested_source_path.push_str("init_config", &mut string_table);
+
+    assert!(
+        !crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+            &nested_source_path,
+            false,
+            &string_table,
+        ),
+        "a folder named config must remain a valid source path prefix"
+    );
+
+    let mut grouped_config_path =
+        crate::compiler_frontend::symbols::interned_path::InternedPath::new();
+    grouped_config_path.push_str("config", &mut string_table);
+    grouped_config_path.push_str("project", &mut string_table);
+
+    assert!(
+        crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+            &grouped_config_path,
+            true,
+            &string_table,
+        ),
+        "a grouped import must classify its source component as config"
+    );
 }
 
 #[test]
@@ -806,7 +1133,7 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -845,7 +1172,7 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
 }
 
 #[test]
-fn rejects_legacy_config_assignment_syntax() {
+fn rejects_hash_config_assignment_syntax() {
     let root = temp_dir("config_invalid_assignment");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -1057,7 +1384,7 @@ fn missing_default_library_folder_is_ignored() {
     let root = temp_dir("missing_default_lib_ignored");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2137,7 +2464,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
     fs::write(root.join("lib/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
-    fs::write(root.join("#config.bst"), "").expect("should write config");
+    fs::write(root.join("config.bst"), "").expect("should write config");
 
     let config = Config::new(root.clone());
     let mut string_table = StringTable::new();
@@ -2177,7 +2504,7 @@ fn library_prefix_collision_with_builder_library_rejected() {
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("lib/html/#mod.bst"), "foo #= 1\n").expect("should write facade");
-    fs::write(root.join("#config.bst"), "").expect("should write config");
+    fs::write(root.join("config.bst"), "").expect("should write config");
 
     let config = Config::new(root.clone());
     let mut string_table = StringTable::new();
@@ -2221,7 +2548,7 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     fs::write(root.join("packages/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
     fs::write(root.join("packages/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "library_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
@@ -2269,7 +2596,7 @@ fn missing_explicit_library_folder_is_error() {
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "library_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
@@ -2317,7 +2644,7 @@ fn explicit_library_folder_must_be_directory() {
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("packages"), "").expect("should write file in place of folder");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "library_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
@@ -2354,7 +2681,7 @@ fn source_library_requires_mod_facade() {
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2392,7 +2719,7 @@ fn library_prefix_collision_across_scan_roots_rejected() {
     fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
     fs::write(root.join("vendor/helper/#mod.bst"), "bar #= 2\n").expect("should write facade");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "library_folders #= { \"lib\", \"vendor\" }\n",
     )
     .expect("should write config");
@@ -2437,7 +2764,7 @@ fn library_prefix_collision_across_scan_roots_rejected() {
 fn entry_root_requires_at_least_one_root_entry_file() {
     let root = temp_dir("entry_root_without_entries");
     fs::create_dir_all(root.join("src")).expect("should create src");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2469,7 +2796,7 @@ fn rejects_bst_file_and_folder_collision_in_same_directory() {
     fs::create_dir_all(root.join("src/ui")).expect("should create src/ui");
     fs::write(root.join("src/ui/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("src/ui.bst"), "y ~= 2\n").expect("should write colliding file");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2507,7 +2834,7 @@ fn allows_same_stem_in_different_directories() {
     fs::write(root.join("src/components/card.bst"), "x ~= 1\n").expect("should write card");
     fs::write(root.join("src/pages/card.bst"), "y ~= 2\n").expect("should write another card");
     fs::write(root.join("src/#page.bst"), "z ~= 3\n").expect("should write entry");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2536,7 +2863,7 @@ fn rejects_collision_with_empty_folder() {
     fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
     fs::write(root.join("src/helper.bst"), "x ~= 1\n").expect("should write colliding file");
     fs::write(root.join("src/#page.bst"), "y ~= 2\n").expect("should write entry");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2575,7 +2902,7 @@ fn js_file_with_same_stem_as_folder_does_not_trigger_collision() {
     fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
     fs::write(root.join("src/helper.js"), "// js\n").expect("should write js file");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2608,7 +2935,7 @@ fn rejects_bst_file_and_folder_collision_in_source_library() {
     fs::write(root.join("lib/helper/ui.bst"), "value #= 2\n")
         .expect("should write colliding library file");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"src\"\nlibrary_folders #= { \"lib\" }\n",
     )
     .expect("should write config");
@@ -3311,6 +3638,529 @@ fn reachable_file_discovery_unsupported_markdown_import_reports_bst_import_0025(
         &diagnostic.payload,
         DiagnosticPayload::UnsupportedSourceFileKind { .. }
     ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn stage0_reuses_scanned_bst_source_when_assembling_input_files() {
+    let root = temp_dir("stage0_reuses_scanned_bst_source");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "import @./helper\n#[:entry]\n").expect("should write entry");
+    fs::write(src.join("helper.bst"), "message #= \"helper\"\n").expect("should write helper");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let canonical_root = fs::canonicalize(&root).expect("test root should canonicalize");
+    super::source_loading::reset_source_read_count_for_test(&canonical_root);
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+
+    assert_eq!(modules.len(), 1);
+    assert_eq!(
+        super::source_loading::source_read_count_for_test(),
+        2,
+        "entry and helper .bst files should each be read once during import scanning"
+    );
+    assert_eq!(modules[0].input_files.len(), 2);
+    assert!(
+        modules[0]
+            .input_files
+            .iter()
+            .any(|input| input.source_code.contains("#[:entry]"))
+    );
+    assert!(
+        modules[0]
+            .input_files
+            .iter()
+            .any(|input| input.source_code.contains("message #="))
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
+    let root = temp_dir("stage0_asset_source_loading_order");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(
+        src.join("#page.bst"),
+        "import @./intro\nimport @./notes\n#[:entry]\n",
+    )
+    .expect("should write entry");
+    fs::write(src.join("intro.bd"), "beandown body\n").expect("should write beandown");
+    fs::write(src.join("notes.md"), "# Markdown body\n").expect("should write markdown");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("asset source discovery should pass");
+    let input_files = &modules[0].input_files;
+    let input_names = input_files
+        .iter()
+        .map(|input| {
+            input
+                .source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(input_names, vec!["#page.bst", "intro.bd", "notes.md"]);
+    assert_eq!(
+        input_files[1].source_kind,
+        crate::libraries::SourceFileKind::Beandown
+    );
+    assert_eq!(input_files[1].source_code, "beandown body\n");
+    assert_eq!(
+        input_files[2].source_kind,
+        crate::libraries::SourceFileKind::PlainMarkdown
+    );
+    assert_eq!(input_files[2].source_code, "# Markdown body\n");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn stage0_parallel_missing_source_loading_preserves_input_order() {
+    let root = temp_dir("stage0_parallel_missing_source_order");
+    fs::create_dir_all(&root).expect("should create root dir");
+
+    let source_paths = (0..super::reachable_file_discovery::STAGE0_PARALLEL_SOURCE_LOAD_MIN_FILES)
+        .map(|index| {
+            let path = root.join(format!("asset_{index}.md"));
+            fs::write(&path, format!("# Asset {index}\n")).expect("should write markdown asset");
+            path
+        })
+        .collect::<Vec<_>>();
+    let mut string_table = StringTable::new();
+
+    let input_files = super::reachable_file_discovery::load_missing_source_paths_for_test(
+        source_paths,
+        crate::libraries::SourceFileKind::PlainMarkdown,
+        &mut string_table,
+    )
+    .expect("parallel missing source loading should pass");
+
+    let loaded_names = input_files
+        .iter()
+        .map(|input| {
+            input
+                .source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    let expected_names = (0
+        ..super::reachable_file_discovery::STAGE0_PARALLEL_SOURCE_LOAD_MIN_FILES)
+        .map(|index| format!("asset_{index}.md"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(loaded_names, expected_names);
+    for (index, input_file) in input_files.iter().enumerate() {
+        assert_eq!(input_file.source_code, format!("# Asset {index}\n"));
+        assert_eq!(
+            input_file.source_kind,
+            crate::libraries::SourceFileKind::PlainMarkdown
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn stage0_missing_source_load_preserves_file_error_shape() {
+    let root = temp_dir("stage0_missing_source_load_error");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let missing_source = root.join("missing.md");
+    let mut string_table = StringTable::new();
+
+    let messages = super::reachable_file_discovery::load_missing_source_path_for_test(
+        missing_source.clone(),
+        crate::libraries::SourceFileKind::PlainMarkdown,
+        &mut string_table,
+    )
+    .expect_err("missing source read should fail");
+
+    let (_error_type, message, location) = messages
+        .first_infrastructure_error_for_tests()
+        .expect("expected infrastructure file error");
+    assert!(
+        message.contains("Error reading file when adding new bst files to parse"),
+        "unexpected infrastructure message: {message}"
+    );
+    assert!(
+        location
+            .scope
+            .to_portable_string(&messages.string_table)
+            .contains("missing.md"),
+        "missing source path should be preserved in the diagnostic location"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_backed_imports_are_resolved_without_becoming_source_inputs() {
+    let root = temp_dir("provider_imports_not_source_inputs");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "import @./drawing.js\n#[:entry]\n")
+        .expect("should write entry");
+    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut providers = ExternalImportProviderRegistry::empty();
+    providers.register(Arc::new(CountingExternalImportProvider::new(Arc::clone(
+        &calls,
+    ))));
+
+    let modules =
+        discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
+            .expect("provider-backed import should resolve during discovery");
+
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    assert_eq!(modules[0].input_files.len(), 1);
+    assert_eq!(
+        modules[0].input_files[0].source_path.file_name().unwrap(),
+        OsStr::new("#page.bst")
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path() {
+    let root = temp_dir("provider_free_multi_entry_deterministic");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("shared")).expect("should create shared dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Two entry points with overlapping and distinct dependency trees.
+    fs::write(
+        src.join("#pageA.bst"),
+        "import @./shared/helper\nimport @./a_only\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(
+        src.join("#pageB.bst"),
+        "import @./shared/helper\nimport @./b_only\n#[:pageB]\n",
+    )
+    .expect("should write pageB");
+    fs::write(src.join("shared/helper.bst"), "helper #= 1\n").expect("should write helper");
+    fs::write(src.join("a_only.bst"), "a #= 1\n").expect("should write a_only");
+    fs::write(src.join("b_only.bst"), "b #= 1\n").expect("should write b_only");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let canonical_root = fs::canonicalize(&root).expect("test root should canonicalize");
+    super::source_loading::reset_source_read_count_for_test(&canonical_root);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("provider-free multi-entry discovery should pass");
+
+    assert_eq!(
+        super::source_loading::source_read_count_for_test(),
+        5,
+        "provider-free classification should read each unique Beanstalk source once and share the source cache with module discovery"
+    );
+    assert_eq!(modules.len(), 2, "expected two discovered modules");
+
+    // Module order must follow deterministic entry-point order.
+    let module_names: Vec<_> = modules
+        .iter()
+        .map(|module| {
+            module
+                .entry_point
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(module_names, vec!["#pageA.bst", "#pageB.bst"]);
+
+    // Per-module input order must be deterministic.
+    let module_a_inputs = modules[0]
+        .input_files
+        .iter()
+        .map(|input| {
+            input
+                .source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    let module_b_inputs = modules[1]
+        .input_files
+        .iter()
+        .map(|input| {
+            input
+                .source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+
+    // Reachable files are collected into a `BTreeSet`, so per-module order is deterministic by
+    // canonical path (file name within this test).
+    assert_eq!(
+        module_a_inputs,
+        vec!["#pageA.bst", "a_only.bst", "helper.bst"]
+    );
+    assert_eq!(
+        module_b_inputs,
+        vec!["#pageB.bst", "b_only.bst", "helper.bst"]
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider() {
+    let root = temp_dir("provider_backed_multi_entry_fallback");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Entry A is plain provider-free; entry B imports a .js file.
+    fs::write(src.join("#pageA.bst"), "a #= 1\n").expect("should write pageA");
+    fs::write(src.join("#pageB.bst"), "import @./drawing.js\n#[:pageB]\n")
+        .expect("should write pageB");
+    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut providers = ExternalImportProviderRegistry::empty();
+    providers.register(Arc::new(CountingExternalImportProvider::new(Arc::clone(
+        &calls,
+    ))));
+
+    let modules =
+        discover_modules_for_test_with_providers(&config, &resolver, &style_directives, &providers)
+            .expect("provider-backed multi-entry discovery should fall back and succeed");
+
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        1,
+        "provider should be called once"
+    );
+    assert_eq!(modules.len(), 2);
+
+    // Module A has its own input; module B should only contain the Beanstalk entry, not the .js.
+    assert_eq!(modules[0].input_files.len(), 1);
+    assert_eq!(modules[1].input_files.len(), 1);
+    assert_eq!(
+        modules[1].input_files[0].source_path.file_name().unwrap(),
+        OsStr::new("#pageB.bst")
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn unsupported_external_extension_in_multi_entry_preserves_diagnostic_shape() {
+    let root = temp_dir("unsupported_extension_multi_entry");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#pageA.bst"), "a #= 1\n").expect("should write pageA");
+    fs::write(src.join("#pageB.bst"), "import @./drawing.js\n#[:pageB]\n")
+        .expect("should write pageB");
+    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("unsupported .js import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0021",
+        "expected unsupported external extension diagnostic, got {:?}",
+        diagnostic
+    );
+    if let DiagnosticPayload::UnsupportedExternalExtension { path, extension } = &diagnostic.payload
+    {
+        let path_text = path.to_portable_string(&messages.string_table);
+        assert_eq!(path_text, "./drawing.js", "unexpected path in diagnostic");
+        assert_eq!(
+            messages.string_table.resolve(*extension),
+            "js",
+            "unexpected extension in diagnostic"
+        );
+    } else {
+        panic!(
+            "expected UnsupportedExternalExtension payload, got {:?}",
+            diagnostic.payload
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn provider_free_parallel_preserves_cross_module_facade_queuing() {
+    let root = temp_dir("provider_free_cross_module_facade");
+    let src = root.join("src");
+    let module_a = src.join("module_a");
+    let module_b = src.join("module_b");
+    fs::create_dir_all(&module_a).expect("should create module_a");
+    fs::create_dir_all(&module_b).expect("should create module_b");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Two entry points; entry A imports an implementation file in module B, which should queue
+    // module B's facade.
+    fs::write(src.join("#pageA.bst"), "import @module_b/impl\n#[:pageA]\n")
+        .expect("should write pageA");
+    fs::write(src.join("#pageB.bst"), "#[:pageB]\n").expect("should write pageB");
+    fs::write(module_a.join("#mod.bst"), "export a #= 1\n").expect("should write module_a facade");
+    fs::write(module_b.join("#mod.bst"), "export b #= 1\n").expect("should write module_b facade");
+    fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("cross-module facade discovery should pass");
+
+    assert_eq!(modules.len(), 2);
+
+    let module_a_inputs = modules[0]
+        .input_files
+        .iter()
+        .map(|input| {
+            input
+                .source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        module_a_inputs.contains(&"#mod.bst".to_string()),
+        "module B facade should be queued for cross-module import in provider-free parallel path"
+    );
+    assert!(
+        module_a_inputs.contains(&"impl.bst".to_string()),
+        "module B impl should be reachable"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

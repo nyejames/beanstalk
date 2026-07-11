@@ -27,19 +27,18 @@ use super::definitions::{
 };
 use super::generic_bindings::{BindingConflict, GenericTypeBindings};
 use super::generic_identity_bridge::{
-    BuiltinGenericType, BuiltinTypeKey as BridgeBuiltinTypeKey, GenericBaseType,
-    GenericInstantiationKey, TypeIdentityKey,
+    BuiltinTypeKey as BridgeBuiltinTypeKey, GenericInstantiationKey, TypeIdentityKey,
 };
 use super::generic_parameters::{
     GenericParameterList as ParsedGenericParameterList, TypeParameterId,
 };
 use super::ids::{
-    BuiltinTypeConstructor, BuiltinTypeKey, ConstructedTypeKey, FunctionTypeId, FunctionTypeKey,
+    BuiltinTypeConstructor, BuiltinTypeKey, ConstructedTypeKey, FunctionTypeKey,
     GenericInstanceKey, GenericParameterId, GenericParameterListId, NominalTypeId, TypeConstructor,
     TypeId,
 };
 use super::queries::TypeKind;
-use super::{BuiltinScalarReceiver, DataType, ReceiverKey, fallible_carrier_constructor};
+use super::{BuiltinScalarReceiver, ReceiverKey};
 
 // -----------------------------------------------------------
 //  Supporting Types
@@ -121,7 +120,6 @@ pub struct TypeEnvironment {
     // ID counters.
     next_generic_parameter_id: u32,
     next_generic_parameter_list_id: u32,
-    next_function_type_id: u32,
 
     // Seeded builtins.
     builtins: BuiltinTypes,
@@ -263,7 +261,6 @@ impl TypeEnvironment {
             nominal_to_type_id: FxHashMap::default(),
             next_generic_parameter_id: 0,
             next_generic_parameter_list_id: 0,
-            next_function_type_id: 0,
             builtins: BuiltinTypes {
                 bool: TypeId(0),
                 int: TypeId(0),
@@ -757,16 +754,6 @@ impl TypeEnvironment {
     //  Interning
     // --------------------------------------------------------
 
-    /// Returns the canonical `TypeId` for a builtin key.
-    /// Builtins are always pre-seeded, so this is a lookup, not insertion.
-    pub fn intern_builtin(&mut self, key: BuiltinTypeKey) -> TypeId {
-        if let Some(&id) = self.builtin_ids.get(&key) {
-            return id;
-        }
-        // Fallback for builtins not in the initial seed set.
-        self.insert_builtin(key)
-    }
-
     /// Interns a constructed type, reusing an existing `TypeId` if the same
     /// constructor and arguments were already registered.
     pub fn intern_constructed(
@@ -798,9 +785,6 @@ impl TypeEnvironment {
             return existing;
         }
 
-        let function_id = FunctionTypeId(self.next_function_type_id);
-        self.next_function_type_id += 1;
-
         let parameters: Box<[FunctionParameterDefinition]> = key
             .parameters
             .iter()
@@ -811,7 +795,6 @@ impl TypeEnvironment {
             .collect();
 
         let id = self.insert_definition(TypeDefinition::Function(FunctionTypeDefinition {
-            id: function_id,
             parameters,
             returns: key.returns.clone(),
             error_return: key.error_return,
@@ -1049,11 +1032,12 @@ impl TypeEnvironment {
     //  Queries
     // --------------------------------------------------------
 
-    /// Returns true if the type is a numeric scalar.
+    /// Test-only query for canonical numeric classification fixtures.
     ///
     /// Decimal is intentionally excluded: it is seeded in the environment to keep
     /// stable builtin TypeId layout, but it is not an authorable or operator-active
     /// numeric type in the Alpha surface.
+    #[cfg(test)]
     pub fn is_numeric(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
@@ -1130,12 +1114,14 @@ impl TypeEnvironment {
         self.map_shape(id).is_some()
     }
 
-    /// Returns the key type of a map, if this type is a map.
+    /// Test-only query for a canonical map key type.
+    #[cfg(test)]
     pub fn map_key_type(&self, id: TypeId) -> Option<TypeId> {
         self.map_shape(id).map(|shape| shape.key_type)
     }
 
-    /// Returns the value type of a map, if this type is a map.
+    /// Test-only query for a canonical map value type.
+    #[cfg(test)]
     pub fn map_value_type(&self, id: TypeId) -> Option<TypeId> {
         self.map_shape(id).map(|shape| shape.value_type)
     }
@@ -1397,10 +1383,11 @@ impl TypeEnvironment {
         variants
     }
 
-    /// Returns one borrowed choice variant definition by source-level variant name.
+    /// Returns one borrowed choice variant for environment fixtures.
     ///
     /// WHAT: centralizes direct variant lookup over base and generic choice
     /// instances so callers do not need a clone-returning query surface.
+    #[cfg(test)]
     pub fn variant_for(
         &self,
         type_id: TypeId,
@@ -1560,7 +1547,6 @@ impl TypeEnvironment {
                     })
                 }
                 TypeConstructor::Builtin(BuiltinTypeConstructor::Tuple) => None,
-                TypeConstructor::Nominal(_) | TypeConstructor::External(_) => None,
             },
             TypeDefinition::GenericInstance(instance) => {
                 let base_path = self.nominal_path_by_id(instance.base)?.clone();
@@ -1748,115 +1734,6 @@ impl TypeEnvironment {
                     Self::remap_fields(fields.as_mut(), remap);
                 }
             }
-        }
-    }
-
-    /// Returns the canonical `TypeId` for a builtin key, if seeded.
-    pub fn type_id_for_builtin(&self, key: BuiltinTypeKey) -> Option<TypeId> {
-        self.builtin_ids.get(&key).copied()
-    }
-
-    /// Returns the canonical `TypeId` for an opaque external type, if it has already
-    /// been interned by normal signature or type resolution.
-    pub fn type_id_for_external(&self, external_type_id: ExternalTypeId) -> Option<TypeId> {
-        self.external_ids.get(&external_type_id).copied()
-    }
-
-    /// Returns the canonical `TypeId` for a constructed type key, if registered.
-    pub fn type_id_for_constructed(&self, key: ConstructedTypeKey) -> Option<TypeId> {
-        self.constructed_ids.get(&key).copied()
-    }
-
-    /// Returns the canonical `TypeId` for a generic instance key, if registered.
-    pub fn type_id_for_generic_instance(&self, key: GenericInstanceKey) -> Option<TypeId> {
-        self.generic_instance_ids.get(&key).copied()
-    }
-
-    /// Converts a `DataType` back to its canonical `TypeId`.
-    ///
-    /// WHAT: reverse bridge from diagnostic/display `DataType` to canonical semantic `TypeId`.
-    /// WHY: operator policy and diagnostic layers work with `DataType` but typed diagnostics
-    ///      require `TypeId`.
-    ///
-    /// Returns `None` for unresolved, inferred, or unregistered types.
-    pub fn data_type_to_type_id(&self, data_type: &DataType) -> Option<TypeId> {
-        match data_type {
-            DataType::Bool => Some(self.builtins.bool),
-            DataType::Int => Some(self.builtins.int),
-            DataType::Float => Some(self.builtins.float),
-            DataType::Decimal => Some(self.builtins.decimal),
-            DataType::StringSlice => Some(self.builtins.string),
-            DataType::Char => Some(self.builtins.char),
-            DataType::Range => Some(self.builtins.range),
-            DataType::None => Some(self.builtins.none),
-            DataType::Struct { type_id, .. } => Some(*type_id),
-            DataType::Choices { type_id, .. } => Some(*type_id),
-            DataType::TypeParameter {
-                canonical_id: Some(canonical_id),
-                ..
-            } => self.type_id_for_generic_parameter(*canonical_id),
-            DataType::External { type_id } => self.external_ids.get(type_id).copied(),
-            DataType::Reference(inner) => self.data_type_to_type_id(inner),
-            DataType::Option(inner) => {
-                let inner_id = self.data_type_to_type_id(inner)?;
-                let key = ConstructedTypeKey {
-                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Option),
-                    arguments: Box::new([inner_id]),
-                };
-                self.constructed_ids.get(&key).copied()
-            }
-            DataType::FallibleCarrier { success, error } => {
-                let success_id = self.data_type_to_type_id(success)?;
-                let error_id = self.data_type_to_type_id(error)?;
-                let key = ConstructedTypeKey {
-                    constructor: fallible_carrier_constructor(),
-                    arguments: Box::new([success_id, error_id]),
-                };
-                self.constructed_ids.get(&key).copied()
-            }
-            DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }),
-                arguments,
-            } => {
-                let element_id = self.data_type_to_type_id(arguments.first()?)?;
-                let key = ConstructedTypeKey {
-                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
-                        fixed_capacity: *fixed_capacity,
-                    }),
-                    arguments: Box::new([element_id]),
-                };
-                self.constructed_ids.get(&key).copied()
-            }
-            DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
-                arguments,
-            } => {
-                let key_id = self.data_type_to_type_id(arguments.first()?)?;
-                let value_id = self.data_type_to_type_id(arguments.get(1)?)?;
-                let key = ConstructedTypeKey {
-                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
-                    arguments: Box::new([key_id, value_id]),
-                };
-                self.constructed_ids.get(&key).copied()
-            }
-            DataType::GenericInstance {
-                base: GenericBaseType::ResolvedNominal(path),
-                arguments,
-            } => {
-                let base_nominal = self.nominal_id_for_path(path)?;
-                let arg_ids: Vec<TypeId> = arguments
-                    .iter()
-                    .map(|arg| self.data_type_to_type_id(arg))
-                    .collect::<Option<Vec<_>>>()?;
-                let key = GenericInstanceKey {
-                    base: base_nominal,
-                    arguments: arg_ids.into_boxed_slice(),
-                };
-                self.generic_instance_ids.get(&key).copied()
-            }
-            // NamedType, uncanonicalized TypeParameter, and unresolved generic instances cannot
-            // be mapped.
-            _ => None,
         }
     }
 

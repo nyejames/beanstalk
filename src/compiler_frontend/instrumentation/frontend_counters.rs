@@ -1,9 +1,10 @@
 //! Local-only frontend performance instrumentation.
 //!
 //! WHAT: exposes counters for clone-heavy, cache-sensitive, and remap-heavy frontend paths.
-//! WHY: detailed benchmark runs need enough local evidence to interpret small
-//! end-to-end timing changes, while normal compiler builds must not pay for or
-//! print this diagnostic data.
+//! WHY: benchmark runs built with `benchmark_counters` need enough local evidence to
+//! interpret small end-to-end timing changes, while normal compiler builds must not
+//! pay for or print this diagnostic data. Counter storage and logging are gated by
+//! `benchmark_counters`, independent of `detailed_timers`.
 
 /// Stable local benchmark counters grouped by the compiler stage that owns the work.
 ///
@@ -20,6 +21,25 @@ pub(crate) enum FrontendCounter {
     HeaderCount,
     ImportCount,
     TopLevelDeclarationCount,
+    ModuleCompilationSerialCount,
+    ModuleCompilationParallelTaskCount,
+    FilePreparationSerialModuleCount,
+    FilePreparationParallelModuleCount,
+    FilePreparationStrategySmallSerialCount,
+    FilePreparationStrategyByteThresholdSerialCount,
+    FilePreparationStrategyParallelCount,
+    FilePreparationStrategyParallelPerFileCount,
+    FilePreparationStrategyChunkedCount,
+    FilePreparationInputFileCount,
+    FilePreparationInputByteCount,
+    FilePreparationResultMergeCount,
+    FilePreparationIdentityRemapCount,
+    FilePreparationNonIdentityRemapCount,
+    Stage0SourceCacheHitCount,
+    Stage0SourceCacheMissCount,
+    Stage0ParallelSourceLoadCount,
+    Stage0SerialSourceLoadCount,
+    Stage0SourceBytesLoaded,
 
     // Dependency sorting volume.
     DependencyHeaderCount,
@@ -37,6 +57,14 @@ pub(crate) enum FrontendCounter {
     AstReceiverMethodCount,
     AstGenericTemplateCount,
     AstGenericInstanceCount,
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
+    AstFunctionBodyRootCount,
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
+    AstStartBodyRootCount,
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
+    AstConstTemplateFoldedCount,
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
+    AstRootScopeArenaCount,
     ConstantFoldAttemptCount,
     ConstantFoldSuccessCount,
     TemplateCount,
@@ -76,31 +104,32 @@ pub(crate) enum FrontendCounter {
     StringTableMergeFromSourceEntriesScanned,
     StringTableDeltaMergeCalls,
     StringTableDeltaEntriesScanned,
-    // These identity/non-identity counters are emitted only by detailed-timer
-    // identity scans so default builds avoid extra remap traversal cost.
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    // These identity/non-identity counters are emitted only by explicit
+    // benchmark-counter identity scans so default builds avoid extra remap
+    // traversal cost.
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     StringTableDeltaIdentityRemaps,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     StringTableDeltaNonIdentityRemaps,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     StringTableDeltaNonIdentityEntries,
     ModuleRemapStringIdsCalls,
     FilePrepareOutputRemapCalls,
     FilePrepareErrorRemapCalls,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     FilePrepareNonIdentityPayloadRemaps,
 
     // Arena capacity-estimate counters (Phase 1).
     EstimatedScopeFrames,
     ActualScopeFrames,
     ScopeArenaCapacity,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     ScopeFrameEstimateToActualBasisPoints,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     ScopeArenaCapacityToActualBasisPoints,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     ScopeFrameUnderEstimateCount,
-    #[cfg_attr(not(feature = "detailed_timers"), allow(dead_code))]
+    #[cfg_attr(not(feature = "benchmark_counters"), allow(dead_code))]
     ScopeFrameOverEstimateCount,
     CappedCapacityEstimates,
 
@@ -112,15 +141,15 @@ pub(crate) enum FrontendCounter {
     ExternalAbiParameterCloneCount,
 }
 
-#[cfg(feature = "detailed_timers")]
-use crate::compiler_frontend::compiler_messages::compiler_dev_logging::{
-    detailed_timer_output_enabled, log_benchmark_counter,
-};
+#[cfg(feature = "benchmark_counters")]
+use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_benchmark_counter;
 
-#[cfg(feature = "detailed_timers")]
+#[cfg(feature = "benchmark_counters")]
 mod detailed {
     use super::FrontendCounter;
-    use super::{detailed_timer_output_enabled, log_benchmark_counter};
+    use super::log_benchmark_counter;
+    #[cfg(test)]
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TYPE_ENVIRONMENT_FIELDS_FOR_QUERIES: AtomicUsize = AtomicUsize::new(0);
@@ -158,6 +187,25 @@ mod detailed {
     static HEADER_COUNT: AtomicUsize = AtomicUsize::new(0);
     static IMPORT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static TOP_LEVEL_DECLARATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static MODULE_COMPILATION_SERIAL_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static MODULE_COMPILATION_PARALLEL_TASK_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_SERIAL_MODULE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_PARALLEL_MODULE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_STRATEGY_SMALL_SERIAL_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_STRATEGY_BYTE_THRESHOLD_SERIAL_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_STRATEGY_PARALLEL_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_STRATEGY_PARALLEL_PER_FILE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_STRATEGY_CHUNKED_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_INPUT_FILE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_INPUT_BYTE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_RESULT_MERGE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_IDENTITY_REMAP_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static FILE_PREPARATION_NON_IDENTITY_REMAP_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE0_SOURCE_CACHE_HIT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE0_SOURCE_CACHE_MISS_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE0_PARALLEL_SOURCE_LOAD_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE0_SERIAL_SOURCE_LOAD_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE0_SOURCE_BYTES_LOADED: AtomicUsize = AtomicUsize::new(0);
     static DEPENDENCY_HEADER_COUNT: AtomicUsize = AtomicUsize::new(0);
     static DEPENDENCY_EDGE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static DEPENDENCY_VISIT_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -171,6 +219,10 @@ mod detailed {
     static AST_RECEIVER_METHOD_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_GENERIC_TEMPLATE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_GENERIC_INSTANCE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_FUNCTION_BODY_ROOT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_START_BODY_ROOT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_CONST_TEMPLATE_FOLDED_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_ROOT_SCOPE_ARENA_COUNT: AtomicUsize = AtomicUsize::new(0);
     static CONSTANT_FOLD_ATTEMPT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static CONSTANT_FOLD_SUCCESS_COUNT: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -200,6 +252,42 @@ mod detailed {
     static FILE_PREPARE_ERROR_REMAP_CALLS: AtomicUsize = AtomicUsize::new(0);
     static FILE_PREPARE_NON_IDENTITY_PAYLOAD_REMAPS: AtomicUsize = AtomicUsize::new(0);
 
+    #[cfg(test)]
+    thread_local! {
+        /// Whether this test thread is intentionally capturing global frontend counters.
+        ///
+        /// WHAT: exact counter tests opt in before mutating the process-global
+        ///      frontend counter atomics.
+        /// WHY: most unit tests compile frontend snippets under `benchmark_counters`
+        ///      without caring about counters. Letting those unrelated tests update
+        ///      the same atomics makes reset/read assertions race under parallel
+        ///      `cargo test`.
+        static TEST_COUNTER_CAPTURE_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    }
+
+    #[cfg(test)]
+    pub(crate) struct FrontendCounterTestCaptureGuard {
+        previous: bool,
+    }
+
+    #[cfg(test)]
+    impl Drop for FrontendCounterTestCaptureGuard {
+        fn drop(&mut self) {
+            TEST_COUNTER_CAPTURE_ACTIVE.with(|active| active.set(self.previous));
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn capture_frontend_counters_for_test() -> FrontendCounterTestCaptureGuard {
+        let previous = TEST_COUNTER_CAPTURE_ACTIVE.with(|active| {
+            let previous = active.get();
+            active.set(true);
+            previous
+        });
+
+        FrontendCounterTestCaptureGuard { previous }
+    }
+
     pub(crate) fn reset_frontend_counters() {
         for counter in all_counters() {
             atomic_counter(counter).store(0, Ordering::Relaxed);
@@ -211,11 +299,21 @@ mod detailed {
     }
 
     pub(crate) fn add_frontend_counter(counter: FrontendCounter, amount: usize) {
+        #[cfg(test)]
+        if !test_counter_capture_active() {
+            return;
+        }
+
         atomic_counter(counter).fetch_add(amount, Ordering::Relaxed);
     }
 
     pub(crate) fn log_frontend_counters() {
-        let print_human_counters = detailed_timer_output_enabled();
+        // The legacy per-counter human dump only prints in `BST_COUNTERS=full`.
+        // Stable `BST_BENCH counter` lines (summary/full) are emitted inside
+        // `log_benchmark_counter`, so `off` and `summary` stay quiet of per-line
+        // prose here.
+        let print_human_counters =
+            crate::timing::current_counter_output_mode().emits_human_counter_prose();
         update_scope_capacity_derived_counters();
 
         if print_human_counters {
@@ -232,7 +330,7 @@ mod detailed {
         }
     }
 
-    fn all_counters() -> [FrontendCounter; 76] {
+    fn all_counters() -> [FrontendCounter; 99] {
         [
             FrontendCounter::ModuleCount,
             FrontendCounter::SourceFileCount,
@@ -242,6 +340,25 @@ mod detailed {
             FrontendCounter::HeaderCount,
             FrontendCounter::ImportCount,
             FrontendCounter::TopLevelDeclarationCount,
+            FrontendCounter::ModuleCompilationSerialCount,
+            FrontendCounter::ModuleCompilationParallelTaskCount,
+            FrontendCounter::FilePreparationSerialModuleCount,
+            FrontendCounter::FilePreparationParallelModuleCount,
+            FrontendCounter::FilePreparationStrategySmallSerialCount,
+            FrontendCounter::FilePreparationStrategyByteThresholdSerialCount,
+            FrontendCounter::FilePreparationStrategyParallelCount,
+            FrontendCounter::FilePreparationStrategyParallelPerFileCount,
+            FrontendCounter::FilePreparationStrategyChunkedCount,
+            FrontendCounter::FilePreparationInputFileCount,
+            FrontendCounter::FilePreparationInputByteCount,
+            FrontendCounter::FilePreparationResultMergeCount,
+            FrontendCounter::FilePreparationIdentityRemapCount,
+            FrontendCounter::FilePreparationNonIdentityRemapCount,
+            FrontendCounter::Stage0SourceCacheHitCount,
+            FrontendCounter::Stage0SourceCacheMissCount,
+            FrontendCounter::Stage0ParallelSourceLoadCount,
+            FrontendCounter::Stage0SerialSourceLoadCount,
+            FrontendCounter::Stage0SourceBytesLoaded,
             FrontendCounter::DependencyHeaderCount,
             FrontendCounter::DependencyEdgeCount,
             FrontendCounter::DependencyVisitCount,
@@ -255,6 +372,10 @@ mod detailed {
             FrontendCounter::AstReceiverMethodCount,
             FrontendCounter::AstGenericTemplateCount,
             FrontendCounter::AstGenericInstanceCount,
+            FrontendCounter::AstFunctionBodyRootCount,
+            FrontendCounter::AstStartBodyRootCount,
+            FrontendCounter::AstConstTemplateFoldedCount,
+            FrontendCounter::AstRootScopeArenaCount,
             FrontendCounter::ConstantFoldAttemptCount,
             FrontendCounter::ConstantFoldSuccessCount,
             FrontendCounter::TemplateCount,
@@ -313,6 +434,11 @@ mod detailed {
         ]
     }
 
+    #[cfg(test)]
+    fn test_counter_capture_active() -> bool {
+        TEST_COUNTER_CAPTURE_ACTIVE.with(Cell::get)
+    }
+
     fn atomic_counter(counter: FrontendCounter) -> &'static AtomicUsize {
         match counter {
             FrontendCounter::ModuleCount => &MODULE_COUNT,
@@ -330,6 +456,66 @@ mod detailed {
             FrontendCounter::ImportCount => &IMPORT_COUNT,
 
             FrontendCounter::TopLevelDeclarationCount => &TOP_LEVEL_DECLARATION_COUNT,
+
+            FrontendCounter::ModuleCompilationSerialCount => &MODULE_COMPILATION_SERIAL_COUNT,
+
+            FrontendCounter::ModuleCompilationParallelTaskCount => {
+                &MODULE_COMPILATION_PARALLEL_TASK_COUNT
+            }
+
+            FrontendCounter::FilePreparationSerialModuleCount => {
+                &FILE_PREPARATION_SERIAL_MODULE_COUNT
+            }
+
+            FrontendCounter::FilePreparationParallelModuleCount => {
+                &FILE_PREPARATION_PARALLEL_MODULE_COUNT
+            }
+
+            FrontendCounter::FilePreparationStrategySmallSerialCount => {
+                &FILE_PREPARATION_STRATEGY_SMALL_SERIAL_COUNT
+            }
+
+            FrontendCounter::FilePreparationStrategyByteThresholdSerialCount => {
+                &FILE_PREPARATION_STRATEGY_BYTE_THRESHOLD_SERIAL_COUNT
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelCount => {
+                &FILE_PREPARATION_STRATEGY_PARALLEL_COUNT
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelPerFileCount => {
+                &FILE_PREPARATION_STRATEGY_PARALLEL_PER_FILE_COUNT
+            }
+
+            FrontendCounter::FilePreparationStrategyChunkedCount => {
+                &FILE_PREPARATION_STRATEGY_CHUNKED_COUNT
+            }
+
+            FrontendCounter::FilePreparationInputFileCount => &FILE_PREPARATION_INPUT_FILE_COUNT,
+
+            FrontendCounter::FilePreparationInputByteCount => &FILE_PREPARATION_INPUT_BYTE_COUNT,
+
+            FrontendCounter::FilePreparationResultMergeCount => {
+                &FILE_PREPARATION_RESULT_MERGE_COUNT
+            }
+
+            FrontendCounter::FilePreparationIdentityRemapCount => {
+                &FILE_PREPARATION_IDENTITY_REMAP_COUNT
+            }
+
+            FrontendCounter::FilePreparationNonIdentityRemapCount => {
+                &FILE_PREPARATION_NON_IDENTITY_REMAP_COUNT
+            }
+
+            FrontendCounter::Stage0SourceCacheHitCount => &STAGE0_SOURCE_CACHE_HIT_COUNT,
+
+            FrontendCounter::Stage0SourceCacheMissCount => &STAGE0_SOURCE_CACHE_MISS_COUNT,
+
+            FrontendCounter::Stage0ParallelSourceLoadCount => &STAGE0_PARALLEL_SOURCE_LOAD_COUNT,
+
+            FrontendCounter::Stage0SerialSourceLoadCount => &STAGE0_SERIAL_SOURCE_LOAD_COUNT,
+
+            FrontendCounter::Stage0SourceBytesLoaded => &STAGE0_SOURCE_BYTES_LOADED,
 
             FrontendCounter::DependencyHeaderCount => &DEPENDENCY_HEADER_COUNT,
 
@@ -356,6 +542,14 @@ mod detailed {
             FrontendCounter::AstGenericTemplateCount => &AST_GENERIC_TEMPLATE_COUNT,
 
             FrontendCounter::AstGenericInstanceCount => &AST_GENERIC_INSTANCE_COUNT,
+
+            FrontendCounter::AstFunctionBodyRootCount => &AST_FUNCTION_BODY_ROOT_COUNT,
+
+            FrontendCounter::AstStartBodyRootCount => &AST_START_BODY_ROOT_COUNT,
+
+            FrontendCounter::AstConstTemplateFoldedCount => &AST_CONST_TEMPLATE_FOLDED_COUNT,
+
+            FrontendCounter::AstRootScopeArenaCount => &AST_ROOT_SCOPE_ARENA_COUNT,
 
             FrontendCounter::ConstantFoldAttemptCount => &CONSTANT_FOLD_ATTEMPT_COUNT,
 
@@ -517,6 +711,66 @@ mod detailed {
 
             FrontendCounter::TopLevelDeclarationCount => "top-level declaration count",
 
+            FrontendCounter::ModuleCompilationSerialCount => "module compilation/serial count",
+
+            FrontendCounter::ModuleCompilationParallelTaskCount => {
+                "module compilation/parallel task count"
+            }
+
+            FrontendCounter::FilePreparationSerialModuleCount => {
+                "file preparation/serial module count"
+            }
+
+            FrontendCounter::FilePreparationParallelModuleCount => {
+                "file preparation/parallel module count"
+            }
+
+            FrontendCounter::FilePreparationStrategySmallSerialCount => {
+                "file preparation/small serial strategy count"
+            }
+
+            FrontendCounter::FilePreparationStrategyByteThresholdSerialCount => {
+                "file preparation/byte-threshold serial strategy count"
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelCount => {
+                "file preparation/parallel strategy count"
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelPerFileCount => {
+                "file preparation/parallel per-file strategy count"
+            }
+
+            FrontendCounter::FilePreparationStrategyChunkedCount => {
+                "file preparation/chunked strategy count"
+            }
+
+            FrontendCounter::FilePreparationInputFileCount => "file preparation/input file count",
+
+            FrontendCounter::FilePreparationInputByteCount => "file preparation/input byte count",
+
+            FrontendCounter::FilePreparationResultMergeCount => {
+                "file preparation/result merge count"
+            }
+
+            FrontendCounter::FilePreparationIdentityRemapCount => {
+                "file preparation/identity remap count"
+            }
+
+            FrontendCounter::FilePreparationNonIdentityRemapCount => {
+                "file preparation/non-identity remap count"
+            }
+
+            FrontendCounter::Stage0SourceCacheHitCount => "Stage 0/source cache hit count",
+
+            FrontendCounter::Stage0SourceCacheMissCount => "Stage 0/source cache miss count",
+
+            FrontendCounter::Stage0ParallelSourceLoadCount => "Stage 0/parallel source load count",
+
+            FrontendCounter::Stage0SerialSourceLoadCount => "Stage 0/serial source load count",
+
+            FrontendCounter::Stage0SourceBytesLoaded => "Stage 0/source bytes loaded",
+
             FrontendCounter::DependencyHeaderCount => "dependency header count",
 
             FrontendCounter::DependencyEdgeCount => "dependency edge count",
@@ -542,6 +796,14 @@ mod detailed {
             FrontendCounter::AstGenericTemplateCount => "AST/generic template count",
 
             FrontendCounter::AstGenericInstanceCount => "AST/generic instance count",
+
+            FrontendCounter::AstFunctionBodyRootCount => "AST/function body root count",
+
+            FrontendCounter::AstStartBodyRootCount => "AST/start body root count",
+
+            FrontendCounter::AstConstTemplateFoldedCount => "AST/const template folded count",
+
+            FrontendCounter::AstRootScopeArenaCount => "AST/root scope arena count",
 
             FrontendCounter::ConstantFoldAttemptCount => "constant fold attempt count",
 
@@ -707,6 +969,66 @@ mod detailed {
 
             FrontendCounter::TopLevelDeclarationCount => "top_level_declaration_count",
 
+            FrontendCounter::ModuleCompilationSerialCount => "module_compilation_serial_count",
+
+            FrontendCounter::ModuleCompilationParallelTaskCount => {
+                "module_compilation_parallel_task_count"
+            }
+
+            FrontendCounter::FilePreparationSerialModuleCount => {
+                "file_preparation_serial_module_count"
+            }
+
+            FrontendCounter::FilePreparationParallelModuleCount => {
+                "file_preparation_parallel_module_count"
+            }
+
+            FrontendCounter::FilePreparationStrategySmallSerialCount => {
+                "file_preparation_strategy_small_serial_count"
+            }
+
+            FrontendCounter::FilePreparationStrategyByteThresholdSerialCount => {
+                "file_preparation_strategy_byte_threshold_serial_count"
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelCount => {
+                "file_preparation_strategy_parallel_count"
+            }
+
+            FrontendCounter::FilePreparationStrategyParallelPerFileCount => {
+                "file_preparation_strategy_parallel_per_file_count"
+            }
+
+            FrontendCounter::FilePreparationStrategyChunkedCount => {
+                "file_preparation_strategy_chunked_count"
+            }
+
+            FrontendCounter::FilePreparationInputFileCount => "file_preparation_input_file_count",
+
+            FrontendCounter::FilePreparationInputByteCount => "file_preparation_input_byte_count",
+
+            FrontendCounter::FilePreparationResultMergeCount => {
+                "file_preparation_result_merge_count"
+            }
+
+            FrontendCounter::FilePreparationIdentityRemapCount => {
+                "file_preparation_identity_remap_count"
+            }
+
+            FrontendCounter::FilePreparationNonIdentityRemapCount => {
+                "file_preparation_non_identity_remap_count"
+            }
+
+            FrontendCounter::Stage0SourceCacheHitCount => "stage0_source_cache_hit_count",
+
+            FrontendCounter::Stage0SourceCacheMissCount => "stage0_source_cache_miss_count",
+
+            FrontendCounter::Stage0ParallelSourceLoadCount => "stage0_parallel_source_load_count",
+
+            FrontendCounter::Stage0SerialSourceLoadCount => "stage0_serial_source_load_count",
+
+            FrontendCounter::Stage0SourceBytesLoaded => "stage0_source_bytes_loaded",
+
             FrontendCounter::DependencyHeaderCount => "dependency_header_count",
 
             FrontendCounter::DependencyEdgeCount => "dependency_edge_count",
@@ -732,6 +1054,14 @@ mod detailed {
             FrontendCounter::AstGenericTemplateCount => "ast_generic_template_count",
 
             FrontendCounter::AstGenericInstanceCount => "ast_generic_instance_count",
+
+            FrontendCounter::AstFunctionBodyRootCount => "ast_function_body_root_count",
+
+            FrontendCounter::AstStartBodyRootCount => "ast_start_body_root_count",
+
+            FrontendCounter::AstConstTemplateFoldedCount => "ast_const_template_folded_count",
+
+            FrontendCounter::AstRootScopeArenaCount => "ast_root_scope_arena_count",
 
             FrontendCounter::ConstantFoldAttemptCount => "constant_fold_attempt_count",
 
@@ -908,20 +1238,23 @@ mod detailed {
     }
 }
 
-#[cfg(feature = "detailed_timers")]
+#[cfg(feature = "benchmark_counters")]
 pub(crate) use detailed::{
     add_frontend_counter, increment_frontend_counter, log_frontend_counters,
     reset_frontend_counters,
 };
 
-#[cfg(not(feature = "detailed_timers"))]
+#[cfg(all(test, feature = "benchmark_counters"))]
+pub(crate) use detailed::capture_frontend_counters_for_test;
+
+#[cfg(not(feature = "benchmark_counters"))]
 pub(crate) fn reset_frontend_counters() {}
 
-#[cfg(not(feature = "detailed_timers"))]
+#[cfg(not(feature = "benchmark_counters"))]
 pub(crate) fn increment_frontend_counter(_counter: FrontendCounter) {}
 
-#[cfg(not(feature = "detailed_timers"))]
+#[cfg(not(feature = "benchmark_counters"))]
 pub(crate) fn add_frontend_counter(_counter: FrontendCounter, _amount: usize) {}
 
-#[cfg(not(feature = "detailed_timers"))]
+#[cfg(not(feature = "benchmark_counters"))]
 pub(crate) fn log_frontend_counters() {}

@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: COROUTINES AND ASYNC IN BEANSTALK]
 
-#[section, $markdown:
+#[section, $md:
     **Design draft:** This page is a future-facing design document for language and compiler planning.
     It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.
 
@@ -28,7 +28,7 @@ page_head #= theme_head
     The goal is async code that remains readable, predictable, and analyzable.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core idea
 
     Async in Beanstalk is built around three concepts:
@@ -78,7 +78,7 @@ page_head #= theme_head
     > Async is structured control flow plus safe message passing.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Channels
 
     Coroutines should not share mutable state by default.
@@ -100,7 +100,7 @@ page_head #= theme_head
     You can think of this as a one-way pipe for values of a specific type.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Sending values
 
     Values are sent into a channel with `>>`.
@@ -116,7 +116,7 @@ page_head #= theme_head
     This is an intentional visible suspension point.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Receiving values
 
     Values are received from a channel with `<<`.
@@ -132,7 +132,7 @@ page_head #= theme_head
     Like sending, this is a visible suspension point.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Coroutines
 
     A coroutine is a function that can suspend and resume execution.
@@ -165,7 +165,7 @@ page_head #= theme_head
     - all interaction happens through the channel
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Yield
 
     `yield` explicitly suspends the current coroutine and allows other coroutines to run.
@@ -197,7 +197,7 @@ page_head #= theme_head
     There are no hidden pause points.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Structured async scopes
 
     Coroutines run inside an `async` scope.
@@ -236,7 +236,7 @@ page_head #= theme_head
     You can see where async work starts, where it may suspend, and where it must be contained.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Why not viral async types?
 
     Beanstalk should avoid making async infect every function type by default.
@@ -256,7 +256,7 @@ page_head #= theme_head
     The goal is to make async local and visible.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Safety model
 
     The async model should preserve Beanstalk's normal safety rules.
@@ -274,7 +274,7 @@ page_head #= theme_head
     Mutable shared state may be possible later through specific safe abstractions, but it should not be the default async model.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Full example
 
     [codeblock, $code("bst"):
@@ -311,7 +311,7 @@ page_head #= theme_head
     - `yield` explicitly gives the scheduler a chance to run other work
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Compiler lowering
 
     The exact lowering strategy is not final.
@@ -336,7 +336,7 @@ page_head #= theme_head
     Async should be represented semantically before backend-specific lowering.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Backend considerations
 
     This design depends on backend capabilities.
@@ -353,7 +353,7 @@ page_head #= theme_head
     The user-facing syntax should remain stable even if backend strategies differ.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Deferred design questions
 
     Several details should be deliberately deferred until the basic model is proven:
@@ -371,7 +371,7 @@ page_head #= theme_head
     These should be designed as extensions, not packed into the first implementation.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Current status
 
     This design is not implemented yet.
@@ -389,7 +389,7 @@ page_head #= theme_head
     The important part is to keep the source model explicit and structured.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Summary
 
     Async in Beanstalk is intended to be:

@@ -112,11 +112,9 @@ pub(crate) fn resolve_external_package_symbol(
 ///
 /// Returns `DirectSourceExport` for all source targets because this function does not know whether
 /// the caller will later prove a more specific internal or facade access surface.
-// The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-#[allow(clippy::result_large_err)]
 pub(crate) fn resolve_import_target(
     input: ImportTargetResolutionInput<'_>,
-) -> Result<ResolvedImportTarget, CompilerDiagnostic> {
+) -> Result<ResolvedImportTarget, Box<CompilerDiagnostic>> {
     // Resolve as a source symbol import first.
     match resolve_import_target_path(
         input.import_path,
@@ -127,10 +125,10 @@ pub(crate) fn resolve_import_target(
             symbol_path,
             access: SourceImportAccess::DirectSourceExport,
         }),
-        ImportPathMatch::Ambiguous => Err(diagnostics::ambiguous_import_target(
+        ImportPathMatch::Ambiguous => Err(Box::new(diagnostics::ambiguous_import_target(
             input.import_path,
             input.location.clone(),
-        )),
+        ))),
         ImportPathMatch::Missing => {
             // File→symbol inference: if the path matches a source file but not a symbol,
             // try appending the path's last component to the file path as the symbol name.
@@ -153,10 +151,10 @@ pub(crate) fn resolve_import_target(
                         });
                     }
                     ImportPathMatch::Ambiguous => {
-                        return Err(diagnostics::ambiguous_import_target(
+                        return Err(Box::new(diagnostics::ambiguous_import_target(
                             &inferred_path,
                             input.location.clone(),
-                        ));
+                        )));
                     }
                     ImportPathMatch::Missing => {
                         // The file exists but the inferred symbol does not.
@@ -178,11 +176,11 @@ pub(crate) fn resolve_import_target(
                     package_path,
                     symbol_name,
                 } => {
-                    return Err(diagnostics::missing_package_symbol(
+                    return Err(Box::new(diagnostics::missing_package_symbol(
                         symbol_name,
                         package_path,
                         input.location.clone(),
-                    ));
+                    )));
                 }
                 ExternalPackageSymbolLookup::NoMatch => {}
             }
@@ -195,16 +193,16 @@ pub(crate) fn resolve_import_target(
                     input.string_table,
                 )
             {
-                return Err(diagnostics::bare_file_import(
+                return Err(Box::new(diagnostics::bare_file_import(
                     input.import_path,
                     input.location.clone(),
-                ));
+                )));
             }
 
-            Err(diagnostics::missing_import_target(
+            Err(Box::new(diagnostics::missing_import_target(
                 input.import_path,
                 input.location.clone(),
-            ))
+            )))
         }
     }
 }

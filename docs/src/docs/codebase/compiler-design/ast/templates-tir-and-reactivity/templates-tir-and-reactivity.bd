@@ -1,0 +1,126 @@
+
+Templates are frontend-owned until AST finishes preparing them.
+
+AST owns composition, slot routing, wrapper application, folding, runtime render-plan preparation, reactivity metadata and const page fragment output.
+HIR only lowers final runtime templates.
+
+## Main paths
+
+- `src/compiler_frontend/ast/templates/`
+- `src/compiler_frontend/ast/templates/tir/`
+- `src/compiler_frontend/ast/module_ast/finalization/`
+- `src/compiler_frontend/hir/`
+- `src/backends/backend_feature_validation.rs`
+
+## AST template ownership
+
+AST owns:
+
+- parsing template bodies after tokenization and emitting them into TIR
+- composing slots, inserts, wrappers and child templates in TIR
+- folding fully constant templates into string literals
+- preserving structured template `if` and `loop` bodies for runtime lazy lowering
+- preparing runtime slot source/site plans after schema extraction and contribution routing
+- validating const-required template control flow before HIR
+- rejecting escaped slot/insert helper artifacts that are invalid after composition/routing
+- preserving runtime templates as runtime expressions
+- replacing runtime templates with owned runtime handoff payloads before HIR
+- removing helper-only template artifacts before HIR
+- emitting builder-facing const top-level fragment metadata
+
+This isn't backend work.
+Backends should not parse directives or rebuild slot schemas.
+
+## TIR
+
+TIR is the AST-local Template IR.
+It stores parsed and finalized template nodes, summaries, wrapper sets, slot plans and HIR handoff data.
+
+TIR is internal and behaviour-preserving.
+It doesn't change the template language.
+
+TIR is the authoritative internal representation for templates during AST processing.
+The parser emits templates directly into the module-scoped `TemplateIrStore`, and `Template` is a thin TIR handle while AST is active. The TIR registry and stores are dropped before the completed `Ast` is returned: HIR and backends never see TIR IDs, stores, views, overlays or registry values. HIR receives only folded string constants or neutral owned runtime handoff payloads.
+The direction should stay clear: template semantics live in one AST-owned representation, not in scattered backend-specific plans.
+
+## HIR handoff
+
+HIR only lowers final runtime templates that remain after AST folding.
+
+HIR doesn't:
+
+- parse directives
+- validate slot schemas
+- rebuild missing render plans
+- carry backend-specific template control-flow nodes
+- carry compile-time page fragments
+
+Runtime template control flow lowers inline as ordinary HIR branches, loops, accumulator appends and AST-prepared runtime slot source/site plans in the enclosing function.
+
+Runtime slot applications are routed during AST preparation and lower through ordinary runtime string accumulators.
+
+## Page fragments
+
+Top-level runtime templates remain runtime code inside entry `start()`.
+Top-level const templates fold in AST into compile-time fragments with runtime insertion indexes.
+Builders merge compile-time fragments into the runtime fragment list.
+
+HIR doesn't need to know how an HTML page is assembled.
+That belongs to builders.
+
+## Reactivity V1
+
+Reactivity V1 is frontend-owned source and template metadata that later stages preserve for backend feature validation and backend lowering.
+
+It must not become:
+
+- a second type system
+- a general closure model
+- a function-value surface
+- a backend render-plan language
+
+Stage ownership:
+
+- declaration syntax parses `$Type`, `$=` and `$T` parameter access markers as syntax only
+- AST resolves the underlying ordinary `TypeId`, assigns source identity, validates `$(source)` template subscriptions and preserves reactive template string metadata
+- HIR carries backend-facing reactive source/template metadata and reachability facts
+- borrow validation treats subscriptions as read-only source dependencies, not active borrow lifetimes
+- backend feature validation applies the selected target contract before lowering
+- runtime reactive behaviour remains backend-owned artifact policy
+
+## Reactive subscriptions
+
+A template subscription captures stable source identity and read-only subscription metadata.
+It doesn't capture a mutable borrow, copied value or computed expression.
+
+[codeblock, $code("bst"):
+    [source]     -- snapshot template read
+    $(source)    -- reactive subscription
+]
+
+The first form is a snapshot read. The second captures stable reactive source
+identity and subscription metadata.
+
+Borrow validation records conservative invalidation facts for writes and mutations that may dirty reactive sources.
+Ordinary alias and exclusivity rules still apply to the underlying values.
+
+## Common mistakes
+
+- Asking HIR to parse template directives.
+- Letting a backend validate slot schemas.
+- Carrying compile-time page fragments inside HIR.
+- Treating TIR as a language feature instead of an AST representation.
+- Treating reactive subscriptions as mutable borrows.
+- Turning reactivity into closures or function values.
+- Letting runtime template control flow become backend-specific nodes.
+
+## Related reading
+
+- @../ (AST internals): AST phase owners and invariants
+- @../constants-and-folding (Constants and folding): compile-time template folding and const records
+- @../../stages/hir-generation (Stage 5: HIR generation): how runtime templates lower through HIR
+- @../../../memory-management/borrow-validation
+  (Memory borrow validation): subscription and invalidation semantics
+- @../../../memory-management/runtime-and-backend-lowering
+  (Runtime memory lowering): liveness of reactive sources and mounted fragments
+- @../../entry-start-and-page-fragments (Entry start and page fragments): top-level const page fragments

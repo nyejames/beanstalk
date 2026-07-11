@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: THE DOCS]
 
-#[section, $markdown:
+#[section, $md:
     [large: Welcome to the Beanstalk documentation] 
     [$todo: 
         [$img, @assets/seedling_icon.png: Beanstalk logo]
@@ -42,6 +42,10 @@ page_head #= theme_head
     - @./aliases (Aliases)
     - @./reactivity (Reactivity)
 
+    ### Compiler and codebase internals
+    - @./codebase (Start here for codebase info)
+    - @./codebase/memory-management (Memory management)
+    - @./codebase/design-scope (Language and compiler design scope)
 
     ## Project Structure
     - @./project-structure (The shape of Beanstalk projects)
@@ -50,10 +54,6 @@ page_head #= theme_head
     - @./markdown (Plain Markdown imports)
     - @./beandown (Beandown content files)
 
-    ## More info
-    - @./design-scope (Language Design Scope)
-
     ### Future Design Drafts
     - @./async (Async)
-
 ]

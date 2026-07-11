@@ -263,6 +263,100 @@ fn builder_registered_handler_directive_rejects_runtime_argument_values() {
 }
 
 #[test]
+fn builder_registered_handler_directive_rejects_foreign_runtime_template_argument() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::handler(
+        "brand",
+        TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
+        StyleDirectiveHandlerSpec::new(
+            Some(StyleDirectiveArgumentType::Template),
+            Default::default(),
+            None,
+        ),
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
+
+    let mut argument_tokens = template_tokens_from_source_with_directives(
+        "[value: body]",
+        &directives,
+        &mut string_table,
+    );
+    let argument_context = runtime_template_context_with_style_directives(
+        &argument_tokens.src_path,
+        &registry,
+        &mut string_table,
+    );
+    let argument = Template::new(
+        &mut argument_tokens,
+        &argument_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("runtime template argument should parse");
+    let argument_reference = argument
+        .tir_reference
+        .as_ref()
+        .expect("runtime template argument should retain its TIR identity")
+        .clone();
+    let argument_name = string_table.intern("argument");
+    let declarations = vec![Declaration {
+        id: argument_tokens.src_path.append(argument_name),
+        value: Expression::template(argument, ValueMode::ImmutableOwned),
+    }];
+
+    let directive_store_id = argument_context
+        .template_ir_registry
+        .borrow_mut()
+        .allocate_store();
+    let directive_store = argument_context
+        .template_ir_registry
+        .borrow()
+        .store_handle(directive_store_id)
+        .expect("directive store should exist");
+    assert_ne!(argument_reference.root.store_id, directive_store_id);
+
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(argument): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context = with_test_path_context(
+        ScopeContext::new(
+            ContextKind::Template,
+            token_stream.src_path.to_owned(),
+            Rc::new(TopLevelDeclarationTable::new(declarations)),
+            Arc::new(ExternalPackageRegistry::default()),
+            vec![],
+            0,
+        ),
+        &token_stream.src_path,
+        &registry,
+    )
+    .with_template_ir_registry(
+        Rc::clone(&argument_context.template_ir_registry),
+        directive_store_id,
+        directive_store,
+    );
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("handler directives should reject foreign runtime template arguments");
+
+    assert!(
+        matches!(
+            &error.payload,
+            DiagnosticPayload::InvalidTemplateDirective {
+                reason: InvalidTemplateDirectiveReason::InvalidArgument,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        error.payload
+    );
+}
+
+#[test]
 fn builder_registered_style_directive_preserves_raw_body_whitespace() {
     let mut string_table = StringTable::new();
     let directives = vec![StyleDirectiveSpec::handler_no_op(

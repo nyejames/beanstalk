@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: MARKDOWN IMPORTS]
 
-#[section, $markdown:
+#[section, $md:
     Plain Markdown files use the `.md` extension for raw Markdown content fragments in HTML projects.
     They are helpers for `.bst` pages and modules, not pages themselves.
 
@@ -19,10 +19,10 @@ page_head #= theme_head
     ]
 
     Use `.md` when the file should be plain Markdown with no Beanstalk syntax. Use @./beandown
-    when the content needs nested templates, `$markdown`, or same-directory facade constants.
+    when the content needs nested templates, `$md`, or same-directory facade constants.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Importing a Markdown file
 
     Project shape:
@@ -64,7 +64,7 @@ page_head #= theme_head
     `import @docs/intro.md` is rejected; use `import @docs/intro`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## What .md does not do
 
     Plain Markdown files do not parse Beanstalk source syntax.
@@ -79,7 +79,7 @@ page_head #= theme_head
     They also do not see same-directory `#mod.bst` constants or `@html` constants.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## HTML, links, and assets
 
     Raw HTML is preserved in V1. There is no sanitizer or raw-HTML policy key in this feature.
@@ -95,7 +95,7 @@ page_head #= theme_head
     asset paths when a file should participate in tracked-asset output.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## .md and .bd compared
 
     [styled_table:
@@ -104,7 +104,7 @@ page_head #= theme_head
         [data:
             [: Parser]
             [: CommonMark-style dependency]
-            [: Beanstalk `$markdown`]
+            [: Beanstalk `$md`]
         ]
 
         [data:

@@ -40,7 +40,6 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// token index so the caller can fall back to Bool condition parsing.
 /// WHY: the `if` keyword has already been consumed; speculation must not leave
 /// the stream in a partial state.
-#[allow(clippy::result_large_err)]
 pub(super) fn try_parse_inline_single_predicate_value_match(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -105,7 +104,7 @@ pub(super) fn try_parse_inline_single_predicate_value_match(
         string_table,
     ) {
         Ok(pattern) => pattern,
-        Err(diagnostic) => return Some(Err(diagnostic)),
+        Err(diagnostic) => return Some(Err(*diagnostic)),
     };
 
     if token_stream.current_token_kind() != &TokenKind::Then {
@@ -124,18 +123,21 @@ pub(super) fn try_parse_inline_single_predicate_value_match(
 
     checkpoint.commit();
 
-    Some(parse_inline_value_match(InlineValueMatchParseInput {
-        token_stream,
-        context,
-        then_context: &parsed_pattern.arm_scope,
-        type_interner,
-        expected_result_type_ids,
-        receiver_kind,
-        string_table,
-        scrutinee,
-        pattern: parsed_pattern.pattern,
-        location,
-    }))
+    Some(
+        parse_inline_value_match(InlineValueMatchParseInput {
+            token_stream,
+            context,
+            then_context: &parsed_pattern.arm_scope,
+            type_interner,
+            expected_result_type_ids,
+            receiver_kind,
+            string_table,
+            scrutinee,
+            pattern: parsed_pattern.pattern,
+            location,
+        })
+        .map_err(|boxed_diagnostic| *boxed_diagnostic),
+    )
 }
 
 struct InlineValueMatchParseInput<'a, 'b> {
@@ -151,9 +153,21 @@ struct InlineValueMatchParseInput<'a, 'b> {
     location: SourceLocation,
 }
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: the inline single-predicate value-match parser returns
+/// `Result<T, Box<CompilerDiagnostic>>` through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when
+/// stored directly in a `Result` variant. Boxing the error at the owner boundary keeps
+/// the `Result` envelope small without changing `DiagnosticBag`, `CompilerMessages`, or
+/// any shared error type. The still-plain `parse_inline_then_else` result is adapted at
+/// its narrow call site; the caller `try_parse_inline_single_predicate_value_match`
+/// unboxes once at the plain speculative `Option<Result<...>>` boundary.
+type InlineValueMatchResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 fn parse_inline_value_match(
     input: InlineValueMatchParseInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> InlineValueMatchResult<Expression> {
     let InlineValueMatchParseInput {
         token_stream,
         context,

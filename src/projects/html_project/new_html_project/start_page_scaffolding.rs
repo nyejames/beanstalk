@@ -1,6 +1,6 @@
 //! Scaffold templates for `bean new html`.
 //!
-//! WHAT: Owns the generated content for `#config.bst`, `src/#page.bst`, manifests, and `.gitignore`.
+//! WHAT: Owns the generated content for `config.bst`, `src/#page.bst`, manifests, and `.gitignore`.
 //! WHY: Centralises template strings so they are not scattered through write logic.
 
 /// Escape a string for use in a Beanstalk config string literal.
@@ -10,7 +10,7 @@ pub fn escape_beanstalk_string_literal(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-/// Generate the content for `#config.bst`.
+/// Generate the content for `config.bst`.
 pub fn config_template(project_name: &str) -> String {
     let escaped = escape_beanstalk_string_literal(project_name);
     format!(
@@ -43,7 +43,7 @@ page_head #= [$html:
     </style>
 ]
 
-[$markdown:
+[$md:
     # Welcome to Beanstalk
 
     Here's the @https://nyejames.github.io/beanstalk/docs/ (documentation).

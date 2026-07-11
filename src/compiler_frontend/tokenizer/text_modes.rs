@@ -14,10 +14,19 @@ use crate::compiler_frontend::tokenizer::newline_handling::{
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::return_token;
 
+/// Boxed diagnostic result shared by every text-mode function in this file.
+///
+/// WHAT: one file-local alias for the boxed `CompilerDiagnostic` error variant returned by
+/// `tokenize_raw_string`, `tokenize_string`, `tokenize_template_body`,
+/// `tokenize_code_template_body` and `tokenize_discard_template_body`.
+/// WHY: every text mode returns directly into the lexer's boxed dispatch family. Sharing that
+/// error shape keeps mode transitions direct and leaves one owner for string diagnostics.
+type TextModeResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(super) fn tokenize_raw_string(
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> TextModeResult<Token> {
     let mut token_value = String::new();
 
     while let Some(ch) = stream.next() {
@@ -35,15 +44,15 @@ pub(super) fn tokenize_raw_string(
         token_value.push(ch);
     }
 
-    Err(CompilerDiagnostic::unterminated_string_literal(
+    Err(Box::new(CompilerDiagnostic::unterminated_string_literal(
         stream.new_location(),
-    ))
+    )))
 }
 
 pub(super) fn tokenize_string(
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> TextModeResult<Token> {
     let mut token_value = String::new();
 
     while let Some(ch) = stream.next() {
@@ -68,16 +77,16 @@ pub(super) fn tokenize_string(
         token_value.push(ch);
     }
 
-    Err(CompilerDiagnostic::unterminated_string_literal(
+    Err(Box::new(CompilerDiagnostic::unterminated_string_literal(
         stream.new_location(),
-    ))
+    )))
 }
 
 pub(super) fn tokenize_template_body(
     current_char: char,
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> TextModeResult<Token> {
     let mut token_value = String::new();
     append_template_body_char(current_char, &mut token_value, stream);
 
@@ -121,7 +130,7 @@ pub(super) fn tokenize_code_template_body(
     current_char: char,
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
-) -> Result<Token, CompilerDiagnostic> {
+) -> TextModeResult<Token> {
     // `$code` template bodies treat square brackets as literal code characters.
     // The template only closes when the running bracket counts become balanced.
     if current_char == ']' && stream.template_body_next_close_balances_brackets() {
@@ -152,7 +161,7 @@ pub(super) fn tokenize_code_template_body(
 pub(super) fn tokenize_discard_template_body(
     current_char: char,
     stream: &mut TokenStream<'_>,
-) -> Result<Token, CompilerDiagnostic> {
+) -> TextModeResult<Token> {
     match current_char {
         '[' => stream.register_template_body_open_square_bracket(),
         ']' => {

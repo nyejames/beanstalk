@@ -6,9 +6,9 @@
 //! owns only source-order body declarations and the coercion boundary between an initializer
 //! expression and the declared local type.
 
-#![allow(clippy::result_large_err)]
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
 };
@@ -20,6 +20,7 @@ use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, SignatureTypeFallbackPolicy, signature_member_to_declaration,
 };
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, TypeResolutionContextInputs, fold_collection_capacity,
@@ -58,6 +59,13 @@ use crate::compiler_frontend::type_coercion::parse_context::{
     parse_expectation_for_type_id,
 };
 
+/// Stage-local result for body-local declaration parsing and lowering.
+///
+/// Boxing keeps the diagnostic result small while the declaration entry points share one
+/// explicit boundary. Plain diagnostic producers are boxed here and existing boxed producers
+/// propagate without an unbox/rebox cycle.
+type DeclarationResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Returns `Some(capacity)` when the parsed type is a capacity-only shorthand `{N}`.
 ///
 /// WHAT: detects shorthand collection annotations where the element type is inferred.
@@ -72,6 +80,27 @@ fn capacity_only_shorthand(type_ref: &ParsedTypeRef) -> Option<&ParsedCollection
         } if matches!(element.as_ref(), ParsedTypeRef::Inferred) => Some(capacity),
         _ => None,
     }
+}
+
+/// Classify a body-local constant initializer through the module's effective TIR views.
+///
+/// Both declaration paths use the same registry because templates may retain exact foreign-store
+/// references after composition. A scratch view of the current store cannot recover that identity.
+fn initializer_is_compile_time_constant(
+    initializer: &Expression,
+    context: &ScopeContext,
+    string_table: &StringTable,
+) -> Result<bool, CompilerDiagnostic> {
+    initializer
+        .const_value_kind_with_template_classifier(&mut |template| {
+            classify_template_from_effective_tir(
+                template,
+                &context.template_ir_registry,
+                string_table,
+            )
+        })
+        .map(|kind| kind.is_compile_time_value())
+        .map_err(TemplateError::into_diagnostic)
 }
 
 /// Apply binding-level reactive identity after the initializer has been fully typed.
@@ -131,16 +160,16 @@ pub(crate) fn new_declaration(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<ResolvedDeclaration, CompilerDiagnostic> {
+) -> DeclarationResult<ResolvedDeclaration> {
     let declaration_name = string_table.resolve(symbol_id).to_owned();
     ensure_not_keyword_shadow_identifier(symbol_id, token_stream.current_location(), string_table)?;
 
     if is_reserved_builtin_symbol(&declaration_name) {
-        return Err(CompilerDiagnostic::invalid_declaration(
+        return Err(Box::new(CompilerDiagnostic::invalid_declaration(
             InvalidDeclarationReason::ReservedBuiltinName,
             Some(symbol_id),
             token_stream.current_location(),
-        ));
+        )));
     }
 
     // Move past the name
@@ -188,8 +217,7 @@ pub(crate) fn new_declaration(
             &function_data_type,
             type_interner.environment_mut_for_derived_types(),
             &token_stream.current_location(),
-        )
-        .map_err(|diagnostic| *diagnostic)?;
+        )?;
 
         return Ok(ResolvedDeclaration {
             declaration: Declaration {
@@ -210,7 +238,7 @@ pub(crate) fn new_declaration(
     }
 
     if let Some(error) = check_signature_common_mistake(token_stream) {
-        return Err(error);
+        return Err(Box::new(error));
     }
 
     // ----------------------------
@@ -287,18 +315,18 @@ pub fn resolve_declaration_syntax(
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Declaration, CompilerDiagnostic> {
+) -> DeclarationResult<Declaration> {
     // ----------------------------
     //  Validate constant-context constraints
     // ----------------------------
     let is_reactive_binding = declaration_syntax.binding_mode.is_reactive();
     let value_mode = declaration_syntax.value_mode();
     if declaration_syntax.binding_mode.is_mutable() && context.kind.is_constant_context() {
-        return Err(CompilerDiagnostic::invalid_declaration(
+        return Err(Box::new(CompilerDiagnostic::invalid_declaration(
             InvalidDeclarationReason::ConstantCannotBeMutable,
             None,
             declaration_syntax.location.clone(),
-        ));
+        )));
     }
 
     // ----------------------------
@@ -313,7 +341,8 @@ pub fn resolve_declaration_syntax(
             capacity,
             Some(context),
             type_interner.environment_mut_for_derived_types(),
-        )?;
+        )
+        .map_err(|diagnostic| diagnostic.into_boxed())?;
 
         let mut initializer_tokens = declaration_syntax.initializer_tokens.clone();
         initializer_tokens.push(Token::new(
@@ -324,10 +353,10 @@ pub fn resolve_declaration_syntax(
 
         // Shorthand requires an immediate collection literal initializer.
         if initializer_stream.current_token_kind() != &TokenKind::OpenCurly {
-            return Err(CompilerDiagnostic::invalid_collection_type(
+            return Err(Box::new(CompilerDiagnostic::invalid_collection_type(
                 InvalidCollectionTypeReason::ShorthandNonLiteralRhs,
                 initializer_stream.current_location(),
-            ));
+            )));
         }
 
         let collection_context = ExpectedCollectionContext::CapacityOnlyShorthand {
@@ -351,22 +380,29 @@ pub fn resolve_declaration_syntax(
         // Shorthand already rejected empty literals during parsing, but immutable
         // empty fixed collections are also invalid for explicit fixed annotations.
         // Post-parse validation for token consumption and constant folding.
+        let initializer_is_compile_time_constant =
+            if declaration_syntax.binding_mode.is_compile_time() {
+                initializer_is_compile_time_constant(&parsed_initializer, context, string_table)?
+            } else {
+                true
+            };
+
         if declaration_syntax.binding_mode.is_compile_time()
-            && !parsed_initializer.is_compile_time_constant()
+            && !initializer_is_compile_time_constant
         {
-            return Err(CompilerDiagnostic::compile_time_evaluation_error(
+            return Err(Box::new(CompilerDiagnostic::compile_time_evaluation_error(
                 CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
                 qualified_name.name(),
                 declaration_syntax.location.clone(),
-            ));
+            )));
         }
 
         initializer_stream.skip_newlines();
         if initializer_stream.current_token_kind() != &TokenKind::Eof {
-            return Err(CompilerDiagnostic::unexpected_token(
+            return Err(Box::new(CompilerDiagnostic::unexpected_token(
                 initializer_stream.current_token_kind().to_owned(),
                 initializer_stream.current_location(),
-            ));
+            )));
         }
 
         parsed_initializer.value_mode = value_mode.to_owned();
@@ -421,8 +457,7 @@ pub fn resolve_declaration_syntax(
             &mut type_resolution_context,
             string_table,
             Some(context),
-        )
-        .map_err(|diagnostic| *diagnostic)?
+        )?
     };
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;
@@ -464,10 +499,12 @@ pub fn resolve_declaration_syntax(
                 )?);
             }
 
-            if let Err(bag) = validate_struct_default_values(&params) {
+            if let Err(bag) =
+                validate_struct_default_values(&params, &context.template_ir_registry, string_table)
+            {
                 let diagnostics = bag.into_diagnostics();
                 if let Some(first) = diagnostics.into_iter().next() {
-                    return Err(first);
+                    return Err(Box::new(first));
                 }
             }
 
@@ -545,7 +582,8 @@ pub fn resolve_declaration_syntax(
                     },
                     false,
                 );
-                create_expression_with_trailing_newline_policy(input)?
+                create_expression_with_trailing_newline_policy(input)
+                    .map_err(|error| Box::new(error.into()))?
             };
 
             if let Some(declared_type_id) = declared_type_id {
@@ -567,14 +605,19 @@ pub fn resolve_declaration_syntax(
     // Body-local compile-time constants must fully fold after parsing and coercion.
     // Top-level constants are validated by `parse_constant_header_declaration`;
     // this check covers the body-local path through `resolve_declaration_syntax`.
-    if declaration_syntax.binding_mode.is_compile_time()
-        && !parsed_initializer.is_compile_time_constant()
+    let initializer_is_compile_time_constant = if declaration_syntax.binding_mode.is_compile_time()
     {
-        return Err(CompilerDiagnostic::compile_time_evaluation_error(
+        initializer_is_compile_time_constant(&parsed_initializer, context, string_table)?
+    } else {
+        true
+    };
+
+    if declaration_syntax.binding_mode.is_compile_time() && !initializer_is_compile_time_constant {
+        return Err(Box::new(CompilerDiagnostic::compile_time_evaluation_error(
             CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
             qualified_name.name(),
             declaration_syntax.location.clone(),
-        ));
+        )));
     }
 
     // Defensive: ensure the initializer parser consumed all tokens.
@@ -587,17 +630,17 @@ pub fn resolve_declaration_syntax(
             .option_inner_type(parsed_initializer.type_id)
             .is_some()
     {
-        return Err(CompilerDiagnostic::invalid_result_handling(
+        return Err(Box::new(CompilerDiagnostic::invalid_result_handling(
             InvalidResultHandlingReason::DirectOptionFallbackSyntax,
             initializer_stream.current_location(),
-        ));
+        )));
     }
 
     if initializer_stream.current_token_kind() != &TokenKind::Eof {
-        return Err(CompilerDiagnostic::unexpected_token(
+        return Err(Box::new(CompilerDiagnostic::unexpected_token(
             initializer_stream.current_token_kind().to_owned(),
             initializer_stream.current_location(),
-        ));
+        )));
     }
 
     // Reject immutable bindings initialized with an empty fixed collection literal.
@@ -610,10 +653,10 @@ pub fn resolve_declaration_syntax(
             && let ExpressionKind::Collection(items) = &parsed_initializer.kind
             && items.is_empty()
         {
-            return Err(CompilerDiagnostic::invalid_collection_type(
+            return Err(Box::new(CompilerDiagnostic::invalid_collection_type(
                 InvalidCollectionTypeReason::EmptyImmutableFixedCollection,
                 parsed_initializer.location.clone(),
-            ));
+            )));
         }
     }
 

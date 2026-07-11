@@ -87,6 +87,7 @@ pub enum MatchPattern {
         binding_location: SourceLocation,
     },
 
+    #[cfg(test)]
     Wildcard {
         location: SourceLocation,
     },
@@ -125,26 +126,12 @@ impl MatchPattern {
             | MatchPattern::OptionValue { location, .. }
             | MatchPattern::OptionPresentCapture { location, .. } => location,
 
-            MatchPattern::Wildcard { location }
-            | MatchPattern::Relational { location, .. }
+            #[cfg(test)]
+            MatchPattern::Wildcard { location } => location,
+
+            MatchPattern::Relational { location, .. }
             | MatchPattern::ChoiceVariant { location, .. }
             | MatchPattern::Capture { location, .. } => location,
-        }
-    }
-
-    /// Return the capture list if this is a choice-variant pattern.
-    pub fn choice_captures(&self) -> Option<&[ChoicePayloadCapture]> {
-        match self {
-            MatchPattern::ChoiceVariant { captures, .. } => Some(captures),
-            _ => None,
-        }
-    }
-
-    /// Return the binding path if this is a general capture pattern.
-    pub fn capture_binding_path(&self) -> Option<&InternedPath> {
-        match self {
-            MatchPattern::Capture { binding_path, .. } => Some(binding_path),
-            _ => None,
         }
     }
 }
@@ -205,6 +192,7 @@ impl MatchPattern {
                 binding_location.remap_string_ids(remap);
             }
 
+            #[cfg(test)]
             MatchPattern::Wildcard { location } => {
                 location.remap_string_ids(remap);
             }

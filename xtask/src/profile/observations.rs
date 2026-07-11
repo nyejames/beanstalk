@@ -1,11 +1,12 @@
 //! Profile observation logging
 //!
 //! WHAT: Runs warmup and observation passes for each benchmark case,
-//! parses `detailed_timers` stdout into `BenchmarkCaseObservations`,
+//! parses stable `BST_BENCH` stdout into `BenchmarkCaseObservations`,
 //! and writes per-case artifacts (stdout/stderr logs, observations JSON,
 //! summary markdown).
 //!
-//! WHY: The observation pass gives timer/counter data without profiler
+//! WHY: The observation pass gives timer data, plus counters when explicitly
+//! enabled by the profiling build and environment, without profiler
 //! overhead. Separating observation from profiling (Samply) keeps each
 //! concern independently testable and lets Phase 3 add Samply recording
 //! beside the observation artifacts without changing this module.

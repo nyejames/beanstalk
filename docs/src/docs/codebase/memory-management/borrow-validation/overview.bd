@@ -1,0 +1,21 @@
+# Borrow validation
+
+Roots, joins, move safety and facts.
+
+## Contract
+
+- Input: validated HIR, external package metadata and access rules
+- Output: read-only side-table facts
+- Decides: exclusivity, alias safety, inferred-move safety, advisory drop sites
+- Must not decide: HIR shape, backend lowering, final ownership
+- Invariant: borrow validation reads HIR and writes side tables: it doesn't rewrite HIR
+
+## Main paths
+
+- `src/compiler_frontend/analysis/borrow_checker/`
+
+## Read next
+
+- `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
+- `docs/src/docs/codebase/compiler-design/stages/borrow-validation/overview.bd`
+- `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`

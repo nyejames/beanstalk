@@ -1,183 +1,137 @@
-# Contributing to this project
-This project is at a very early stage with long-term high-difficulty goals.
+# Contributing to Beanstalk
 
-If you are interested in compilers/programming languages or the goals of this language 
-and want to contribute or make suggestions, please get in touch or open a discussion on GitHub.
+Beanstalk is an early-stage compiler and language project with ambitious long-term, difficult goals. 
 
-Any questions about the future / design of this language are welcome.
-Open a discussion on GitHub if you're curious.
+If you are interested in compilers/programming languages or the goals of this project 
+and want to contribute or make suggestions, please open a discussion on GitHub.
 
-This is still an undisclosed project (its open sourced but no one knows about it), so getting it touch prior to contributing is preferred at this stage over yeeting a random PR at the repo.
+This is still an undisclosed project (its open sourced but no one really knows about it), so getting in touch prior to contributing is preferred at this stage over yeeting a random PR at the repo.
 
-## Learning about this project
+No PRs making modifications to documentation or other supporting documents in this codebase will be accepted. 
+
+## AI Policy
+
+AI tools are used to help with building this language, but all LLM generated output is meticulously planned and scaffolded ahead of time, carefully reviewed, and has been put through a rigourously tested pipeline with tons of documentation and testing to support that process.
+
+Contributions that are AI generated can be accepted on their own merit, but might have to adhere to a higher standard of scruitiny before they can be accepted. Everything must pass the full validation workflow and follow the compiler documentation strictly. Submissions that show design drift, duplicated implementation paths, weak diagnostics, superficial tests, or unreviewed generated churn will not be accepted.
+
+---
+
+## Learning materials and design guides for this codebase
 
 The [user facing docs](docs/src/docs/**) contain examples, and beginner-oriented explanations for the language and using the tooling.
 
 To see the current plans and priority goals of the compiler and language, see the [roadmap](docs/roadmap/roadmap.md).
 
-The [progress matrix](docs/src/docs/progress/#page.bst) tracks current support, partial support, clean rejection, experimental backend status and coverage status.
+### Language and current support
 
-See [the language overview](docs/language-overview.md), 
-[the compiler overview](docs/compiler-design-overview.md) and [the memory management strategy](docs/memory-management-design.md) for more technical details about the language, compiler and build system.
+- [Compiler-facing language overview](docs/language-overview.md)
+- [User-facing documentation](docs/src/docs/)
+- [Progress matrix](docs/src/docs/progress/#page.bst)
+- [Roadmap](docs/roadmap/roadmap.md)
 
-New code contributions must follow the [codebase style guide](docs/codebase-style-guide.md).
+`docs/language-overview.md` is the current source of truth for compiler-facing language semantics. The progress matrix records what is implemented today; the roadmap records sequencing and proposals.
 
-## Validation command guide
+### Compiler and memory design
 
-| Command | Use when | Writes tracked output? |
-|---|---|---|
-| `just validate` | Before submitting any compiler/docs change | No, except normal build artifacts |
-| `cargo run -- tests` | Fast integration-suite iteration | No |
-| `just bench-check` | Performance sanity check without recording history | No |
-| `just bench` | Intentional benchmark recording after meaningful performance work | Yes, tracked summaries may change |
-| `just bench-report` | Local investigation of benchmark history | No tracked output |
-| `just profile` | Profiling a case with Samply (default terse filter) | No — all outputs local-only |
-| `just profile <filter>` | Profiling with a specific filter (terse, normal, deep, raw-index) | No — all outputs local-only |
-| `just profile-case <case> [filter]` | Profiling one specific benchmark case | No — all outputs local-only |
-| `just profile-symbolicated [filter]` | Profiling with Samply presymbolication requested | No — all outputs local-only |
-| `just profile-case-symbolicated <case> [filter]` | Profiling one case with Samply presymbolication requested | No — all outputs local-only |
-| `just profile-build` | Building a profiling binary after a benchmark report identifies a target | No tracked output |
+More technical details about the language, compiler and build system.
+
+- [Codebase overview](docs/src/docs/codebase/overview.bd)
+- [Compiler design overview](docs/src/docs/codebase/compiler-design/overview.bd)
+- [Memory-management overview](docs/src/docs/codebase/memory-management/overview.bd)
+- [Design scope](docs/src/docs/codebase/design-scope/overview.bd)
+- [Repository index](index.md)
+
+### Development standards
+
+- [Code style](docs/src/docs/codebase/style-guide/style-guide.bd)
+- [Testing standards](docs/src/docs/codebase/style-guide/testing.bd)
+- [Validation gates](docs/src/docs/codebase/style-guide/validation.bd)
+
+These Beandown files are the development-standard references. The generated web page combines them at `/docs/codebase/style-guide/`.
 
 ---
 
+## Contribution workflow
+
+1. Discuss broad design or architecture changes before implementing a large slice.
+2. Read the relevant language, compiler, memory, style, testing, and validation documents.
+3. Find the existing owner of the behavior before adding a new path.
+4. Keep the change focused and remove obsolete paths instead of preserving compatibility scaffolding.
+5. Add or update tests according to the testing standards.
+6. Review the progress matrix when support, rejection, backend coverage, or test coverage changes.
+7. Run the correct final gate for the files changed.
+8. Summarize design impact, test coverage, documentation changes, and validation accurately.
+
 ## Testing
 
-Run the compiler integration suite with `cargo run -- tests`.
-Alternatively, run `just validate` to execute the full validation suite. 
-You must have `just` installed to run this.
+The complete testing policy is in [testing.bd](docs/src/docs/codebase/style-guide/testing.bd).
 
-New integration fixtures should use the canonical `tests/cases/<case>/input + expect.toml` layout.
-An optional `tests/cases/manifest.toml` can define case ordering and tags during fixture migrations.
+In general:
 
-## Benchmark contribution policy
+- use integration cases under `tests/cases/` for user-visible behavior;
+- use focused unit tests for hidden invariants and side-table facts;
+- use backend artifact assertions or contractual goldens for emitted structure;
+- prefer stable diagnostic codes over full rendered-message snapshots;
+- do not use benchmark fixtures as correctness tests.
 
-Benchmarks are rough compiler-development evidence, not a correctness gate by themselves.
+Run the integration suite during iteration with:
 
-Use `just bench-check` for validation and PR confidence. Use `just bench` only when you intentionally want to record benchmark history or update tracked monthly summaries.
-
-Do not add benchmark cases for negative diagnostics. Those belong in `tests/cases`. Benchmark cases should be valid programs or projects that exercise real compiler work.
-
-When adding or changing benchmarks:
-
-- keep source fixtures committed
-- do not commit generated `dev/` or `release/` outputs
-- prefer end-to-end compiler workloads over tiny microbenchmarks
-- add focused stress cases only when they represent a real compiler subsystem
-- use `just bench-report` to inspect local history before claiming a performance improvement
-- do not turn timing noise into a CI blocker without a dedicated benchmark-infrastructure change
-
-## Benchmarking
-
-Since the benchmarking system isn't introduced or mentioned anywhere else, here is a quick summary of it:
-
-The project includes a Rust-only (crappy and imprecise) benchmark system for rough compiler performance sanity checks. The system executes the release `bean` binary against defined benchmark cases, records local timing data, and writes terse public summaries tied to the local hardware that ran it.
-
-### Quick Start
-
-```bash
-just bench-check   # Run without recording: 1 warmup, 10 iterations (for validation/CI)
-just bench         # Run and record: 1 warmup, 10 iterations (for comprehensive measurements)
+```sh
+cargo run --quiet -- tests
 ```
 
-`just bench-check` is safe for validation because it does not create or update benchmark history, system identity files, old benchmark archives, or tracked summary files. It still builds the release compiler, so Cargo may update `target/` as part of the normal build.
+## Validation
 
-### How It Works
+The executable validation policy is summarized in [validation.bd](docs/src/docs/codebase/style-guide/validation.bd).
 
-The benchmark system:
+### Code-bearing changes
 
-1. **Builds the compiler** with `cargo build --release --features detailed_timers`
-2. **Parses benchmark cases** from `benchmarks/cases.txt` (group directives plus `<command> <arg1> <arg2>`)
-3. **Executes benchmarks** with a warmup run followed by 10 measured iterations
-4. **Records timing data** to local raw history (`benchmarks/local-data/`) and appends a concise monthly Markdown summary (`benchmarks/summaries/`)
+If a change touches Rust, compiler/build-system sources, libraries, tests, benchmarks, manifests, scripts, configuration, or another non-documentation implementation file, run:
 
-### Benchmark Cases
-
-The system benchmarks various compiler operations defined in `benchmarks/cases.txt`:
-- **Core benchmarks**: `check` and `build` operations on `speed-test.bst`
-- **Docs benchmarks**: `check docs`
-- **Stress tests**: Template system, type system, constant folding, pattern matching, and collection operations
-- **Module benchmarks**: A multi-file module/import/dependency graph fixture
-- **Borrow benchmarks**: Valid borrow/exclusivity paths
-
-Each stress test file exercises specific compiler subsystems to identify performance bottlenecks.
-
-### Output Structure
-
-Results are stored in two locations:
-
-- **`benchmarks/local-data/`** (local-only, ignored): raw per-run JSONL history and system identity.
-- **`benchmarks/summaries/`** (tracked): concise monthly Markdown summaries with per-run entries.
-
-### Understanding Results
-
-The monthly Markdown summary includes:
-- **Initial benchmark**: first recorded run for your system this month
-- **Latest benchmark**: most recent recorded run for your system this month
-- **Change since initial**: shared-case movement between latest and initial
-- **Group averages**: absolute averages for `all` cases and each benchmark group
-- **Case spread latest**: spread across different benchmark cases, not timing uncertainty
-
-Per-run entries show the change relative to the previous run on the same system:
-
-```markdown
-# macOS M1 (B7F2): May 10th - 15:21
-**-4ms avg**; 5 faster, 0 slower; 8/8 cases
-Avg: all ~41ms, core ~72ms, docs ~71ms, stress ~9ms
+```sh
+just validate
 ```
 
-`no measurable change` means no overlapping case exceeded the rough per-case threshold. `mixed` means at least one case became meaningfully faster and at least one case became meaningfully slower. `case set changed` means added or removed cases affected comparability, so summary lines report how many cases overlapped.
+Run `cargo fmt` when Rust files changed.
 
-### Adding New Benchmarks
 
-Edit `benchmarks/cases.txt` to add new benchmark cases:
+## Command guide
 
-```
-# Comment lines start with #
-# group: core
-check path/to/file.bst
-build path/to/file.bst
+| Command | Use |
+|---|---|
+| `cargo run build docs --release` | Required final gate for a strictly documentation-only change |
+| `cargo run --quiet -- tests` | Fast integration-suite iteration |
+| `just validate` | Required final gate for code-bearing changes |
+| `just bench-check` | Non-recording performance sanity check |
+| `just bench` | Intentional benchmark-history recording |
+| `just bench-report` | Inspect local benchmark history |
+| `just profile-case <case> [filter]` | Profile a selected benchmark case |
 
-# group: docs
-check docs
-```
+## Benchmarks and profiling
 
-The system automatically:
-- Skips comment lines (starting with `#`) and empty lines
-- Applies `# group: <name>` labels to following cases
-- Handles multiple spaces as single separators
-- Supports quoted arguments for paths with spaces
+Benchmarks are development evidence, not correctness gates by themselves.
 
-New benchmark cases should be valid end-to-end programs or projects. Do not add negative diagnostic tests here; those belong in the compiler integration suite.
+- Use `just bench-check` for non-recording performance checks.
+- Use `just bench` only when intentionally updating benchmark history.
+- Do not add negative diagnostic cases to benchmarks; they belong in `tests/cases/`.
+- Commit benchmark source fixtures, not generated project outputs or local profiling data.
+- Do not claim an improvement from noisy timing alone.
 
-Benchmark project fixtures should commit only source inputs. Generated `dev/` and `release/` output directories are ignored and must not be committed.
+See [benchmarks/README.md](benchmarks/README.md) for the benchmark and profiling workflow.
 
-### Profiling
+## Pull-request expectations
 
-Use `just bench-report` first to identify which case and stage are worth investigating. When stage or counter data points at a hot area but source ownership is unclear, use `just profile` to collect Samply-backed stack samples alongside `detailed_timers` observations.
+A useful pull request should:
 
-```bash
-just bench-report                          # find the target case and stage
-just profile                               # profile all cases, default terse filter
-just profile-case <case-name> normal       # profile one case with more detail
-just profile-case-symbolicated <case-name> # retry with explicit presymbolication
-```
+- have one coherent purpose
+- explain the relevant design owner and any boundary changes
+- avoid compatibility shims and parallel implementations
+- include appropriate tests without redundant fixtures
+- preserve structured diagnostics and source context
+- update the progress matrix when current support changed
+- update relevant documentation when the documented behavior changed
+- avoid unrelated formatting or generated churn
+- state exactly which validation command was run
 
-The profiling build uses full debug info and prepares symbol directories for `target/profiling/bean` where available. When presymbolication is requested, xtask probes `samply record --help` and uses the supported flag (`--presymbolicate` or `--unstable-presymbolicate`). Profile summaries print symbolication smoke diagnostics, including macOS dSYM UUID status when available, and mark raw-address-heavy function lists as symbolication failures. Treat those function hotspots as non-actionable and use stage/counter data until symbolication succeeds. Open the raw `profile.json.gz` through `samply load` only for deeper investigation.
-
-All profiling outputs are local-only under `benchmarks/local-data/`. Do not commit them.
-
-Profile evidence is attribution, not proof. Use benchmark movement and `just validate` to prove or reject a change.
-
-### Design Principles
-
-- **Minimal external dependencies**: Normal benchmark orchestration uses only Rust stdlib (no clap, criterion). Profile JSON extraction uses a small direct `serde_json` dependency in `xtask`.
-- **Cross-platform**: Works on macOS, Linux, and Windows
-- **Fail-fast**: Fail-fast with no partial benchmark writes
-- **Isolated tooling**: Implemented in separate `xtask/` workspace crate
-
-### Use Cases
-
-- **Performance regression detection**: Compare results over time using recorded summaries
-- **Optimization validation**: Verify that compiler changes improve targeted areas
-- **CI integration**: Use `just bench-check` for fast automated performance checks
-- **Bottleneck identification**: Stress tests reveal which subsystems need optimization
+Do not claim full validation when only a targeted command was used instead of full validation.

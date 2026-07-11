@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: BEANDOWN]
 
-#[section, $markdown:
+#[section, $md:
     Beandown files are Beanstalk-aware markdown-first content files. They use the same markdown
     flavour as string templates and can contain nested templates as if the file were a template body.
 
@@ -19,7 +19,7 @@ page_head #= theme_head
     A `.bd` file is compiled as if its whole body were the body of an implicit compile-time markdown template:
 
     [codeblock, $code("bst"):
-        content #String = [$markdown:
+        content #String = [$md:
             ...entire .bd file body...
         ]
     ]
@@ -27,7 +27,7 @@ page_head #= theme_head
     The generated `content` constant is the only public surface of a Beandown file.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Authoring a Beandown file
 
     Write markdown and nested Beanstalk templates directly in the `.bd` file:
@@ -43,7 +43,11 @@ page_head #= theme_head
     ]
 
     Beandown starts inside a template body, so `--`, backticks, and backslashes are normal text.
-    It also uses the same `$markdown` inline-code rules as `.bst` markdown templates.
+    It also uses the same `$md` inline-code rules as `.bst` markdown templates.
+
+    Nested templates with no explicit directive default to `$md` too. Add any explicit directive,
+    such as `$raw`, `$fresh`, `$html`, `$code`, `$css`, or `$escape_html`, to override that
+    Beandown default for the nested template.
 
     Literal template delimiters use normal string insertion:
 
@@ -54,7 +58,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Importing from .bst
 
     Import Beandown content with normal extensionless source imports:
@@ -79,7 +83,7 @@ page_head #= theme_head
     `import @docs/intro.bd` is rejected; use `import @docs/intro`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Scope inside .bd
 
     Beandown bodies have a deliberately small compile-time scope:
@@ -93,7 +97,7 @@ page_head #= theme_head
     Keep richer composition in `.bst`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Facade re-exports
 
     A module facade can explicitly re-export Beandown content:
@@ -114,7 +118,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Boundaries
 
     Beandown is intentionally small.

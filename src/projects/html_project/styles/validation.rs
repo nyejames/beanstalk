@@ -8,10 +8,10 @@
 //! - `$html` and `$css` both validate literal text without rewriting it, so they should share the
 //!   source-span bookkeeping rather than duplicating offset-mapping logic.
 
-use crate::compiler_frontend::ast::templates::template::FormatterResult;
-use crate::compiler_frontend::ast::templates::template_render_plan::{
+use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
+use crate::compiler_frontend::ast::templates::template::FormatterResult;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};

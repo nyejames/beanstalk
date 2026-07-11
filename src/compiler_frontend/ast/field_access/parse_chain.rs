@@ -19,7 +19,7 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -188,6 +188,7 @@ fn parse_postfix_chain_typed(
                 InvalidFieldAccessReason::ExpectedNameAfterDot,
                 None,
                 None,
+                Vec::new(),
                 fallback_location,
             )
             .into());
@@ -272,10 +273,14 @@ fn parse_postfix_chain_typed(
             InvalidFieldAccessReason::UnknownMember
         };
 
+        // Collect known field/method names for "did you mean?" suggestions on UnknownMember.
+        let known_fields = collect_known_member_names(receiver_type_id, type_interner);
+
         return Err(CompilerDiagnostic::invalid_field_access(
             reason,
             Some(member_name),
             Some(receiver_type_id),
+            known_fields,
             member_location,
         )
         .into());
@@ -383,4 +388,37 @@ pub(crate) fn parse_field_access_expression_with_receiver_access(
         type_interner,
         string_table,
     )
+}
+
+/// Collect known struct field names and choice variant names for a receiver type.
+///
+/// WHAT: gathers the member names that are valid on the receiver so the diagnostic renderer
+/// can offer a "did you mean?" suggestion when a name is misspelled.
+/// WHY: the most helpful thing a compiler can do for a typo'd field access is suggest the
+/// correct field name. The type environment already has this information.
+fn collect_known_member_names(
+    receiver_type_id: TypeId,
+    type_interner: &AstTypeInterner<'_>,
+) -> Vec<StringId> {
+    let environment = type_interner.environment();
+    let mut names = Vec::new();
+
+    // Struct field names are stored as InternedPath; the field name is the last
+    // path component, not the first (which may be a source-file prefix).
+    if let Some(fields) = environment.fields_for(receiver_type_id) {
+        for field in fields {
+            if let Some(name) = field.name.name() {
+                names.push(name);
+            }
+        }
+    }
+
+    // Choice variant names are already plain StringId values.
+    if let Some(variants) = environment.variants_for(receiver_type_id) {
+        for variant in variants {
+            names.push(variant.name);
+        }
+    }
+
+    names
 }

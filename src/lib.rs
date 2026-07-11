@@ -3,6 +3,8 @@
 //! Targeted `#[allow(...)]` attributes are used where needed, each with a justification
 //! comment. Avoid blanket crate-level allowances.
 
+pub(crate) mod timing;
+
 mod compiler_tests {
     #[cfg(test)]
     mod frontend_pipeline_tests;

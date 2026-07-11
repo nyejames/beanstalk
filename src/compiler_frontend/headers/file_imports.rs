@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Per-file import clause recording for header parsing.
 //!
 //! WHAT: parses top-level import clauses into normalized file-local import records.
@@ -16,6 +14,13 @@ use crate::compiler_frontend::paths::const_paths::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
+
+/// Boxed diagnostic result for file-local import-clause parsing.
+///
+/// WHAT: gives the four parsing and recording entry points one small error boundary.
+/// WHY: import clauses propagate structured diagnostics through several successful
+///      normalization steps without carrying the large value inline at every return.
+type FileImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 struct ImportItemRecord {
     header_path: InternedPath,
@@ -36,7 +41,7 @@ pub(super) fn parse_and_record_imports(
     state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     import_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileImportResult<()> {
     parse_and_record_import_clause(
         token_stream,
         state,
@@ -57,7 +62,7 @@ pub(super) fn parse_and_record_public_imports(
     context: &mut HeaderParseContext<'_>,
     import_location: SourceLocation,
     clause_token_index: usize,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileImportResult<()> {
     parse_and_record_import_clause(
         token_stream,
         state,
@@ -79,7 +84,7 @@ pub(super) fn parse_and_record_export_path_clause(
     context: &mut HeaderParseContext<'_>,
     export_location: SourceLocation,
     clause_token_index: usize,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileImportResult<()> {
     let (items, next_index) = parse_export_path_clause_items(
         &token_stream.tokens,
         clause_token_index,
@@ -120,7 +125,7 @@ fn parse_and_record_import_clause(
     export_mode: HeaderExportMode,
     clause_location: SourceLocation,
     clause_token_index: usize,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileImportResult<()> {
     let (items, next_index) = parse_import_clause_items(
         &token_stream.tokens,
         clause_token_index,

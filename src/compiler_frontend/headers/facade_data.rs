@@ -39,6 +39,13 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// Boxed diagnostic result for facade export and membership construction.
+///
+/// WHAT: keeps the facade build/pass family on one small error boundary.
+/// WHY: facade construction carries structured diagnostics through many successful
+///      build steps without inlining the large diagnostic value at every return.
+type FacadeDataResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Whether a header kind represents a real authored declaration that can be exported by a
 /// module facade.
 ///
@@ -74,7 +81,7 @@ pub(super) fn build_facade_data(
     resolver: &ProjectPathResolver,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     // Pass 1: collect public authored declarations for all facades.
     build_source_library_facade_exports(module_symbols, headers, resolver, string_table)?;
     build_module_root_facade_exports_pass1(module_symbols, headers, resolver, string_table)?;
@@ -109,11 +116,11 @@ fn build_source_library_facade_exports(
     headers: &[Header],
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     for (prefix, facade_file) in resolver.facade_files() {
         let mod_file_logical = resolver
             .logical_path_for_canonical_file(facade_file, string_table)
-            .map_err(|error| compiler_error_to_diagnostic(&error))?;
+            .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
         let mod_file_interned = InternedPath::from_path_buf(&mod_file_logical, string_table);
 
         let mut collector = FacadeExportCollector::default();
@@ -162,11 +169,11 @@ fn build_source_library_facade_imports(
     resolver: &ProjectPathResolver,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     for (prefix, facade_file) in resolver.facade_files() {
         let mod_file_logical = resolver
             .logical_path_for_canonical_file(facade_file, string_table)
-            .map_err(|error| compiler_error_to_diagnostic(&error))?;
+            .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
         let mod_file_interned = InternedPath::from_path_buf(&mod_file_logical, string_table);
 
         let current_exports = module_symbols
@@ -220,7 +227,7 @@ fn build_module_root_facade_exports_pass1(
     headers: &[Header],
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     let mut module_root_prefixes =
         build_module_root_prefixes(module_symbols, resolver, string_table);
     module_root_prefixes.sort_by_key(|(prefix, _)| std::cmp::Reverse(prefix.len()));
@@ -274,7 +281,7 @@ fn build_module_root_facade_imports(
     resolver: &ProjectPathResolver,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     let facade_sources: Vec<_> = module_symbols
         .file_imports_by_source
         .keys()
@@ -350,7 +357,7 @@ fn reject_facade_export_target_if_source_receiver_method(
     module_symbols: &ModuleSymbols,
     target: &FacadeExportTarget,
     location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     let FacadeExportTarget::Source(method_path) = target else {
         return Ok(());
     };
@@ -362,12 +369,12 @@ fn reject_source_receiver_method_export(
     module_symbols: &ModuleSymbols,
     method_path: &InternedPath,
     location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FacadeDataResult<()> {
     if module_symbols.receiver_method_paths.contains(method_path) {
-        return Err(CompilerDiagnostic::invalid_receiver_declaration(
+        return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
             InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
             location,
-        ));
+        )));
     }
 
     Ok(())
@@ -382,15 +389,15 @@ fn reject_source_receiver_method_export(
 /// WHAT: alias wins; otherwise use the imported symbol name.
 fn public_export_name(
     import: &crate::compiler_frontend::headers::parse_file_headers::FileImport,
-) -> Result<StringId, CompilerDiagnostic> {
+) -> FacadeDataResult<StringId> {
     match import.alias {
         Some(alias) => Ok(alias),
         None => match import.header_path.name() {
             Some(name) => Ok(name),
-            None => Err(CompilerDiagnostic::missing_import_target(
+            None => Err(Box::new(CompilerDiagnostic::missing_import_target(
                 import.header_path.clone(),
                 import.location.clone(),
-            )),
+            ))),
         },
     }
 }
@@ -405,7 +412,7 @@ fn resolve_public_facade_import(
     facade_file: &InternedPath,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
-) -> Result<FacadeExportTarget, CompilerDiagnostic> {
+) -> FacadeDataResult<FacadeExportTarget> {
     // 1. Try external package resolution first.
     match resolve_external_package_symbol(ExternalPackageSymbolResolutionInput {
         import_path: &import.header_path,
@@ -419,11 +426,11 @@ fn resolve_public_facade_import(
             package_path,
             symbol_name,
         } => {
-            return Err(CompilerDiagnostic::missing_package_symbol(
+            return Err(Box::new(CompilerDiagnostic::missing_package_symbol(
                 symbol_name,
                 package_path,
                 import.location.clone(),
-            ));
+            )));
         }
         ExternalPackageSymbolLookup::NoMatch => {}
     }
@@ -466,12 +473,12 @@ fn resolve_public_facade_import(
                         FacadeType::SourceLibrary => ImportFacadeType::SourceLibrary,
                         FacadeType::ModuleRoot => ImportFacadeType::ModuleRoot,
                     };
-                    return Err(CompilerDiagnostic::not_exported_by_facade(
+                    return Err(Box::new(CompilerDiagnostic::not_exported_by_facade(
                         import.header_path.clone(),
                         facade_name_id,
                         diagnostic_facade_type,
                         import.location.clone(),
-                    ));
+                    )));
                 }
             }
             FacadeLookupResult::NotAFacadeImport => {
@@ -550,21 +557,21 @@ impl FacadeExportCollector {
         target: FacadeExportTarget,
         location: SourceLocation,
         string_table: &StringTable,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> FacadeDataResult<()> {
         let export_name_text = string_table.resolve(export_name);
         if is_core_cast_trait_name(export_name_text) {
-            return Err(CompilerDiagnostic::reserved_name_collision(
+            return Err(Box::new(CompilerDiagnostic::reserved_name_collision(
                 export_name,
                 ReservedNameOwner::CoreTrait,
                 location,
-            ));
+            )));
         }
 
         if self.seen_names.contains_key(&export_name) {
-            return Err(CompilerDiagnostic::duplicate_public_export(
+            return Err(Box::new(CompilerDiagnostic::duplicate_public_export(
                 export_name,
                 location,
-            ));
+            )));
         }
         self.seen_names.insert(export_name, location);
         self.exports.insert(FacadeExportEntry {

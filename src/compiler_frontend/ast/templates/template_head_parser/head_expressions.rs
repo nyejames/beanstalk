@@ -1,7 +1,7 @@
 //! Head expression insertion helpers.
 //!
 //! WHAT:
-//! - Normalizes values inserted from template heads into template content.
+//! - Normalizes values inserted from template heads into parser TIR.
 //! - Handles template-valued expressions, non-template expressions, and compile-time
 //!   path coercion.
 //!
@@ -11,14 +11,17 @@
 
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource,
 };
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_renderability::is_template_renderable_type;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::TemplateConstructionContext;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
@@ -28,6 +31,22 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
+use std::sync::Arc;
+
+pub(super) struct TemplateHeadExpressionContext<'a> {
+    pub(super) context: &'a ScopeContext,
+    pub(super) type_environment: &'a TypeEnvironment,
+    pub(super) construction_context: &'a mut TemplateConstructionContext,
+    pub(super) foldable: &'a mut bool,
+}
+
+/// Boxed diagnostic result shared by head-expression insertion helpers.
+///
+/// Head-expression helpers sit behind the already-boxed template-head parsing
+/// boundary (`TemplateHeadResult` in `head_parser.rs`). Boxing here keeps the
+/// `Err` variant small enough for Clippy's `result_large_err` lint while
+/// preserving every diagnostic value, source location, and semantic fact.
+type HeadExpressionResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 fn is_unresolved_constant_placeholder_reference(
     expression: &Expression,
@@ -50,12 +69,12 @@ fn validate_template_head_value_type(
     expression: &Expression,
     location: &SourceLocation,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> HeadExpressionResult<()> {
     if type_environment.is_fallible_carrier(expression.type_id) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::ResultInTemplateHead,
             location.to_owned(),
-        ));
+        )));
     }
 
     // Template head values must be simple scalar types that can render as
@@ -68,12 +87,12 @@ fn validate_template_head_value_type(
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::invalid_template_structure(
+    Err(Box::new(CompilerDiagnostic::invalid_template_structure(
         InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead {
             type_id: expression.type_id,
         },
         location.to_owned(),
-    ))
+    )))
 }
 
 /// Handles a template-typed value found in the template head.
@@ -81,15 +100,15 @@ fn validate_template_head_value_type(
 pub(super) fn handle_template_value_in_template_head(
     value: &Template,
     context: &ScopeContext,
-    parent_template: &mut Template,
+    construction_context: &mut TemplateConstructionContext,
     foldable: &mut bool,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> HeadExpressionResult<()> {
     if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeTemplateInConst,
             location.to_owned(),
-        ));
+        )));
     }
 
     if matches!(value.kind, TemplateType::Comment(_)) {
@@ -97,20 +116,49 @@ pub(super) fn handle_template_value_in_template_head(
     }
 
     if matches!(value.kind, TemplateType::SlotDefinition(_)) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::SlotInHead,
             location.to_owned(),
-        ));
+        )));
     }
 
     if matches!(value.kind, TemplateType::StringFunction) {
         *foldable = false;
     }
 
-    parent_template.content.add_with_origin(
-        Expression::template(value.to_owned(), ValueMode::ImmutableOwned),
-        TemplateSegmentOrigin::Head,
-    );
+    let head_expression = Expression::template(value.to_owned(), ValueMode::ImmutableOwned);
+
+    // Record parser TIR child-template references only when the referenced
+    // template was parsed into the same module-scoped store. Imported or
+    // cross-context template values must not have their raw `TemplateIrId` reused
+    // here because IDs are only valid inside their originating store.
+    let store_owner = construction_context.store_owner();
+    let same_store = value
+        .tir_store_owner()
+        .is_some_and(|owner| Arc::ptr_eq(&owner, &store_owner));
+
+    if same_store && let Some(child_reference) = value.tir_reference.as_ref() {
+        // `$insert("name")` helpers are slot contributions, not ordinary child
+        // template output. Recording them as `InsertContribution` nodes lets
+        // TIR-native slot routing bucket them by the helper's target slot key
+        // rather than treating them as loose fill content.
+        if matches!(value.kind, TemplateType::SlotInsert(_)) {
+            construction_context
+                .record_insert_contribution(child_reference.root.template_id, location.to_owned());
+        } else {
+            construction_context.record_child_template(
+                child_reference,
+                TemplateSegmentOrigin::Head,
+                location.to_owned(),
+            );
+        }
+        return Ok(());
+    }
+
+    // Cross-store child templates cannot be referenced by ID. Represent the
+    // head template as an opaque dynamic expression so parser TIR still
+    // records head output in source order without an unsafe child reference.
+    construction_context.record_head_dynamic_expression(head_expression, None, location.to_owned());
 
     Ok(())
 }
@@ -118,55 +166,87 @@ pub(super) fn handle_template_value_in_template_head(
 /// Pushes a non-template expression into the head content after validation.
 pub(super) fn push_template_head_expression(
     expression: Expression,
-    context: &ScopeContext,
-    type_environment: &TypeEnvironment,
-    parent_template: &mut Template,
-    foldable: &mut bool,
+    target: TemplateHeadExpressionContext<'_>,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+    string_table: &StringTable,
+) -> HeadExpressionResult<()> {
     if let ExpressionKind::Template(template_value) = &expression.kind {
         return handle_template_value_in_template_head(
             template_value,
-            context,
-            parent_template,
-            foldable,
+            target.context,
+            target.construction_context,
+            target.foldable,
             location,
         );
     }
 
     let defer_inferred_type_validation =
-        is_unresolved_constant_placeholder_reference(&expression, context);
+        is_unresolved_constant_placeholder_reference(&expression, target.context);
 
     if !defer_inferred_type_validation {
-        validate_template_head_value_type(&expression, location, type_environment)?;
+        validate_template_head_value_type(&expression, location, target.type_environment)?;
     }
 
-    if context.kind.is_constant_context()
-        && !expression.is_compile_time_constant()
-        && !is_unresolved_constant_placeholder_reference(&expression, context)
+    let expression_needs_constness =
+        target.context.kind.is_constant_context() || !expression.kind.is_foldable();
+    let expression_is_compile_time_constant = if expression_needs_constness {
+        expression
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(
+                    template,
+                    &target.context.template_ir_registry,
+                    string_table,
+                )
+            })
+            .map_err(TemplateError::into_diagnostic)?
+            .is_compile_time_value()
+    } else {
+        false
+    };
+
+    if target.context.kind.is_constant_context()
+        && !expression_is_compile_time_constant
+        && !is_unresolved_constant_placeholder_reference(&expression, target.context)
     {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeValueInConstTemplateHead,
             location.to_owned(),
-        ));
+        )));
     }
 
-    if !expression.kind.is_foldable() && !expression.is_compile_time_constant() {
+    if !expression.kind.is_foldable() && !expression_is_compile_time_constant {
         ast_log!("Template is no longer foldable due to reference");
-        *foldable = false;
+        *target.foldable = false;
     }
 
     // Ordinary `[source]` insertion is a snapshot read. Keep reactive source identity only for
     // the explicit `$(source)` subscription path.
     let mut snapshot_expression = expression;
     snapshot_expression.clear_reactive_source();
-    parent_template
-        .content
-        .add_with_origin(snapshot_expression, TemplateSegmentOrigin::Head);
+
+    // Record head segments into parser TIR in source order before any body
+    // nodes are appended.
+    match &snapshot_expression.kind {
+        ExpressionKind::StringSlice(text) => {
+            let byte_len = string_table.resolve(*text).len();
+            target
+                .construction_context
+                .record_head_text(*text, byte_len, location.to_owned());
+        }
+
+        _ => {
+            target.construction_context.record_head_dynamic_expression(
+                snapshot_expression.clone(),
+                None,
+                location.to_owned(),
+            );
+        }
+    }
+
     Ok(())
 }
 
-/// Pushes an explicit `$(source)` subscription into the head content.
+/// Pushes an explicit `$(source)` subscription into parser TIR.
 ///
 /// WHAT: reuses the ordinary reference expression for current rendering while attaching V1
 /// subscription metadata to the segment.
@@ -175,33 +255,48 @@ pub(super) fn push_template_head_expression(
 pub(super) fn push_template_head_reactive_subscription(
     expression: Expression,
     source: ReactiveSource,
-    context: &ScopeContext,
-    type_environment: &TypeEnvironment,
-    parent_template: &mut Template,
-    foldable: &mut bool,
+    target: TemplateHeadExpressionContext<'_>,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
-    if context.kind.is_constant_context() {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+    string_table: &StringTable,
+) -> HeadExpressionResult<()> {
+    if target.context.kind.is_constant_context() {
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::ReactiveSubscriptionInConstTemplate,
             location.to_owned(),
-        ));
+        )));
     }
 
-    validate_template_head_value_type(&expression, location, type_environment)?;
+    validate_template_head_value_type(&expression, location, target.type_environment)?;
 
-    *foldable = false;
+    *target.foldable = false;
 
     let subscription = ReactiveSubscription {
         source,
         type_id: expression.type_id,
         location: location.to_owned(),
     };
-    parent_template.content.add_reactive_subscription(
-        expression,
-        TemplateSegmentOrigin::Head,
-        subscription,
-    );
+
+    // Reactive literal text in the head is recorded as a Text node carrying the
+    // subscription in the store side-table, not as a dynamic-expression anchor.
+    // The dependency remains available to reactive metadata and HIR invalidation.
+    match &expression.kind {
+        ExpressionKind::StringSlice(text) => {
+            let byte_len = string_table.resolve(*text).len();
+            target.construction_context.record_reactive_head_text(
+                *text,
+                byte_len,
+                Some(subscription.clone()),
+                location.to_owned(),
+            );
+        }
+        _ => {
+            target.construction_context.record_head_dynamic_expression(
+                expression.clone(),
+                Some(subscription.clone()),
+                location.to_owned(),
+            );
+        }
+    }
 
     Ok(())
 }
@@ -212,27 +307,32 @@ pub(super) fn push_template_head_path_expression(
     paths: &[InternedPath],
     token_stream: &FileTokens,
     context: &ScopeContext,
-    parent_template: &mut Template,
+    construction_context: &mut TemplateConstructionContext,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> HeadExpressionResult<()> {
     if paths.is_empty() {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::EmptyPathInTemplateHead,
             token_stream.current_location(),
-        ));
+        )));
     }
 
-    let source_scope = context.required_source_file_scope("template head path coercion")?;
+    let source_scope = context
+        .required_source_file_scope("template head path coercion")
+        .map_err(CompilerDiagnostic::from)?;
     let importer_file = source_scope.to_path_buf(string_table);
     let (resolved, recorded) = resolve_compile_time_paths_for_rendered_output(
         paths,
-        context.required_project_path_resolver("template head path coercion")?,
+        context
+            .required_project_path_resolver("template head path coercion")
+            .map_err(CompilerDiagnostic::from)?,
         &importer_file,
         source_scope,
         &token_stream.current_location(),
         &context.path_format_config,
         string_table,
-    )?;
+    )
+    .map_err(CompilerDiagnostic::from)?;
 
     // Warn when a .bst source file path is coerced into template output.
     for path in &resolved.paths {
@@ -253,14 +353,10 @@ pub(super) fn push_template_head_path_expression(
     // Templates always fold to strings, so path text is eagerly formatted here.
     context.record_rendered_path_usages(recorded.usages);
     let interned = string_table.get_or_intern(recorded.rendered_text);
-    parent_template.content.add_with_origin(
-        Expression::string_slice(
-            interned,
-            token_stream.current_location(),
-            ValueMode::ImmutableOwned,
-        ),
-        TemplateSegmentOrigin::Head,
-    );
+    let location = token_stream.current_location();
+    let byte_len = string_table.resolve(interned).len();
+
+    construction_context.record_head_text(interned, byte_len, location.clone());
 
     Ok(())
 }

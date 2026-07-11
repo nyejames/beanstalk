@@ -1,5 +1,5 @@
--- Test calling imported config entrypoints explicitly.
-import @config {init_config, get_database_url}
+-- Test calling imported initialization entrypoints explicitly.
+import @app_config {init_config, get_database_url}
 
 io.line("Before config initialization")
 init_config()

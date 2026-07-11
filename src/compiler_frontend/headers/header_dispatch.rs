@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Header declaration dispatch.
 //!
 //! WHAT: classifies one top-level declaration after its leading symbol has been seen and builds the
@@ -49,6 +47,13 @@ use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 
+/// Boxed diagnostic result for header dispatch.
+///
+/// WHAT: gives declaration dispatch and its local helpers one small error boundary.
+/// WHY: delegated declaration parsers already return boxed diagnostics, so dispatch can
+///      propagate them directly without unboxing and reboxing between each step.
+type HeaderDispatchResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 // WHAT: classifies one top-level declaration by its leading token and builds the concrete header
 // payload (kind + body token slice + dependency set) that later AST passes consume.
 //
@@ -71,12 +76,13 @@ pub(super) fn create_header(
     name_location: SourceLocation,
     export_mode: HeaderExportMode,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<Header, CompilerDiagnostic> {
+) -> HeaderDispatchResult<Header> {
     let Some(declaration_name) = full_name.name() else {
         return Err(internal_header_dispatch_error(
             "Header declaration path is missing its declaration name.",
             name_location,
-        ));
+        )
+        .into());
     };
     let _declaration_name_text = context.string_table.resolve(declaration_name).to_owned();
 
@@ -89,11 +95,11 @@ pub(super) fn create_header(
 
     if token_stream.current_token_kind() == &TokenKind::Of {
         if !generic_parameters.is_empty() {
-            return Err(CompilerDiagnostic::invalid_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                 InvalidDeclarationReason::GenericTraitsUnsupported,
                 Some(declaration_name),
                 name_location,
-            ));
+            )));
         }
 
         let target = parse_specialized_conformance_target(
@@ -132,11 +138,11 @@ pub(super) fn create_header(
     //      reserved-trait rejection path.
     if token_stream.current_token_kind() == &TokenKind::Must {
         if !generic_parameters.is_empty() {
-            return Err(CompilerDiagnostic::invalid_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                 InvalidDeclarationReason::GenericTraitsUnsupported,
                 Some(declaration_name),
                 name_location,
-            ));
+            )));
         }
 
         let peek = token_stream.peek_next_token().cloned();
@@ -316,11 +322,12 @@ pub(super) fn create_header(
             return Err(CompilerDiagnostic::invalid_this_usage(
                 crate::compiler_frontend::compiler_messages::InvalidThisUsageReason::OutsideTraitDeclaration,
                 token_stream.current_location(),
-            ));
+            )
+            .into());
         }
 
         // `=` only creates a declaration header for struct shells. Runtime top-level
-        // `name = value` stays in the entry start body outside `#config.bst`.
+        // `name = value` stays in the entry start body outside `config.bst`.
         TokenKind::Assign => {
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 ensure_not_keyword_shadow_identifier(
@@ -415,7 +422,8 @@ pub(super) fn create_header(
                 &full_name,
                 context.string_table,
                 context.warnings,
-            )?;
+            )
+            .map_err(CompilerDiagnostic::from)?;
 
             // Collect strict type edges from payload field types.
             for variant in &choice_header {
@@ -445,11 +453,11 @@ pub(super) fn create_header(
         // `as`: type alias declaration `Name as Type`
         TokenKind::As => {
             if !generic_parameters.is_empty() {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::ParameterizedGenericTypeAlias,
                     Some(declaration_name),
                     name_location.to_owned(),
-                ));
+                )));
             }
 
             ensure_not_keyword_shadow_identifier(
@@ -522,7 +530,7 @@ fn emit_header_naming_warning(
 fn parse_optional_generic_parameters(
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<GenericParameterList, CompilerDiagnostic> {
+) -> HeaderDispatchResult<GenericParameterList> {
     if token_stream.current_token_kind() != &TokenKind::Type {
         return Ok(GenericParameterList::default());
     }
@@ -596,7 +604,7 @@ fn capture_function_body_tokens(
     token_stream: &mut FileTokens,
     body: &mut Vec<crate::compiler_frontend::tokenizer::tokens::Token>,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> HeaderDispatchResult<()> {
     let mut scopes_opened = 1;
     let mut scopes_closed = 0;
 
@@ -631,7 +639,8 @@ fn capture_function_body_tokens(
                 return Err(CompilerDiagnostic::unexpected_end_of_file(
                     Some(string_table.intern(";")),
                     token_stream.current_location(),
-                ));
+                )
+                .into());
             }
 
             _ => {
@@ -651,12 +660,13 @@ fn create_constant_header_payload(
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
     capacity_references: &mut Vec<InitializerReference>,
-) -> Result<DeclarationSyntax, CompilerDiagnostic> {
+) -> HeaderDispatchResult<DeclarationSyntax> {
     let Some(declaration_name) = full_name.name() else {
         return Err(internal_header_dispatch_error(
             "Constant header path is missing its declaration name.",
             token_stream.current_location(),
-        ));
+        )
+        .into());
     };
     let declaration_syntax =
         parse_declaration_syntax(token_stream, declaration_name, context.string_table)?;

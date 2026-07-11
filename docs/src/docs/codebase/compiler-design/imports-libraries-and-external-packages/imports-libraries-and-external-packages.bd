@@ -1,0 +1,150 @@
+
+Imports are resolved before AST body semantics.
+AST consumes a file-local visibility environment through `ScopeContext`.
+It may validate semantic use of visible symbols, but it must not rebuild import bindings or rediscover top-level visibility.
+
+## Main owners
+
+- Stage 0 discovers source libraries, builder-supported source assets and provider-backed external files.
+- Header import preparation resolves import paths, aliases, facade exports, namespace records, source-library surfaces, external package symbols, prelude/builtin names, receiver-method visibility and collision rules.
+- Dependency sorting uses header-provided dependency edges.
+- AST uses `ScopeContext` to resolve expressions and type references through the active visibility maps.
+- HIR carries stable external IDs only.
+- Backends map those IDs to helpers, imports, glue, runtime names or target-native operations.
+
+No stage after header import preparation should rebuild import visibility from raw source syntax.
+
+## Source libraries and facades
+
+Source libraries are normal modules behind explicit `#mod.bst` facades.
+They participate in module-level dependency sorting.
+
+A facade is an API boundary, not an opaque blob.
+Public authored declarations, public grouped re-exports, exported constants and exported type surfaces still need to be ordered before outside declarations that import them through the facade.
+
+Ordinary facade imports and unmarked facade declarations remain private to the facade file.
+Grouped public re-exports define the public API name.
+
+Facade public API maps are built from:
+
+- public authored `#mod.bst` headers
+- `export import @path { Symbol }`
+- `export @path { Symbol }`
+- grouped aliases inside those exports
+
+Bare namespace exports, wildcard exports and legacy `#import` are outside the current surface.
+
+## Namespace records
+
+Source and facade namespace imports create shallow field-access-only import records.
+Import records are not first-class values.
+Import source child paths directly rather than walking source/facade path segments through namespace fields.
+
+External package namespace imports can expose recursive child namespace records for package-local symbol paths such as `io.input.*`.
+That recursion belongs to virtual package metadata, not source facades.
+
+## External packages
+
+External packages are virtual typed symbols provided by backend metadata.
+They are not `.bst` source files.
+They expose opaque types, constants and free functions only.
+
+External package membership uses:
+
+- stable `ExternalPackageId` values
+- readable package paths
+- structured package-local symbol paths
+- origin metadata
+- stable frontend IDs such as `ExternalFunctionId`
+
+All external packages, whether registered directly by a builder or produced by
+an import provider, share one external-package identity model.
+The prelude `io` namespace alias is the only bare-name external namespace exception.
+
+External packages don't register source-style receiver methods.
+Use a source-owned wrapper type when method-style ergonomics are wanted over an external handle.
+The HTML `@html` library's `Canvas` wrapper is the shape to copy: the raw `@web/canvas` symbols stay external, while method-style calls come from an ordinary source-owned wrapper.
+
+## External import providers
+
+External import providers live under `LibrarySet` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
+
+Grouped imports for virtual external packages resolve through external package metadata before source/module facade enforcement.
+Source imports still go through facade checks before source target resolution, so virtual package lookup doesn't weaken source-library or module privacy.
+
+Provider-backed external JavaScript is the main current example.
+The frontend registers typed package metadata.
+The backend later emits only the runtime assets and glue reachable from the compiled bundle.
+
+## Source file kinds
+
+Builder-supported source file kinds resolve through the same extensionless source import path as `.bst` files when the active builder declares support.
+
+HTML supports:
+
+- Beandown `.bd`
+- plain Markdown `.md`
+
+Both become private synthetic `content #String` constants during header preparation.
+Recognised but unsupported source kinds are rejected with typed import diagnostics.
+
+There is no source-kind-specific AST, HIR or borrow-checker path.
+This keeps content assets integrated without making every asset format a compiler sublanguage.
+
+## Receiver methods and visibility
+
+Header import preparation doesn't import source-authored receiver methods as independent symbols.
+
+A source-authored receiver method belongs to the same file as its nominal receiver type.
+It becomes callable wherever the receiver type is visible.
+Namespace imports may make the receiver type visible, but methods are not namespace fields and can't be grouped-imported or aliased independently.
+
+External packages don't expose receiver methods.
+Compiler-owned collection and map operations are builtin member access, not user extension methods.
+
+## Collision policy
+
+All user-visible names go through one collision policy.
+Same-file declarations, source imports, external imports, type aliases, prelude symbols and builtins can't silently shadow each other.
+
+Aliases have two different rules depending on where they appear:
+
+- Ordinary import aliases are file-local. They can't be independently re-exported.
+- An alias authored inside an explicit grouped facade re-export defines the public API name for that exported symbol.
+
+Both kinds must not collide with visible names. Leading-case mismatches warn.
+
+Ordinary examples:
+
+[codeblock, $code("bst"):
+    import @some/path { Symbol as LocalName }
+    import @core/io { io as CoreIo }
+]
+
+Facade export alias examples:
+
+[codeblock, $code("bst"):
+    export import @some/path { Symbol as PublicName }
+    export @some/path { Symbol as PublicName }
+]
+
+The grouped alias in a facade re-export is the public API name. It isn't a file-local-only alias that happens to be exported.
+
+## Related reading
+
+- @../stages/header-parsing (Stage 2: Header parsing): where imports, aliases and facade exports are parsed
+- @../stages/dependency-sorting (Stage 3: Dependency sorting): how source-library facades participate in ordering
+- @../stages/ast-construction (Stage 4: AST construction): `ScopeContext` visibility consumption
+- @../backend/external-js-and-runtime-assets (External JavaScript and runtime assets): provider-backed JS and runtime asset planning
+
+If a lookup path needs to behave differently for source imports, facade imports and external packages, put that distinction in the visibility/import layer.
+Don't hide it in expression resolution.
+
+## HIR handoff
+
+HIR stores stable external IDs, not package syntax or backend runtime names.
+
+Borrow validation can resolve external IDs through the external package registry to recover access rules and return-alias metadata.
+Backends map the same IDs to target-specific helpers, imports, generated glue, runtime names or target-native operations.
+
+That lets frontend semantics stay target-neutral while backends still own runtime integration.

@@ -8,11 +8,11 @@
 //! - HTML escaping is output-policy behavior owned by the HTML project builder, not a core
 //!   language directive.
 
+use crate::compiler_frontend::ast::templates::formatter_contract::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
-};
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;

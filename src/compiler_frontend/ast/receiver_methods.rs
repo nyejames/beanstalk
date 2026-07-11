@@ -23,19 +23,25 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 
 pub(crate) enum ReceiverMethodCatalogError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for ReceiverMethodCatalogError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
+        ReceiverMethodCatalogError::Diagnostic(Box::new(diagnostic))
+    }
+}
+
+impl From<Box<CompilerDiagnostic>> for ReceiverMethodCatalogError {
+    fn from(diagnostic: Box<CompilerDiagnostic>) -> Self {
         ReceiverMethodCatalogError::Diagnostic(diagnostic)
     }
 }
 
 impl From<CompilerError> for ReceiverMethodCatalogError {
     fn from(error: CompilerError) -> Self {
-        ReceiverMethodCatalogError::Infrastructure(error)
+        ReceiverMethodCatalogError::Infrastructure(Box::new(error))
     }
 }
 
@@ -121,52 +127,52 @@ fn validate_source_receiver_method_declaration(
     struct_source_by_path: &FxHashMap<InternedPath, InternedPath>,
     choice_source_by_path: &FxHashMap<InternedPath, InternedPath>,
     location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     match receiver {
         ReceiverKey::Struct(struct_path) => {
             let Some(struct_source_file) = struct_source_by_path.get(struct_path) else {
-                return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                     InvalidReceiverDeclarationReason::UnknownStructTarget,
                     location,
-                ));
+                )));
             };
 
             if struct_source_file != method_source_file {
-                return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                     InvalidReceiverDeclarationReason::NonlocalSourceType,
                     location,
-                ));
+                )));
             }
         }
 
         ReceiverKey::Choice(choice_path) => {
             let Some(choice_source_file) = choice_source_by_path.get(choice_path) else {
-                return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                     InvalidReceiverDeclarationReason::UnknownStructTarget,
                     location,
-                ));
+                )));
             };
 
             if choice_source_file != method_source_file {
-                return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                     InvalidReceiverDeclarationReason::NonlocalSourceType,
                     location,
-                ));
+                )));
             }
         }
 
         ReceiverKey::External(_) => {
-            return Err(CompilerDiagnostic::invalid_receiver_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                 InvalidReceiverDeclarationReason::ExternalOpaqueType,
                 location,
-            ));
+            )));
         }
 
         ReceiverKey::BuiltinScalar(_) => {
-            return Err(CompilerDiagnostic::invalid_receiver_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                 InvalidReceiverDeclarationReason::BuiltinScalarType,
                 location,
-            ));
+            )));
         }
     }
 

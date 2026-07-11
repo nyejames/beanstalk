@@ -6,7 +6,7 @@
 //! stage-local pass handles the narrow inline-code recognition rules.
 
 use super::{MarkdownInlineAtom, atom_char};
-use crate::compiler_frontend::ast::templates::template_render_plan::FormatterOpaqueKind;
+use crate::compiler_frontend::ast::templates::formatter_contract::FormatterOpaqueKind;
 
 /// A successfully parsed inline code span with its content atoms and total
 /// consumed atom count (including both delimiters).

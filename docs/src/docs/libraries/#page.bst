@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: LIBRARIES]
 
-#[section, $markdown:
+#[section, $md:
     Libraries are named import surfaces.
     They let a Beanstalk file pull declarations from another place without depending on that place's private implementation layout.
 
@@ -52,7 +52,7 @@ page_head #= theme_head
     This page calls it the canvas library, but examples use the current full import path.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core library pages
 
     Core libraries are builder-provided packages for common language-adjacent work.
@@ -68,7 +68,7 @@ page_head #= theme_head
     - @./core/time (Time)
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Import forms
 
     Imports target a declaration surface, not a raw folder dump.
@@ -101,7 +101,7 @@ page_head #= theme_head
     - other non-relative source imports resolve from the project's configured `entry_root`.
     - core and builder runtime packages use their registered package path, such as `@core/math` or `@web/canvas`.
     - specific symbol imports use grouped syntax. Direct symbol-path imports such as `import @core/math/sin` are rejected.
-    - direct imports of special files such as `#mod.bst`, `#page.bst`, and `#config.bst` are rejected.
+    - direct imports of special files such as `#mod.bst`, `#page.bst`, and `config.bst` are rejected.
     - Beandown `.bd` and plain Markdown `.md` content files both expose generated `content` constants.
     - folder imports across module boundaries require a `#mod.bst` facade. Import concrete same-module files directly when no facade is intended.
 
@@ -111,7 +111,7 @@ page_head #= theme_head
     Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Source libraries
 
     Source libraries are normal Beanstalk source roots.
@@ -120,7 +120,7 @@ page_head #= theme_head
 
     [codeblock, $code("text"):
         project-root/
-        ├── #config.bst
+        ├── config.bst
         ├── src/
         │   └── #page.bst
         └── lib/
@@ -200,7 +200,7 @@ page_head #= theme_head
     - bare namespace exports such as `export @./utils` and wildcard exports remain deferred
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Builder source libraries
 
     Builders can provide source libraries without requiring those files to exist in the user's project.
@@ -223,7 +223,7 @@ page_head #= theme_head
     This is useful for builder-specific components, templates, styles, or helper declarations that should feel like normal Beanstalk code.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core external packages
 
     Some libraries are not source files.
@@ -257,7 +257,7 @@ page_head #= theme_head
     
 ]
 
-#[section, $markdown:
+#[section, $md:
     # JavaScript libraries
 
     The HTML builder can import annotated JavaScript files.
@@ -303,7 +303,7 @@ page_head #= theme_head
 
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Writing JavaScript Beanstalk can import
 
     A Beanstalk-compatible JavaScript library should be small, explicit, and typed from Beanstalk's point of view.
@@ -382,7 +382,7 @@ page_head #= theme_head
     - no `Void`, `None`, `Unit`, or `()` return spelling; omit `->` for no success return
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Fallible JavaScript functions
 
     A JavaScript signature that returns `Error!` must return Beanstalk's result wrapper shape.
@@ -427,7 +427,7 @@ page_head #= theme_head
     If you are adapting an existing JS library, bundle or flatten its dependencies first, then expose a narrow annotated wrapper file to Beanstalk.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Mutable JavaScript free functions
 
     JavaScript-backed external packages expose free functions only.
@@ -472,7 +472,7 @@ page_head #= theme_head
     Source libraries can wrap raw external values in ordinary Beanstalk structs when they want method-style ergonomics.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # The canvas library
 
     The HTML builder's canvas library is a built-in JS-backed package exposed as `@web/canvas`.
@@ -539,7 +539,7 @@ page_head #= theme_head
     This means `@web/canvas` behaves like a normal import to Beanstalk code, but the project author does not need to keep `canvas.js` in their own project.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # What the HTML builder emits
 
     JavaScript imports do more than type-check.
@@ -559,7 +559,7 @@ page_head #= theme_head
     JS-backed packages need a Wasm lowering before they can be used by that backend path.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Converting an existing JavaScript file
 
     To make an existing JavaScript file importable from Beanstalk:
@@ -614,7 +614,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # How builders provide libraries
 
     Project builders own the library set they expose.
@@ -665,7 +665,7 @@ page_head #= theme_head
     The builder decides which surfaces exist and how their compiled output is emitted.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Current limits
 
     Library support is intentionally narrow while the language is still in alpha.
@@ -677,7 +677,7 @@ page_head #= theme_head
     - no source-library version resolution yet
     - no wildcard imports yet
     - no arbitrary JavaScript dependency graphs through the JS provider yet
-    - no direct `.js` imports from `#config.bst`
+    - no direct `.js` imports from `config.bst`
     - no direct cross-module bypass into another module's private JavaScript file
     - no automatic documentation extraction from `#mod.bst` yet
     - no HIR cache for source libraries yet

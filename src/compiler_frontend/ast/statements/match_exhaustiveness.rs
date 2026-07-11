@@ -176,10 +176,9 @@ pub(crate) struct MatchExhaustivenessCheck<'a> {
 /// `else` fallback exists; for non-choice types, requires an explicit `else =>` arm.
 /// WHY: exhaustiveness at parse time prevents silent fallthrough bugs and gives users
 /// actionable diagnostics listing the specific missing variants.
-#[allow(clippy::result_large_err)]
 pub(crate) fn enforce_match_exhaustiveness(
     check: MatchExhaustivenessCheck<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     let is_choice = matches!(
         check.type_environment.type_kind(check.scrutinee.type_id),
         Some(TypeKind::Choice | TypeKind::GenericInstance)
@@ -192,11 +191,11 @@ pub(crate) fn enforce_match_exhaustiveness(
         }
 
         if check.facts.has_guarded_arms {
-            return Err(CompilerDiagnostic::non_exhaustive_match(
+            return Err(Box::new(CompilerDiagnostic::non_exhaustive_match(
                 NonExhaustiveMatchReason::GuardedArmsRequireElse,
                 vec![],
                 check.scrutinee.location.clone(),
-            ));
+            )));
         }
 
         let missing_variants: Vec<StringId> = check
@@ -215,11 +214,11 @@ pub(crate) fn enforce_match_exhaustiveness(
             return Ok(());
         }
 
-        return Err(CompilerDiagnostic::non_exhaustive_match(
+        return Err(Box::new(CompilerDiagnostic::non_exhaustive_match(
             NonExhaustiveMatchReason::MissingVariants,
             missing_variants,
             check.scrutinee.location.clone(),
-        ));
+        )));
     }
 
     if check.has_default {
@@ -244,9 +243,9 @@ pub(crate) fn enforce_match_exhaustiveness(
         NonExhaustiveMatchReason::MissingElseArm
     };
 
-    Err(CompilerDiagnostic::non_exhaustive_match(
+    Err(Box::new(CompilerDiagnostic::non_exhaustive_match(
         reason,
         vec![],
         check.scrutinee.location.clone(),
-    ))
+    )))
 }

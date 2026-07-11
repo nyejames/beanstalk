@@ -35,6 +35,3 @@ test.bst
 # Integration fixture build outputs
 tests/cases/**/input/dev/
 tests/cases/**/input/release/
-
-# AI stuff
-AGENTS.md

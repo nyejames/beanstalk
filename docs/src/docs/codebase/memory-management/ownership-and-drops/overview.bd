@@ -1,0 +1,23 @@
+# Ownership and drops
+
+Inferred transfer, unified ABI and conditional destruction.
+
+## Contract
+
+- Input: borrow facts and validated HIR
+- Output: ownership-aware lowering decisions and conditional drop placement
+- Decides: inferred move points, unified ABI shape, conditional destruction
+- Must not decide: source legality, HIR shape, borrow facts
+- Invariant: ownership-aware and GC paths preserve identical observable behavior
+
+## Main paths
+
+- `src/backends/wasm/hir_to_lir/ownership.rs`
+- `src/backends/wasm/lir/`
+- `src/backends/wasm/runtime/`
+
+## Read next
+
+- `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
+- `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/overview.bd`

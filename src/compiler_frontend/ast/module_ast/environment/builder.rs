@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::module_ast::environment::{
     TopLevelDeclarationTable,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::{
     ResolvedTypeAnnotation, TypeResolutionContext, TypeResolutionContextInputs,
@@ -273,7 +274,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             },
             &mut trait_evidence_environment,
         )
-        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+        .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
         timer_log!(
             trait_evidence_start,
             "AST/environment/trait evidence resolved in: "
@@ -318,12 +319,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let generic_declarations_by_path =
             std::mem::take(&mut self.module_symbols.generic_declarations_by_path);
 
-        Ok(self.finish_environment(
+        self.finish_environment(
             receiver_methods,
             trait_environment,
             trait_evidence_environment,
             generic_declarations_by_path,
-        ))
+            string_table,
+        )
     }
 
     /// Assemble the completed immutable environment package consumed by body emission.
@@ -338,15 +340,21 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         trait_environment: TraitEnvironment,
         trait_evidence_environment: TraitEvidenceEnvironment,
         generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
-    ) -> AstModuleEnvironment {
+        string_table: &StringTable,
+    ) -> Result<AstModuleEnvironment, CompilerMessages> {
         let declaration_semantics = DeclarationSemanticTable::from_environment(
             self.declaration_table.as_ref(),
             &self.resolved_function_signatures_by_path,
             &self.nominal_type_ids_by_path,
             &self.type_environment,
-        );
+            &self.context.template_ir_registry,
+            string_table,
+        )
+        .map_err(|error| {
+            self.diagnostic_messages(TemplateError::into_diagnostic(error), string_table)
+        })?;
 
-        AstModuleEnvironment {
+        Ok(AstModuleEnvironment {
             lookups: Rc::new(AstModuleLookups {
                 module_symbols: self.module_symbols,
                 import_environment: self.import_environment,
@@ -380,7 +388,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 path_format_config: self.context.path_format_config.clone(),
             }),
             type_environment: self.type_environment,
-        }
+        })
     }
 
     pub(crate) fn replace_declaration(

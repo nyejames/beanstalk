@@ -10,8 +10,8 @@ use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, TypeParameterId,
 };
 use crate::compiler_frontend::datatypes::ids::{
-    BuiltinTypeConstructor, FunctionTypeId, FunctionTypeKey, GenericInstanceKey,
-    GenericParameterId, NominalTypeId, TypeConstructor, TypeId,
+    BuiltinTypeConstructor, FunctionTypeKey, GenericInstanceKey, GenericParameterId, NominalTypeId,
+    TypeConstructor, TypeId,
 };
 use crate::compiler_frontend::datatypes::{
     BuiltinScalarReceiver, DataType, ReceiverKey, diagnostic_type_spelling,
@@ -859,7 +859,6 @@ fn remap_string_ids_updates_definitions_indexes_and_generic_instance_caches() {
 
     let named_parameter = local_table.intern("input");
     let function_type_id = env.insert_function_type_for_test(FunctionTypeDefinition {
-        id: FunctionTypeId(0),
         parameters: vec![FunctionParameterDefinition {
             name: Some(named_parameter),
             type_id: env.builtins().int,

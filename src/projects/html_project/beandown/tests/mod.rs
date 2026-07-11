@@ -153,7 +153,7 @@ fn in_memory_sources_compile_without_filesystem_output() {
     }]));
 
     assert_eq!(output.documents.len(), 1);
-    assert_eq!(output.documents[0].content, "nested");
+    assert_eq!(output.documents[0].content, "<p>nested</p>");
     assert_eq!(
         output.documents[0].source_path,
         PathBuf::from("memory/intro.bd")
@@ -243,4 +243,51 @@ fn directory_entries(path: &Path) -> Vec<PathBuf> {
         .collect::<Vec<_>>();
     entries.sort();
     entries
+}
+
+// -----------------------------------------------------------------------------
+// Beandown direct API TIR-backed behavior tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn file_input_compiles_bd_markdown_with_nested_template() {
+    let temp_dir = temp_project(&[("intro.bd", "# [:title]")]);
+
+    let output = compile_ok(BeandownInput::File(temp_dir.path().join("intro.bd")));
+
+    assert_eq!(output.documents.len(), 1);
+    assert_eq!(output.documents[0].content, "<h1><p>title</p></h1>");
+}
+
+#[test]
+fn source_input_compiles_bd_nested_authored_template() {
+    let output = compile_ok(BeandownInput::Sources(vec![BeandownSource {
+        display_path: PathBuf::from("memory/nested.bd"),
+        source_text: "[:# Nested]".to_owned(),
+    }]));
+
+    assert_eq!(output.documents.len(), 1);
+    assert_eq!(output.documents[0].content, "<h1>Nested</h1>");
+}
+
+#[test]
+fn source_input_nested_raw_directive_overrides_bd_markdown_default() {
+    let output = compile_ok(BeandownInput::Sources(vec![BeandownSource {
+        display_path: PathBuf::from("memory/raw-nested.bd"),
+        source_text: "[$raw:# Nested]".to_owned(),
+    }]));
+
+    assert_eq!(output.documents.len(), 1);
+    assert_eq!(output.documents[0].content, "# Nested");
+}
+
+#[test]
+fn source_input_nested_non_formatter_directive_overrides_bd_markdown_default() {
+    let output = compile_ok(BeandownInput::Sources(vec![BeandownSource {
+        display_path: PathBuf::from("memory/fresh-nested.bd"),
+        source_text: "[$fresh:# Nested]".to_owned(),
+    }]));
+
+    assert_eq!(output.documents.len(), 1);
+    assert_eq!(output.documents[0].content, "# Nested");
 }

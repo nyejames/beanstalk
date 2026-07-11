@@ -657,7 +657,7 @@ fixtures are clearer as static source inputs.
 - [x] Add static committed fixtures first:
   - [x] `one-module-kitchen-sink.bst` — many constructs in one module to stress combined AST/environment/type/template paths.
   - [x] `deep-scope-churn.bst` — nested functions/control/value blocks/templates to stress scope frame creation and lookup.
-  - [x] `template-render-plan-churn.bst` — nested templates, slots, `$children`, `$markdown`, runtime template control flow.
+  - [x] `template-render-plan-churn.bst` — nested templates, slots, `$children`, `$md`, runtime template control flow.
   - [x] `constant-dag-churn.bst` — many constants, cross-constant references, folded templates, arithmetic trees.
   - [x] `expression-rpn-churn.bst` — large expressions, casts, operators, value-producing blocks at valid receiving sites.
   - [x] `generic-trait-churn.bst` — generic functions/types, trait bounds, conformances, concrete instantiations.

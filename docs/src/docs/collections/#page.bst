@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: LANGUAGE BASICS]
 
-#[section, $markdown:
+#[section, $md:
     # Collections
 
     Collections are ordered groups of values that are zero-indexed (start from 0).
@@ -79,7 +79,7 @@ page_head #= theme_head
     later elements down so dense logical length is preserved.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Immutable Bindings
     [codeblock, $code("bst"):
         -- A collection assigned without the mutable symbol cannot be mutated through this binding.
@@ -101,7 +101,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Mutable Bindings
     Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.
 
@@ -135,7 +135,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Fixed Collections
     Fixed collections keep the same dense item behavior as growable collections, but they have an
     exact maximum length in their type.
@@ -166,7 +166,7 @@ page_head #= theme_head
 ]
 
 
-#[section, $markdown:
+#[section, $md:
     ## Hash Maps
     Hash maps are insertion-ordered key/value collections. Builtin map keys are permanently limited
     to `String`, `Int`, `Bool`, and `Char`.

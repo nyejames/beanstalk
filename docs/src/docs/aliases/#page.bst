@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: ALIASES]
 
-#[section, $markdown:
+#[section, $md:
     Aliases give a local name to something that already exists.
 
     Beanstalk uses `as` for three narrow, deliberate renaming surfaces:
@@ -32,7 +32,7 @@ page_head #= theme_head
     collide with any other visible name in that file.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Type Aliases
 
     Type aliases give another name to an existing type.
@@ -54,7 +54,7 @@ page_head #= theme_head
     Type aliases are compile-time-only. They do not create runtime values and they do not emit code.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Transparent Type Aliases
 
     Type aliases are transparent.
@@ -85,7 +85,7 @@ page_head #= theme_head
     Use a type alias when you only want a clearer type name.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Type Aliases Are Not Values
 
     A type alias can only be used where the compiler expects a type annotation.
@@ -120,7 +120,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Aliasing Collections and Options
 
     Aliases can target nested type expressions.
@@ -153,7 +153,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Aliases in Function Signatures
 
     Type aliases can be used in parameters, returns, and local declarations.
@@ -190,7 +190,7 @@ page_head #= theme_head
     use a struct instead of an alias.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Import Aliases
 
     Import aliases rename an imported symbol for the current file.
@@ -224,7 +224,7 @@ page_head #= theme_head
     Import aliases are file-local. They are not exported and they do not rename the source declaration for other files.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Resolving Import Name Conflicts
 
     Import aliases are most useful when two libraries export the same symbol name.
@@ -264,7 +264,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Grouped Import Aliases
 
     Grouped imports can rename individual imported entries.
@@ -314,7 +314,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Import Aliases and Type Aliases Together
 
     Type aliases can target imported aliases.
@@ -344,7 +344,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Alias Collision Rules
 
     Aliases must not collide with any visible name in the same file.
@@ -376,7 +376,7 @@ page_head #= theme_head
     Prefer one local spelling per imported symbol.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Alias Naming Warnings
 
     Import aliases should keep the same broad naming convention as the imported symbol.
@@ -398,7 +398,7 @@ page_head #= theme_head
     The goal is only to catch obvious type/value naming drift.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Choice Payload Capture Aliases
 
     Choice payload capture aliases rename a matched payload field inside one match arm.
@@ -447,7 +447,7 @@ page_head #= theme_head
     Choice payload capture aliases are arm-local. They do not rename the variant field itself and they do not leak into other arms.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## What as Does Not Do
 
     `as` is not a cast operator and it is not a general renaming expression.
@@ -465,7 +465,7 @@ page_head #= theme_head
     This keeps renaming predictable and avoids adding multiple ways to express the same idea.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## When To Use Aliases
 
     Use a type alias for clearer annotations:

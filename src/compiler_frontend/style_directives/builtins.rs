@@ -97,7 +97,7 @@ pub(crate) fn frontend_built_in_directives() -> Vec<StyleDirectiveSpec> {
             CoreStyleDirectiveKind::Raw,
         ),
         StyleDirectiveSpec::handler(
-            "markdown",
+            "md",
             TemplateBodyMode::Normal,
             TemplateHeadCompatibility {
                 presence_tags: TemplateHeadTag::MEANINGFUL_ITEM

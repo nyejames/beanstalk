@@ -1,0 +1,23 @@
+# Wasm lowering
+
+HIR-to-Wasm ownership and HTML-Wasm boundary.
+
+## Contract
+
+- Input: validated HIR and companion metadata
+- Output: Wasm LIR, runtime contracts and optional binary artifacts
+- Decides: HIR-to-Wasm lowering, helper exports, ownership projection
+- Must not decide: HTML route assembly, frontend semantics
+- Invariant: ownership-aware lowering preserves the GC semantic baseline
+
+## Main paths
+
+- `src/backends/wasm/`
+- `src/projects/html_project/wasm/`
+- `src/backends/wasm/hir_to_lir/ownership.rs`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/backend/wasm-lowering/wasm-lowering.bd`
+- `docs/src/docs/codebase/compiler-design/backend/html-project-assembly/overview.bd`
+- `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`

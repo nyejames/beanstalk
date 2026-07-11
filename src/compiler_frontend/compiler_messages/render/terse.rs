@@ -34,12 +34,11 @@ pub(crate) fn format_terse_diagnostics_with_context(
 
 pub(crate) fn format_terse_compiler_messages(messages: &CompilerMessages) -> Vec<String> {
     messages
-        .diagnostic_slice()
-        .iter()
-        .enumerate()
-        .map(|(diagnostic_index, diagnostic)| {
+        .diagnostic_display_order()
+        .into_iter()
+        .map(|diagnostic_index| {
             format_terse_diagnostic_with_context(
-                diagnostic,
+                &messages.diagnostic_slice()[diagnostic_index],
                 messages.diagnostic_render_context(diagnostic_index),
             )
         })

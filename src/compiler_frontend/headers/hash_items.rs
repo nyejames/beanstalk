@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Top-level `#` item handling for header parsing.
 //!
 //! WHAT: handles boundary `#` items, including valid entry-file const templates and removed
@@ -15,6 +13,13 @@ use crate::compiler_frontend::headers::types::{
 };
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
+/// Boxed diagnostic result for hash-item handling.
+///
+/// WHAT: gives the hash-item family one small error boundary.
+/// WHY: hash-item parsing passes structured diagnostics through to the file-parser loop
+///      without carrying the large value inline at every return.
+type HashItemsResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(super) fn handle_hash_item(
     token_stream: &mut FileTokens,
     state: &mut HeaderFileParseState,
@@ -22,7 +27,7 @@ pub(super) fn handle_hash_item(
     current_token: Token,
     current_location: SourceLocation,
     at_statement_boundary: bool,
-) -> Result<(), CompilerDiagnostic> {
+) -> HashItemsResult<()> {
     if !at_statement_boundary {
         state.push_start_body_token(current_token);
         return Ok(());
@@ -33,11 +38,13 @@ pub(super) fn handle_hash_item(
             handle_top_level_const_template(token_stream, state, context, current_location)
         }
 
-        TokenKind::Import => Err(CompilerDiagnostic::legacy_import_syntax(current_location)),
-
-        TokenKind::Symbol(_) => Err(CompilerDiagnostic::old_prefix_declaration_syntax(
+        TokenKind::Import => Err(Box::new(CompilerDiagnostic::legacy_import_syntax(
             current_location,
-        )),
+        ))),
+
+        TokenKind::Symbol(_) => Err(Box::new(CompilerDiagnostic::old_prefix_declaration_syntax(
+            current_location,
+        ))),
 
         _ => {
             state.push_start_body_token(current_token);
@@ -51,23 +58,23 @@ fn handle_top_level_const_template(
     state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     current_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> HashItemsResult<()> {
     if context.file_role == FileRole::Normal {
-        return Err(CompilerDiagnostic::deferred_feature(
+        return Err(Box::new(CompilerDiagnostic::deferred_feature(
             context
                 .string_table
                 .intern("top-level const templates in non-entry files"),
             current_location,
-        ));
+        )));
     }
 
     if context.file_role == FileRole::ModuleFacade {
-        return Err(CompilerDiagnostic::deferred_feature(
+        return Err(Box::new(CompilerDiagnostic::deferred_feature(
             context
                 .string_table
                 .intern("top-level const templates in module facades"),
             current_location,
-        ));
+        )));
     }
 
     let template_token = token_stream.current_token();

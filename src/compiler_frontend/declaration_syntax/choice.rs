@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Choice declaration shell parsing.
 //!
 //! WHAT: defines the choice metadata types and the parser that produces them from
@@ -153,7 +151,8 @@ pub(crate) fn parse_choice_shell(
                     variant_name,
                     current_location.to_owned(),
                     string_table,
-                )?;
+                )
+                .map_err(|diagnostic| *diagnostic)?;
 
                 // Make sure this is not a duplicate variant name
                 if let Some(first_location) = seen_variants.get(&variant_name) {
@@ -199,7 +198,8 @@ pub(crate) fn parse_choice_shell(
                             warnings,
                             SignatureMemberContext::ChoicePayloadField,
                             choice_path,
-                        )?;
+                        )
+                        .map_err(|diagnostic| *diagnostic)?;
 
                         if fields.is_empty() {
                             return Err(CompilerDiagnostic::invalid_choice_variant(

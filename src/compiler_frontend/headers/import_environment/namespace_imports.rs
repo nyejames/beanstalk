@@ -21,11 +21,18 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::keywords::is_valid_identifier;
-use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
+use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Boxed diagnostic result for namespace import registration and record construction.
+///
+/// WHAT: gives namespace registration and recursive record construction one small error boundary.
+/// WHY: record insertion and privacy checks propagate structured diagnostics through the
+///      same connected family without carrying the large value inline at every return.
+type NamespaceImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SymbolKind {
@@ -52,7 +59,7 @@ impl<'a> ExternalNamespaceRecordInserter<'a> {
         symbol_path: &ExternalSymbolPath,
         symbol_id: ExternalSymbolId,
         surface_path: &InternedPath,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> NamespaceImportResult<()> {
         self.insert_at(record, symbol_path.components(), 0, symbol_id, surface_path)
     }
 
@@ -63,7 +70,7 @@ impl<'a> ExternalNamespaceRecordInserter<'a> {
         index: usize,
         symbol_id: ExternalSymbolId,
         surface_path: &InternedPath,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> NamespaceImportResult<()> {
         let component = &components[index];
         let name_id = self.string_table.intern(component);
         let child_surface_path = surface_path.join_str(component, self.string_table);
@@ -76,10 +83,12 @@ impl<'a> ExternalNamespaceRecordInserter<'a> {
                 || record.value_members.contains_key(&name_id)
                 || record.type_members.contains_key(&name_id)
             {
-                return Err(CompilerDiagnostic::duplicate_import_surface_member(
-                    child_surface_path,
-                    name_id,
-                    self.location.clone(),
+                return Err(Box::new(
+                    CompilerDiagnostic::duplicate_import_surface_member(
+                        child_surface_path,
+                        name_id,
+                        self.location.clone(),
+                    ),
                 ));
             }
 
@@ -114,10 +123,12 @@ impl<'a> ExternalNamespaceRecordInserter<'a> {
         // a value or type member at the same level.
         if record.value_members.contains_key(&name_id) || record.type_members.contains_key(&name_id)
         {
-            return Err(CompilerDiagnostic::duplicate_import_surface_member(
-                child_surface_path.clone(),
-                name_id,
-                self.location.clone(),
+            return Err(Box::new(
+                CompilerDiagnostic::duplicate_import_surface_member(
+                    child_surface_path.clone(),
+                    name_id,
+                    self.location.clone(),
+                ),
             ));
         }
 
@@ -139,8 +150,6 @@ impl<'a> ExternalNamespaceRecordInserter<'a> {
 
 impl<'a> ImportEnvironmentBuilder<'a> {
     /// Build and register a namespace import record.
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn register_namespace_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -148,7 +157,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         source_file: &InternedPath,
         namespace_target: ResolvedNamespaceTarget,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> NamespaceImportResult<()> {
         let local_name = self.derive_namespace_name(import)?;
         let source_namespace_access =
             if let ResolvedNamespaceTarget::SourceFile(file_path) = &namespace_target {
@@ -433,7 +442,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         target_file: &InternedPath,
         import: &FileImport,
         source_file: &InternedPath,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> NamespaceImportResult<()> {
         if let Some(target_library) = self
             .module_symbols
             .file_library_membership
@@ -452,12 +461,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
 
                 let facade_name_id = self.string_table.intern(&target_library);
-                return Err(diagnostics::not_exported_by_facade(
+                return Err(Box::new(diagnostics::not_exported_by_facade(
                     &import.header_path,
                     facade_name_id,
                     ImportFacadeType::SourceLibrary,
                     import.location.clone(),
-                ));
+                )));
             }
         }
 
@@ -484,16 +493,16 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .module_root_facade_exports
             .contains_key(target_root)
         {
-            return Err(diagnostics::cross_module_import_not_exported(
+            return Err(Box::new(diagnostics::cross_module_import_not_exported(
                 &import.header_path,
                 import.location.clone(),
-            ));
+            )));
         }
 
-        Err(diagnostics::missing_module_facade(
+        Err(Box::new(diagnostics::missing_module_facade(
             &import.header_path,
             import.location.clone(),
-        ))
+        )))
     }
 
     fn module_root_facade_logical_path(
@@ -512,7 +521,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     pub(super) fn derive_namespace_name(
         &mut self,
         import: &FileImport,
-    ) -> Result<StringId, CompilerDiagnostic> {
+    ) -> NamespaceImportResult<StringId> {
         match import.alias {
             Some(alias) => Ok(alias),
             None => {
@@ -523,9 +532,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     .unwrap_or_default();
                 let stem = stem.strip_suffix(".js").unwrap_or(&stem);
                 if stem.is_empty() || !is_valid_identifier(stem) {
-                    return Err(CompilerDiagnostic::invalid_namespace_default_name(
-                        import.header_path.clone(),
-                        import.location.clone(),
+                    return Err(Box::new(
+                        CompilerDiagnostic::invalid_namespace_default_name(
+                            import.header_path.clone(),
+                            import.location.clone(),
+                        ),
                     ));
                 }
                 Ok(self.string_table.intern(stem))
@@ -538,7 +549,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         &self,
         file_path: &InternedPath,
         location: &SourceLocation,
-    ) -> Result<NamespaceRecord, CompilerDiagnostic> {
+    ) -> NamespaceImportResult<NamespaceRecord> {
         let mut value_members = FxHashMap::default();
         let mut type_members = FxHashMap::default();
 
@@ -606,7 +617,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         facade_file: &InternedPath,
         exported_entries: &FxHashSet<FacadeExportEntry>,
         location: &SourceLocation,
-    ) -> Result<NamespaceRecord, CompilerDiagnostic> {
+    ) -> NamespaceImportResult<NamespaceRecord> {
         let mut value_members = FxHashMap::default();
         let mut type_members = FxHashMap::default();
 
@@ -684,7 +695,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         &mut self,
         package_path: StringId,
         location: &SourceLocation,
-    ) -> Result<NamespaceRecord, CompilerDiagnostic> {
+    ) -> NamespaceImportResult<NamespaceRecord> {
         let mut record =
             NamespaceRecord::empty(NamespaceRecordSource::ExternalPackage(package_path));
 
@@ -768,13 +779,15 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         value_members: &FxHashMap<StringId, NamespaceValueMember>,
         type_members: &FxHashMap<StringId, NamespaceTypeMember>,
         location: &SourceLocation,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> NamespaceImportResult<()> {
         for name in value_members.keys() {
             if type_members.contains_key(name) {
-                return Err(CompilerDiagnostic::duplicate_import_surface_member(
-                    surface_path.clone(),
-                    *name,
-                    location.clone(),
+                return Err(Box::new(
+                    CompilerDiagnostic::duplicate_import_surface_member(
+                        surface_path.clone(),
+                        *name,
+                        location.clone(),
+                    ),
                 ));
             }
         }

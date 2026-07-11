@@ -7,19 +7,6 @@
 //! It will also enable printing out Hir structures for easy debugging also.
 
 #[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::external_packages::CallTarget;
-#[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
-use crate::compiler_frontend::hir::expressions::FallibleCarrierVariant;
-#[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::expressions::{
-    HirExpression, HirExpressionKind, HirVariantCarrier, ValueKind,
-};
-use crate::compiler_frontend::hir::numeric::HirNumericOp;
-#[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::numeric::{HirNumericOperands, NumericFailureMode};
-// WHY: FallibleCarrierVariant is still used by HirConstValue and its Display impl.
-#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::datatypes::definitions::{
     BuiltinTypeDefinition, ChoiceTypeDefinition, ConstructedTypeDefinition, FunctionTypeDefinition,
     StructTypeDefinition, TypeDefinition,
@@ -35,6 +22,16 @@ use crate::compiler_frontend::datatypes::ids::{
     BuiltinTypeConstructor, BuiltinTypeKey, TypeConstructor,
 };
 #[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::external_packages::CallTarget;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+#[cfg(test)]
+use crate::compiler_frontend::hir::expressions::FallibleCarrierVariant;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::expressions::{
+    HirExpression, HirExpressionKind, HirVariantCarrier, ValueKind,
+};
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::functions::HirFunction;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
@@ -45,6 +42,9 @@ use crate::compiler_frontend::hir::ids::{
 };
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::numeric::HirNumericOp;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::numeric::{HirNumericOperands, NumericFailureMode};
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
@@ -908,27 +908,6 @@ impl<'a> HirDisplayContext<'a> {
                     );
                     format!("FallibleCarrier<{success}, {error}>")
                 }
-                TypeConstructor::Nominal(nominal_id) => {
-                    let args = arguments
-                        .iter()
-                        .map(|arg| {
-                            self.render_type_with_environment(type_environment, *arg, depth + 1)
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let name = type_environment
-                        .nominal_path_by_id(*nominal_id)
-                        .map(|path| path.to_string(self.string_table))
-                        .unwrap_or_else(|| format!("Nominal({})", nominal_id.0));
-                    if args.is_empty() {
-                        name
-                    } else {
-                        format!("{name}<{args}>")
-                    }
-                }
-                TypeConstructor::External(external_id) => {
-                    format!("External({})", external_id.0)
-                }
             },
             TypeDefinition::External(external_def) => {
                 format!("External({})", external_def.type_id.0)
@@ -1036,6 +1015,7 @@ impl<'a> HirDisplayContext<'a> {
             #[cfg(not(any(test, feature = "show_hir")))]
             HirVariantCarrier::Choice { .. } => "choice".to_owned(),
             HirVariantCarrier::Option => "option".to_owned(),
+            #[cfg(test)]
             HirVariantCarrier::Fallible => "result".to_owned(),
         }
     }
@@ -1210,6 +1190,7 @@ impl Display for HirNumericOp {
     }
 }
 
+#[cfg(test)]
 impl Display for FallibleCarrierVariant {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {

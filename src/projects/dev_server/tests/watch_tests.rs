@@ -5,7 +5,7 @@ use super::{
     should_ignore_path,
 };
 use crate::compiler_tests::test_support::temp_dir;
-use crate::projects::settings::Config;
+use crate::projects::settings::{CONFIG_FILE_NAME, Config};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -81,7 +81,7 @@ fn directory_scope_watches_config_entry_root_and_library_folders() {
 
     let scope = WatchScope::derive(&root, Some(&config), &output_dir);
 
-    assert!(scope.watches_path(&canonical_root.join("#config.bst")));
+    assert!(scope.watches_path(&canonical_root.join(CONFIG_FILE_NAME)));
     assert!(scope.watches_path(&canonical_root.join("src/main.bst")));
     assert!(scope.watches_path(&canonical_root.join("assets/logo.png")));
     assert!(!scope.watches_path(&canonical_root.join("target/debug/app")));

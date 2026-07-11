@@ -6,10 +6,13 @@
 //! WHY: separates the detailed walking logic from the main finalizer
 //!      orchestration to keep `finalizer.rs` readable.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::const_values::facts::AstConstFacts;
 use crate::compiler_frontend::ast::const_values::resolver::{
-    ConstValueEnvironment, ConstValueResolver,
+    ConstResolutionError, ConstValueEnvironment, ConstValueResolver,
 };
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -19,8 +22,11 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 use crate::compiler_frontend::ast::expressions::expression_types::FallibleHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+
+use super::normalize_ast::TemplateNormalizationError;
 
 /// Collects const facts from the finalized AST after normalization.
 pub(super) struct ConstFactCollector<'a> {
@@ -30,9 +36,18 @@ pub(super) struct ConstFactCollector<'a> {
 }
 
 impl<'a> ConstFactCollector<'a> {
-    pub(super) fn new(string_table: &'a mut StringTable) -> Self {
+    /// Creates a collector backed by the module TIR registry.
+    ///
+    /// WHAT: threads the finalization registry from `AstPhaseContext` so template
+    ///       const classification reads each exact effective TIR view.
+    /// WHY: store-qualified roots may belong to the primary or a foreign module
+    ///      store, and overlays are registry-owned rather than content-derived.
+    pub(super) fn new(
+        string_table: &'a mut StringTable,
+        template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+    ) -> Self {
         Self {
-            resolver: ConstValueResolver::new(string_table),
+            resolver: ConstValueResolver::new(string_table, template_ir_registry),
             facts: AstConstFacts::default(),
             module_explicit_env: ConstValueEnvironment::default(),
         }
@@ -49,10 +64,10 @@ impl<'a> ConstFactCollector<'a> {
         module_constants: &[Declaration],
         ast_nodes: &[AstNode],
         start_function_path: &InternedPath,
-    ) -> AstConstFacts {
-        self.collect_explicit_top_level_facts(module_constants);
-        self.collect_private_and_body_local_facts(ast_nodes, start_function_path);
-        self.facts
+    ) -> Result<AstConstFacts, TemplateNormalizationError> {
+        self.collect_explicit_top_level_facts(module_constants)?;
+        self.collect_private_and_body_local_facts(ast_nodes, start_function_path)?;
+        Ok(self.facts)
     }
 
     // ------------------------------
@@ -60,7 +75,10 @@ impl<'a> ConstFactCollector<'a> {
     // ------------------------------
 
     /// Resolve explicit module constants and register them as facts.
-    fn collect_explicit_top_level_facts(&mut self, module_constants: &[Declaration]) {
+    fn collect_explicit_top_level_facts(
+        &mut self,
+        module_constants: &[Declaration],
+    ) -> Result<(), TemplateNormalizationError> {
         for declaration in module_constants {
             match self
                 .resolver
@@ -72,12 +90,18 @@ impl<'a> ConstFactCollector<'a> {
                     self.facts.declarations.insert(declaration.id.clone(), fact);
                 }
 
-                Err(_) => {
+                Err(error) if error.is_expected_non_const_resolution() => {
                     // Explicit constants that fail resolution are skipped silently.
                     // They were already validated earlier; this is a safety fallback.
                 }
+
+                Err(error) => {
+                    template_classification_error(error)?;
+                }
             }
         }
+
+        Ok(())
     }
 
     // ------------------------------------
@@ -89,18 +113,20 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         ast_nodes: &[AstNode],
         start_function_path: &InternedPath,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         for node in ast_nodes {
             if let NodeKind::Function(path, _, body) = &node.kind {
                 if path == start_function_path {
                     let mut start_env = self.module_explicit_env.clone();
-                    self.walk_start_body(body, &mut start_env);
+                    self.walk_start_body(body, &mut start_env)?;
                 } else {
                     let mut function_env = self.module_explicit_env.clone();
-                    self.walk_body_local(body, &mut function_env);
+                    self.walk_body_local(body, &mut function_env)?;
                 }
             }
         }
+
+        Ok(())
     }
 
     // ------------------------------
@@ -113,19 +139,25 @@ impl<'a> ConstFactCollector<'a> {
     ///       `PrivateTopLevel` facts. Nested scopes are walked for `BodyLocal`
     ///       facts. Declarations that do not resolve as const are skipped
     ///       silently.
-    fn walk_start_body(&mut self, nodes: &[AstNode], env: &mut ConstValueEnvironment) {
+    fn walk_start_body(
+        &mut self,
+        nodes: &[AstNode],
+        env: &mut ConstValueEnvironment,
+    ) -> Result<(), TemplateNormalizationError> {
         for node in nodes {
             match &node.kind {
                 NodeKind::VariableDeclaration(declaration) => {
-                    self.walk_expression_for_body_local(&declaration.value, env);
-                    self.try_add_private_top_level_fact(declaration, env);
+                    self.walk_expression_for_body_local(&declaration.value, env)?;
+                    self.try_add_private_top_level_fact(declaration, env)?;
                 }
 
                 _ => {
-                    self.walk_node_for_body_local(node, env);
+                    self.walk_node_for_body_local(node, env)?;
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Attempt to resolve a start-body declaration as a private top-level const fact.
@@ -136,7 +168,7 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         declaration: &Declaration,
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         match self
             .resolver
             .resolve_private_top_level_declaration(declaration, env)
@@ -146,12 +178,18 @@ impl<'a> ConstFactCollector<'a> {
                 self.facts.declarations.insert(declaration.id.clone(), fact);
             }
 
-            Err(_) => {
+            Err(error) if error.is_expected_non_const_resolution() => {
                 // Not a const fact — skip silently. Mutable declarations,
                 // forward references, and runtime expressions are all
                 // intentionally omitted.
             }
+
+            Err(error) => {
+                template_classification_error(error)?;
+            }
         }
+
+        Ok(())
     }
 
     // ------------------------------
@@ -163,37 +201,47 @@ impl<'a> ConstFactCollector<'a> {
     /// WHAT: all variable declarations inside function bodies (and nested
     ///       scopes) are attempted as `BodyLocal` facts. Each nested scope
     ///       receives a cloned environment so declarations do not leak outward.
-    fn walk_body_local(&mut self, nodes: &[AstNode], env: &mut ConstValueEnvironment) {
+    fn walk_body_local(
+        &mut self,
+        nodes: &[AstNode],
+        env: &mut ConstValueEnvironment,
+    ) -> Result<(), TemplateNormalizationError> {
         for node in nodes {
-            self.walk_node_for_body_local(node, env);
+            self.walk_node_for_body_local(node, env)?;
         }
+
+        Ok(())
     }
 
     /// Walk a single AST node for body-local const facts.
     ///
     /// WHAT: dispatches over all [`NodeKind`] variants, cloning the environment
     ///       for nested scopes and attempting to register const declarations.
-    fn walk_node_for_body_local(&mut self, node: &AstNode, env: &mut ConstValueEnvironment) {
+    fn walk_node_for_body_local(
+        &mut self,
+        node: &AstNode,
+        env: &mut ConstValueEnvironment,
+    ) -> Result<(), TemplateNormalizationError> {
         match &node.kind {
             NodeKind::VariableDeclaration(declaration) => {
-                self.walk_expression_for_body_local(&declaration.value, env);
-                self.try_add_body_local_fact(declaration, env);
+                self.walk_expression_for_body_local(&declaration.value, env)?;
+                self.try_add_body_local_fact(declaration, env)?;
             }
 
             NodeKind::ScopedBlock { body } => {
                 let mut nested_env = env.clone();
-                self.walk_body_local(body, &mut nested_env);
+                self.walk_body_local(body, &mut nested_env)?;
             }
 
             NodeKind::If(condition, then_body, else_body) => {
-                self.walk_expression_for_body_local(condition, env);
+                self.walk_expression_for_body_local(condition, env)?;
 
                 let mut then_env = env.clone();
-                self.walk_body_local(then_body, &mut then_env);
+                self.walk_body_local(then_body, &mut then_env)?;
 
                 if let Some(else_body) = else_body {
                     let mut else_env = env.clone();
-                    self.walk_body_local(else_body, &mut else_env);
+                    self.walk_body_local(else_body, &mut else_env)?;
                 }
             }
 
@@ -201,7 +249,7 @@ impl<'a> ConstFactCollector<'a> {
                 condition,
                 message: _,
             } => {
-                self.walk_expression_for_body_local(condition, env);
+                self.walk_expression_for_body_local(condition, env)?;
             }
 
             NodeKind::Match {
@@ -210,77 +258,77 @@ impl<'a> ConstFactCollector<'a> {
                 default,
                 ..
             } => {
-                self.walk_expression_for_body_local(scrutinee, env);
+                self.walk_expression_for_body_local(scrutinee, env)?;
 
                 for arm in arms {
-                    self.walk_match_pattern_for_body_local(&arm.pattern, env);
+                    self.walk_match_pattern_for_body_local(&arm.pattern, env)?;
                     if let Some(guard) = &arm.guard {
-                        self.walk_expression_for_body_local(guard, env);
+                        self.walk_expression_for_body_local(guard, env)?;
                     }
 
                     let mut arm_env = env.clone();
-                    self.walk_body_local(&arm.body, &mut arm_env);
+                    self.walk_body_local(&arm.body, &mut arm_env)?;
                 }
 
                 if let Some(default_body) = default {
                     let mut default_env = env.clone();
-                    self.walk_body_local(default_body, &mut default_env);
+                    self.walk_body_local(default_body, &mut default_env)?;
                 }
             }
 
             NodeKind::RangeLoop { range, body, .. } => {
-                self.walk_expression_for_body_local(&range.start, env);
-                self.walk_expression_for_body_local(&range.end, env);
+                self.walk_expression_for_body_local(&range.start, env)?;
+                self.walk_expression_for_body_local(&range.end, env)?;
                 if let Some(step) = &range.step {
-                    self.walk_expression_for_body_local(step, env);
+                    self.walk_expression_for_body_local(step, env)?;
                 }
 
                 let mut loop_env = env.clone();
-                self.walk_body_local(body, &mut loop_env);
+                self.walk_body_local(body, &mut loop_env)?;
             }
 
             NodeKind::CollectionLoop { iterable, body, .. } => {
-                self.walk_expression_for_body_local(iterable, env);
+                self.walk_expression_for_body_local(iterable, env)?;
 
                 let mut loop_env = env.clone();
-                self.walk_body_local(body, &mut loop_env);
+                self.walk_body_local(body, &mut loop_env)?;
             }
 
             NodeKind::WhileLoop(condition, body) => {
-                self.walk_expression_for_body_local(condition, env);
+                self.walk_expression_for_body_local(condition, env)?;
 
                 let mut loop_env = env.clone();
-                self.walk_body_local(body, &mut loop_env);
+                self.walk_body_local(body, &mut loop_env)?;
             }
 
             NodeKind::Function(_, _, body) => {
                 let mut nested_env = env.clone();
-                self.walk_body_local(body, &mut nested_env);
+                self.walk_body_local(body, &mut nested_env)?;
             }
 
             NodeKind::Return(expressions) => {
-                self.walk_expressions_for_body_local(expressions, env);
+                self.walk_expressions_for_body_local(expressions, env)?;
             }
 
             NodeKind::ThenValue(produced_values) => {
-                self.walk_expressions_for_body_local(&produced_values.expressions, env);
+                self.walk_expressions_for_body_local(&produced_values.expressions, env)?;
             }
 
             NodeKind::ReturnError(expression) | NodeKind::PushStartRuntimeFragment(expression) => {
-                self.walk_expression_for_body_local(expression, env);
+                self.walk_expression_for_body_local(expression, env)?;
             }
 
             NodeKind::Assignment { value, .. } => {
-                self.walk_expression_for_body_local(value, env);
+                self.walk_expression_for_body_local(value, env)?;
             }
 
             NodeKind::MultiBind { value, .. } | NodeKind::ExpressionStatement(value) => {
-                self.walk_expression_for_body_local(value, env);
+                self.walk_expression_for_body_local(value, env)?;
             }
 
             NodeKind::StructDefinition(_, fields) => {
                 for field in fields {
-                    self.walk_expression_for_body_local(&field.value, env);
+                    self.walk_expression_for_body_local(&field.value, env)?;
                 }
             }
 
@@ -288,6 +336,8 @@ impl<'a> ConstFactCollector<'a> {
             // bodies that need walking for const facts.
             NodeKind::Break | NodeKind::Continue => {}
         }
+
+        Ok(())
     }
 
     /// Attempt to resolve a body-local declaration as a const fact.
@@ -298,7 +348,7 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         declaration: &Declaration,
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         match self
             .resolver
             .resolve_body_local_declaration(declaration, env)
@@ -308,10 +358,16 @@ impl<'a> ConstFactCollector<'a> {
                 self.facts.declarations.insert(declaration.id.clone(), fact);
             }
 
-            Err(_) => {
+            Err(error) if error.is_expected_non_const_resolution() => {
                 // Not a const fact — skip silently.
             }
+
+            Err(error) => {
+                template_classification_error(error)?;
+            }
         }
+
+        Ok(())
     }
 
     /// Walk call arguments for body-local const facts.
@@ -319,10 +375,12 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         arguments: &[CallArgument],
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         for argument in arguments {
-            self.walk_expression_for_body_local(&argument.value, env);
+            self.walk_expression_for_body_local(&argument.value, env)?;
         }
+
+        Ok(())
     }
 
     /// Walk a list of expressions for body-local const facts.
@@ -330,10 +388,12 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         expressions: &[Expression],
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         for expression in expressions {
-            self.walk_expression_for_body_local(expression, env);
+            self.walk_expression_for_body_local(expression, env)?;
         }
+
+        Ok(())
     }
 
     /// Walk a match pattern for body-local const facts.
@@ -344,22 +404,26 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         pattern: &MatchPattern,
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         match pattern {
             MatchPattern::Literal(expression) => {
-                self.walk_expression_for_body_local(expression, env);
+                self.walk_expression_for_body_local(expression, env)?;
             }
 
             MatchPattern::OptionValue { value, .. } | MatchPattern::Relational { value, .. } => {
-                self.walk_expression_for_body_local(value, env);
+                self.walk_expression_for_body_local(value, env)?;
             }
 
             MatchPattern::OptionNone { .. }
-            | MatchPattern::Wildcard { .. }
             | MatchPattern::ChoiceVariant { .. }
             | MatchPattern::Capture { .. }
             | MatchPattern::OptionPresentCapture { .. } => {}
+
+            #[cfg(test)]
+            MatchPattern::Wildcard { .. } => {}
         }
+
+        Ok(())
     }
 
     /// Walk an expression tree for body-local const facts.
@@ -381,13 +445,13 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         expression: &Expression,
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         match &expression.kind {
             ExpressionKind::Runtime(rpn) => {
                 for item in &rpn.items {
                     match item {
                         ExpressionRpnItem::Operand(expression) => {
-                            self.walk_expression_for_body_local(expression, env);
+                            self.walk_expression_for_body_local(expression, env)?;
                         }
                         ExpressionRpnItem::Operator { .. } => {}
                     }
@@ -399,97 +463,100 @@ impl<'a> ConstFactCollector<'a> {
             }
 
             ExpressionKind::FieldAccess { base, .. } => {
-                self.walk_expression_for_body_local(base, env);
+                self.walk_expression_for_body_local(base, env)?;
             }
 
             ExpressionKind::MethodCall { receiver, args, .. }
             | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
             | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
-                self.walk_expression_for_body_local(receiver, env);
-                self.walk_call_arguments_for_body_local(args, env);
+                self.walk_expression_for_body_local(receiver, env)?;
+                self.walk_call_arguments_for_body_local(args, env)?;
             }
 
             ExpressionKind::FunctionCall { args, .. }
             | ExpressionKind::HostFunctionCall { args, .. } => {
-                self.walk_call_arguments_for_body_local(args, env);
+                self.walk_call_arguments_for_body_local(args, env)?;
             }
 
             ExpressionKind::HandledFallibleFunctionCall { args, .. }
             | ExpressionKind::HandledFallibleHostFunctionCall { args, .. } => {
-                self.walk_call_arguments_for_body_local(args, env);
+                self.walk_call_arguments_for_body_local(args, env)?;
             }
 
             ExpressionKind::HandledFallibleExpression { value, .. } => {
-                self.walk_expression_for_body_local(value, env);
+                self.walk_expression_for_body_local(value, env)?;
             }
 
             ExpressionKind::Cast(cast) => {
-                self.walk_expression_for_body_local(&cast.source, env);
+                self.walk_expression_for_body_local(&cast.source, env)?;
             }
 
-            ExpressionKind::FallibleCarrierConstruct { value, .. }
-            | ExpressionKind::OptionPropagation { value }
-            | ExpressionKind::Coerced { value, .. } => {
-                self.walk_expression_for_body_local(value, env);
+            #[cfg(test)]
+            ExpressionKind::FallibleCarrierConstruct { value, .. } => {
+                self.walk_expression_for_body_local(value, env)?;
+            }
+
+            ExpressionKind::OptionPropagation { value } | ExpressionKind::Coerced { value, .. } => {
+                self.walk_expression_for_body_local(value, env)?;
             }
 
             ExpressionKind::Collection(items) => {
-                self.walk_expressions_for_body_local(items, env);
+                self.walk_expressions_for_body_local(items, env)?;
             }
 
             ExpressionKind::MapLiteral(entries) => {
                 for entry in entries {
-                    self.walk_expression_for_body_local(&entry.key, env);
-                    self.walk_expression_for_body_local(&entry.value, env);
+                    self.walk_expression_for_body_local(&entry.key, env)?;
+                    self.walk_expression_for_body_local(&entry.value, env)?;
                 }
             }
 
             ExpressionKind::StructDefinition(fields) | ExpressionKind::StructInstance(fields) => {
                 for field in fields {
-                    self.walk_expression_for_body_local(&field.value, env);
+                    self.walk_expression_for_body_local(&field.value, env)?;
                 }
             }
 
             ExpressionKind::ChoiceConstruct { fields, .. } => {
                 for field in fields {
-                    self.walk_expression_for_body_local(&field.value, env);
+                    self.walk_expression_for_body_local(&field.value, env)?;
                 }
             }
 
             ExpressionKind::Range(start, end) => {
-                self.walk_expression_for_body_local(start, env);
-                self.walk_expression_for_body_local(end, env);
+                self.walk_expression_for_body_local(start, env)?;
+                self.walk_expression_for_body_local(end, env)?;
             }
 
             ExpressionKind::ValueBlock { block } => match block.as_ref() {
                 ValueBlock::If(value_if) => {
-                    self.walk_expression_for_body_local(&value_if.condition, env);
+                    self.walk_expression_for_body_local(&value_if.condition, env)?;
 
                     let mut then_env = env.clone();
-                    self.walk_body_local(&value_if.then_body, &mut then_env);
+                    self.walk_body_local(&value_if.then_body, &mut then_env)?;
 
                     let mut else_env = env.clone();
-                    self.walk_body_local(&value_if.else_body, &mut else_env);
+                    self.walk_body_local(&value_if.else_body, &mut else_env)?;
                 }
                 ValueBlock::Match(value_match) => {
-                    self.walk_expression_for_body_local(&value_match.scrutinee, env);
+                    self.walk_expression_for_body_local(&value_match.scrutinee, env)?;
 
                     for arm in &value_match.arms {
                         if let Some(guard) = &arm.guard {
-                            self.walk_expression_for_body_local(guard, env);
+                            self.walk_expression_for_body_local(guard, env)?;
                         }
                         let mut arm_env = env.clone();
-                        self.walk_body_local(&arm.body, &mut arm_env);
+                        self.walk_body_local(&arm.body, &mut arm_env)?;
                     }
 
                     if let Some(default_body) = &value_match.default {
                         let mut default_env = env.clone();
-                        self.walk_body_local(default_body, &mut default_env);
+                        self.walk_body_local(default_body, &mut default_env)?;
                     }
                 }
                 ValueBlock::Catch(value_catch) => {
-                    self.walk_expression_for_body_local(&value_catch.handled_value, env);
-                    self.walk_fallible_handling_for_body_local(&value_catch.handler, env);
+                    self.walk_expression_for_body_local(&value_catch.handled_value, env)?;
+                    self.walk_fallible_handling_for_body_local(&value_catch.handler, env)?;
                 }
             },
 
@@ -501,11 +568,17 @@ impl<'a> ConstFactCollector<'a> {
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
             | ExpressionKind::Char(_)
-            | ExpressionKind::Path(_)
             | ExpressionKind::Reference(_)
             | ExpressionKind::Function(_)
-            | ExpressionKind::Template(_) => {}
+            | ExpressionKind::Template(_)
+            | ExpressionKind::RuntimeTemplateHandoff(_)
+            | ExpressionKind::RuntimeSlotApplicationHandoff(_) => {}
+
+            #[cfg(test)]
+            ExpressionKind::Path(_) => {}
         }
+
+        Ok(())
     }
 
     /// Walk fallible handler bodies for body-local const facts.
@@ -515,12 +588,23 @@ impl<'a> ConstFactCollector<'a> {
         &mut self,
         handling: &FallibleHandling,
         env: &mut ConstValueEnvironment,
-    ) {
+    ) -> Result<(), TemplateNormalizationError> {
         let FallibleHandling::Handler { body, .. } = handling else {
-            return;
+            return Ok(());
         };
 
         let mut handler_env = env.clone();
-        self.walk_body_local(body, &mut handler_env);
+        self.walk_body_local(body, &mut handler_env)
+    }
+}
+
+fn template_classification_error(
+    error: ConstResolutionError,
+) -> Result<(), TemplateNormalizationError> {
+    match error {
+        ConstResolutionError::TemplateClassification(error) => {
+            Err(TemplateNormalizationError::from(error))
+        }
+        _ => Ok(()),
     }
 }

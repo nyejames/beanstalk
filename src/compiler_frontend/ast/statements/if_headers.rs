@@ -46,14 +46,20 @@ pub(crate) enum ParsedIfHeader {
     },
 }
 
+/// Stage-local result for `if` header parsing and option-present capture helpers.
+///
+/// WHY: `CompilerDiagnostic` is large enough that returning it directly inside a
+/// `Result` triggers `clippy::result_large_err`. Boxing at this boundary keeps the
+/// four `if`-header owner functions uniform without changing diagnostic semantics.
+type IfHeaderResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parse the header after `if`, leaving the stream at the colon or body marker.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_if_header(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ParsedIfHeader, CompilerDiagnostic> {
+) -> IfHeaderResult<ParsedIfHeader> {
     // Single-predicate option match: `if option is |name|:`.
     // Detected before normal expression parsing because `|name|` is not a valid expression.
     if is_single_predicate_option_capture(token_stream) {
@@ -79,7 +85,8 @@ pub(crate) fn parse_if_header(
         &ValueMode::ImmutableOwned,
         false,
         string_table,
-    )?;
+    )
+    .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
 
     if token_stream.current_token_kind() == &TokenKind::Is {
         token_stream.advance();
@@ -136,13 +143,12 @@ fn next_meaningful_token_is_header_boundary(token_stream: &FileTokens, start_ind
     false
 }
 
-#[allow(clippy::result_large_err)]
 fn parse_match_style_if_header(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ParsedIfHeader, CompilerDiagnostic> {
+) -> IfHeaderResult<ParsedIfHeader> {
     let condition_context = if_condition_parse_context(context, string_table);
     let mut condition_type = ExpectedType::Infer;
     let mut cast_target_context = CastTargetContext::None;
@@ -155,7 +161,8 @@ fn parse_match_style_if_header(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
+    let scrutinee = create_expression_until(input, &[TokenKind::Is])
+        .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
     token_stream.advance(); // consume `is`
 
     Ok(ParsedIfHeader::MatchStyle { scrutinee })
@@ -190,13 +197,12 @@ fn is_single_predicate_option_capture(token_stream: &FileTokens) -> bool {
         .is_some_and(|t| t.kind == TokenKind::TypeParameterBracket)
 }
 
-#[allow(clippy::result_large_err)]
 fn parse_option_present_capture_if_header(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ParsedIfHeader, CompilerDiagnostic> {
+) -> IfHeaderResult<ParsedIfHeader> {
     let condition_context = if_condition_parse_context(context, string_table);
     let mut condition_type = ExpectedType::Infer;
     let mut cast_target_context = CastTargetContext::None;
@@ -209,17 +215,18 @@ fn parse_option_present_capture_if_header(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
+    let scrutinee = create_expression_until(input, &[TokenKind::Is])
+        .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
     token_stream.advance(); // consume `is`
 
     let type_environment = type_interner.environment();
     let Some(inner_type_id) = type_environment.option_inner_type(scrutinee.type_id) else {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::OptionPresentCaptureOnNonOptional,
             None,
             None,
             scrutinee.location.clone(),
-        ));
+        )));
     };
 
     let pattern =
@@ -232,12 +239,12 @@ fn parse_option_present_capture_if_header(
         ..
     } = &pattern
     else {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::ExpectedBindingInOptionPresentCapture,
             None,
             None,
             pattern.location().clone(),
-        ));
+        )));
     };
 
     let (then_context, pattern) = build_option_present_capture_scope_and_pattern(
@@ -273,7 +280,6 @@ fn if_condition_parse_context(
 ///
 /// Validates:
 /// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
-#[allow(clippy::result_large_err)]
 pub(crate) fn build_option_present_capture_scope_and_pattern(
     match_context: &ScopeContext,
     capture_name: StringId,
@@ -282,16 +288,16 @@ pub(crate) fn build_option_present_capture_scope_and_pattern(
     pattern_location: &SourceLocation,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<(ScopeContext, MatchPattern), CompilerDiagnostic> {
+) -> IfHeaderResult<(ScopeContext, MatchPattern)> {
     let mut arm_scope = match_context.clone();
 
     if let Some(_existing) = arm_scope.get_reference(&capture_name) {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::CaptureBindingShadowsVariable,
             None,
             None,
             binding_location.clone(),
-        ));
+        )));
     }
 
     let binding_name_str = string_table.resolve(capture_name).to_owned();

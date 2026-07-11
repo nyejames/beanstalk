@@ -338,14 +338,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn type_constructor_is_public(
         &self,
         constructor: &TypeConstructor,
-        public_facade_file: &InternedPath,
+        _public_facade_file: &InternedPath,
     ) -> bool {
         match constructor {
             TypeConstructor::Builtin(_) => true,
-            TypeConstructor::Nominal(nominal_id) => {
-                self.nominal_id_is_public(*nominal_id, public_facade_file)
-            }
-            TypeConstructor::External(_) => true,
         }
     }
 

@@ -22,6 +22,7 @@ use super::source_library_discovery::{
     discover_project_local_source_libraries, merge_source_libraries,
     validate_entry_root_library_prefix_collisions,
 };
+use super::source_tree_index::SourceTreeIndex;
 
 /// Canonical roots used to construct project-aware path resolution.
 pub(super) struct ProjectRootResolution {
@@ -29,16 +30,39 @@ pub(super) struct ProjectRootResolution {
     pub(super) entry_root: PathBuf,
 }
 
-/// Build the canonical path resolver for a directory project.
-///
-/// WHY: both `project_root` and `entry_root` must be canonicalized before path resolution; doing
-/// this in one owner keeps config interpretation out of later module inventory and frontend paths.
+/// Canonical directory-project roots plus the one Stage 0 source-tree index built from them.
+pub(super) struct ProjectPathResolverSetup {
+    pub(super) resolver: ProjectPathResolver,
+    pub(super) source_tree_index: SourceTreeIndex,
+}
+
+/// Build only the resolver for callers that don't need the directory module inventory.
+#[cfg(test)]
 pub(super) fn build_project_path_resolver(
     config: &Config,
     builder_source_libraries: &SourceLibraryRegistry,
     source_file_kinds: &SourceFileKindRegistry,
     string_table: &mut StringTable,
 ) -> Result<ProjectPathResolver, CompilerMessages> {
+    build_project_path_resolver_with_index(
+        config,
+        builder_source_libraries,
+        source_file_kinds,
+        string_table,
+    )
+    .map(|setup| setup.resolver)
+}
+
+/// Build the canonical path resolver for a directory project.
+///
+/// WHY: both `project_root` and `entry_root` must be canonicalized before path resolution; doing
+/// this in one owner keeps config interpretation out of later module inventory and frontend paths.
+pub(super) fn build_project_path_resolver_with_index(
+    config: &Config,
+    builder_source_libraries: &SourceLibraryRegistry,
+    source_file_kinds: &SourceFileKindRegistry,
+    string_table: &mut StringTable,
+) -> Result<ProjectPathResolverSetup, CompilerMessages> {
     let roots = resolve_project_roots(config, string_table)?;
 
     let project_local_libraries =
@@ -58,12 +82,19 @@ pub(super) fn build_project_path_resolver(
     )?;
 
     let entry_root = roots.entry_root.clone();
+    let source_tree_index = SourceTreeIndex::discover(
+        entry_root.clone(),
+        &roots.project_root,
+        config,
+        string_table,
+    )?;
 
-    let resolver = ProjectPathResolver::new(
+    let resolver = ProjectPathResolver::new_with_module_roots(
         roots.project_root,
         entry_root.clone(),
         &merged_libraries,
         source_file_kinds,
+        source_tree_index.module_roots().clone(),
     )
     .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
@@ -71,7 +102,10 @@ pub(super) fn build_project_path_resolver(
 
     validate_project_structure_collisions(&entry_root, &merged_libraries, string_table)?;
 
-    Ok(resolver)
+    Ok(ProjectPathResolverSetup {
+        resolver,
+        source_tree_index,
+    })
 }
 
 /// Resolve the directory configured as the project entry root.

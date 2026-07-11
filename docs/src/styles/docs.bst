@@ -78,6 +78,74 @@ theme_head #= [$html:
     <style>[theme_css]</style>
 ]
 
+codebase_theme_css #= [$css:
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }
+]
+
+codebase_theme_head #= [$html:
+    [theme_head]
+    <style>[codebase_theme_css]</style>
+]
+
 section #= [$html:
     <section class="container">[$slot]</section>
 ]
@@ -172,14 +240,20 @@ header #= [$html:
     ]):[$slot]]
 ]
 
-styled_table #= [table, $html:
-    [$insert("style"):border-collapse: collapse; border: 1px solid; padding: 1em;]
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-        [$slot(1)]
-    </tr>
-    [$children([$html:<tr style="border-bottom: 1px dotted grey;">[$slot]</tr>]):
-        [$slot]
-    ]
+styled_table #= [$html:
+    <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
+        [$note: The first row is styled differently to indicate that it is a header row.]
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+            [$slot(1)]
+        </tr>
+
+        [$note: Each remaining row is styled with a dotted border to separate the rows visually.]
+        [$children([$html:<tr style="border-bottom: 1px dotted grey;">[$slot]</tr>]):
+            [$slot]
+        ]
+
+    </table>
 ]
 
 data #= [$html:

@@ -26,6 +26,13 @@ use crate::compiler_frontend::traits::syntax::{
 };
 use rustc_hash::FxHashMap;
 
+/// Boxed diagnostics for the connected conformance-target resolution family.
+///
+/// Target and trait lookup feed directly into the already boxed evidence
+/// validation boundary. Keeping the result family boxed avoids large local
+/// `Result` values without changing diagnostic construction or propagation.
+type TargetResolutionResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 #[derive(Clone)]
 pub(super) struct ConformanceTarget {
     pub(super) type_id: TypeId,
@@ -48,14 +55,15 @@ pub(super) struct ResolveConformanceTargetContext<'a> {
 pub(super) fn resolve_conformance_target(
     target: &ConformanceTargetSyntax,
     context: ResolveConformanceTargetContext<'_>,
-) -> Result<ConformanceTarget, CompilerDiagnostic> {
+) -> TargetResolutionResult<ConformanceTarget> {
     if target.kind == ConformanceTargetKind::SpecializedGenericInstance {
         return Err(CompilerDiagnostic::deferred_feature_reason(
             DeferredFeatureReason::NamedFeature {
                 feature: target.name,
             },
             target.location.clone(),
-        ));
+        )
+        .into());
     }
 
     if is_builtin_scalar_target(target.name, context.string_table) {
@@ -65,7 +73,8 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::BuiltinTarget,
             target.location.clone(),
             Vec::new(),
-        ));
+        )
+        .into());
     }
 
     if let Some(symbol_id) = context
@@ -80,7 +89,8 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::ExternalOpaqueTarget,
             target.location.clone(),
             Vec::new(),
-        ));
+        )
+        .into());
     }
 
     if context
@@ -94,14 +104,14 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::AliasTarget,
             target.location.clone(),
             Vec::new(),
-        ));
+        )
+        .into());
     }
 
     let Some(target_path) = context.visibility.visible_source_names.get(&target.name) else {
-        return Err(CompilerDiagnostic::unknown_type_name(
-            target.name,
-            target.location.clone(),
-        ));
+        return Err(
+            CompilerDiagnostic::unknown_type_name(target.name, target.location.clone()).into(),
+        );
     };
     let Some(type_id) = context.nominal_type_ids_by_path.get(target_path).copied() else {
         return Err(invalid_conformance(
@@ -110,7 +120,8 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::NonCanonicalTarget,
             target.location.clone(),
             Vec::new(),
-        ));
+        )
+        .into());
     };
 
     let Some(definition) = context.type_environment.get(type_id) else {
@@ -120,7 +131,8 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::NonCanonicalTarget,
             target.location.clone(),
             Vec::new(),
-        ));
+        )
+        .into());
     };
 
     match definition {
@@ -136,7 +148,8 @@ pub(super) fn resolve_conformance_target(
                     InvalidTraitConformanceReason::NonlocalSourceTarget,
                     target.location.clone(),
                     Vec::new(),
-                ));
+                )
+                .into());
             }
 
             Ok(ConformanceTarget {
@@ -160,7 +173,8 @@ pub(super) fn resolve_conformance_target(
                     InvalidTraitConformanceReason::NonlocalSourceTarget,
                     target.location.clone(),
                     Vec::new(),
-                ));
+                )
+                .into());
             }
 
             Ok(ConformanceTarget {
@@ -178,7 +192,8 @@ pub(super) fn resolve_conformance_target(
             InvalidTraitConformanceReason::NonCanonicalTarget,
             target.location.clone(),
             Vec::new(),
-        )),
+        )
+        .into()),
     }
 }
 
@@ -194,7 +209,7 @@ pub(super) fn resolve_trait_reference(
     visibility: &FileVisibility,
     trait_environment: &TraitEnvironment,
     string_table: &mut StringTable,
-) -> Result<TraitId, CompilerDiagnostic> {
+) -> TargetResolutionResult<TraitId> {
     if let Some(path) = visibility.visible_trait_names.get(&trait_ref.name)
         && let Some(id) = trait_environment.id_for_path(path)
     {
@@ -205,8 +220,5 @@ pub(super) fn resolve_trait_reference(
         return Ok(id);
     }
 
-    Err(CompilerDiagnostic::unknown_trait_name(
-        trait_ref.name,
-        trait_ref.location.clone(),
-    ))
+    Err(CompilerDiagnostic::unknown_trait_name(trait_ref.name, trait_ref.location.clone()).into())
 }

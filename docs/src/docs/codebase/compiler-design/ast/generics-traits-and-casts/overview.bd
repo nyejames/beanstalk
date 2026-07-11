@@ -1,0 +1,24 @@
+# Generics, traits and casts
+
+All evidence resolves before HIR.
+
+## Contract
+
+- Input: generic declarations, trait metadata, cast evidence and call sites
+- Output: concrete calls, resolved cast operations and trait evidence before HIR
+- Decides: generic inference, static bound checks, explicit cast target classification
+- Must not decide: HIR control flow, backend runtime dispatch
+- Invariant: HIR never carries unresolved generic calls or trait evidence for runtime dispatch
+
+## Main paths
+
+- `src/compiler_frontend/ast/generic_functions/`
+- `src/compiler_frontend/ast/generic_bounds.rs`
+- `src/compiler_frontend/traits/`
+- `src/compiler_frontend/builtins/casts/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/ast/generics-traits-and-casts/generics-traits-and-casts.bd`
+- `docs/src/docs/codebase/compiler-design/ast/environment-and-type-resolution/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/hir-generation/overview.bd`

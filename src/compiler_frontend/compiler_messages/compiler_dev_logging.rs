@@ -4,23 +4,32 @@
 //!       snapshot types for debugging compiler internals without affecting release builds.
 //! WHY: keeping developer instrumentation behind feature flags keeps normal builds deterministic,
 //!      quiet, and free of debug output overhead.
+//!
+//! The benchmark observation collector (timings + counters) is owned by `crate::timing`.
+//! This module re-exports the shared types and collection APIs under `timers` so both
+//! timer-only and `detailed_timers` call sites compile. Counter-specific logging
+//! (`log_benchmark_counter`) is gated by `benchmark_counters`; timer prose helpers
+//! (`timer_log!`, `benchmark_timer_log!`, `log_aggregated_duration`) stay gated by
+//! `detailed_timers`.
 
 #[cfg(feature = "detailed_timers")]
 use std::time::Duration;
 
-#[cfg(feature = "detailed_timers")]
-#[derive(Debug, Clone, Default)]
-pub(crate) struct BenchmarkObservationSnapshot {
-    pub(crate) timings: Vec<BenchmarkObservationMetric>,
-    pub(crate) counters: Vec<BenchmarkObservationMetric>,
-}
-
-#[cfg(feature = "detailed_timers")]
-#[derive(Debug, Clone)]
-pub(crate) struct BenchmarkObservationMetric {
-    pub(crate) name: String,
-    pub(crate) value: f64,
-}
+// Re-export the shared observation types and collection APIs from the central
+// timing module so existing imports from `compiler_dev_logging` keep working.
+// Gated by `timers` because the collection scope serves stage timings (available
+// under `timers`) and counters (available under `benchmark_counters`); both
+// in-process benchmark callers and test code import through this path.
+//
+// The types are re-exported for test code that references them via the
+// `compiler_dev_logging` path. They appear unused during `cargo check`
+// (which does not compile tests), so suppress the expected warning.
+#[cfg(feature = "timers")]
+#[allow(unused_imports)]
+pub(crate) use crate::timing::{
+    BenchmarkObservationMetric, BenchmarkObservationSnapshot, start_benchmark_collection,
+    stop_and_collect_benchmark_observations,
+};
 
 // TOKEN LOGGING MACROS
 #[macro_export]
@@ -108,129 +117,39 @@ pub fn log_benchmark_timing(metric_name: &str, duration: Duration) {
     }
 
     let millis = duration.as_secs_f64() * 1000.0;
-    if detailed_timer_output_enabled() {
-        saying::say!("BST_BENCH timing ", metric_name, "=", #millis, "ms");
-    }
-    benchmark_collector::record_timing(metric_name, millis);
+    crate::timing::emit_bench_timing_line(metric_name, duration);
+
+    // Delegate timing storage to the central timing collector.
+    crate::timing::record_timing(metric_name, millis);
 }
 
-/// Emit one stable, machine-readable benchmark counter line.
+/// Emit one stable, machine-readable benchmark counter observation.
 ///
-/// WHAT: prints and records `BST_BENCH counter <metric>=<value>` observations
-/// using the same collection scope as stage timings.
+/// WHAT: records `BST_BENCH counter <metric>=<value>` into the central collection
+///       scope and prints the stable line when `BST_COUNTERS` requests stdout.
 /// WHY: counters need a stable machine path for local benchmark history while
-/// human counter prose remains optional display text.
-#[cfg(feature = "detailed_timers")]
+///      human counter prose remains optional display text. Gated by
+///      `benchmark_counters` (independent of `detailed_timers`) so counter
+///      benchmark runs do not have to enable verbose timer prose.
+///
+/// Counter storage reuses the `timers` collector, so observations are only
+/// recorded when `timers` is also active. The stdout line is delegated to
+/// `timing::emit_bench_counter_line`, which honors the `BST_COUNTERS` mode
+/// and the in-process output-suppression flag.
+#[cfg(feature = "benchmark_counters")]
 pub fn log_benchmark_counter(metric_name: &str, value: f64) {
     if metric_name.trim().is_empty() || !value.is_finite() {
         return;
     }
 
-    if detailed_timer_output_enabled() {
-        saying::say!("BST_BENCH counter ", metric_name, "=", #value);
-    }
-    benchmark_collector::record_counter(metric_name, value);
+    crate::timing::emit_bench_counter_line(metric_name, value);
+    crate::timing::record_counter(metric_name, value);
 }
 
 #[cfg(feature = "detailed_timers")]
 pub fn detailed_timer_output_enabled() -> bool {
-    benchmark_collector::output_enabled()
+    crate::timing::output_enabled() && crate::timing::current_output_mode().emits_human_prose()
 }
-
-// -------------------------
-//  In-Memory Benchmark Collector
-// -------------------------
-
-/// Thread-safe in-memory collector for benchmark observations.
-///
-/// WHAT: captures stable benchmark metric values during an active collection scope
-/// so that in-process benchmark APIs can read timings and counters directly
-/// instead of parsing stdout.
-/// WHY: subprocess-free frontend benchmarks need programmatic access to the same
-/// metrics that CLI benchmarks extract from stable `BST_BENCH` lines.
-#[cfg(feature = "detailed_timers")]
-mod benchmark_collector {
-    use super::{BenchmarkObservationMetric, BenchmarkObservationSnapshot};
-    use std::sync::Mutex;
-
-    struct ActiveBenchmarkCollection {
-        timings: Vec<BenchmarkObservationMetric>,
-        counters: Vec<BenchmarkObservationMetric>,
-        suppress_output: bool,
-    }
-
-    static ACTIVE_COLLECTOR: Mutex<Option<ActiveBenchmarkCollection>> = Mutex::new(None);
-
-    /// Start a new collection scope, discarding any previous in-flight data.
-    pub fn start_collection(suppress_output: bool) {
-        if let Ok(mut guard) = ACTIVE_COLLECTOR.lock() {
-            *guard = Some(ActiveBenchmarkCollection {
-                timings: Vec::new(),
-                counters: Vec::new(),
-                suppress_output,
-            });
-        }
-    }
-
-    /// Record one timing if a collection scope is currently active.
-    pub fn record_timing(name: &str, millis: f64) {
-        if let Ok(mut guard) = ACTIVE_COLLECTOR.lock()
-            && let Some(collection) = guard.as_mut()
-        {
-            collection.timings.push(BenchmarkObservationMetric {
-                name: name.to_string(),
-                value: millis,
-            });
-        }
-    }
-
-    /// Record one counter if a collection scope is currently active.
-    pub fn record_counter(name: &str, value: f64) {
-        if let Ok(mut guard) = ACTIVE_COLLECTOR.lock()
-            && let Some(collection) = guard.as_mut()
-        {
-            collection.counters.push(BenchmarkObservationMetric {
-                name: name.to_string(),
-                value,
-            });
-        }
-    }
-
-    /// Whether detailed timer text should currently be printed.
-    pub fn output_enabled() -> bool {
-        match ACTIVE_COLLECTOR.lock() {
-            Ok(guard) => match guard.as_ref() {
-                Some(collection) => !collection.suppress_output,
-                None => true,
-            },
-            Err(_) => true,
-        }
-    }
-
-    /// Stop the current collection scope and return all captured observations.
-    ///
-    /// Returns an empty snapshot if no scope was active or if the lock was poisoned.
-    pub fn stop_and_collect() -> BenchmarkObservationSnapshot {
-        if let Ok(mut guard) = ACTIVE_COLLECTOR.lock() {
-            guard
-                .take()
-                .map_or_else(BenchmarkObservationSnapshot::default, |collection| {
-                    BenchmarkObservationSnapshot {
-                        timings: collection.timings,
-                        counters: collection.counters,
-                    }
-                })
-        } else {
-            BenchmarkObservationSnapshot::default()
-        }
-    }
-}
-
-#[cfg(feature = "detailed_timers")]
-pub use benchmark_collector::{
-    start_collection as start_benchmark_collection,
-    stop_and_collect as stop_and_collect_benchmark_observations,
-};
 
 // Headers Logging
 #[macro_export]

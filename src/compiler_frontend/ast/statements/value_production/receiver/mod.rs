@@ -75,7 +75,6 @@ pub(super) struct ValueIfParseInput<'a, 'b> {
 /// block and returns the resulting expression (or a diagnostic on failure).
 /// WHY: this is the only place where `if` is permitted in expression position;
 /// `create_expression` continues to reject it everywhere else.
-#[allow(clippy::result_large_err)]
 pub fn try_parse_value_block_at_receiver(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -103,8 +102,8 @@ pub fn try_parse_value_block_at_receiver(
     }
 
     match detect::classify_value_if_header(token_stream) {
-        detect::ValueIfHeaderKind::FullMatch => Some(full_match::parse_value_match_at_receiver(
-            full_match::ValueMatchParseInput {
+        detect::ValueIfHeaderKind::FullMatch => Some(
+            full_match::parse_value_match_at_receiver(full_match::ValueMatchParseInput {
                 token_stream,
                 context,
                 type_interner,
@@ -112,8 +111,9 @@ pub fn try_parse_value_block_at_receiver(
                 receiver_kind,
                 string_table,
                 location,
-            },
-        )),
+            })
+            .map_err(|diagnostic| *diagnostic),
+        ),
 
         detect::ValueIfHeaderKind::InlineSinglePredicate => {
             if let Some(result) = inline_match::try_parse_inline_single_predicate_value_match(
@@ -128,7 +128,22 @@ pub fn try_parse_value_block_at_receiver(
                 return Some(result);
             }
 
-            Some(parse_bool_value_if_after_condition(
+            Some(
+                parse_bool_value_if_after_condition(
+                    token_stream,
+                    context,
+                    type_interner,
+                    expected_result_type_ids,
+                    receiver_kind,
+                    string_table,
+                    location,
+                )
+                .map_err(|diagnostic| *diagnostic),
+            )
+        }
+
+        detect::ValueIfHeaderKind::BoolCondition => Some(
+            parse_bool_value_if_after_condition(
                 token_stream,
                 context,
                 type_interner,
@@ -136,20 +151,19 @@ pub fn try_parse_value_block_at_receiver(
                 receiver_kind,
                 string_table,
                 location,
-            ))
-        }
-
-        detect::ValueIfHeaderKind::BoolCondition => Some(parse_bool_value_if_after_condition(
-            token_stream,
-            context,
-            type_interner,
-            expected_result_type_ids,
-            receiver_kind,
-            string_table,
-            location,
-        )),
+            )
+            .map_err(|diagnostic| *diagnostic),
+        ),
     }
 }
+
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: the private Bool value-if parser returns a boxed diagnostic through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when
+/// stored directly in a `Result` variant. Already-boxed sibling parsers flow through
+/// directly, then the public speculative boundary unboxes once for its existing API.
+type ReceiverResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 /// Parses a Bool condition value-if after the `if` keyword has been consumed.
 ///
@@ -163,7 +177,7 @@ fn parse_bool_value_if_after_condition(
     receiver_kind: ValueReceiverKind,
     string_table: &mut StringTable,
     location: SourceLocation,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> ReceiverResult<Expression> {
     let mut condition_type = ExpectedType::Infer;
     let condition_context = context.new_child_control_flow(ContextKind::Condition, string_table);
     let mut cast_target_context = CastTargetContext::None;
@@ -177,15 +191,17 @@ fn parse_bool_value_if_after_condition(
         string_table,
     });
     let condition = create_expression_until(input, &[TokenKind::Then, TokenKind::Colon])
-        .map_err(|error| -> CompilerDiagnostic { error.into() })?;
+        .map_err(|error| Box::new(error.into()))?;
 
     ensure_if_statement_condition(&condition, type_interner.environment())?;
 
     if token_stream.current_token_kind() == &TokenKind::Then {
         if !same_logical_line(&location, &token_stream.current_location()) {
-            return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                InvalidControlFlowStatementReason::InlineValueIfMultiline,
-                token_stream.current_location(),
+            return Err(Box::new(
+                CompilerDiagnostic::invalid_control_flow_statement(
+                    InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                    token_stream.current_location(),
+                ),
             ));
         }
 
@@ -214,8 +230,10 @@ fn parse_bool_value_if_after_condition(
         });
     }
 
-    Err(CompilerDiagnostic::invalid_control_flow_statement(
-        InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-        token_stream.current_location(),
+    Err(Box::new(
+        CompilerDiagnostic::invalid_control_flow_statement(
+            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+            token_stream.current_location(),
+        ),
     ))
 }

@@ -1,0 +1,21 @@
+# Stage 6: Borrow validation
+
+Immutable HIR input and side-table facts.
+
+## Contract
+
+- Input: validated HIR and the paired `TypeEnvironment`
+- Output: read-only borrow facts keyed by HIR identity
+- Decides: exclusivity, alias safety, inferred-move safety, advisory drop sites
+- Must not decide: HIR shape, backend allocation, final runtime ownership
+- Invariant: borrow validation reads HIR and writes side tables: it doesn't mutate HIR
+
+## Main paths
+
+- `src/compiler_frontend/analysis/borrow_checker/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/stages/borrow-validation/borrow-validation.bd`
+- `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/hir-generation/overview.bd`

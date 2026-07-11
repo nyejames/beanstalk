@@ -23,22 +23,32 @@ use super::diagnostics::reject_deferred_pattern_lead_token;
 use super::types::ParsedChoicePattern;
 use super::types::ParsedChoicePayloadCapture;
 
+/// Boxed diagnostic result for all choice-pattern parsing functions.
+///
+/// WHAT: every function in this module returns errors as `Box<CompilerDiagnostic>`.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err`;
+/// boxing the error variant keeps the success path cheap and matches the
+/// already-boxed `MatchHeaderResult` convention used by the surrounding
+/// match-header parser.
+type ChoicePatternResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Resolve a choice variant pattern to its deterministic variant index.
 ///
 /// WHAT: accepts bare (`Ready`) or qualified (`Status::Ready`) variant names and
 /// resolves them against the scrutinee choice metadata.
 /// WHY: later lowering uses the stable variant index in `HirPattern::ChoiceVariant`,
 /// while payload captures are materialized separately at arm entry.
-#[allow(clippy::result_large_err)]
 pub fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     choice_nominal_path: &InternedPath,
     variants: &[ChoiceVariant],
     string_table: &StringTable,
-) -> Result<ParsedChoicePattern, CompilerDiagnostic> {
+) -> ChoicePatternResult<ParsedChoicePattern> {
     // Choice patterns support exact variant names plus constructor-like payload captures.
-    reject_deferred_pattern_lead_token(token_stream)?;
+    if let Some(diagnostic) = reject_deferred_pattern_lead_token(token_stream) {
+        return Err(Box::new(diagnostic));
+    }
 
     let choice_name_display = choice_display_name(choice_nominal_path, string_table);
     let (variant_name, variant_location) = parse_variant_name(
@@ -50,10 +60,10 @@ pub fn parse_choice_variant_pattern(
     )?;
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return Err(deferred_feature_reason_diagnostic(
+        return Err(Box::new(deferred_feature_reason_diagnostic(
             DeferredFeatureReason::CaptureTaggedPattern,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     let variant_index = resolve_variant_to_tag(
@@ -84,22 +94,21 @@ pub fn parse_choice_variant_pattern(
 /// captures match the variant's payload metadata exactly.
 /// WHY: separating capture parsing from name resolution keeps each function focused
 /// and makes error messages specific to the payload layer.
-#[allow(clippy::result_large_err)]
 fn parse_choice_pattern_captures(
     token_stream: &mut FileTokens,
     variant: &ChoiceVariant,
     _choice_name_display: &str,
     string_table: &StringTable,
-) -> Result<Vec<ParsedChoicePayloadCapture>, CompilerDiagnostic> {
+) -> ChoicePatternResult<Vec<ParsedChoicePayloadCapture>> {
     match &variant.payload {
         ChoiceVariantPayload::Unit => {
             if token_stream.current_token_kind() == &TokenKind::OpenParenthesis {
-                return Err(CompilerDiagnostic::invalid_match_pattern(
+                return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                     InvalidMatchPatternReason::UnitVariantHasPayload,
                     Some(variant.id),
                     None,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             Ok(Vec::new())
@@ -107,12 +116,12 @@ fn parse_choice_pattern_captures(
 
         ChoiceVariantPayload::Record { fields } => {
             if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
-                return Err(CompilerDiagnostic::invalid_match_pattern(
+                return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                     InvalidMatchPatternReason::PayloadVariantNeedsBindings,
                     Some(variant.id),
                     None,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             token_stream.advance();
@@ -132,23 +141,23 @@ fn parse_choice_pattern_captures(
 
                 // Wildcards are not yet supported in choice payload position.
                 if token_stream.current_token_kind() == &TokenKind::Wildcard {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::WildcardNotSupported,
                         None,
                         None,
                         capture_location,
-                    ));
+                    )));
                 }
 
                 let field_name = match token_stream.current_token_kind() {
                     TokenKind::Symbol(name) => *name,
                     _ => {
-                        return Err(CompilerDiagnostic::invalid_match_pattern(
+                        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                             InvalidMatchPatternReason::CaptureBindingMustBeFieldName,
                             None,
                             None,
                             capture_location,
-                        ));
+                        )));
                     }
                 };
                 token_stream.advance();
@@ -171,62 +180,62 @@ fn parse_choice_pattern_captures(
                         | TokenKind::Eof
                         | TokenKind::CloseParenthesis
                         | TokenKind::Comma => {
-                            return Err(CompilerDiagnostic::invalid_match_pattern(
+                            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                                 InvalidMatchPatternReason::ExpectedLocalBindingAfterAs,
                                 None,
                                 None,
                                 binding_location,
-                            ));
+                            )));
                         }
                         _ => {
-                            return Err(CompilerDiagnostic::invalid_match_pattern(
+                            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                                 InvalidMatchPatternReason::AliasMustBeLocalBinding,
                                 None,
                                 None,
                                 binding_location,
-                            ));
+                            )));
                         }
                     };
                 }
 
                 // Reject named assignment: `Err(message = text) =>`
                 if token_stream.current_token_kind() == &TokenKind::Assign {
-                    return Err(deferred_feature_reason_diagnostic(
+                    return Err(Box::new(deferred_feature_reason_diagnostic(
                         DeferredFeatureReason::NamedPayloadPatternAssignment,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 // Check duplicate capture binding name (uses the local alias when present).
                 if seen_names.contains_key(&binding_name) {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::DuplicateCaptureBinding,
                         Some(variant.id),
                         None,
                         binding_location,
-                    ));
+                    )));
                 }
                 seen_names.insert(binding_name, binding_location.clone());
 
                 // Validate capture position and name against declaration metadata.
                 let field_index = captures.len();
                 let Some(field_decl) = fields.get(field_index) else {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::TooManyCaptureBindings,
                         Some(variant.id),
                         None,
                         capture_location,
-                    ));
+                    )));
                 };
 
                 let expected_field_name = choice_payload_field_name(field_decl, string_table)?;
                 if field_name != expected_field_name {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::CaptureBindingNameMismatch,
                         Some(variant.id),
                         None,
                         capture_location,
-                    ));
+                    )));
                 }
 
                 captures.push(ParsedChoicePayloadCapture {
@@ -250,29 +259,29 @@ fn parse_choice_pattern_captures(
                         break;
                     }
                     TokenKind::OpenParenthesis => {
-                        return Err(deferred_feature_reason_diagnostic(
+                        return Err(Box::new(deferred_feature_reason_diagnostic(
                             DeferredFeatureReason::NestedPayloadPattern,
                             token_stream.current_location(),
-                        ));
+                        )));
                     }
                     _ => {
-                        return Err(CompilerDiagnostic::expected_token(
+                        return Err(Box::new(CompilerDiagnostic::expected_token(
                             TokenKind::Comma,
                             Some(token_stream.current_token_kind().clone()),
                             token_stream.current_location(),
-                        ));
+                        )));
                     }
                 }
             }
 
             // Check for too few captures.
             if captures.len() != fields.len() {
-                return Err(CompilerDiagnostic::invalid_match_pattern(
+                return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                     InvalidMatchPatternReason::TooFewCaptureBindings,
                     Some(variant.id),
                     None,
                     variant.location.clone(),
-                ));
+                )));
             }
 
             Ok(captures)
@@ -289,17 +298,18 @@ fn parse_choice_pattern_captures(
 fn choice_payload_field_name(
     field: &Declaration,
     string_table: &StringTable,
-) -> Result<StringId, CompilerDiagnostic> {
+) -> ChoicePatternResult<StringId> {
     field.id.name().ok_or_else(|| {
-        CompilerError::new(
+        let missing_field_name_error = CompilerError::new(
             format!(
                 "Choice payload field '{}' has no leaf name during match-pattern parsing",
                 field.id.to_string(string_table)
             ),
             field.value.location.clone(),
             ErrorType::Compiler,
-        )
-        .into()
+        );
+
+        Box::new(missing_field_name_error.into())
     })
 }
 
@@ -307,14 +317,13 @@ fn choice_payload_field_name(
 ///
 /// WHY: separating token-level parsing from tag resolution keeps each function focused
 /// and makes error messages specific to the syntactic layer they diagnose.
-#[allow(clippy::result_large_err)]
 fn parse_variant_name(
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     choice_nominal_path: &InternedPath,
     _choice_name_display: &str,
     _string_table: &StringTable,
-) -> Result<(StringId, SourceLocation), CompilerDiagnostic> {
+) -> ChoicePatternResult<(StringId, SourceLocation)> {
     let leading_token = token_stream.current_token_kind().to_owned();
 
     match leading_token {
@@ -327,12 +336,12 @@ fn parse_variant_name(
                     && first_name != expected_choice_name
                     && !qualifier_resolves_to_choice(match_context, first_name, choice_nominal_path)
                 {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::QualifierDoesNotMatchScrutinee,
                         None,
                         choice_nominal_path.name(),
                         first_location,
-                    ));
+                    )));
                 }
 
                 token_stream.advance();
@@ -344,12 +353,12 @@ fn parse_variant_name(
                         token_stream.advance();
                         Ok((qualified_variant_name, qualified_location))
                     }
-                    _ => Err(CompilerDiagnostic::invalid_match_pattern(
+                    _ => Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::ExpectedVariantNameAfterQualifier,
                         None,
                         None,
                         token_stream.current_location(),
-                    )),
+                    ))),
                 }
             } else {
                 Ok((first_name, first_location))
@@ -361,19 +370,19 @@ fn parse_variant_name(
         | TokenKind::BoolLiteral(_)
         | TokenKind::CharLiteral(_)
         | TokenKind::StringSliceLiteral(_)
-        | TokenKind::Negative => Err(CompilerDiagnostic::invalid_match_pattern(
+        | TokenKind::Negative => Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::MustUseVariantNamesNotLiterals,
             None,
             None,
             token_stream.current_location(),
-        )),
+        ))),
 
-        _ => Err(CompilerDiagnostic::invalid_match_pattern(
+        _ => Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::MustStartWithVariantName,
             None,
             None,
             token_stream.current_location(),
-        )),
+        ))),
     }
 }
 
@@ -397,7 +406,6 @@ fn qualifier_resolves_to_choice(
 ///
 /// WHY: separating semantic resolution from token parsing produces clearer control flow
 /// and keeps the error-construction logic for unknown variants in one place.
-#[allow(clippy::result_large_err)]
 fn resolve_variant_to_tag(
     variants: &[ChoiceVariant],
     variant_name: StringId,
@@ -405,17 +413,17 @@ fn resolve_variant_to_tag(
     variant_location: &SourceLocation,
     _string_table: &StringTable,
     choice_nominal_path: &InternedPath,
-) -> Result<usize, CompilerDiagnostic> {
+) -> ChoicePatternResult<usize> {
     let Some(variant_index) = variants
         .iter()
         .position(|variant| variant.id == variant_name)
     else {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::UnknownVariant,
             Some(variant_name),
             choice_nominal_path.name(),
             variant_location.clone(),
-        ));
+        )));
     };
 
     Ok(variant_index)

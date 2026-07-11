@@ -71,13 +71,16 @@ pub(crate) fn parse_curly_literal_expression(
         ExpectedType::Infer => ExpectedCurlyLiteralContext::Infer,
     };
 
-    expression.push(ExpressionRpnItem::Operand(new_curly_literal(
-        token_stream,
-        curly_context,
-        context,
-        type_interner,
-        value_mode,
-        string_table,
-    )?));
+    expression.push(ExpressionRpnItem::Operand(
+        new_curly_literal(
+            token_stream,
+            curly_context,
+            context,
+            type_interner,
+            value_mode,
+            string_table,
+        )
+        .map_err(ExpressionParseError::Diagnostic)?,
+    ));
     Ok(())
 }

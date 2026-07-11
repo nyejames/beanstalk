@@ -54,6 +54,7 @@ pub fn evaluate_expression(
 
         let only_expression = fold_compile_time_expression(
             expression,
+            &context.template_ir_registry,
             string_table,
             context.kind.is_constant_context(),
         )?;

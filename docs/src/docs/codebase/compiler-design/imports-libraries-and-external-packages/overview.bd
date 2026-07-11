@@ -1,0 +1,23 @@
+# Imports, libraries and external packages
+
+Header-built visibility, facade boundaries and stable external IDs.
+
+## Contract
+
+- Input: raw import syntax, source libraries, facades and builder-provided external packages
+- Output: a file-local `ScopeContext` and stable external IDs for HIR
+- Decides: import resolution, alias rules, facade API surfaces, external package identity
+- Must not decide: expression semantics, backend runtime names, target feature support
+- Invariant: no stage after header import preparation rebuilds visibility from raw source syntax
+
+## Main paths
+
+- `src/compiler_frontend/headers/`
+- `src/compiler_frontend/import_resolution/`
+- `src/compiler_frontend/external_packages/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/imports-libraries-and-external-packages.bd`
+- `docs/src/docs/codebase/compiler-design/stages/header-parsing/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/dependency-sorting/overview.bd`

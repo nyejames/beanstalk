@@ -7,11 +7,11 @@
 //! WHY:
 //! - HTML-specific safety heuristics are output-policy concerns owned by the HTML project builder.
 
+use crate::compiler_frontend::ast::templates::formatter_contract::FormatterInput;
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
-use crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;

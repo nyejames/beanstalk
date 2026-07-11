@@ -40,19 +40,19 @@ pub(crate) fn invalid_config_message(
             "Config files may only import from core or builder-provided libraries.".to_owned()
         }
         InvalidConfigReason::FunctionUnsupported => {
-            "`#config.bst` does not support user-defined functions. Use known setting declarations plus import/type support declarations only.".to_owned()
+            "`config.bst` does not support user-defined functions. Use known setting declarations plus import/type support declarations only.".to_owned()
         }
         InvalidConfigReason::TraitDeclarationUnsupported => {
-            "`#config.bst` does not support trait declarations. Use ordinary source files for trait contracts.".to_owned()
+            "`config.bst` does not support trait declarations. Use ordinary source files for trait contracts.".to_owned()
         }
         InvalidConfigReason::TraitConformanceUnsupported => {
-            "`#config.bst` does not support trait conformance declarations. Use ordinary source files for reusable trait evidence.".to_owned()
+            "`config.bst` does not support trait conformance declarations. Use ordinary source files for reusable trait evidence.".to_owned()
         }
         InvalidConfigReason::TraitIncompatibilityUnsupported => {
-            "`#config.bst` does not support trait incompatibility declarations. Use ordinary source files for trait metadata.".to_owned()
+            "`config.bst` does not support trait incompatibility declarations. Use ordinary source files for trait metadata.".to_owned()
         }
         InvalidConfigReason::MutableBindingUnsupported => {
-            "`#config.bst` settings must be immutable constant declarations. Use `name #= value`.".to_owned()
+            "`config.bst` settings must be immutable constant declarations. Use `name #= value`.".to_owned()
         }
         InvalidConfigReason::PlainBindingUnsupported => {
             format!(
@@ -60,10 +60,10 @@ pub(crate) fn invalid_config_message(
             )
         }
         InvalidConfigReason::UnsupportedStatement => {
-            "`#config.bst` supports known setting declarations plus import/type support declarations only.".to_owned()
+            "`config.bst` supports known setting declarations plus import/type support declarations only.".to_owned()
         }
         InvalidConfigReason::StandaloneTemplateUnsupported => {
-            "`#config.bst` does not support standalone templates or page fragments. Assign a folded template to a known setting instead.".to_owned()
+            "`config.bst` does not support standalone templates or page fragments. Assign a folded template to a known setting instead.".to_owned()
         }
         InvalidConfigReason::MissingValue => {
             format!("Missing value for config constant '{key_label}'.")
@@ -95,7 +95,7 @@ pub(crate) fn invalid_config_message(
             format!("Config setting '#{key_label}' cannot be empty.")
         }
         InvalidConfigReason::UnknownKey { key } => format!(
-            "Unknown config key '{}'. `#config.bst` currently accepts only known project config keys. Helper declarations are not supported yet.",
+            "Unknown config key '{}'. `config.bst` currently accepts only known project config keys. Helper declarations are not supported yet.",
             string_table.resolve(*key)
         ),
         InvalidConfigReason::InvalidConfigValueShape { expected } => format!(
@@ -339,9 +339,11 @@ pub(crate) fn invalid_namespace_default_name_message(
 ) -> String {
     let path_text = path.to_portable_string(string_table);
     let stem = path.name().map(|n| string_table.resolve(n)).unwrap_or("");
+    // Ensure the rendered example includes the @ prefix that import paths require.
+    let at_prefix = if path_text.starts_with('@') { "" } else { "@" };
     format!(
         "Cannot derive an import namespace name from `{stem}`.\n\
-         Use an explicit alias, for example `import {path_text} as my_name`.",
+         Use an explicit alias, for example `import {at_prefix}{path_text} as my_name`.",
     )
 }
 
@@ -462,8 +464,10 @@ pub(crate) fn import_record_used_as_value_message(
 ) -> String {
     let name = string_table.resolve(record_name);
     format!(
-        "Import records are field-access-only records and cannot be used as values.\n\
-         Access a member instead, for example `{name}.member` or `{name}.Type` in type position.",
+        "`{name}` is an import namespace, not a value.\n\
+         Use `{name}.member` for imported values or `{name}.Type` in type position.\n\
+         For Beandown and Markdown content files, the generated string is always `{name}.content`.\n\
+         Alternative: import @path {{ content as {name} }}",
     )
 }
 
@@ -534,7 +538,7 @@ pub(crate) fn invalid_import_clause_message(reason: InvalidImportClauseReason) -
             "Expected a path after the 'import' keyword, found something else."
         }
         InvalidImportClauseReason::MissingAlias => {
-            "Expected alias name after `as` in grouped import entry."
+            "Expected an alias after `as`.\nWrite `import @path as local_name` or `import @path { symbol as local_name }`."
         }
         InvalidImportClauseReason::ExpectedAliasName => "Expected alias name after `as`.",
         InvalidImportClauseReason::AliasNotValidIdentifier => {
@@ -542,7 +546,7 @@ pub(crate) fn invalid_import_clause_message(reason: InvalidImportClauseReason) -
         }
         InvalidImportClauseReason::AliasIsKeyword => "Import alias cannot be a reserved keyword.",
         InvalidImportClauseReason::GroupedWithTrailingAlias => {
-            "Grouped imports cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming."
+            "Grouped imports cannot use one alias for the whole group.\nAlias individual entries instead: `import @path { symbol as local_name }`."
         }
         InvalidImportClauseReason::PerEntryAndTrailingAlias => {
             "Cannot use both per-entry aliases and a group-level alias."
@@ -553,5 +557,30 @@ pub(crate) fn invalid_import_clause_message(reason: InvalidImportClauseReason) -
         InvalidImportClauseReason::DoubleAliasInGroupedEntry => {
             "Grouped import entries can only have one alias."
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import_record_used_as_value_message_contains_record_name_and_content_hint() {
+        let mut string_table = StringTable::new();
+        let record_name = string_table.intern("intro");
+        let message = import_record_used_as_value_message(record_name, &string_table);
+
+        assert!(
+            message.contains("`intro`"),
+            "message should contain the record name: {message}"
+        );
+        assert!(
+            message.contains("intro.content"),
+            "message should mention `intro.content`: {message}"
+        );
+        assert!(
+            message.contains("content as intro"),
+            "message should mention grouped `content as ...` import: {message}"
+        );
     }
 }

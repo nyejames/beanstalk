@@ -1632,6 +1632,7 @@ impl CompilerDiagnostic {
         reason: crate::compiler_frontend::compiler_messages::InvalidFieldAccessReason,
         field_name: Option<StringId>,
         receiver_type: Option<crate::compiler_frontend::datatypes::ids::TypeId>,
+        known_fields: Vec<StringId>,
         location: SourceLocation,
     ) -> Self {
         Self::new(
@@ -1641,6 +1642,7 @@ impl CompilerDiagnostic {
                 reason,
                 field_name,
                 receiver_type,
+                known_fields,
             },
         )
     }

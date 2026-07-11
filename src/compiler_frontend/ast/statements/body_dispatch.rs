@@ -40,6 +40,12 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings;
 
+type StatementDispatchResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
+fn statement_dispatch_error(diagnostic: CompilerDiagnostic) -> Box<CompilerDiagnostic> {
+    Box::new(diagnostic)
+}
+
 /// Produce a diagnostic for a deferred block keyword (`checked`, `async`).
 ///
 /// If the keyword is followed by an assignment operator, treats it as an attempt to use the
@@ -62,14 +68,13 @@ fn deferred_block_error(
     CompilerDiagnostic::deferred_feature_reason(reason, location)
 }
 
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_function_body_statements(
     token_stream: &mut FileTokens,
     mut context: ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+) -> StatementDispatchResult<Vec<AstNode>> {
     let mut body_nodes: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
@@ -90,9 +95,11 @@ pub(crate) fn parse_function_body_statements(
             if token_stream.current_token_kind() != &TokenKind::Else
                 && current_line_contains_top_level_fat_arrow(token_stream)
             {
-                return Err(CompilerDiagnostic::invalid_match_arm(
-                    InvalidMatchArmReason::ArmMustStartNewLine,
-                    token_stream.current_location(),
+                return Err(statement_dispatch_error(
+                    CompilerDiagnostic::invalid_match_arm(
+                        InvalidMatchArmReason::ArmMustStartNewLine,
+                        token_stream.current_location(),
+                    ),
                 ));
             }
         }
@@ -131,21 +138,21 @@ pub(crate) fn parse_function_body_statements(
             )?),
 
             TokenKind::Checked => {
-                return Err(deferred_block_error(
+                return Err(statement_dispatch_error(deferred_block_error(
                     token_stream,
                     &mut *string_table,
                     "checked",
                     DeferredFeatureReason::CheckedBlock,
-                ));
+                )));
             }
 
             TokenKind::Async => {
-                return Err(deferred_block_error(
+                return Err(statement_dispatch_error(deferred_block_error(
                     token_stream,
                     &mut *string_table,
                     "async",
                     DeferredFeatureReason::AsyncBlock,
-                ));
+                )));
             }
 
             // Control flow
@@ -177,9 +184,11 @@ pub(crate) fn parse_function_body_statements(
                 if context.kind == ContextKind::Branch || context.kind == ContextKind::MatchArm {
                     break;
                 } else {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::ElseOutsideIfOrMatch,
-                        token_stream.current_location(),
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::ElseOutsideIfOrMatch,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
             }
@@ -197,7 +206,8 @@ pub(crate) fn parse_function_body_statements(
                     &context,
                     type_interner,
                     string_table,
-                )?;
+                )
+                .map_err(CompilerDiagnostic::from)?;
             }
 
             TokenKind::Return | TokenKind::ReturnBang => {
@@ -212,9 +222,11 @@ pub(crate) fn parse_function_body_statements(
 
             TokenKind::Break => {
                 if !context.is_inside_loop() {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::BreakOutsideLoop,
-                        token_stream.current_location(),
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::BreakOutsideLoop,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
 
@@ -228,9 +240,11 @@ pub(crate) fn parse_function_body_statements(
 
             TokenKind::Continue => {
                 if !context.is_inside_loop() {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::ContinueOutsideLoop,
-                        token_stream.current_location(),
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::ContinueOutsideLoop,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
 
@@ -259,9 +273,8 @@ pub(crate) fn parse_function_body_statements(
                         InvalidResultHandlingReason::ThenWithNoActiveValueTarget
                     };
 
-                    return Err(CompilerDiagnostic::invalid_result_handling(
-                        reason,
-                        then_location,
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_result_handling(reason, then_location),
                     ));
                 };
 
@@ -269,9 +282,11 @@ pub(crate) fn parse_function_body_statements(
                     token_stream.current_token_kind(),
                     TokenKind::Newline | TokenKind::End | TokenKind::Eof
                 ) {
-                    return Err(CompilerDiagnostic::invalid_result_handling(
-                        InvalidResultHandlingReason::ThenRequiresValues,
-                        then_location,
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_result_handling(
+                            InvalidResultHandlingReason::ThenRequiresValues,
+                            then_location,
+                        ),
                     ));
                 }
 
@@ -279,9 +294,11 @@ pub(crate) fn parse_function_body_statements(
                     && active_target.receiver_kind != ValueReceiverKind::Declaration
                     && active_target.expected_arity.is_none()
                 {
-                    return Err(CompilerDiagnostic::invalid_result_handling(
-                        InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
-                        then_location,
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_result_handling(
+                            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+                            then_location,
+                        ),
                     ));
                 }
 
@@ -292,7 +309,8 @@ pub(crate) fn parse_function_body_statements(
                     target: active_target,
                     label: "then fallback values",
                     string_table,
-                })?;
+                })
+                .map_err(CompilerDiagnostic::from)?;
 
                 body_nodes.push(AstNode {
                     kind: NodeKind::ThenValue(ProducedValues {
@@ -307,17 +325,17 @@ pub(crate) fn parse_function_body_statements(
             // Scope terminators
             TokenKind::End => match context.kind {
                 ContextKind::Expression => {
-                    return Err(unexpected_scope_close(
+                    return Err(statement_dispatch_error(unexpected_scope_close(
                         UnexpectedScopeCloseContext::Expression,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 ContextKind::Template => {
-                    return Err(unexpected_scope_close(
+                    return Err(statement_dispatch_error(unexpected_scope_close(
                         UnexpectedScopeCloseContext::Template,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 ContextKind::MatchArm => break,
@@ -334,9 +352,11 @@ pub(crate) fn parse_function_body_statements(
             // push the evaluated string directly to the runtime fragment list.
             TokenKind::TemplateHead => {
                 if context.kind != ContextKind::Module {
-                    return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                        InvalidControlFlowStatementReason::TemplateInsideFunctionBody,
-                        token_stream.current_location(),
+                    return Err(statement_dispatch_error(
+                        CompilerDiagnostic::invalid_control_flow_statement(
+                            InvalidControlFlowStatementReason::TemplateInsideFunctionBody,
+                            token_stream.current_location(),
+                        ),
                     ));
                 }
 
@@ -389,14 +409,14 @@ pub(crate) fn parse_function_body_statements(
                 if let Some(diagnostic) =
                     check_statement_common_mistake(token_stream.current_token_kind(), token_stream)
                 {
-                    return Err(diagnostic);
+                    return Err(statement_dispatch_error(diagnostic));
                 }
 
-                return Err(unexpected_statement_token(
+                return Err(statement_dispatch_error(unexpected_statement_token(
                     token_stream.current_token_kind(),
                     token_stream.current_location(),
                     string_table,
-                ));
+                )));
             }
         }
     }

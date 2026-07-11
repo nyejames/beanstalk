@@ -371,14 +371,13 @@ impl AstHeaderCounterSnapshot {
 // WHAT: public(crate) entrypoint for function/start-function body parsing.
 // WHY: callers should import one obvious `ast`-root function while detailed statement parsing
 // lives in focused helper modules.
-#[allow(clippy::result_large_err)]
 pub(crate) fn function_body_to_ast(
     token_stream: &mut FileTokens,
     context: ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+) -> Result<Vec<AstNode>, Box<CompilerDiagnostic>> {
     parse_function_body_statements(token_stream, context, type_interner, warnings, string_table)
 }
 

@@ -1,0 +1,185 @@
+
+## Design contract
+
+Beanstalk ownership is an optimisation state layered over GC-safe source
+semantics. It isn't a separate source type system.
+
+The compiler may transfer destruction responsibility only where static
+analysis proves that doing so can't invalidate a later source use. If that
+proof is unavailable, the value remains GC-managed.
+
+## Ownership is an optimisation state
+
+- Ownership metadata is separate from semantic `TypeId`.
+- Shared/mutable parameter syntax doesn't create owned/borrowed source types.
+- Backend ownership eligibility isn't required for correctness.
+- GC fallback is always legal.
+- Ownership-aware and GC paths must preserve identical observable behaviour.
+
+## Inferred transfer
+
+Assignments and calls can be consumption points. The compiler chooses borrow
+or consumption. There is no move keyword. Consumption invalidates source
+ownership state. Aliases can't remain usable after a possible transfer. A
+callee that receives ownership assumes eventual release responsibility.
+Responsibility may be discharged by release or a further proven transfer.
+
+## Last use and consumption points
+
+The conceptual question is: is this value required again on any relevant
+control-flow path after this operation?
+
+- No later use → transfer may occur.
+- Later use → operation borrows.
+- Path-dependent outcome → analysis must conservatively preserve safety.
+- Last use is sufficient for transfer, not necessarily the only future
+  optimisation basis.
+- The model doesn't expose exact lifetimes.
+
+## Single ownership transfer
+
+- Ownership transfers at most once along a control-flow path.
+- A borrowed value is never released by the borrower.
+- An owned value must reach a valid release or transfer point.
+- A later source use after possible transfer is invalid.
+- Joins conservatively account for paths that may own.
+
+## Unified ownership ABI
+
+Ownership-aware lowering uses one calling convention rather than separate
+source-visible borrowed and owned function variants.
+
+Heap-managed or handle-based values that participate in ownership lowering
+carry ownership metadata with the runtime value. Scalar values may continue to
+use target-native representations.
+
+ABI behaviour:
+
+- Borrowed metadata → callee must not destroy the value.
+- Owned metadata → callee receives release responsibility.
+- Callee must release or safely transfer that responsibility before it ends.
+- Caller must not use a value again after a path that may have transferred
+  ownership.
+- Source function signatures don't distinguish borrowed and owned variants.
+- Backend specialisation may remove redundant checks without changing the
+  semantic ABI.
+
+The unified ABI keeps dispatch static without generating separate borrowed and
+owned function families.
+
+It also limits ownership-driven monomorphisation and binary-size growth,
+especially for Wasm, while still allowing static specialisation to remove
+redundant ownership checks.
+
+## Borrowed and owned runtime states
+
+[codeblock, $code("text"):
+    borrowed
+        The callee may read or mutate only according to the source access contract,
+        but it must not destroy the value.
+
+    owned
+        The callee has destruction responsibility and must release or safely
+        transfer it before that responsibility ends.
+]
+
+The runtime ownership bit chooses between already-safe behaviours. It never
+turns an invalid source program into a valid one.
+
+## Conditional destruction
+
+`drop_if_owned` is inserted at possible destruction points. It checks ownership
+metadata and releases only when responsibility is owned. It's a no-op for
+borrowed state. Under pure GC it can lower to no-op. It can be eliminated when
+ownership effect is statically known. It doesn't belong in source syntax.
+Different backends may represent it differently while preserving behaviour.
+
+## Control-flow exits
+
+Possible destruction points include:
+
+- normal region or scope exits.
+- function returns.
+- error returns.
+- loop `break` and other reachable loop-exit paths.
+- branch edges that leave an owning region.
+- return values that transfer responsibility out.
+
+A non-exiting loop needs no exit destruction point. A loop that can exit must
+account for ownership on each reachable break, return, error-return or
+region-exit path.
+
+A control-flow join determines whether a later exit may own. The join itself is
+not a destruction point.
+
+Deterministic release is enabled where analysis supports it. GC fallback is
+used where it doesn't.
+
+## Aggregates and stored values
+
+Collections, maps, structs, choices, strings and templates may own stored
+heap values. Insertion follows ordinary borrow/copy/transfer rules. Explicit
+copy is required for independent duplication. Removal may transfer ownership
+out. Aggregate destruction must recursively respect ownership metadata or GC
+behaviour. Borrowed child values can't be destroyed through an aggregate that
+doesn't own them.
+
+## Static specialisation
+
+Accepted effect categories:
+
+[codeblock, $code("text"):
+    MayConsume
+    NeverConsumes
+    AlwaysConsumes
+]
+
+These are design categories, not required exact Rust enum names.
+
+- `MayConsume` retains conditional ownership handling.
+- `NeverConsumes` can omit drop responsibility.
+- `AlwaysConsumes` may remove ownership-condition branches.
+- Specialisation must not create source-visible overloads.
+- Exact monomorphisation extent remains a backend and benchmarking decision.
+- The unified semantic contract remains fixed even if implementation encoding
+  evolves.
+
+## Design extension points
+
+Compatible extension points within the accepted memory model:
+
+- stronger future-use precision.
+- region-based allocation.
+- place- and projection-based alias precision.
+- drop elision through region knowledge.
+- static ownership specialisation.
+- retain elimination.
+- escape analysis.
+- GC elision for proven regions.
+
+These must preserve source-language semantics, the unified ownership contract
+and GC fallback.
+
+## Common mistakes
+
+- Treating ownership as a source type.
+- Treating `~` as ownership transfer.
+- Using runtime ownership metadata to decide source legality.
+- Generating separate visible borrowed/owned functions.
+- Assuming every scalar is a tagged pointer.
+- Destroying borrowed values.
+- Using advisory sites as exact lifetimes.
+- Requiring ownership proof for correctness.
+- Allowing ownership optimisation to change alias behaviour.
+
+## Related reading
+
+- @../ (Memory management): concise memory-model contract
+- @../access-and-aliasing (Access and aliasing): source semantics
+- @../borrow-validation (Borrow validation): move and drop facts
+- @../runtime-and-backend-lowering
+  (Runtime and backend memory lowering): ABI realisation and GC fallback
+- @../../compiler-design/stages/borrow-validation
+  (Compiler Stage 6: Borrow validation)
+- @../../compiler-design/backend/wasm-lowering
+  (Wasm lowering)

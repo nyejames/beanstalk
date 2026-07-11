@@ -358,7 +358,7 @@ fn resolve_call_arguments_with_type_policy(
                         parameter_name: expectation.name,
                         parameter_index: slot,
                     },
-                    None,
+                    Some(string_table.intern(diagnostics.callee_name)),
                     location.clone(),
                 )
                 .into());
@@ -525,7 +525,7 @@ pub(crate) fn resolve_call_argument_slots_typed(
                     InvalidCallShapeReason::ExtraPositionalArgument {
                         expected_count: expectations.len(),
                     },
-                    None,
+                    Some(string_table.intern(diagnostics.callee_name)),
                     location.clone(),
                 )
                 .into());

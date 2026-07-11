@@ -29,10 +29,11 @@
 
 use super::finalizer::AstFinalizer;
 use super::normalize_ast::TemplateNormalizationError;
-use super::template_helpers::try_fold_template_to_string;
+use super::template_helpers::{TemplateFinalizationFoldInputs, try_fold_template_to_string};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -40,6 +41,7 @@ use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counte
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::rc::Rc;
 
 impl AstFinalizer<'_, '_> {
     /// Normalizes module constants for HIR.
@@ -64,7 +66,7 @@ impl AstFinalizer<'_, '_> {
             // Wrapper constants remain valid here even when their authored source used
             // slot-oriented composition structure, as long as the final constant value
             // classifies as `RenderableString` or `WrapperTemplate`.
-            if contains_helper_only_template_value(&declaration.value) {
+            if self.contains_helper_only_template_value(&declaration.value, string_table)? {
                 continue;
             }
 
@@ -122,37 +124,52 @@ impl AstFinalizer<'_, '_> {
         let mut normalized = expression.to_owned();
         normalized.kind = match &expression.kind {
             ExpressionKind::Template(template) => {
-                validate_const_required_template_control_flow(template, &template.location)?;
+                validate_const_required_template_control_flow(
+                    template,
+                    &self.context.template_ir_registry.borrow(),
+                    string_table,
+                )
+                .map_err(|diagnostic| {
+                    TemplateNormalizationError::Diagnostic(Box::new(diagnostic))
+                })?;
 
-                match template.const_value_kind() {
-                    TemplateConstValueKind::RenderableString
-                    | TemplateConstValueKind::WrapperTemplate => {
-                        let Some(folded) = try_fold_template_to_string(
-                            template,
-                            source_file_scope,
-                            &self.context.path_format_config,
-                            project_path_resolver,
-                            string_table,
-                            self.context.template_const_loop_iteration_limit,
-                        )?
-                        else {
+                let fold_result = try_fold_template_to_string(
+                    template,
+                    TemplateFinalizationFoldInputs {
+                        source_file_scope,
+                        path_format_config: &self.context.path_format_config,
+                        project_path_resolver,
+                        string_table,
+                        template_const_loop_iteration_limit: self
+                            .context
+                            .template_const_loop_iteration_limit,
+                        template_ir_store: &self.context.template_ir_store,
+                        template_ir_registry: Rc::clone(&self.context.template_ir_registry),
+                    },
+                )?;
+
+                if let Some(folded) = fold_result.folded {
+                    normalized.diagnostic_type = DataType::StringSlice;
+                    ExpressionKind::StringSlice(folded)
+                } else {
+                    match fold_result.const_value_kind {
+                        TemplateConstValueKind::LoopControlSignal
+                        | TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
+
+                        TemplateConstValueKind::RenderableString
+                        | TemplateConstValueKind::WrapperTemplate => {
                             return Err(CompilerError::compiler_error(
                                 "Foldable module-constant template did not produce a folded string.",
                             )
                             .into());
-                        };
-                        normalized.diagnostic_type = DataType::StringSlice;
-                        ExpressionKind::StringSlice(folded)
-                    }
+                        }
 
-                    // Preserve helper templates so wrapper composition can still reference them.
-                    TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
-
-                    TemplateConstValueKind::NonConst => {
-                        return Err(CompilerError::compiler_error(
-                            "Non-constant template reached AST finalization in module constant metadata.",
-                        )
-                        .into());
+                        TemplateConstValueKind::NonConst => {
+                            return Err(CompilerError::compiler_error(
+                                "Non-constant template reached AST finalization in module constant metadata.",
+                            )
+                            .into());
+                        }
                     }
                 }
             }
@@ -181,6 +198,7 @@ impl AstFinalizer<'_, '_> {
                 Box::new(normalize_expr(end)?),
             ),
 
+            #[cfg(test)]
             ExpressionKind::FallibleCarrierConstruct { variant, value } => {
                 ExpressionKind::FallibleCarrierConstruct {
                     variant: *variant,
@@ -208,27 +226,69 @@ impl AstFinalizer<'_, '_> {
 //  Helper-only template filter
 // --------------------------
 
-fn contains_helper_only_template_value(expression: &Expression) -> bool {
-    // Shorthand so composite checks read as a single step.
-    let check = |expr: &Expression| contains_helper_only_template_value(expr);
+impl AstFinalizer<'_, '_> {
+    fn contains_helper_only_template_value(
+        &self,
+        expression: &Expression,
+        string_table: &StringTable,
+    ) -> Result<bool, TemplateNormalizationError> {
+        let contains_helper = match &expression.kind {
+            ExpressionKind::Template(template) => {
+                if !matches!(template.kind, TemplateType::SlotInsert(_)) {
+                    return Ok(false);
+                }
 
-    match &expression.kind {
-        ExpressionKind::Template(template) => matches!(
-            template.const_value_kind(),
-            TemplateConstValueKind::SlotInsertHelper
-        ),
+                let template_const_kind = classify_template_from_effective_tir(
+                    template,
+                    &self.context.template_ir_registry,
+                    string_table,
+                )?;
+                matches!(
+                    template_const_kind,
+                    TemplateConstValueKind::SlotInsertHelper
+                )
+            }
 
-        ExpressionKind::Collection(items) => items.iter().any(check),
+            ExpressionKind::Collection(items) => {
+                for item in items {
+                    if self.contains_helper_only_template_value(item, string_table)? {
+                        return Ok(true);
+                    }
+                }
+                false
+            }
 
-        ExpressionKind::StructInstance(fields) => fields.iter().any(|field| check(&field.value)),
+            ExpressionKind::StructInstance(fields)
+            | ExpressionKind::ChoiceConstruct { fields, .. } => {
+                for field in fields {
+                    if self.contains_helper_only_template_value(&field.value, string_table)? {
+                        return Ok(true);
+                    }
+                }
+                false
+            }
 
-        ExpressionKind::Range(start, end) => check(start) || check(end),
+            ExpressionKind::Range(start, end) => {
+                self.contains_helper_only_template_value(start, string_table)?
+                    || self.contains_helper_only_template_value(end, string_table)?
+            }
 
-        ExpressionKind::FallibleCarrierConstruct { value, .. }
-        | ExpressionKind::OptionPropagation { value } => check(value),
+            #[cfg(test)]
+            ExpressionKind::FallibleCarrierConstruct { value, .. } => {
+                self.contains_helper_only_template_value(value, string_table)?
+            }
 
-        ExpressionKind::Coerced { value, .. } => check(value),
+            ExpressionKind::OptionPropagation { value } => {
+                self.contains_helper_only_template_value(value, string_table)?
+            }
 
-        _ => false,
+            ExpressionKind::Coerced { value, .. } => {
+                self.contains_helper_only_template_value(value, string_table)?
+            }
+
+            _ => false,
+        };
+
+        Ok(contains_helper)
     }
 }

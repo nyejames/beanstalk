@@ -21,38 +21,6 @@ impl DataType {
             error: Box::new(error),
         }
     }
-
-    /// Returns true for the diagnostic-only fallible carrier.
-    ///
-    /// Do not use this for semantic checks when a `TypeId` and `TypeEnvironment`
-    /// are available; use `TypeEnvironment::is_fallible_carrier` instead.
-    pub fn is_fallible_carrier(&self) -> bool {
-        matches!(self, DataType::FallibleCarrier { .. })
-    }
-
-    /// Returns the diagnostic success side of an internal fallible carrier.
-    ///
-    /// New semantic checks should use `TypeEnvironment::fallible_carrier_slots`
-    /// on a canonical `TypeId`. This helper remains for diagnostic/test-support
-    /// paths that still carry pre-lowering `DataType::FallibleCarrier` values.
-    pub fn fallible_carrier_success_type(&self) -> Option<&DataType> {
-        match self {
-            DataType::FallibleCarrier { success, .. } => Some(success.as_ref()),
-            _ => None,
-        }
-    }
-
-    /// Returns the diagnostic error side of an internal fallible carrier.
-    ///
-    /// New semantic checks should use `TypeEnvironment::fallible_carrier_slots`
-    /// on a canonical `TypeId`. This helper remains for diagnostic/test-support
-    /// paths that still carry pre-lowering `DataType::FallibleCarrier` values.
-    pub fn fallible_carrier_error_type(&self) -> Option<&DataType> {
-        match self {
-            DataType::FallibleCarrier { error, .. } => Some(error.as_ref()),
-            _ => None,
-        }
-    }
 }
 
 impl TypeEnvironment {
@@ -84,15 +52,5 @@ impl TypeEnvironment {
             }
             _ => None,
         }
-    }
-
-    /// Returns the success type of a fallible carrier, if any.
-    pub fn fallible_success_type(&self, id: TypeId) -> Option<TypeId> {
-        self.fallible_carrier_slots(id).map(|(success, _)| success)
-    }
-
-    /// Returns the error type of a fallible carrier, if any.
-    pub fn fallible_error_type(&self, id: TypeId) -> Option<TypeId> {
-        self.fallible_carrier_slots(id).map(|(_, error)| error)
     }
 }

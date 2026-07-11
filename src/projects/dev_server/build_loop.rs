@@ -6,6 +6,7 @@
 use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteMode, WriteOptions};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::projects::dev_server::error_page::{
     format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
 };
@@ -24,6 +25,9 @@ pub struct BuildCycleReport {
     pub build_ok: bool,
     pub clients_notified: usize,
     pub watch_scope: Option<watch::WatchScope>,
+    /// Structured warnings for successful dev builds, carried to the rebuild loop so terminal
+    /// output can print full diagnostics after the success summary.
+    pub success_messages: Option<CompilerMessages>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +40,13 @@ struct BuildOutcome {
     entry_page_rel: Option<PathBuf>,
     html_site_config: Option<HtmlSiteConfig>,
     diagnostics_summary: String,
+    /// Full structured warnings for successful dev builds.
+    ///
+    /// WHAT: carries the same `CompilerDiagnostic` payloads that would be printed on a CLI build
+    /// so the dev-server terminal can show complete warnings after a successful rebuild.
+    /// WHY: `diagnostics_summary` is intentionally brief for SSE/state consumers; terminal output
+    /// needs the full diagnostic cards without rebuilding them from summary titles.
+    success_messages: Option<CompilerMessages>,
     failed_build: Option<BuildFailure>,
     watch_scope: Option<watch::WatchScope>,
 }
@@ -124,6 +135,7 @@ pub fn run_single_build_cycle(
         entry_page_rel,
         html_site_config,
         diagnostics_summary,
+        success_messages,
         failed_build,
         watch_scope,
     } = build_outcome;
@@ -184,6 +196,7 @@ pub fn run_single_build_cycle(
         build_ok: build_succeeded,
         clients_notified,
         watch_scope,
+        success_messages,
     }
 }
 
@@ -220,6 +233,9 @@ pub fn run_builds_until_stable(
                 Blue report.clients_notified,
                 Reset " clients."
             );
+            if let Some(messages) = report.success_messages {
+                print_compiler_messages(messages);
+            }
         } else {
             say!(
                 "Dev build #",
@@ -317,6 +333,7 @@ fn build_once(
                 entry_page_rel: None,
                 html_site_config: None,
                 diagnostics_summary: format_compiler_messages(&messages),
+                success_messages: None,
                 failed_build: Some(BuildFailure::CompilerMessages(messages)),
                 watch_scope: None,
             };
@@ -338,6 +355,7 @@ fn build_once(
                     entry_page_rel: None,
                     html_site_config: None,
                     diagnostics_summary: format_compiler_messages(&messages),
+                    success_messages: None,
                     failed_build: Some(BuildFailure::CompilerMessages(messages)),
                     watch_scope: Some(watch_scope),
                 };
@@ -358,11 +376,21 @@ fn build_once(
             format!("Build succeeded with warnings:\n{warnings_summary}")
         };
 
+        let success_messages = if build_result.warnings.is_empty() {
+            None
+        } else {
+            Some(CompilerMessages::from_diagnostics(
+                build_result.warnings,
+                build_result.string_table,
+            ))
+        };
+
         BuildOutcome {
             build_succeeded: true,
             entry_page_rel: Some(entry_page_rel),
             html_site_config: Some(html_site_config),
             diagnostics_summary,
+            success_messages,
             failed_build: None,
             watch_scope: Some(watch_scope),
         }
@@ -374,6 +402,7 @@ fn build_once(
             diagnostics_summary: String::from(
                 "Build completed, but the project builder did not declare a dev entry page.",
             ),
+            success_messages: None,
             failed_build: Some(BuildFailure::RuntimeError {
                 title: String::from("Missing Dev Entry"),
                 details: String::from(

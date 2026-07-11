@@ -474,8 +474,6 @@ body {
         let bst_same_l26 = __bs_binding(undefined);
         let bst_different_l27 = __bs_binding(undefined);
         let bst___hir_tmp_4_l28 = __bs_binding(undefined);
-        let bst___hir_tmp_5_l29 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l30 = __bs_binding(undefined);
         
         __bs_assign_value(bst___hir_tmp_3_l22, []);
         __bs_assign_value(bst_a_l23, "x");
@@ -485,13 +483,9 @@ body {
         __bs_assign_value(bst_different_l27, (__bs_read(bst_a_l23) !== __bs_read(bst_c_l25)));
         __bs_assign_value(bst___hir_tmp_4_l28, "");
         __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + "char_equality same="));
-        __bs_assign_value(bst___hir_tmp_5_l29, "");
-        __bs_assign_value(bst___hir_tmp_5_l29, (__bs_read(bst___hir_tmp_5_l29) + ("" + __bs_read(bst_same_l26))));
-        __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + __bs_clone_value(__bs_read(bst___hir_tmp_5_l29))));
+        __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + ("" + __bs_read(bst_same_l26))));
         __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + " different="));
-        __bs_assign_value(bst___hir_tmp_6_l30, "");
-        __bs_assign_value(bst___hir_tmp_6_l30, (__bs_read(bst___hir_tmp_6_l30) + ("" + __bs_read(bst_different_l27))));
-        __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + __bs_clone_value(__bs_read(bst___hir_tmp_6_l30))));
+        __bs_assign_value(bst___hir_tmp_4_l28, (__bs_read(bst___hir_tmp_4_l28) + ("" + __bs_read(bst_different_l27))));
         __bs_read(bst___hir_tmp_3_l22).push(__bs_clone_value(__bs_read(bst___hir_tmp_4_l28)));
         return __bs_read(bst___hir_tmp_3_l22);
     }

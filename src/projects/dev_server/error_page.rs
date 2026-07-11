@@ -95,16 +95,16 @@ fn render_error_page_shell(
   <style>
     :root {{
       color-scheme: dark;
-      --bg: #0b0f14;
-      --bg-glow: rgba(58, 92, 148, 0.24);
-      --card: #131922;
-      --panel: #0f141c;
+      --bg: #0a120b;
+      --bg-glow: rgba(80, 180, 100, 0.20);
+      --card: #061004e0;
+      --panel: #0d160e;
       --fg: #f2f5f8;
-      --accent: #ff7a90;
-      --muted: #9ba8b8;
-      --border: #273142;
-      --link: #8bc7ff;
-      --warning: #ffd479;
+      --accent: #fd494b;
+      --muted: #9bb09b;
+      --border: #243a25;
+      --link: #7fd97f;
+      --warning: #ff8f57;
       --shadow: rgba(0, 0, 0, 0.35);
     }}
     body {{
@@ -217,6 +217,32 @@ fn render_error_page_shell(
     .empty-state {{
       padding: 1.3rem;
       color: var(--muted);
+    }}
+    .source-frame {{
+      margin: 0.8rem 0;
+      padding: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.18);
+      white-space: pre;
+      overflow-x: auto;
+    }}
+    .source-location {{
+      color: var(--link);
+    }}
+    .source-line-number {{
+      color: var(--muted);
+    }}
+    .source-caret {{
+      color: var(--accent);
+    }}
+    .guidance {{
+      margin-top: 0.7rem;
+      color: var(--muted);
+    }}
+    .open-source {{
+      display: inline-block;
+      margin-top: 0.8rem;
     }}
   </style>
 </head>

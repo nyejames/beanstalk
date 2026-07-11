@@ -35,8 +35,7 @@ pub(super) fn not_exported_by_facade(
     )
 }
 
-/// Diagnostic when an import path directly references a special file (`#mod.bst`,
-/// `#page.bst`, or `#config.bst`).
+/// Diagnostic when an import path directly references a hash root or canonical `config.bst`.
 pub(super) fn direct_special_file_import(
     path: &InternedPath,
     location: SourceLocation,

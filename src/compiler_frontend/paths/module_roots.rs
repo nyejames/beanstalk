@@ -1,95 +1,105 @@
-//! Module-root discovery helpers for project-aware path resolution.
+//! Prepared module-root lookup data for project-aware path resolution.
 //!
-//! A directory is a module root/boundary when it contains one or more special `#*.bst` files
-//! excluding `#config.bst`. `#mod.bst` is the only public facade file; a module root without
-//! `#mod.bst` exports nothing outside itself.
+//! WHAT: stores the canonical module-root records prepared by Stage 0 and provides nearest-root
+//! lookups for the frontend.
+//! WHY: filesystem traversal belongs to the build system. The frontend consumes this table
+//! without discovering project structure during resolver construction.
 
-use crate::compiler_frontend::source_libraries::mod_file::{CONFIG_FILE_NAME, MOD_FILE_NAME};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Whether a file name is a module-boundary special file (e.g. `#mod.bst`, `#page.bst`).
-fn is_module_boundary_file_name(name: &str) -> bool {
-    name.starts_with('#') && name.ends_with(".bst") && name != CONFIG_FILE_NAME
+/// Stable identity for one prepared module-root record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ModuleRootId(usize);
+
+/// One canonical hash-root file and its containing module directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ModuleRootRecord {
+    root_directory: PathBuf,
+    root_file: PathBuf,
+    facade_file: Option<PathBuf>,
 }
 
-pub(crate) struct DiscoveredModuleRoots {
-    pub(crate) module_roots: Vec<PathBuf>,
-    pub(crate) module_roots_set: HashSet<PathBuf>,
-    pub(crate) module_root_facades: HashMap<PathBuf, PathBuf>,
+impl ModuleRootRecord {
+    pub(crate) fn with_facade(
+        root_directory: PathBuf,
+        root_file: PathBuf,
+        facade_file: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            root_directory,
+            root_file,
+            facade_file,
+        }
+    }
 }
 
-/// WHAT: discovers all module roots under the entry root.
-/// WHY: facade fallback and module membership both depend on nearest module-root lookup.
-pub(crate) fn discover_module_roots(entry_root: &Path) -> DiscoveredModuleRoots {
-    let mut module_roots = Vec::new();
-    let mut module_roots_set = HashSet::new();
-    let mut module_root_facades = HashMap::new();
+/// Prepared module-root records and indexes used by path resolution.
+///
+/// The facade map is an index over the same records, not an independently discovered filesystem
+/// view. It remains available to the current facade/export consumers until their later roadmap
+/// phase replaces the filename-specific surface.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ModuleRootTable {
+    records: Vec<ModuleRootRecord>,
+    by_directory: HashMap<PathBuf, ModuleRootId>,
+    facade_files: HashMap<PathBuf, PathBuf>,
+}
 
-    let mut queue = VecDeque::new();
-    queue.push_back(entry_root.to_path_buf());
+impl ModuleRootTable {
+    pub(crate) fn empty() -> Self {
+        Self::default()
+    }
 
-    while let Some(dir) = queue.pop_front() {
-        let entries = match fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(_) => continue,
+    pub(crate) fn from_records(mut records: Vec<ModuleRootRecord>) -> Self {
+        records.sort_by(|left, right| {
+            left.root_directory
+                .cmp(&right.root_directory)
+                .then_with(|| left.root_file.cmp(&right.root_file))
+        });
+
+        let mut table = Self {
+            records,
+            ..Self::default()
         };
 
-        let mut has_boundary_file = false;
-        let mut mod_file = None;
-        let mut subdirs = Vec::new();
+        for (index, record) in table.records.iter().enumerate() {
+            let id = ModuleRootId(index);
+            table.by_directory.insert(record.root_directory.clone(), id);
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                subdirs.push(path);
-            } else if let Some(name) = path.file_name().and_then(|name| name.to_str())
-                && is_module_boundary_file_name(name)
-            {
-                has_boundary_file = true;
-                if name == MOD_FILE_NAME {
-                    mod_file = fs::canonicalize(&path).ok();
-                }
+            if let Some(facade_file) = &record.facade_file {
+                table
+                    .facade_files
+                    .insert(record.root_directory.clone(), facade_file.clone());
             }
         }
 
-        if has_boundary_file {
-            let canonical_dir = fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
-            module_roots.push(canonical_dir.clone());
-            module_roots_set.insert(canonical_dir.clone());
-            if let Some(mod_path) = mod_file {
-                module_root_facades.insert(canonical_dir, mod_path);
+        table
+    }
+
+    pub(crate) fn root_directories(&self) -> impl Iterator<Item = &PathBuf> {
+        self.records.iter().map(|record| &record.root_directory)
+    }
+
+    pub(crate) fn facade_files(&self) -> &HashMap<PathBuf, PathBuf> {
+        &self.facade_files
+    }
+
+    pub(crate) fn module_root_for_file(&self, file: &Path) -> Option<PathBuf> {
+        let mut current = file.parent();
+
+        while let Some(directory) = current {
+            if let Some(module_root_id) = self.by_directory.get(directory) {
+                return Some(self.records[module_root_id.0].root_directory.clone());
             }
+
+            current = directory.parent();
         }
 
-        for subdir in subdirs {
-            queue.push_back(subdir);
-        }
+        None
     }
 
-    // Sort deepest first so nearest-ancestor lookup works.
-    module_roots.sort_by(|a, b| {
-        let depth_a = a.components().count();
-        let depth_b = b.components().count();
-        depth_b.cmp(&depth_a)
-    });
-
-    DiscoveredModuleRoots {
-        module_roots,
-        module_roots_set,
-        module_root_facades,
+    pub(crate) fn contains_directory(&self, directory: &Path) -> bool {
+        self.by_directory.contains_key(directory)
     }
-}
-
-/// WHAT: returns the nearest discovered module root that contains the given file.
-/// WHY: nearest-ancestor lookup determines which module a file belongs to.
-pub(crate) fn module_root_for_file(module_roots: &[PathBuf], file: &Path) -> Option<PathBuf> {
-    for root in module_roots {
-        if file.starts_with(root) {
-            return Some(root.clone());
-        }
-    }
-
-    None
 }

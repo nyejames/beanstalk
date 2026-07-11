@@ -1,6 +1,5 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[test]
@@ -29,24 +28,12 @@ fn default_whitespace_normalizer_preserves_leading_spaces_without_initial_newlin
 
 #[test]
 fn default_whitespace_normalizer_preserves_middle_run_newline_boundaries() {
-    let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source(
-        "[:\n    before\n    [value]\n    after\n]",
-        &mut string_table,
-    );
-    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+    // A child template in the body is now an opaque TIR anchor that skips the
+    // content mirror. Verify whitespace normalization through the folded TIR
+    // output instead of the content-mirror render plan.
+    let rendered = folded_template_output("[:\n    before\n    [:dynamic]\n    after\n]");
 
-    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("template should parse");
-
-    // Formatting is applied to the render plan, not written back into template.content.
-    // Read the whitespace-normalised body text slices from render_plan pieces directly.
-    let body_slices = collect_body_text_from_render_plan(&template, &string_table);
-
-    assert_eq!(
-        body_slices,
-        vec!["before\n".to_string(), "\nafter".to_string()]
-    );
+    assert_eq!(rendered, "before\ndynamic\nafter");
 }
 
 #[test]
@@ -85,18 +72,21 @@ fn escape_html_preserves_runtime_head_references() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    // Head references remain in template.content — check there.
-    assert!(template_segments(&template).iter().any(|segment| {
-        segment.origin == TemplateSegmentOrigin::Head
-            && matches!(segment.expression.kind, ExpressionKind::Reference(_))
-    }));
+    assert!(template.content.is_empty());
 
-    // Formatted body text is in render_plan after the escape pass — check there.
-    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
+    let store = context.template_ir_store.borrow();
+    assert!(tir_root_has_head_dynamic_expression(
+        &template,
+        &store,
+        |expression| matches!(expression.kind, ExpressionKind::Reference(_))
+    ));
+
+    // Formatted body text is in the TIR root after the escape pass.
+    let body_texts = collect_body_text_from_tir(&template, &store, &string_table);
     let escaped_body = body_texts
         .into_iter()
         .find(|text| !text.is_empty())
-        .expect("expected escaped body text in render plan");
+        .expect("expected escaped body text in formatted body");
 
     assert_eq!(escaped_body, "\n    &lt;b&gt;body&lt;/b&gt;\n");
 }

@@ -19,6 +19,8 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
+type LiteralPatternTestResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 #[test]
 fn parse_literal_pattern_accepts_i32_boundary_values() {
     let max = parse_whole_number_pattern(NumericLiteralSign::Positive, "2147483647").unwrap();
@@ -31,10 +33,10 @@ fn parse_literal_pattern_accepts_i32_boundary_values() {
 #[test]
 fn parse_literal_pattern_rejects_i32_out_of_range() {
     let error = parse_whole_number_pattern(NumericLiteralSign::Positive, "2147483648").unwrap_err();
-    assert_invalid_number_literal_outside_range(error);
+    assert_invalid_number_literal_outside_range(*error);
 
     let error = parse_whole_number_pattern(NumericLiteralSign::Negative, "2147483649").unwrap_err();
-    assert_invalid_number_literal_outside_range(error);
+    assert_invalid_number_literal_outside_range(*error);
 }
 
 #[test]
@@ -46,7 +48,7 @@ fn parse_literal_pattern_negative_fallback_allows_i32_min() {
 #[test]
 fn parse_literal_pattern_negative_fallback_rejects_i32_underflow() {
     let error = parse_negative_number_pattern("2147483649").unwrap_err();
-    assert_invalid_number_literal_outside_range(error);
+    assert_invalid_number_literal_outside_range(*error);
 }
 
 fn assert_invalid_number_literal_outside_range(diagnostic: CompilerDiagnostic) {
@@ -62,7 +64,7 @@ fn assert_invalid_number_literal_outside_range(diagnostic: CompilerDiagnostic) {
 fn parse_whole_number_pattern(
     sign: NumericLiteralSign,
     normalized_text: &str,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> LiteralPatternTestResult<Expression> {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let text = string_table.intern(normalized_text);
@@ -102,7 +104,7 @@ fn parse_whole_number_pattern(
     )
 }
 
-fn parse_negative_number_pattern(normalized_text: &str) -> Result<Expression, CompilerDiagnostic> {
+fn parse_negative_number_pattern(normalized_text: &str) -> LiteralPatternTestResult<Expression> {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let text = string_table.intern(normalized_text);

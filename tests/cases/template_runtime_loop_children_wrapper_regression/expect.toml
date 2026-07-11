@@ -1,0 +1,7 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "<li>onetwo</li>",
+]
+rendered_output_not_contains = ["<li></li>"]

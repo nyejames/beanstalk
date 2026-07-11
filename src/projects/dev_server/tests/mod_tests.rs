@@ -11,7 +11,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use crate::compiler_tests::test_support::temp_dir;
 use crate::libraries::LibrarySet;
-use crate::projects::settings::{Config, ProjectConfigError};
+use crate::projects::settings::{CONFIG_FILE_NAME, Config, ProjectConfigError};
 use std::fs;
 
 struct NoopBuilder;
@@ -71,7 +71,7 @@ impl BackendBuilder for ConflictingDirectiveBuilder {
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
         vec![StyleDirectiveSpec::handler(
-            "markdown",
+            "md",
             TemplateBodyMode::Normal,
             TemplateHeadCompatibility::fully_compatible_meaningful(),
             StyleDirectiveHandlerSpec::no_op(),
@@ -135,7 +135,7 @@ fn empty_entry_path_uses_current_directory() {
 fn resolve_dev_runtime_paths_use_configured_dev_folder_for_directory_projects() {
     let root = temp_dir("configured_dev_folder");
     fs::create_dir_all(&root).expect("should create temp root");
-    fs::write(root.join("#config.bst"), "dev_folder #= \"preview\"\n")
+    fs::write(root.join(CONFIG_FILE_NAME), "dev_folder #= \"preview\"\n")
         .expect("should write config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
@@ -150,7 +150,7 @@ fn resolve_dev_runtime_paths_use_configured_dev_folder_for_directory_projects() 
 fn resolve_dev_runtime_paths_fall_back_to_project_root_for_empty_dev_folder() {
     let root = temp_dir("empty_dev_folder");
     fs::create_dir_all(&root).expect("should create temp root");
-    fs::write(root.join("#config.bst"), "dev_folder #= \"\"\n").expect("should write config");
+    fs::write(root.join(CONFIG_FILE_NAME), "dev_folder #= \"\"\n").expect("should write config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
     let resolved = resolve_dev_runtime_paths(&builder, &root, &[])
@@ -167,7 +167,7 @@ fn resolve_dev_runtime_paths_fall_back_to_project_root_for_empty_dev_folder() {
 fn resolve_dev_runtime_paths_return_config_load_failures() {
     let root = temp_dir("bad_config");
     fs::create_dir_all(&root).expect("should create temp root");
-    fs::write(root.join("#config.bst"), "import\n").expect("should write bad config");
+    fs::write(root.join(CONFIG_FILE_NAME), "import\n").expect("should write bad config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
     let messages = resolve_dev_runtime_paths(&builder, &root, &[])

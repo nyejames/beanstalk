@@ -3,7 +3,6 @@
 //! WHAT: parses function signatures, return lists, and host/user call metadata used by AST construction.
 //! WHY: function syntax has enough dedicated parsing and type-shape rules to live outside the general statement parser.
 
-#![allow(clippy::result_large_err)]
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -37,6 +36,13 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, To
 use crate::compiler_frontend::type_coercion::parse_context::{
     cast_target_context_for_type_id, parse_expectation_for_type_id,
 };
+
+/// Stage-local result for function-signature parsing and return-slot helpers.
+///
+/// WHY: `CompilerDiagnostic` is large; boxing at this boundary avoids
+/// `clippy::result_large_err` while keeping every signature, member, return,
+/// and default-expression helper uniform.
+type SignatureResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 /// One function return slot, either a concrete value type or a parameter-alias set.
 #[derive(Clone, Debug, PartialEq)]
@@ -100,6 +106,7 @@ impl ReturnSlot {
         }
     }
 
+    #[cfg(test)]
     pub fn error(value: FunctionReturn) -> Self {
         Self {
             value,
@@ -147,7 +154,7 @@ impl FunctionSignature {
         function_path: &InternedPath,
         parent_context: &ScopeContext,
         type_interner: &mut AstTypeInterner<'_>,
-    ) -> Result<Self, CompilerDiagnostic> {
+    ) -> SignatureResult<Self> {
         let signature_syntax =
             parse_function_signature_syntax(token_stream, warnings, string_table, function_path)?;
 
@@ -163,14 +170,6 @@ impl FunctionSignature {
         )
     }
 
-    /// Success-channel return types for diagnostics only.
-    pub fn diagnostic_return_types(&self) -> Vec<DataType> {
-        self.success_returns()
-            .iter()
-            .map(|return_value| return_value.data_type().clone())
-            .collect()
-    }
-
     pub fn success_returns(&self) -> Vec<&FunctionReturn> {
         self.returns
             .iter()
@@ -184,16 +183,6 @@ impl FunctionSignature {
             .iter()
             .find(|slot| slot.channel == ReturnChannel::Error)
             .map(|slot| &slot.value)
-    }
-
-    pub fn error_return_index(&self) -> Option<usize> {
-        self.returns
-            .iter()
-            .position(|slot| slot.channel == ReturnChannel::Error)
-    }
-
-    pub fn has_error_slot(&self) -> bool {
-        self.error_return().is_some()
     }
 
     /// Canonical TypeIds for success-channel return slots.
@@ -271,7 +260,7 @@ pub(crate) fn function_signature_from_syntax_with_unresolved_types(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
     fallback_policy: SignatureTypeFallbackPolicy,
-) -> Result<FunctionSignature, CompilerDiagnostic> {
+) -> SignatureResult<FunctionSignature> {
     let mut parameters = Vec::with_capacity(syntax.parameters.len());
     for parameter in &syntax.parameters {
         let mut declaration = signature_member_to_declaration(
@@ -317,7 +306,7 @@ pub(crate) fn signature_member_to_declaration(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
     fallback_policy: SignatureTypeFallbackPolicy,
-) -> Result<Declaration, CompilerDiagnostic> {
+) -> SignatureResult<Declaration> {
     let resolved = resolve_signature_type_annotation(
         member.type_annotation.clone(),
         &member.location,
@@ -344,7 +333,7 @@ pub(crate) fn signature_member_to_declaration(
             );
             (type_id, data_type)
         }
-        Err(diagnostic) => return Err(*diagnostic),
+        Err(diagnostic) => return Err(diagnostic),
     };
 
     let mut value = if member.default_tokens.is_empty() {
@@ -391,7 +380,7 @@ fn resolve_signature_type_annotation(
     expression_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ResolvedTypeAnnotation, Box<CompilerDiagnostic>> {
+) -> SignatureResult<ResolvedTypeAnnotation> {
     let mut type_resolution_context =
         TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
             declaration_table: &expression_context.top_level_declarations,
@@ -465,7 +454,7 @@ fn parse_signature_default_expression(
     expression_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> SignatureResult<Expression> {
     let mut parameter_context = expression_context.to_owned();
     parameter_context.expected_result_type_ids = vec![type_id];
 
@@ -491,16 +480,17 @@ fn parse_signature_default_expression(
             allow_expected_result_evidence: true,
         },
     );
-    create_expression_with_trailing_newline_policy(input).map_err(CompilerDiagnostic::from)
+    create_expression_with_trailing_newline_policy(input)
+        .map_err(|error| Box::new(CompilerDiagnostic::from(error)))
 }
 
 /// Wrap a raw token slice in a `FileTokens` stream terminated by EOF.
-fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerDiagnostic> {
+fn token_stream_with_eof(tokens: &[Token]) -> SignatureResult<FileTokens> {
     let Some(first_token) = tokens.first() else {
-        return Err(CompilerDiagnostic::unexpected_end_of_file(
+        return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
             None,
             SourceLocation::default(),
-        ));
+        )));
     };
 
     let mut tokens_with_eof = tokens.to_vec();
@@ -523,7 +513,7 @@ fn return_slot_from_syntax(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
     fallback_policy: SignatureTypeFallbackPolicy,
-) -> Result<ReturnSlot, CompilerDiagnostic> {
+) -> SignatureResult<ReturnSlot> {
     let channel = match return_slot.channel {
         ReturnChannelSyntax::Success => ReturnChannel::Success,
         ReturnChannelSyntax::Error => ReturnChannel::Error,
@@ -549,7 +539,7 @@ fn return_slot_from_syntax(
                     // declaration-site generic parameter scope is active.
                     parsed_ref_to_data_type(type_annotation)
                 }
-                Err(diagnostic) => return Err(*diagnostic),
+                Err(diagnostic) => return Err(diagnostic),
             };
 
             FunctionReturn::Value(data_type)
@@ -567,11 +557,11 @@ fn return_slot_from_syntax(
             for parameter_index in parameter_indices.iter().copied().skip(1) {
                 let parameter = &parameters[parameter_index];
                 if parameter.value.type_id != first_type_id {
-                    return Err(alias_return_type_mismatch_diagnostic(
+                    return Err(Box::new(alias_return_type_mismatch_diagnostic(
                         first_type_id,
                         parameter.value.type_id,
                         location.clone(),
-                    ));
+                    )));
                 }
                 data_type = parameter.value.diagnostic_type.clone();
             }

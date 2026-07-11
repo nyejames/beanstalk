@@ -1,0 +1,135 @@
+
+Generics, traits and cast evidence resolve before HIR.
+
+HIR gets concrete calls and explicit runtime operations.
+It doesn't solve generic functions, decide trait conformance or carry trait evidence for runtime dispatch.
+
+## Main paths
+
+- `src/compiler_frontend/ast/generic_functions/`
+- `src/compiler_frontend/ast/generic_bounds.rs`
+- `src/compiler_frontend/traits/`
+- `src/compiler_frontend/builtins/casts/`
+- `src/compiler_frontend/builtins/casts/resolution.rs`
+
+## Generics
+
+Header parsing records declaration-site generic parameter metadata on declaration shells.
+AST owns semantic registration, validation, inference and concrete instance emission.
+
+The contract:
+
+- Header parsing records generic parameter lists and declaration metadata.
+- Header parsing doesn't infer or substitute generic types.
+- AST registers generic parameter lists in `TypeEnvironment`.
+- AST resolves generic signatures to canonical `TypeId`s.
+- AST stores generic free-function templates and validates generic bodies before concrete calls are emitted.
+- AST infers generic function calls from immediate argument evidence and immediate expected result context only.
+- AST emits concrete generic function instances before HIR generation.
+- HIR never carries unresolved generic executable types or unsolved generic function calls.
+- Borrow validation receives concrete HIR and doesn't consume generic template state.
+- Backends never solve generic type arguments or generic function instances.
+
+Generic inference is intentionally local.
+It doesn't use later mutation, later use, whole-program analysis, HIR, borrow validation or expected parameter context from an outer function call into a nested generic call.
+
+## Traits
+
+Trait declarations and conformances are compile-time frontend metadata.
+They are not value types and not backend-side rediscovery paths.
+
+Header parsing records trait and conformance shells.
+AST owns:
+
+- semantic trait identity
+- requirement type resolution
+- conformance evidence validation
+- reusable evidence visibility
+- trait diagnostics
+- static generic-bound evidence checks
+- bound-provided receiver-call resolution before HIR
+
+Traits live in `TraitEnvironment`, not `DataType`.
+Trait names are valid in trait declarations, conformance declarations and generic bounds only.
+Trait names in ordinary type position are rejected with a structured static-contract diagnostic.
+
+Explicit conformance evidence lives in `TraitEvidenceEnvironment` with stable evidence IDs and requirement-to-method mappings.
+A matching method without explicit conformance isn't conformance.
+
+## Static bounds
+
+Static generic bounds use visible reusable evidence during generic function calls and concrete generic nominal instantiation.
+
+Static trait-bound receiver calls are resolved to concrete source calls before HIR.
+Concrete values use ordinary visible receiver methods.
+A conformance declaration proves a type satisfies a trait, but it doesn't independently import trait methods as concrete receiver methods.
+
+Backends don't carry trait objects, erased dispatch or trait evidence metadata for runtime dispatch.
+Dynamic trait values are outside the language design.
+
+## Core cast traits
+
+Core cast evidence is exposed through compiler-owned static traits such as `CASTABLE_TO_STRING` and `TRY_CASTABLE_TO_INT`.
+
+These traits:
+
+- resolve without imports
+- can't be redeclared
+- can't be imported
+- can't be exported
+- can't be aliased
+- can't be shadowed
+- can't be used as ordinary values
+
+The compiler registers builtin evidence for the supported cast table.
+Same-file nominal source types, including aligned generic constructors, can add user-authored evidence by declaring conformance to the relevant core cast trait.
+
+Infallible and fallible cast trait pairs for the same target are incompatible through compiler-owned `must not` metadata.
+
+## Explicit casts
+
+Explicit casts use compiler-owned target classification, policy metadata and evidence.
+AST selects the evidence and folds builtin casts when it can.
+
+Runtime cast operations that survive AST folding lower into HIR as explicit checked operations.
+User-defined cast evidence selected by AST lowers as direct user-function calls.
+HIR doesn't carry user-defined cast trait evidence or generic-bound cast evidence into backend lowering.
+
+Same-type casts are invalid.
+`Int -> Float` contextual promotion remains separate from explicit casts, but `cast` is allowed when the source is naturally `Int` and the target is `Float`.
+
+## Cast target boundaries
+
+The cast target must come from an immediate typed boundary:
+
+- annotated declarations
+- assignments with a typed target
+- explicit return slots
+- concrete function parameters
+- struct fields
+- choice fields
+- default values
+- typed collection or map entries
+- `then` arms whose enclosing value-producing block has an explicit receiver
+
+Conditions, loop conditions, assertions, template interpolation, operator operands, expression statements and untyped declarations are not cast targets.
+Generic parameter slots are not cast targets.
+Generic inference doesn't look through `cast`.
+
+## Common mistakes
+
+- Letting HIR carry unsolved generic calls.
+- Treating traits as value types.
+- Making conformance structural by matching method shapes.
+- Importing trait methods as concrete receiver methods.
+- Sending trait evidence to backends for runtime dispatch.
+- Folding explicit casts through contextual coercion instead of cast evidence.
+- Treating core cast traits as normal source traits.
+- Allowing generic parameter slots to become cast targets.
+
+## Related reading
+
+- @../ (AST internals): AST phase owners and invariants
+- @../environment-and-type-resolution (AST environment and type resolution): `TypeEnvironment` and generic instance identity
+- @../../type-identity-and-coercion (Type identity and coercion): `TypeId` semantics used by generic solving
+- @../../stages/hir-generation (Stage 5: HIR generation): the concrete IR that receives resolved generic calls

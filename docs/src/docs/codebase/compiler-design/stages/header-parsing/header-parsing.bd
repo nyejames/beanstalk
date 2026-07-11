@@ -1,0 +1,135 @@
+
+Header parsing is the only stage that discovers module-wide top-level declarations.
+It parses top-level declaration shells so later stages don't reconstruct them from raw tokens.
+
+Headers make AST linear.
+That is the whole point.
+
+## Main path
+
+`src/compiler_frontend/headers/parse_file_headers.rs`
+
+Related paths:
+
+- `src/compiler_frontend/headers/`
+- `src/compiler_frontend/declaration_syntax/`
+- `src/compiler_frontend/headers/beandown_prepare.rs`
+- `src/compiler_frontend/headers/plain_markdown_prepare.rs`
+
+## What header parsing owns
+
+Header parsing owns:
+
+- import and re-export parsing
+- facade-only `export` parsing and public/private facade metadata
+- import path validation and normalization
+- file-local import/visibility environment construction
+- declaration shell parsing for constants, functions, structs, choices, type aliases, traits and conformance metadata
+- top-level dependency edge generation
+- start-body token separation
+- top-level const fragment placement metadata
+- source-kind preparation hooks that turn non-`.bst` inputs into ordinary headers
+
+Header parsing doesn't type-check executable bodies or fold expressions.
+It should store normalized, validated path/reference forms instead of raw import/path syntax when enough context exists.
+
+## Dependency edges
+
+Header dependency edges include every top-level declaration dependency needed before AST can resolve declarations linearly:
+
+- imported declaration references
+- type alias targets
+- struct and choice field type annotations
+- function parameter and return type annotations
+- constant explicit type annotations
+- fixed collection capacity references in type annotations when the capacity is a visible compile-time constant
+- constant initializer references to other constants
+- structurally exposed const-template condition/control references when header parsing can identify them without parsing full template body semantics
+
+Executable function/start body references don't participate in dependency sorting.
+Body-local declarations don't participate in dependency sorting.
+The implicit entry start header is always appended last.
+
+## Declaration shells
+
+A declaration shell is structured top-level header data, not a resolved AST node.
+
+Examples:
+
+- constant shell: name, export flag, explicit type annotation, initializer token span/tokens, initializer reference hints and source order
+- function shell: name, generic parameters, parsed signature and body tokens
+- struct shell: name, generic parameters, parsed field names/types and default token data where applicable
+- choice shell: name, generic parameters, variant names and payload field type shells
+- type alias shell: name and target type annotation
+- trait shell: name, requirement signature shells and requirement type-reference dependency edges
+- conformance shell: target type reference, trait references and declaration source context
+- start shell: entry-file executable token body, excluded from dependency sorting
+
+Parameterized generic aliases are rejected before shell creation.
+
+## Shared declaration syntax
+
+Declaration-shell parsers are shared with AST body-local declaration parsing.
+Top-level and body-local declaration syntax should stay equivalent wherever the language allows the same shape.
+
+Header parsing records parsed type-reference shells and dependency edges.
+AST owns resolving those shells into canonical `TypeId`s.
+
+This avoids two parsers drifting apart while still keeping semantic resolution in AST.
+
+## Import preparation
+
+Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST.
+
+It validates and normalizes:
+
+- source imports
+- facade re-exports
+- external package imports
+- aliases
+- prelude/builtin reservations
+- namespace records
+- collision rules that can be checked structurally
+- receiver-method visibility through receiver type surfaces
+
+AST later consumes this through `ScopeContext`.
+It shouldn't rebuild import bindings.
+
+## Constants
+
+Constants are compile-time declarations.
+Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants.
+
+Same-file constant ordering is still source-order constrained.
+Same-file forward references are rejected.
+Cross-file constant cycles are dependency cycles.
+
+Constant initializer references are not body references.
+They belong in the header dependency graph.
+
+## Source-kind headers
+
+Beandown and plain Markdown inputs synthesize ordinary private `content #String` constant declarations.
+
+A `.bd` input contributes one private synthetic constant declaration whose initializer is a structurally built `$md` template over the original `.bd` body tokens.
+AST template parsing uses that Beandown source-kind context to default nested templates with no explicit directive to `$md`: any explicit nested directive overrides the default.
+A `.md` input renders raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer.
+
+Later dependency sorting and AST folding treat both declarations like ordinary compile-time constants.
+There is no Beandown- or Markdown-specific AST node, HIR, borrow-checker or backend path.
+
+## Header and AST boundary
+
+Header parsing builds `ModuleSymbols`, the order-independent top-level symbol, import, export, builtin, type-alias and source-file metadata package.
+Dependency sorting finalizes the sorted declaration list.
+AST consumes that package directly.
+
+AST must not rediscover top-level symbols or reconstruct top-level declaration shells from raw tokens.
+If AST needs a new kind of top-level dependency, add it to headers and dependency sorting.
+
+## Related reading
+
+- @../tokenization (Stage 1: Tokenization): tokenization and fused Stage 1/2 scheduling
+- @../dependency-sorting (Stage 3: Dependency sorting): how header-provided edges become declaration order
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): import visibility, facades and external packages
+- @../../entry-start-and-page-fragments (Entry start and page fragments): start-body separation and top-level const fragments

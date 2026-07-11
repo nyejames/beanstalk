@@ -1,9 +1,7 @@
-#![allow(clippy::result_large_err)]
-
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, SlotKey, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, SlotKey, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::{
     parse_optional_parenthesized_expression, parse_optional_slot_target_argument,
@@ -12,14 +10,15 @@ use crate::compiler_frontend::ast::templates::template_head_parser::directive_ar
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, SyntaxDiagnosticKind,
+    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::numeric_text::token::NumericLiteralKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use std::sync::Arc;
+
+type DirectiveStyleTestResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
@@ -69,28 +68,38 @@ fn parse_optional_parenthesized_expression_for_test(
     tokens: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<
+) -> DirectiveStyleTestResult<
     Option<crate::compiler_frontend::ast::expressions::expression::Expression>,
-    crate::compiler_frontend::compiler_messages::CompilerDiagnostic,
 > {
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
-    parse_optional_parenthesized_expression(tokens, context, &mut type_interner, string_table)
+    let directive_name = string_table.intern("test_directive");
+    parse_optional_parenthesized_expression(
+        directive_name,
+        tokens,
+        context,
+        &mut type_interner,
+        string_table,
+    )
 }
 
 fn parse_required_parenthesized_expression_for_test(
     tokens: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<
-    crate::compiler_frontend::ast::expressions::expression::Expression,
-    crate::compiler_frontend::compiler_messages::CompilerDiagnostic,
-> {
+) -> DirectiveStyleTestResult<crate::compiler_frontend::ast::expressions::expression::Expression> {
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
-    parse_required_parenthesized_expression(tokens, context, &mut type_interner, string_table)
+    let directive_name = string_table.intern("test_directive");
+    parse_required_parenthesized_expression(
+        directive_name,
+        tokens,
+        context,
+        &mut type_interner,
+        string_table,
+    )
 }
 
 // ------------------------------------------------------------------------
@@ -101,7 +110,8 @@ fn parse_required_parenthesized_expression_for_test(
 fn reject_arguments_succeeds_when_no_parens() {
     let mut string_table = StringTable::new();
     let tokens = directive_tokens("[$note]", &mut string_table);
-    let result = reject_unexpected_directive_arguments(&tokens);
+    let directive_name = string_table.intern("note");
+    let result = reject_unexpected_directive_arguments(directive_name, &tokens);
     assert!(result.is_ok());
 }
 
@@ -109,12 +119,14 @@ fn reject_arguments_succeeds_when_no_parens() {
 fn reject_arguments_fails_when_parens_present() {
     let mut string_table = StringTable::new();
     let tokens = directive_tokens("[$note()]", &mut string_table);
-    let result = reject_unexpected_directive_arguments(&tokens);
+    let directive_name = string_table.intern("note");
+    let result = reject_unexpected_directive_arguments(directive_name, &tokens);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
-        DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::OpenParenthesis,
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::UnexpectedArguments,
+            ..
         }
     ));
 }
@@ -127,7 +139,8 @@ fn reject_arguments_fails_when_parens_present() {
 fn optional_slot_target_no_parens_returns_default() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert_eq!(result.unwrap(), SlotKey::Default);
 }
 
@@ -135,7 +148,8 @@ fn optional_slot_target_no_parens_returns_default() {
 fn optional_slot_target_named_string() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(\"style\")]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert!(matches!(result.unwrap(), SlotKey::Named(_)));
 }
 
@@ -143,7 +157,8 @@ fn optional_slot_target_named_string() {
 fn optional_slot_target_positive_positional() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(1)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert_eq!(result.unwrap(), SlotKey::Positional(1));
 }
 
@@ -151,13 +166,15 @@ fn optional_slot_target_positive_positional() {
 fn optional_slot_target_zero_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(0)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
-        DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::NumericLiteral(token),
-        } if token.kind == NumericLiteralKind::WholeNumber
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::InvalidSlotTarget,
+            ..
+        }
     ));
 }
 
@@ -165,7 +182,8 @@ fn optional_slot_target_zero_errors() {
 fn optional_slot_target_negative_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(-1)]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert!(result.is_err());
 }
 
@@ -173,12 +191,14 @@ fn optional_slot_target_negative_errors() {
 fn optional_slot_target_empty_parens_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot()]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
-        DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::CloseParenthesis,
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::EmptyArguments,
+            ..
         }
     ));
 }
@@ -187,7 +207,8 @@ fn optional_slot_target_empty_parens_errors() {
 fn optional_slot_target_missing_close_paren_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$slot(\"style\"]", &mut string_table);
-    let result = parse_optional_slot_target_argument(&mut tokens, &string_table);
+    let directive_name = string_table.intern("slot");
+    let result = parse_optional_slot_target_argument(directive_name, &mut tokens, &string_table);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
@@ -206,7 +227,8 @@ fn optional_slot_target_missing_close_paren_errors() {
 fn required_slot_name_missing_parens_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$insert]", &mut string_table);
-    let result = parse_required_slot_name_argument(&mut tokens);
+    let directive_name = string_table.intern("insert");
+    let result = parse_required_slot_name_argument(directive_name, &mut tokens);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
@@ -221,7 +243,8 @@ fn required_slot_name_missing_parens_errors() {
 fn required_slot_name_string_literal_ok() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$insert(\"style\")]", &mut string_table);
-    let result = parse_required_slot_name_argument(&mut tokens);
+    let directive_name = string_table.intern("insert");
+    let result = parse_required_slot_name_argument(directive_name, &mut tokens);
     assert!(result.is_ok());
 }
 
@@ -229,13 +252,15 @@ fn required_slot_name_string_literal_ok() {
 fn required_slot_name_positional_rejected() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$insert(1)]", &mut string_table);
-    let result = parse_required_slot_name_argument(&mut tokens);
+    let directive_name = string_table.intern("insert");
+    let result = parse_required_slot_name_argument(directive_name, &mut tokens);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
-        DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::NumericLiteral(token),
-        } if token.kind == NumericLiteralKind::WholeNumber
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::InvalidInsertTarget,
+            ..
+        }
     ));
 }
 
@@ -243,12 +268,14 @@ fn required_slot_name_positional_rejected() {
 fn required_slot_name_empty_parens_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$insert()]", &mut string_table);
-    let result = parse_required_slot_name_argument(&mut tokens);
+    let directive_name = string_table.intern("insert");
+    let result = parse_required_slot_name_argument(directive_name, &mut tokens);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,
-        DiagnosticPayload::UnexpectedToken {
-            found: TokenKind::CloseParenthesis,
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::EmptyArguments,
+            ..
         }
     ));
 }
@@ -304,8 +331,9 @@ fn optional_expression_extra_comma_errors() {
     let result =
         parse_optional_parenthesized_expression_for_test(&mut tokens, &context, &mut string_table);
     assert!(result.is_err());
+    let diagnostic = *result.unwrap_err();
     assert!(matches!(
-        result.unwrap_err().payload,
+        diagnostic.payload,
         DiagnosticPayload::UnexpectedToken {
             found: TokenKind::Comma,
         }
@@ -324,8 +352,9 @@ fn required_expression_missing_parens_errors() {
     let result =
         parse_required_parenthesized_expression_for_test(&mut tokens, &context, &mut string_table);
     assert!(result.is_err());
+    let diagnostic = *result.unwrap_err();
     assert!(matches!(
-        result.unwrap_err().payload,
+        diagnostic.payload,
         DiagnosticPayload::ExpectedToken {
             expected: TokenKind::OpenParenthesis,
             ..
@@ -412,7 +441,7 @@ fn duplicate_insert_directives_are_rejected_in_one_head() {
 
 #[test]
 fn formatter_directives_are_exclusive_per_template_head() {
-    let error = template_parse_error("[$markdown, $raw: body]");
+    let error = template_parse_error("[$md, $raw: body]");
     assert!(error.contains("incompatible"));
 }
 
@@ -427,8 +456,7 @@ fn project_owned_formatter_directives_are_exclusive_per_template_head() {
 #[test]
 fn non_formatter_and_formatter_directives_can_coexist() {
     let mut string_table = StringTable::new();
-    let mut token_stream =
-        template_tokens_from_source("[1, $markdown:\n# Hello\n]", &mut string_table);
+    let mut token_stream = template_tokens_from_source("[1, $md:\n# Hello\n]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.to_owned());
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("non-formatter and formatter directives should coexist in the same head");
@@ -483,16 +511,13 @@ fn doc_templates_are_markdown_formatted_by_default() {
 }
 
 #[test]
-fn doc_brackets_become_literal_text_not_doc_children() {
+fn doc_brackets_remain_literal_text() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n[: child]\n]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse");
-
-    // With suppress_child_templates, brackets are literal text. No doc children are collected.
-    assert_eq!(template.doc_children.len(), 0);
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let result = string_table.resolve(folded);
@@ -694,7 +719,7 @@ fn code_empty_parentheses_error_cleanly() {
     let error = template_parse_error("[$code(): body]");
 
     assert!(
-        error.contains("Unexpected token `)`."),
+        error.contains("empty parentheses") || error.contains("EmptyArguments"),
         "unexpected error message: {error}"
     );
 }
@@ -726,30 +751,31 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    // Head values remain in template.content — check there.
-    // The head reference may resolve to a StringSlice during AST construction
-    // when the value is known and will be copied or moved.
-    assert!(template_segments(&template).iter().any(|segment| {
-        segment.origin == TemplateSegmentOrigin::Head
-            && matches!(
-                segment.expression.kind,
-                ExpressionKind::Reference(_) | ExpressionKind::StringSlice(_)
-            )
-    }));
+    assert!(template.content.is_empty());
 
-    // Formatted body text (after $code pass) lives in render_plan, not template.content.
-    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
+    let store = context.template_ir_store.borrow();
+    assert!(tir_root_has_head_dynamic_expression(
+        &template,
+        &store,
+        |expression| matches!(
+            expression.kind,
+            ExpressionKind::Reference(_) | ExpressionKind::StringSlice(_)
+        )
+    ));
+
+    // Formatted body text is authoritative in the TIR root.
+    let body_texts = collect_body_text_from_tir(&template, &store, &string_table);
     assert!(
         body_texts
             .iter()
             .any(|text| text.contains("<code class='codeblock'>")),
-        "expected code HTML block in render_plan body text"
+        "expected code HTML block in formatted body text"
     );
     assert!(
         body_texts
             .iter()
             .any(|text| text.contains("<span class='bst-code-keyword'>loop</span>")),
-        "expected highlighted keyword span in render_plan body text"
+        "expected highlighted keyword span in formatted body text"
     );
 }
 

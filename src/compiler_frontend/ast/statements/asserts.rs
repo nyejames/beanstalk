@@ -7,6 +7,7 @@
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AssertMessage, AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
@@ -22,14 +23,13 @@ use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_assert_statement(
     token_stream: &mut FileTokens,
     ast: &mut Vec<AstNode>,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), ExpressionParseError> {
     let assert_location = token_stream.current_location();
     let assert_name = string_table.intern("assert");
 
@@ -41,7 +41,8 @@ pub(crate) fn parse_assert_statement(
             InvalidBuiltinCallReason::MissingParentheses,
             Some(assert_name),
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
     token_stream.advance(); // past `(`
 
@@ -51,7 +52,8 @@ pub(crate) fn parse_assert_statement(
             InvalidBuiltinCallReason::MissingArgument,
             Some(assert_name),
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
     reject_unsupported_assert_argument_prefix(token_stream, assert_name)?;
 
@@ -69,11 +71,11 @@ pub(crate) fn parse_assert_statement(
         string_table,
     });
     let condition =
-        create_expression_until(input, &[TokenKind::Comma, TokenKind::CloseParenthesis])
-            .map_err(CompilerDiagnostic::from)?;
+        create_expression_until(input, &[TokenKind::Comma, TokenKind::CloseParenthesis])?;
 
     // Validate the condition is Bool using the shared condition diagnostic path.
-    ensure_boolean_condition(&condition, &condition.location, type_interner.environment())?;
+    ensure_boolean_condition(&condition, &condition.location, type_interner.environment())
+        .map_err(ExpressionParseError::Diagnostic)?;
 
     // Optional message argument.
     let message = if token_stream.current_token_kind() == &TokenKind::Comma {
@@ -85,7 +87,8 @@ pub(crate) fn parse_assert_statement(
                 InvalidBuiltinCallReason::MissingArgument,
                 Some(assert_name),
                 token_stream.current_location(),
-            ));
+            )
+            .into());
         }
         reject_unsupported_assert_argument_prefix(token_stream, assert_name)?;
 
@@ -104,7 +107,8 @@ pub(crate) fn parse_assert_statement(
                     InvalidBuiltinCallReason::RuntimeMessageExpressionDeferred,
                     Some(assert_name),
                     token_stream.current_location(),
-                ));
+                )
+                .into());
             }
         }
     } else {
@@ -117,7 +121,8 @@ pub(crate) fn parse_assert_statement(
             InvalidBuiltinCallReason::TooManyArguments,
             Some(assert_name),
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
 
     // Require closing `)`.
@@ -126,7 +131,8 @@ pub(crate) fn parse_assert_statement(
             TokenKind::CloseParenthesis,
             Some(token_stream.current_token_kind().to_owned()),
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
     token_stream.advance(); // past `)`
 
@@ -135,7 +141,8 @@ pub(crate) fn parse_assert_statement(
         return Err(CompilerDiagnostic::invalid_result_handling(
             InvalidResultHandlingReason::NotResultExpression,
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
 
     // Reject `assert(...) catch ...` — assert is not a fallible expression.
@@ -143,7 +150,8 @@ pub(crate) fn parse_assert_statement(
         return Err(CompilerDiagnostic::invalid_result_handling(
             InvalidResultHandlingReason::NotResultExpression,
             token_stream.current_location(),
-        ));
+        )
+        .into());
     }
 
     ast.push(AstNode {
@@ -155,24 +163,25 @@ pub(crate) fn parse_assert_statement(
     Ok(())
 }
 
-#[allow(clippy::result_large_err)]
 fn reject_unsupported_assert_argument_prefix(
     token_stream: &FileTokens,
     assert_name: StringId,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), ExpressionParseError> {
     match token_stream.current_token_kind() {
         TokenKind::Mutable => Err(CompilerDiagnostic::invalid_builtin_call(
             InvalidBuiltinCallReason::DoesNotAcceptMutableAccess,
             Some(assert_name),
             token_stream.current_location(),
-        )),
+        )
+        .into()),
 
         TokenKind::Symbol(_) if token_stream.peek_next_token() == Some(&TokenKind::Assign) => {
             Err(CompilerDiagnostic::invalid_builtin_call(
                 InvalidBuiltinCallReason::NamedArgumentsNotSupported,
                 Some(assert_name),
                 token_stream.current_location(),
-            ))
+            )
+            .into())
         }
 
         _ => Ok(()),

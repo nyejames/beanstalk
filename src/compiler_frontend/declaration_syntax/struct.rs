@@ -7,9 +7,14 @@
 //! This module is the authoritative home for the struct shell parser. It returns neutral field
 //! syntax; AST type resolution later turns that syntax into typed declarations.
 
-#![allow(clippy::result_large_err)]
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
 use crate::compiler_frontend::declaration_syntax::record_body::parse_record_body;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
@@ -17,6 +22,14 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+
+/// Boxed diagnostic result for struct shell parsing.
+///
+/// WHAT: mirrors `RecordBodyParseResult` so the thin `parse_struct_shell` wrapper
+///       propagates the already-boxed `parse_record_body` diagnostic without unboxing.
+/// WHY: struct shell parsing is a delegation layer; the boxed boundary belongs to
+///      record-body parsing, and each plain-`CompilerDiagnostic` caller unboxes once.
+type StructShellResult = Result<Vec<SignatureMemberSyntax>, Box<CompilerDiagnostic>>;
 
 /// Parse a struct field-list shell from `| field Type [= default], ... |` syntax.
 ///
@@ -29,7 +42,7 @@ pub fn parse_struct_shell(
     string_table: &mut StringTable,
     warnings: &mut Vec<CompilerDiagnostic>,
     owner_path: &crate::compiler_frontend::symbols::interned_path::InternedPath,
-) -> Result<Vec<SignatureMemberSyntax>, CompilerDiagnostic> {
+) -> StructShellResult {
     parse_record_body(
         token_stream,
         string_table,
@@ -44,7 +57,15 @@ pub fn parse_struct_shell(
 /// WHAT: enforces the invariant that struct defaults must be known at compile time.
 /// WHY: called at AST stage only, after constant resolution has run. At header stage,
 /// references are unresolved and cannot be validated yet.
-pub(crate) fn validate_struct_default_values(fields: &[Declaration]) -> Result<(), DiagnosticBag> {
+///
+/// Template constness is classified through the caller's registry-backed effective TIR view.
+/// A TIR classification failure is itself a reportable diagnostic and is pushed into the bag
+/// instead of the generic non-constant message.
+pub(crate) fn validate_struct_default_values(
+    fields: &[Declaration],
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<(), DiagnosticBag> {
     let mut bag = DiagnosticBag::new();
 
     for field in fields {
@@ -52,7 +73,28 @@ pub(crate) fn validate_struct_default_values(fields: &[Declaration]) -> Result<(
             continue;
         }
 
-        if !field.value.is_compile_time_constant() {
+        let classification =
+            field
+                .value
+                .const_value_kind_with_template_classifier(&mut |template| {
+                    classify_template_from_effective_tir(
+                        template,
+                        template_ir_registry,
+                        string_table,
+                    )
+                });
+
+        let is_compile_time_constant = match classification {
+            Ok(kind) => kind.is_compile_time_value(),
+            Err(template_error) => {
+                // TIR classification failure is the actionable diagnostic for this
+                // field; report it instead of the generic non-constant message.
+                bag.push(TemplateError::into_diagnostic(template_error));
+                continue;
+            }
+        };
+
+        if !is_compile_time_constant {
             bag.push(CompilerDiagnostic::invalid_struct_default_value(
                 field.value.location.clone(),
             ));

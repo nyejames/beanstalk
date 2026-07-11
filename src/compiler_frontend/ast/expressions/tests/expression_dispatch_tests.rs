@@ -1,19 +1,28 @@
-//! Expression token dispatch tests.
+//! Expression token and identifier dispatch tests.
 //!
-//! WHAT: validates `dispatch_expression_token` behaviour for tokens that are valid in some
-//!       expression contexts but invalid in others (for example Hash before TemplateHead).
-//! WHY: the dispatcher is the single expression-entry gate; targeted tests prevent regressions
-//!      in how edge-case tokens are rejected or advanced.
+//! WHAT: validates token steps and identifier-led semantic routing at the expression entry gate.
+//! WHY: dispatch owns both token advancement and context-sensitive reference validation, so focused
+//!      tests keep those decisions aligned without exercising unrelated statement parsing.
 
-use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
     ExpressionDispatchState, ExpressionTokenStep, dispatch_expression_token,
 };
+use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
+use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
+    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
@@ -27,6 +36,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -276,4 +286,98 @@ fn full_frontend_stray_hash_error() {
         diagnostic.payload,
         DiagnosticPayload::UnexpectedToken { .. }
     ));
+}
+
+#[test]
+fn constant_identifier_uses_foreign_effective_tir_over_stale_content() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("test.bst", &mut string_table);
+    let constant_name = string_table.intern("wrapper");
+
+    let primary_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let foreign_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let primary_store_id = registry.adopt_store(Rc::clone(&primary_store));
+    let foreign_store_id = registry.adopt_store(Rc::clone(&foreign_store));
+    let registry = Rc::new(RefCell::new(registry));
+
+    let location = SourceLocation::new(scope.clone(), Default::default(), Default::default());
+    let template_id = {
+        let mut foreign_store = foreign_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut foreign_store);
+        let slot = builder.push_slot_node(SlotKey::Default, location.clone());
+        builder.finish_template(
+            slot,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            location.clone(),
+        )
+    };
+
+    let mut template = Template::empty();
+    template.content.add(Expression::reference(
+        InternedPath::from_single_str("runtime_value", &mut string_table),
+        DataType::StringSlice,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    ));
+    template.kind = TemplateType::String;
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(foreign_store.borrow().store_id(), template_id),
+        store_owner: foreign_store.borrow().owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
+
+    let mut context = ScopeContext::new(
+        ContextKind::Constant,
+        scope.clone(),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
+        Arc::new(ExternalPackageRegistry::new()),
+        vec![],
+        0,
+    )
+    .with_template_ir_registry(registry, primary_store_id, primary_store);
+    context.set_local_declarations(vec![Declaration {
+        id: InternedPath::from_components(vec![constant_name]),
+        value: Expression::template(template, ValueMode::ImmutableOwned),
+    }]);
+
+    let tokens = vec![
+        token(TokenKind::Symbol(constant_name), &scope),
+        token(TokenKind::Eof, &scope),
+    ];
+    let mut token_stream = FileTokens::new(scope, tokens);
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+    let mut expected_type = ExpectedType::Infer;
+
+    let parsed = create_expression(
+        &mut token_stream,
+        &context,
+        &mut type_interner,
+        &mut expected_type,
+        &ValueMode::ImmutableOwned,
+        false,
+        &mut string_table,
+    )
+    .expect("registry-backed constant reference should ignore stale runtime content");
+
+    let ExpressionKind::Template(parsed_template) = parsed.kind else {
+        panic!("constant reference should preserve the existing inlined template behavior");
+    };
+    assert_eq!(
+        parsed_template
+            .tir_reference
+            .as_ref()
+            .expect("inlined template should keep its TIR identity")
+            .root
+            .store_id,
+        foreign_store_id
+    );
 }

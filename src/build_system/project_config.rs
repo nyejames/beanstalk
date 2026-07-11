@@ -1,6 +1,6 @@
 //! Stage 0 config loading, parsing, and validation for Beanstalk projects.
 //!
-//! WHAT: owns the public entry points for loading `#config.bst` before compilation starts.
+//! WHAT: owns the public entry points for loading `config.bst` before compilation starts.
 //! WHY: callers only need one stable surface while parsing and validation details stay split by
 //! concern in dedicated helpers.
 
@@ -11,7 +11,7 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::LibrarySet;
-use crate::projects::settings::{self, Config};
+use crate::projects::settings::Config;
 
 use std::path::Path;
 
@@ -19,7 +19,7 @@ use std::path::Path;
 //  Config Parse Services
 // -------------------------
 
-/// Focused frontend services passed into config parsing so `#config.bst` can import from core and
+/// Focused frontend services passed into config parsing so `config.bst` can import from core and
 /// builder-provided libraries.
 ///
 /// WHAT: bundles the style directives and the complete library set (external packages, source
@@ -36,7 +36,7 @@ pub(crate) struct ProjectConfigParseServices<'a> {
 //  Public API
 // -------------------------
 
-/// Load and validate the project config from `#config.bst` before compilation begins (Stage 0).
+/// Load and validate the project config from `config.bst` before compilation begins (Stage 0).
 ///
 /// Config files are optional. When present this delegates to the parser/validator pipeline and
 /// applies all accepted settings directly to `config`.
@@ -45,20 +45,45 @@ pub fn load_project_config(
     services: &ProjectConfigParseServices<'_>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
+    let load_total_start = crate::timing::start_pipeline_timing();
 
-    if !config_path.exists() {
+    let config_path = config.config_file_path();
+
+    let file_exists_start = crate::timing::start_pipeline_timing();
+    let config_exists = config_path.exists();
+    log_stage_timing("config.file_exists_check", file_exists_start);
+
+    if !config_exists {
+        log_stage_timing("config.load_total", load_total_start);
         return Ok(());
     }
 
-    parse_project_config_file(config, &config_path, services, string_table)
+    let parse_start = crate::timing::start_pipeline_timing();
+    let result = parse_project_config_file(config, &config_path, services, string_table);
+    log_stage_timing("config.parse_project_config_file", parse_start);
+
+    log_stage_timing("config.load_total", load_total_start);
+    result
+}
+
+/// Record a config-stage timing through the central `timers` substrate.
+///
+/// WHAT: delegates to `timing::record_started_pipeline_timing`, which stores the
+///      observation in the active collection scope and emits the stable
+///      `BST_BENCH timing` line when the output mode permits.
+/// WHY:  config loading and parsing use dotted `config.*` metric names through the
+///      concise `timers` substrate. The start token is zero-sized when `timers`
+///      is off, so regular builds do not read clocks for instrumentation-only
+///      measurements.
+fn log_stage_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
+    crate::timing::record_started_pipeline_timing(metric, start);
 }
 
 // -------------------------
 //  Internal Orchestration
 // -------------------------
 
-/// Parse `#config.bst` and extract top-level constant declarations into the `Config` struct.
+/// Parse `config.bst` and extract top-level constant declarations into the `Config` struct.
 ///
 /// WHY: config uses normal Beanstalk syntax, so Stage 0 keeps the tokenizer/header parser in the
 /// loop and then applies a dedicated config-only validation pass.

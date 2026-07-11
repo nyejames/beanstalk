@@ -20,10 +20,15 @@
 //! - **Comparison**: Equality, inequality, relational comparisons
 //! - **Type Coercion**: Automatic promotion between compatible numeric types
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
+#[cfg(test)]
+use crate::compiler_frontend::ast::expressions::expression::FallibleCarrierVariant;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ExpressionValueShape, FallibleCarrierVariant, Operator,
-    type_id_hint_for_diagnostic_type,
+    Expression, ExpressionKind, ExpressionValueShape, Operator, type_id_hint_for_diagnostic_type,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
@@ -31,6 +36,8 @@ use crate::compiler_frontend::ast::expressions::expression_types::{
     FallibleHandling, ResolvedCastEvidence,
 };
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::builtins::casts::{BuiltinCastLiteral, apply_builtin_cast_policy};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
@@ -56,6 +63,15 @@ impl From<CompilerDiagnostic> for ConstantFoldError {
 impl From<CompilerError> for ConstantFoldError {
     fn from(error: CompilerError) -> Self {
         ConstantFoldError::Infrastructure(Box::new(error))
+    }
+}
+
+impl From<TemplateError> for ConstantFoldError {
+    fn from(error: TemplateError) -> Self {
+        match error {
+            TemplateError::Diagnostic(diagnostic) => ConstantFoldError::Diagnostic(diagnostic),
+            TemplateError::Infrastructure(error) => ConstantFoldError::Infrastructure(error),
+        }
     }
 }
 
@@ -215,32 +231,50 @@ fn fold_unary_operator(
     Ok(Some(ExpressionRpnItem::Operand(folded_expression)))
 }
 
+/// Folds a typed expression that has a dedicated AST const-eval path.
+///
+/// `template_ir_registry` is the active module registry from the caller's `ScopeContext`.
+/// Catch-handler templates keep their store-qualified identity so const classification reads
+/// their effective TIR views instead of rebuilding from compatibility content.
 pub fn fold_compile_time_expression(
     expression: &Expression,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     string_table: &mut StringTable,
     constant_context: bool,
 ) -> Result<Expression, ConstantFoldError> {
     match &expression.kind {
         ExpressionKind::Cast(cast) => {
-            let folded_source =
-                fold_compile_time_expression(&cast.source, string_table, constant_context)?;
+            let folded_source = fold_compile_time_expression(
+                &cast.source,
+                template_ir_registry,
+                string_table,
+                constant_context,
+            )?;
             fold_resolved_cast(
                 expression,
                 cast,
                 &folded_source,
+                template_ir_registry,
                 string_table,
                 constant_context,
                 None,
             )
         }
         ExpressionKind::HandledFallibleExpression { value, handling } => {
-            let folded_value = fold_compile_time_expression(value, string_table, constant_context)?;
+            let folded_value = fold_compile_time_expression(
+                value,
+                template_ir_registry,
+                string_table,
+                constant_context,
+            )?;
 
             match &folded_value.kind {
+                #[cfg(test)]
                 ExpressionKind::FallibleCarrierConstruct {
                     variant: FallibleCarrierVariant::Success,
                     value,
                 } => Ok(value.as_ref().to_owned()),
+                #[cfg(test)]
                 ExpressionKind::FallibleCarrierConstruct {
                     variant: FallibleCarrierVariant::Error,
                     ..
@@ -270,13 +304,18 @@ pub fn fold_compile_time_expression(
                     return Ok(expression.to_owned());
                 };
 
-                let folded_source =
-                    fold_compile_time_expression(&cast.source, string_table, constant_context)?;
+                let folded_source = fold_compile_time_expression(
+                    &cast.source,
+                    template_ir_registry,
+                    string_table,
+                    constant_context,
+                )?;
 
                 fold_resolved_cast(
                     expression,
                     cast,
                     &folded_source,
+                    template_ir_registry,
                     string_table,
                     constant_context,
                     Some(body),
@@ -302,6 +341,7 @@ fn fold_resolved_cast(
     original_expression: &Expression,
     cast: &ResolvedCastExpression,
     folded_source: &Expression,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     string_table: &mut StringTable,
     constant_context: bool,
     recovery_handler_body: Option<&[AstNode]>,
@@ -359,6 +399,7 @@ fn fold_resolved_cast(
                             cast.requires_optional_wrap_after_cast,
                             original_expression.type_id,
                             &original_expression.location,
+                            template_ir_registry,
                             string_table,
                         )?
                     {
@@ -421,6 +462,7 @@ fn fold_cast_recovery_handler(
     requires_optional_wrap_after_cast: bool,
     result_type_id: TypeId,
     diagnostic_location: &SourceLocation,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
     string_table: &mut StringTable,
 ) -> Result<Option<Expression>, ConstantFoldError> {
     let Some(handler_expression) = extract_single_produced_value(handler_body) else {
@@ -433,9 +475,15 @@ fn fold_cast_recovery_handler(
         .into());
     };
 
-    let folded_handler = fold_compile_time_expression(handler_expression, string_table, true)?;
+    let folded_handler =
+        fold_compile_time_expression(handler_expression, template_ir_registry, string_table, true)?;
 
-    if !folded_handler.is_compile_time_constant() {
+    let handler_is_compile_time_constant = folded_handler
+        .const_value_kind_with_template_classifier(&mut |template| {
+            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+        })?
+        .is_compile_time_value();
+    if !handler_is_compile_time_constant {
         return Err(CompilerDiagnostic::invalid_cast(
             InvalidCastReason::CatchHandlerNotConstFoldable,
             None,

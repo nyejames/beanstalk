@@ -9,11 +9,16 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression_rpn::{ExpressionRpn, PlaceExpression};
+#[cfg(test)]
+use crate::compiler_frontend::ast::expressions::expression_types::FallibleCarrierVariant;
 use crate::compiler_frontend::ast::expressions::expression_types::{
-    CastHandling, FallibleCarrierVariant, FallibleExpressionHandling, ResolvedCastEvidence,
+    CastHandling, FallibleExpressionHandling, ResolvedCastEvidence,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
+use crate::compiler_frontend::ast::templates::runtime_handoff::{
+    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastTarget;
@@ -21,6 +26,7 @@ use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
+#[cfg(test)]
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
@@ -84,6 +90,7 @@ pub enum ExpressionKind {
     ///
     /// Deferred until source path expression parsing is wired. Retained because const folding,
     /// HIR lowering, and path tests already share this AST shape.
+    #[cfg(test)]
     Path(Box<CompileTimePaths>),
 
     /// Reference to a variable by name.
@@ -176,6 +183,7 @@ pub enum ExpressionKind {
     Cast(ResolvedCastExpression),
 
     /// Construct a `Success` or `Failure` carrier value.
+    #[cfg(test)]
     FallibleCarrierConstruct {
         variant: FallibleCarrierVariant,
         value: Box<Expression>,
@@ -209,6 +217,24 @@ pub enum ExpressionKind {
 
     /// Equivalent to a string when folded at compile time.
     Template(Box<Template>),
+
+    /// Final AST-owned handoff for an ordinary runtime template.
+    ///
+    /// WHAT: carries the neutral owned runtime-template payload that HIR will consume after the
+    /// Phase 11 cutover. The payload contains no TIR store, view, registry, overlay, or reference
+    /// identity.
+    /// WHY: final AST expressions should own runtime template data directly instead of asking HIR
+    /// to inspect `Template` internals. Current consumers remain on `Template` until the cutover
+    /// slice wires this variant through lowering.
+    RuntimeTemplateHandoff(Box<OwnedRuntimeTemplateHandoff>),
+
+    /// Final AST-owned handoff for a runtime slot application.
+    ///
+    /// WHAT: carries the neutral owned slot-application payload that preserves routed wrapper,
+    /// contribution-source, and slot-site render data without exposing TIR IDs.
+    /// WHY: slot applications need a distinct expression shape so the later HIR cutover can
+    /// preserve the current dispatch rule without reading `Template::runtime_slot_handoff`.
+    RuntimeSlotApplicationHandoff(Box<OwnedRuntimeSlotApplicationHandoff>),
 
     /// Homogeneous collection literal.
     Collection(Vec<Expression>),
@@ -273,30 +299,24 @@ pub enum ExpressionKind {
 impl ExpressionKind {
     /// Whether this expression can be folded to a constant at compile time.
     pub fn is_foldable(&self) -> bool {
-        matches!(
+        if matches!(
             self,
             ExpressionKind::Int(_)
                 | ExpressionKind::Float(_)
                 | ExpressionKind::Bool(_)
                 | ExpressionKind::StringSlice(_)
                 | ExpressionKind::Char(_)
-                | ExpressionKind::Path(_)
                 | ExpressionKind::ChoiceConstruct { .. }
-        )
-    }
+        ) {
+            return true;
+        }
 
-    /// Whether this expression contains runtime control flow that must be lowered
-    /// into HIR statements rather than kept as a pure nested expression.
-    ///
-    /// WHAT: value blocks allocate locals and emit terminators during lowering,
-    ///       so they cannot stay inside a returned expression tree.
-    /// WHY: `lower_child_expression_for_parent` needs to flush pending preludes
-    ///      before any expression that manipulates the current HIR block.
-    pub fn contains_statement_like_control_flow(&self) -> bool {
-        matches!(
-            self,
-            ExpressionKind::OptionPropagation { .. } | ExpressionKind::ValueBlock { .. }
-        )
+        #[cfg(test)]
+        if matches!(self, ExpressionKind::Path(_)) {
+            return true;
+        }
+
+        false
     }
 
     /// Remap all interned string IDs and paths in this expression kind recursively.
@@ -316,6 +336,7 @@ impl ExpressionKind {
                 *name = remap.get(*name);
             }
 
+            #[cfg(test)]
             ExpressionKind::Path(paths) => {
                 paths.remap_string_ids(remap);
             }
@@ -394,9 +415,12 @@ impl ExpressionKind {
             }
 
             // These variants wrap a single inner expression.
-            ExpressionKind::FallibleCarrierConstruct { value, .. }
-            | ExpressionKind::OptionPropagation { value }
-            | ExpressionKind::Coerced { value, .. } => {
+            #[cfg(test)]
+            ExpressionKind::FallibleCarrierConstruct { value, .. } => {
+                value.remap_string_ids(remap);
+            }
+
+            ExpressionKind::OptionPropagation { value } | ExpressionKind::Coerced { value, .. } => {
                 value.remap_string_ids(remap);
             }
 
@@ -418,6 +442,14 @@ impl ExpressionKind {
 
             ExpressionKind::Template(template) => {
                 template.remap_string_ids(remap);
+            }
+
+            ExpressionKind::RuntimeTemplateHandoff(handoff) => {
+                handoff.remap_string_ids(remap);
+            }
+
+            ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => {
+                handoff.remap_string_ids(remap);
             }
 
             ExpressionKind::Collection(items) => {
@@ -467,6 +499,10 @@ impl ExpressionKind {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/runtime_handoff_expression_payload_tests.rs"]
+mod runtime_handoff_expression_payload_tests;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operator {

@@ -44,6 +44,12 @@ pub(crate) fn fold_expression_kind_to_string(
                 Some(FoldedStringPiece::NestedTemplate)
             }
         }
+        ExpressionKind::Coerced { value, .. } => {
+            // Contextual coercion nodes do not change the rendered scalar value;
+            // delegate to the inner expression so coerced literals fold the same
+            // way as their unwrapped counterparts.
+            fold_expression_kind_to_string(&value.kind, string_table)
+        }
         _ => None,
     }
 }

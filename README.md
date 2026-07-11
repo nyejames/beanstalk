@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A high level language for readable and reliable code
+  A high-level, ambitious programming language for building reliable apps and websites
 </em></p>
 
 # 🌱
@@ -12,53 +12,9 @@
 
 <p><a href="https://nyejames.github.io/beanstalk/">The documentation site</a> was created using <a href="https://github.com/nyejames/beanstalk/blob/main/docs/src">Beanstalk</a>. </p>
 
-<p>The language is under rapid active development and evolving constantly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're inspired to help out</p>
+<p>The language is in active development and changes quickly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're interested in helping with this project.</p>
 </div>
 <br>
-<br>
-
-## Getting Started
-
-`bean` is the main project tool for creating, checking, building, and running Beanstalk projects.
-It is a cli tool bundled with the compiler and build system.
-
-Its currently recommended to manually install the compiler from one of the tagged release files. Installation scripts will be fully available once the project is in Beta.
-
-### Check the installation
-
-```bash
-bean --version
-```
-
-### Create a project
-
-```bash
-bean new my-site
-cd my-site
-```
-
-### Run the development server
-
-```bash
-bean dev
-```
-
-The dev server rebuilds the project when files change and refreshes the browser output automatically.
-
-### Release Build
-
-```bash
-bean build --release
-```
-
-This compiles the project using the configured Beanstalk builder and writes the output to the project’s `/release` output directory.
-
-### Check a project without writing output
-
-```bash
-bean check
-```
-
 <br>
 
 <div align="center">
@@ -66,15 +22,17 @@ bean check
 ## What is Beanstalk?
 
 </div>
-<p>Beanstalk is designed to be an opinionated, batteries-included, refreshing language for modern app building.</p>
+<p>Beanstalk is a small, opinionated language that gives you as much tooling as possible already baked into the language and build system.</p>
 
-<p>This project is focused on the long term and carefully designed to be versatile and future proof.</p>
+<p>The first-party HTML builder makes web development the current focus. A pluggable builder interface keeps the compiler open to other targets without turning the language into a pile of target-specific exceptions.</p>
 
-<p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
+<p>Templates are first-class language values. They can produce text, Markdown and HTML, fold at compile time or lower to runtime string construction, with structured slots, wrappers and formatter directives. They replace the same underpowered string formatter functions/macros languages have been stuck using forever</p>
 
-<p>The language surface is deliberately small: static nominal types, explicit trait conformance, constrained generics, no general macro system, and no crazy turing-complete type system spagetti.</p>
+<p>Deliberately small: static nominal types, explicit trait conformance and constrained generics. There is no general macro system or turing-complete type system spaghetti.</p>
 
-<p>This is a serious attempt to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
+<p>Borrow validation enforces exclusive mutation and move safety today. A GC semantic baseline keeps execution practical while ownership analysis leaves room for future allocation and deterministic-drop optimisations.</p>
+
+<p>The goal is modern application development without TypeScript framework lasagne, build-tool linguini or 17 package dependencies for padding a string.</p>
 
 <br>
 
@@ -87,7 +45,7 @@ create_post |title String, date Int, content String| -> String:
     
     io.line("Creating a blog post!")
 
-    formatted_blog = [section, $markdown:
+    formatted_blog = [section, $md:
         [date]
         [center: 
             # [title]
@@ -114,7 +72,7 @@ import @blog_styles {page, title}
 page_title #= "Pointless Blog!!!"
 
 date = 2025
-post = create_post("Boring Title", date, [$markdown:
+post = create_post("Boring Title", date, [$md:
     I have absolutely nothing interesting to say, and never will.
 ])
 
@@ -122,6 +80,60 @@ post = create_post("Boring Title", date, [$markdown:
     [post]
 ]
 ```
+
+<div align="center">
+
+## Beanstalk loves Markdown
+
+</div>
+
+Beanstalk includes its own compact, template-aware flavour of Markdown through the built-in `$md` formatter. Markdown lives inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
+
+This makes content-heavy pages quick to build and easy to format. Write prose where it belongs, keep templates around it and skip the traditional ceremony of feeding Markdown through a JavaScript plugin stack to recover the HTML you wanted in the first place.
+
+## Getting Started
+
+`bean` is the project tool for creating, checking, building and running Beanstalk projects.
+It is the CLI bundled with the compiler and build system.
+
+It's currently best to install the compiler manually from a tagged release. Installation scripts will arrive for Beta.
+
+### Check the installation
+
+```bash
+bean --version
+```
+
+### Create a project
+
+```bash
+bean new html my-site
+cd my-site
+```
+
+### Run the development server
+
+```bash
+bean dev .
+```
+
+The dev server rebuilds the project when files change and refreshes the browser output automatically.
+
+### Release build
+
+```bash
+bean build . --release
+```
+
+This compiles the project using the configured Beanstalk builder and writes output to the configured release directory. The default scaffold uses `/release`.
+
+### Check a project compiles without writing output
+
+```bash
+bean check .
+```
+
+<br>
 
 <div align="center">
 </div>
@@ -132,32 +144,30 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-- String templates powerful enough to become a tiny compile time HTML/markup engine. Perfect for UI generation and complex string formatting. Built-in markdown parsing, reactivity and compile time string formatting.
-- Readability-first syntax - Modern, concise and consistent.
-- Modular and fast for snappy tooling and fast development builds.
-- Integrated build system and tooling for web projects and beyond.
-- Simple, static and strong type system with a borrow checker for writing confident, safe and correct code.
-- A memory model that can allow for future static optimizations - The GC can be  completly elided in ideal cases.
-- Backend agnostic - Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
-- As few dependencies as possible.
+- First-class string templates powerful enough to act as a small compile-time markup engine. They support built-in Markdown, formatting, slots and reactive runtime output.
+- Readable, consistent syntax. Each keyword or symbol exclusively covers one concept.
+- Fast, modular tooling for short feedback loops and quick development builds (currently needs a lot more optimisation work).
+- One project tool for checking, building and running the development server.
+- A small static type system plus borrow validation memory-safe code free of data races and iterator invalidation by default.
+- A GC fallback with ownership analysis that can remove runtime collection in ideal cases.
+- A backend-neutral frontend. HTML and JavaScript are the Alpha target, Wasm is experimental and other builders can follow.
+- Few dependencies. A language project shouldn't need a PhD dissertation for a lockfile.
 
 <div align="center">
 
-## LLM Aware design
+## LLM-aware design
 
 </div>
 
-Beanstalk is designed for an ecosystem where LLMs and programmers work on projects together: 
+Beanstalk assumes developers are using coding agents increasingly as part of their workflow.
 
-Humans should focus on validating, reviewing, designing and artichecting a project while LLMs cover the boring churn.
+Programmers should own the final design and architecture. Agents can handle repetitive churn, provided the compiler gives them nowhere comfortable to hide mistakes.
 
-This is one reason why readability is the primary goal of the language.
+Readability is not decoration. A small syntax, strict rules, fast tooling and stable diagnostics make generated changes easier to inspect and easier to reject when they are wrong.
 
-The strict compiler and snappy, modular tooling enables LLMs to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe, and designed to prefer typed error propagation over panics for expected failures. The language is simple and terse which is ideal for context limits and human validation.
+Compiler diagnostics carry stable codes, structured facts and source metadata for editors, development servers and coding agents.
 
-Even the way compiler errors are designed is to provide good metadata from the start, not just pretty human readable ones.
-
-Beanstalk not being saturated in LLM training data may provide a the long term advantage of having a smaller, higher quality dataseta as the language matures and no pretrained bad or legacy patterns to contend with.
+Beanstalk has very little legacy training data. That is inconvenient today and useful later: examples can grow around the language that exists. No legacy frameworks bloating the picture.
 
 <div align="center">
   
@@ -170,11 +180,15 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md">An Overview of the Compiler</a>
+<a href="https://nyejames.github.io/beanstalk/docs/codebase/compiler-design/">Compiler design</a>
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/memory-management-design.md">The memory management strategy</a>
+<a href="https://nyejames.github.io/beanstalk/docs/codebase/memory-management/">Memory management</a>
+</li>
+<br>
+<li>
+<a href="https://nyejames.github.io/beanstalk/docs/codebase/style-guide/">Development standards</a>
 </li>
 </strong>
 
@@ -184,7 +198,7 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 
 </div>
 
-<a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode</a>
+<a href="https://github.com/nyejames/beanstalk-plugin">Language support and syntax highlighting for Visual Studio Code</a>
 
 <div align="center">
 <br>
@@ -195,6 +209,6 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 
 Here is the current <a href="https://nyejames.github.io/beanstalk/docs/progress/">implementation progress matrix</a>.
 
-This project already has a broad set of tooling, build system work and most of the backend/frontend scaffolding already done.
+The compiler already has broad frontend, backend and build-system tooling in place.
 
 <br>

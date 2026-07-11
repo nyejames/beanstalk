@@ -14,7 +14,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Stage 0 source discovery failure.
 pub(crate) enum SourceDiscoveryError {
-    Diagnostic(CompilerDiagnostic),
+    Diagnostic(Box<CompilerDiagnostic>),
     Messages(CompilerMessages),
     Infrastructure(CompilerError),
 }
@@ -24,7 +24,7 @@ impl SourceDiscoveryError {
     pub(crate) fn into_messages(self, string_table: &StringTable) -> CompilerMessages {
         match self {
             SourceDiscoveryError::Diagnostic(diagnostic) => {
-                CompilerMessages::from_diagnostics(vec![diagnostic], string_table.clone())
+                CompilerMessages::from_diagnostics(vec![*diagnostic], string_table.clone())
             }
             SourceDiscoveryError::Messages(messages) => messages,
             SourceDiscoveryError::Infrastructure(error) => {
@@ -36,7 +36,7 @@ impl SourceDiscoveryError {
 
 impl From<CompilerDiagnostic> for SourceDiscoveryError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        SourceDiscoveryError::Diagnostic(diagnostic)
+        SourceDiscoveryError::Diagnostic(Box::new(diagnostic))
     }
 }
 

@@ -15,7 +15,7 @@
 //!
 //! Directive ownership policy:
 //! - Frontend built-ins define language/template semantics and generic formatter directives
-//!   such as `$markdown`.
+//!   such as `$md`.
 //! - Project builders may only register additional project-owned directives such as the HTML
 //!   project's `$html`, `$css`, and `$escape_html`.
 //! - The frontend always executes directive handlers during parsing/folding, regardless of

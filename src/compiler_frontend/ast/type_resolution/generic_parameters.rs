@@ -75,7 +75,6 @@ pub(crate) fn build_generic_parameter_scope(
         string_table,
         "AST Construction",
     )
-    .map_err(Box::new)
     .map(Some)
 }
 
@@ -143,9 +142,10 @@ pub(crate) fn collect_type_parameter_ids_from_type(
             }
         }
 
-        DataType::Option(inner) | DataType::Reference(inner) => {
-            collect_type_parameter_ids_from_type(inner, used_parameters)
-        }
+        DataType::Option(inner) => collect_type_parameter_ids_from_type(inner, used_parameters),
+
+        #[cfg(test)]
+        DataType::Reference(inner) => collect_type_parameter_ids_from_type(inner, used_parameters),
 
         DataType::FallibleCarrier { success, error } => {
             collect_type_parameter_ids_from_type(success, used_parameters);

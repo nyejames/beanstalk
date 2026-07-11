@@ -544,6 +544,16 @@ pub enum InvalidTemplateDirectiveReason {
     MissingArgument,
     InvalidArgument,
     DirectiveNotAllowedHere,
+    /// Directive received parenthesized arguments it does not accept.
+    UnexpectedArguments,
+    /// Directive parentheses are empty.
+    EmptyArguments,
+    /// `$slot` received an invalid target argument.
+    InvalidSlotTarget,
+    /// `$insert` received an invalid slot name argument.
+    InvalidInsertTarget,
+    /// `$children` received an invalid wrapper argument.
+    InvalidChildrenArgument,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

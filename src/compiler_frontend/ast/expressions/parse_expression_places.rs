@@ -234,8 +234,13 @@ fn parse_copy_place_payload(
         }
 
         // Any other token cannot begin a place expression.
-        _ => Err(CompilerDiagnostic::unexpected_token(
-            token_stream.current_token_kind().to_owned(),
+        //
+        // `copy` requires a variable or field, not a literal, call, or
+        // computed expression. We emit a targeted diagnostic so the user
+        // understands *why* `copy` rejected this token, not just that it was
+        // unexpected.
+        _ => Err(CompilerDiagnostic::invalid_copy_target(
+            InvalidCopyTargetReason::NonPlace,
             token_stream.current_location(),
         )
         .into()),

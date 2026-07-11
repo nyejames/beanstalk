@@ -47,6 +47,7 @@ pub enum HirConstValue {
     Collection(Vec<HirConstValue>),
     Record(Vec<HirConstField>),
     Range(Box<HirConstValue>, Box<HirConstValue>),
+    #[cfg(test)]
     Result {
         /// Stored for completeness so the const-value payload carries the full
         /// result shape. Currently not read outside of test assertions.

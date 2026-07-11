@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -318,12 +321,15 @@ body {
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> LIBRARIES</h1>
     <section class="container"><p>Libraries are named import surfaces. They let a Beanstalk file pull declarations from another place without depending on that place&#39;s private implementation layout.</p><p>Beanstalk currently has four library shapes:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Library kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example import</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> What it exposes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Library kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example import</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> What it exposes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Source library</td>
@@ -354,7 +360,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> <code>import @web/canvas {get_canvas}</code> </td>
      <td style="padding: 0.2em 0.5em;  "> A builder-owned JavaScript library bundled with the project builder.</td>
         </tr>
-        
+            
+
     </table><p>The current canvas library is exposed as <code>@web/canvas</code>. This page calls it the canvas library, but examples use the current full import path.</p></section>
     <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">Core IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
     <section class="container"><h1>Import forms</h1><p>Imports target a declaration surface, not a raw folder dump.</p><pre style="
@@ -545,12 +552,15 @@ body {
         <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>+</span> <span class='bst-code-number'>1</span>;
     <span class='bst-code-parenthesis'>}</span>;
     </code></pre><p>Unsupported public export forms include:</p><ul><li>default exports</li><li>re-exports such as <code>export { name }</code></li><li>class exports</li><li>CommonJS exports such as <code>module.exports</code> or <code>exports.name</code></li><li><code>export const</code> values that are not arrow functions</li><li>expression-bodied arrow exports</li></ul><p>JavaScript parameters must be plain parameters. Rest parameters, destructuring parameters, optional parameters, and default parameter values are rejected.</p><p>The signature subset currently supports:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>@bst.opaque Canvas2d</code> </td>
@@ -576,7 +586,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig fill |ctx ~Canvas2d, x Float|</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Declares a free function whose first parameter takes mutable access to a <code>Canvas2d</code> value.</td>
         </tr>
-        
+            
+
     </table><p>Built-in signature types are <code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>String</code>, and <code>Char</code>. Other type names must be declared with <code>@bst.opaque</code> before they are used in a signature.</p><p>Current JS signature limitations:</p><ul><li>no collection types</li><li>no option types</li><li>no generic parameters</li><li>no callback/function parameter types</li><li>no multi-success returns</li><li>no <code>Void</code>, <code>None</code>, <code>Unit</code>, or <code>()</code> return spelling; omit <code>-&gt;</code> for no success return</li></ul></section>
     <section class="container"><h1>Fallible JavaScript functions</h1><p>A JavaScript signature that returns <code>Error!</code> must return Beanstalk&#39;s result wrapper shape. The easiest way is to import the registered runtime helpers from <code>@beanstalk/runtime</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -766,12 +777,15 @@ body {
     ;
     </code></pre></section>
     <section class="container"><h1>How builders provide libraries</h1><p>Project builders own the library set they expose. A builder can combine several mechanisms in one project:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Mechanism</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Builder action</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Mechanism</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Builder action</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Mandatory core</td>
@@ -808,7 +822,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Register backend-specific config keys before Stage 0 config validation.</td>
      <td style="padding: 0.2em 0.5em;  "> The HTML builder registers keys such as <code>html_lang</code> and <code>redirect_index_html</code>.</td>
         </tr>
-        
+            
+
     </table><p>This separation keeps the compiler frontend generic. The frontend needs typed import surfaces, source roots, and provider results. The builder decides which surfaces exist and how their compiled output is emitted.</p></section>
     <section class="container"><h1>Current limits</h1><p>Library support is intentionally narrow while the language is still in alpha.</p><p>Current limits to expect:</p><ul><li>no package manager yet</li><li>no remote fetching or lockfiles yet</li><li>no source-library version resolution yet</li><li>no wildcard imports yet</li><li>no arbitrary JavaScript dependency graphs through the JS provider yet</li><li>no direct <code>.js</code> imports from <code>#config.bst</code></li><li>no direct cross-module bypass into another module&#39;s private JavaScript file</li><li>no automatic documentation extraction from <code>#mod.bst</code> yet</li><li>no HIR cache for source libraries yet</li></ul><p>The practical model for now is:</p><ul><li>use <code>lib/&lt;name&gt;/#mod.bst</code> for project-local Beanstalk libraries.</li><li>use <code>@core/...</code>, <code>@html</code>, and <code>@web/canvas</code> for builder-provided libraries.</li><li>use small annotated <code>.js</code> wrapper files when a project needs browser JavaScript directly.</li></ul></section>
     <script>

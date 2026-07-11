@@ -24,7 +24,7 @@ pub use crate::compiler_frontend::headers::types::{
     HeaderParseOptions, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::mod_file::path_is_mod_file;
+use crate::compiler_frontend::source_libraries::root_file::path_is_mod_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
@@ -151,9 +151,9 @@ pub fn parse_headers(
             external_package_registry,
             string_table,
         )
-        .map_err(|diagnostic| {
+        .map_err(|boxed_diagnostic| {
             let mut bag = DiagnosticBag::new();
-            bag.push(diagnostic);
+            bag.push(*boxed_diagnostic);
             bag
         })?;
     }

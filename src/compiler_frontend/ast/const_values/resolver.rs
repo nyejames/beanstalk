@@ -5,6 +5,10 @@
 //! WHY: one shared resolver avoids duplicating fold/reference logic across config,
 //!      AST finalization, and HIR metadata.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_eval::constant_fold;
 use crate::compiler_frontend::ast::const_values::facts::{
@@ -14,6 +18,15 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
 };
+use crate::compiler_frontend::ast::expressions::expression_types::ConstValueKind;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateTirPhase, TirView,
+    classify_effective_tir_view_template,
+};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
@@ -45,7 +58,7 @@ impl ConstValueEnvironment {
 /// WHAT: structured failure cases for const resolution.
 /// WHY: callers decide how to report or ignore failures; the resolver does not
 ///      emit user-facing diagnostics directly.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum ConstResolutionError {
     UnresolvedReference,
     NonConstReference,
@@ -53,17 +66,74 @@ pub enum ConstResolutionError {
     CallInConstContext,
     MutableDeclaration,
     NonConstExpression,
+    TemplateClassification(TemplateError),
 }
+
+impl ConstResolutionError {
+    /// Expected non-const failures are advisory for fact collection.
+    ///
+    /// WHAT: unresolved references, mutable declarations, calls, and runtime
+    ///       expressions simply mean "do not record a const fact". Template
+    ///       classification errors are different because they may represent a
+    ///       broken TIR materialization invariant or a source diagnostic that
+    ///       should stay on the template normalization boundary.
+    pub(crate) fn is_expected_non_const_resolution(&self) -> bool {
+        !matches!(self, Self::TemplateClassification(_))
+    }
+}
+
+impl From<TemplateError> for ConstResolutionError {
+    fn from(error: TemplateError) -> Self {
+        Self::TemplateClassification(error)
+    }
+}
+
+impl PartialEq for ConstResolutionError {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::UnresolvedReference, Self::UnresolvedReference)
+                | (Self::NonConstReference, Self::NonConstReference)
+                | (
+                    Self::NonFoldableRuntimeExpression,
+                    Self::NonFoldableRuntimeExpression
+                )
+                | (Self::CallInConstContext, Self::CallInConstContext)
+                | (Self::MutableDeclaration, Self::MutableDeclaration)
+                | (Self::NonConstExpression, Self::NonConstExpression)
+                | (
+                    Self::TemplateClassification(_),
+                    Self::TemplateClassification(_)
+                )
+        )
+    }
+}
+
+impl Eq for ConstResolutionError {}
 
 /// Resolves AST expressions against a [`ConstValueEnvironment`] to determine
 /// whether they are compile-time constants.
 pub struct ConstValueResolver<'a> {
     string_table: &'a mut StringTable,
+    template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
 }
 
 impl<'a> ConstValueResolver<'a> {
-    pub fn new(string_table: &'a mut StringTable) -> Self {
-        Self { string_table }
+    /// Creates a resolver backed by the module TIR registry.
+    ///
+    /// WHAT: the caller supplies the finalization registry so each template is
+    ///       classified through its exact store-qualified effective TIR view.
+    /// WHY: const-fact collection runs after template normalization and must not
+    ///      reconstruct compatibility content in the primary store, especially
+    ///      for overlays or references owned by another registered store.
+    pub fn new(
+        string_table: &'a mut StringTable,
+        template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+    ) -> Self {
+        Self {
+            string_table,
+            template_ir_registry,
+        }
     }
 
     // ------------------------------
@@ -80,12 +150,13 @@ impl<'a> ConstValueResolver<'a> {
         environment: &ConstValueEnvironment,
     ) -> Result<AstConstDeclarationFact, ConstResolutionError> {
         let resolved = self.resolve_expression(&declaration.value, environment)?;
+        let value_kind = self.fact_value_kind(&resolved)?;
 
         Ok(AstConstDeclarationFact {
             declaration_path: declaration.id.clone(),
             scope: ConstBindingScope::ExplicitTopLevel,
             source: ConstBindingSource::ExplicitHash,
-            value_kind: ConstFactValueKind::from_expression(&resolved),
+            value_kind,
             resolved_expression: resolved,
             location: declaration.value.location.clone(),
         })
@@ -105,12 +176,13 @@ impl<'a> ConstValueResolver<'a> {
         }
 
         let resolved = self.resolve_expression(&declaration.value, environment)?;
+        let value_kind = self.fact_value_kind(&resolved)?;
 
         Ok(AstConstDeclarationFact {
             declaration_path: declaration.id.clone(),
             scope: ConstBindingScope::PrivateTopLevel,
             source: ConstBindingSource::InferredImmutable,
-            value_kind: ConstFactValueKind::from_expression(&resolved),
+            value_kind,
             resolved_expression: resolved,
             location: declaration.value.location.clone(),
         })
@@ -130,12 +202,13 @@ impl<'a> ConstValueResolver<'a> {
         }
 
         let resolved = self.resolve_expression(&declaration.value, environment)?;
+        let value_kind = self.fact_value_kind(&resolved)?;
 
         Ok(AstConstDeclarationFact {
             declaration_path: declaration.id.clone(),
             scope: ConstBindingScope::BodyLocal,
             source: ConstBindingSource::InferredImmutable,
-            value_kind: ConstFactValueKind::from_expression(&resolved),
+            value_kind,
             resolved_expression: resolved,
             location: declaration.value.location.clone(),
         })
@@ -156,7 +229,7 @@ impl<'a> ConstValueResolver<'a> {
     ) -> Result<Expression, ConstResolutionError> {
         // Fast path: expressions that are already compile-time constants
         // (literals, composite collections, templates, etc.) need no substitution.
-        if expression.is_compile_time_constant() {
+        if self.is_compile_time_constant(expression)? {
             return Ok(expression.clone());
         }
 
@@ -199,7 +272,7 @@ impl<'a> ConstValueResolver<'a> {
             .lookup(path)
             .ok_or(ConstResolutionError::UnresolvedReference)?;
 
-        if resolved.is_compile_time_constant() {
+        if self.is_compile_time_constant(resolved)? {
             Ok(resolved.clone())
         } else {
             Err(ConstResolutionError::NonConstReference)
@@ -230,7 +303,7 @@ impl<'a> ConstValueResolver<'a> {
 
         if stack.len() == 1
             && let ExpressionRpnItem::Operand(expression) = &stack[0]
-            && expression.is_compile_time_constant()
+            && self.is_compile_time_constant(expression)?
         {
             return Ok(expression.clone());
         }
@@ -256,4 +329,104 @@ impl<'a> ConstValueResolver<'a> {
 
         Ok(ExpressionRpnItem::Operand(expression.clone()))
     }
+
+    fn fact_value_kind(
+        &mut self,
+        expression: &Expression,
+    ) -> Result<ConstFactValueKind, ConstResolutionError> {
+        let kind = self.const_value_kind(expression)?;
+        Ok(ConstFactValueKind::from_const_value_kind(kind))
+    }
+
+    fn is_compile_time_constant(
+        &mut self,
+        expression: &Expression,
+    ) -> Result<bool, ConstResolutionError> {
+        Ok(self.const_value_kind(expression)?.is_compile_time_value())
+    }
+
+    fn const_value_kind(
+        &mut self,
+        expression: &Expression,
+    ) -> Result<ConstValueKind, ConstResolutionError> {
+        let registry = Rc::clone(&self.template_ir_registry);
+        let string_table = &*self.string_table;
+
+        expression
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(template, &registry, string_table)
+            })
+            .map_err(ConstResolutionError::from)
+    }
+}
+
+/// Classifies one template through its registry-qualified effective TIR view.
+///
+/// WHAT: validates the reference, phase and store-owner token before using the
+///       existing effective-view classifier on the owning registry store.
+/// WHY: AST const consumers run after composition, so missing or pre-Composed
+///      identity is a broken phase invariant rather than permission to recover
+///      semantics from the compatibility content mirror.
+pub(crate) fn classify_template_from_effective_tir(
+    template: &Template,
+    registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<TemplateConstValueKind, TemplateError> {
+    Ok(classify_template_effective_tir(template, registry, string_table)?.const_value_kind)
+}
+
+/// Returns the full classification for one registry-qualified template view.
+///
+/// WHAT: exposes structural slot and insert facts alongside the const-value kind.
+/// WHY: parser-side folding must retain an unfilled wrapper template even though
+///      final fold boundaries render its missing slots as empty output.
+pub(crate) fn classify_template_effective_tir(
+    template: &Template,
+    registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<MaterializedTirTemplateClassification, TemplateError> {
+    let reference = template.tir_reference.as_ref().ok_or_else(|| {
+        CompilerError::compiler_error(
+            "AST const template classification requires a registry-backed TIR reference.",
+        )
+    })?;
+
+    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        return Err(CompilerError::compiler_error(format!(
+            "AST const template classification requires Composed TIR, but root {} is at phase {}.",
+            reference.root, reference.phase
+        ))
+        .into());
+    }
+
+    let registry = registry.borrow();
+    let store_handle = registry
+        .store_handle(reference.root.store_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "AST const template root {} refers to a missing registry store.",
+                reference.root
+            ))
+        })?;
+
+    {
+        let store = store_handle.borrow();
+        if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
+            return Err(CompilerError::compiler_error(format!(
+                "AST const template root {} does not match its registry store owner.",
+                reference.root
+            ))
+            .into());
+        }
+    }
+
+    let view = TirView::with_minimum_phase(
+        &registry,
+        reference.root,
+        reference.phase,
+        TemplateTirPhase::Composed,
+        reference.overlay_set_id,
+    )?;
+    let store = store_handle.borrow();
+    classify_effective_tir_view_template(&template.kind, &view, &store, string_table)
 }

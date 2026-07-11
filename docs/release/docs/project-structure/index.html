@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -319,12 +322,15 @@ body {
      <h1 style="font-size: 2em;text-align: center;"> PROJECTS, MODULES AND HTML BUILDER</h1>
     <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <code>#config.bst</code> file</li><li>an entry root, usually <code>src</code></li><li>module entry files named like <code>#page.bst</code></li><li>module API boundaries defined by <code>#mod.bst</code></li><li>normal <code>.bst</code> files that provide declarations for module entries</li><li>builder-owned output folders such as <code>dev</code> and <code>release</code></li></ul><p><code>#mod.bst</code>  = module API / visibility boundary <code>#page.bst</code> = HTML builder entry/configuration convention <code>#config.bst</code>   = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
     <section class="container"><h1>The modular build system</h1><p>The Beanstalk compiler frontend is shared by every project builder. It discovers modules, parses files, type checks code, lowers to HIR, and runs borrow validation. A project builder then decides how those compiled modules become real output files.</p><p>The current user-facing project builder is the HTML project builder. It consumes each compiled module and emits one HTML page per module entry file.</p><p>This split matters because Beanstalk is not designed as a single hard-coded web compiler. The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Layer</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Responsibility</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Layer</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Responsibility</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Compiler frontend</td>
@@ -340,7 +346,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> HTML project builder</td>
      <td style="padding: 0.2em 0.5em;  "> Treats each module entry as a page and emits HTML files, with runtime code embedded as JavaScript by default.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <code>#config.bst</code> file at the project root. Config entries are known top-level <code>#</code> constants whose values fold at compile time.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -368,12 +375,15 @@ body {
         <span class='bst-code-string'>&quot;lib&quot;</span>,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>#config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported when the <code>#=</code> config expression fully folds.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>project</code></td>
@@ -409,7 +419,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> HTML-specific settings</td>
      <td style="padding: 0.2em 0.5em;  "> Settings such as <code>origin</code>, <code>html_lang</code>, <code>html_title_postfix</code>, <code>page_url_style</code>, and <code>redirect_index_html</code> are interpreted by the HTML builder.</td>
         </tr>
-        
+            
+
     </table><p>Config is loaded before module discovery. That means <code>entry_root</code> and <code>library_folders</code> shape how the project is searched and how imports resolve.</p></section>
     <section class="container"><h1>Default project scaffold</h1><p>The <code>bean new html</code> command generates a complete default project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -445,12 +456,15 @@ body {
     <span class='bst-code-operator'>#</span>config.bst                <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> project config, not a module entry
     </code></pre><p>Only module entry files have top-level runtime execution. The compiler treats the entry file&#39;s top-level runtime code as an implicit <code>start</code> function for that module.</p><p>Normal source files can contain imports, functions, structs, choices, type aliases, and constants. They should not rely on top-level runtime statements being executed by themselves.</p></section>
     <section class="container"><h1>Builder-owned meaning of # file names</h1><p>The compiler discovers <code>#*.bst</code> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Entry file</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> HTML output path</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Entry file</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> HTML output path</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>src/#page.bst</code></td>
@@ -471,15 +485,19 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>src/#about.bst</code></td>
      <td style="padding: 0.2em 0.5em;  "> <code>about/index.html</code></td>
         </tr>
-        
+            
+
     </table><p>This gives pages stable folder-backed routes. A <code>#page.bst</code> file means &quot;the index page for this folder&quot;. Other <code>#name.bst</code> files become named routes under the same folder.</p></section>
     <section class="container"><h1>Top-level templates in page entries</h1><p>Top-level templates are special. In the HTML project builder, direct top-level templates in a module entry file become page fragments.</p><p>There are two forms:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>#[...]</code></td>
@@ -490,7 +508,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>[...]</code></td>
      <td style="padding: 0.2em 0.5em;  "> A top-level runtime template. It is evaluated by the module's implicit start function and inserted into the page at runtime.</td>
         </tr>
-        
+            
+
     </table><p>Example:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -508,7 +527,7 @@ body {
     <span class='bst-code-comment'>-- Const fragments are folded by the compiler and emitted directly.</span>
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>navbar<span class='bst-code-parenthesis'>]</span>
 
-    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Welcome</span>
         <span class='bst-code-struct'>This</span> part is static.
     <span class='bst-code-parenthesis'>]</span>
@@ -516,17 +535,20 @@ body {
     name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
 
     <span class='bst-code-comment'>-- Runtime fragments are produced by the implicit start function.</span>
-    <span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+    <span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Runtime</span> hello from <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>.
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>The HTML builder preserves source order between static and runtime fragments. Static fragments are emitted immediately. Runtime fragments use generated slots in the HTML document, then the embedded JavaScript calls the module start function and fills those slots.</p><p>Do not put page-producing top-level templates in helper files. Helper files should export reusable declarations, then page entries should import and use them.</p></section>
     <section class="container"><h1>Visibility and compile-time constants</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Declaration kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Import behavior</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Declaration kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Import behavior</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Runtime top-level binding</td>
@@ -552,7 +574,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> Top-level template</td>
      <td style="padding: 0.2em 0.5em;  "> <code>#[...]</code> is not a normal exported value. It is an entry-file-only const page fragment.</td>
         </tr>
-        
+            
+
     </table><p><code>#</code> no longer means public visibility. It marks compile-time constant bindings. Cross-module public visibility is controlled by <code>#mod.bst</code> facades.</p><p>Example helper file:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -653,12 +676,15 @@ body {
     └── release<span class='bst-code-operator'>/</span>
     </code></pre><p>The important part is the split:</p><ul><li><code>src/</code> contains the root page, the root <code>#mod.bst</code> facade, and ordinary source files.</li><li><code>#page.bst</code> files define HTML pages and make their folders module boundaries.</li><li><code>styles/docs.bst</code> is a normal source file imported by the root facade and then selectively exposed to nested page modules with <code>export</code> declarations in <code>src/#mod.bst</code>.</li><li><code>@html</code> is provided by the HTML builder.</li><li><code>lib/local_helpers/#mod.bst</code> would expose a project-local <code>@local_helpers</code> source library.</li><li><code>assets/</code> is a normal project folder for static files such as images.</li><li><code>dev/</code> and <code>release/</code> are output folders, not source folders.</li></ul></section>
     <section class="container"><h1>Output files</h1><p>The build command compiles the project, then writes the builder&#39;s output files under the selected output root.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Build mode</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Output root</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Build mode</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Output root</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Default / dev</td>
@@ -669,7 +695,8 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>--release</code></td>
      <td style="padding: 0.2em 0.5em;  "> <code>#output_folder</code>, usually <code>release</code>.</td>
         </tr>
-        
+            
+
     </table><p>In the default JS-backed HTML mode, each page module produces an HTML file. The generated JavaScript is embedded into that HTML file.</p><p>In the experimental <code>--html-wasm</code> mode, the builder can instead emit a route folder containing:</p><ul><li><code>index.html</code></li><li><code>page.js</code></li><li><code>page.wasm</code></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
     <section class="container"><h1>Module facades at a glance</h1><p><code>#mod.bst</code> is the public surface for a module root. It is not a shared implementation file, and sibling files do not see its declarations automatically.</p><p>Keep facades small and intentional:</p><ul><li>mark public wrapper functions, type aliases, structs, choices, traits, and constants with <code>export</code></li><li>re-export grouped symbols with <code>export import @path { Symbol }</code> or <code>export @path { Symbol }</code></li><li>keep unmarked declarations and normal imports private to the facade file</li><li>import private implementation details inside the facade when a wrapper needs them</li><li>do not put runtime top-level statements or runtime top-level templates in a facade</li><li>do not expect a normal import inside <code>#mod.bst</code> to become public by itself</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

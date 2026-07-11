@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: LOOPS]
 
-#[section, $markdown:
+#[section, $md:
     ## Loops Syntax
 
     Beanstalk uses a **single** loop keyword: ` loop`.

@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE TIME]
 
-#[section, $markdown:
+#[section, $md:
     `@core/time` separates elapsed time from wall-clock time.
 
     - `Duration` is for elapsed amounts.
@@ -26,7 +26,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Measuring elapsed time
 
     Use `TimeMark` when you need a monotonic measurement point.
@@ -45,7 +45,7 @@ page_head #= theme_head
     This shape works for frame-delta style code without requiring a scheduler or animation package.
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## UTC timestamps
 
     Use `Timestamp` for real-world UTC instants that may be logged, stored, or exchanged with external systems.
@@ -80,7 +80,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## API surface
 
     [styled_table:
@@ -173,7 +173,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## What is deferred?
 
     The first implementation intentionally does not include:

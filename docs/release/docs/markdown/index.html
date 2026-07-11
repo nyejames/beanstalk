@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -326,7 +329,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&lt;rendered html&gt;&quot;</span>
-    </code></pre><p>Use <code>.md</code> when the file should be plain Markdown with no Beanstalk syntax. Use @./beandown when the content needs nested templates, <code>$markdown</code>, or same-directory facade constants.</p></section>
+    </code></pre><p>Use <code>.md</code> when the file should be plain Markdown with no Beanstalk syntax. Use @./beandown when the content needs nested templates, <code>$md</code>, or same-directory facade constants.</p></section>
     <section class="container"><h2>Importing a Markdown file</h2><p>Project shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -388,17 +391,20 @@ body {
     <span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Diagram</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>(</span>.<span class='bst-code-operator'>/</span>diagram.png<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>V1 does not rewrite those paths and does not copy linked or image assets. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.</p></section>
     <section class="container"><h2>.md and .bd compared</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.md`</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.bd`</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.md`</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.bd`</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Parser</td>
      <td style="padding: 0.2em 0.5em;  "> CommonMark-style dependency</td>
-     <td style="padding: 0.2em 0.5em;  "> Beanstalk `$markdown`</td>
+     <td style="padding: 0.2em 0.5em;  "> Beanstalk `$md`</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -436,7 +442,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Literal output V1</td>
      <td style="padding: 0.2em 0.5em;  "> Template-rendered output</td>
         </tr>
-        
+            
+
     </table></section>
     <script>
     function __bs_is_ref(value) {

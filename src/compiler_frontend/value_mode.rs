@@ -30,12 +30,4 @@ impl ValueMode {
             _ => self.clone(),
         }
     }
-
-    pub fn as_reference(&self) -> Self {
-        match self {
-            Self::MutableOwned => Self::MutableReference,
-            Self::ImmutableOwned => Self::ImmutableReference,
-            _ => self.clone(),
-        }
-    }
 }

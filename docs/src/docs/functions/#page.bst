@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: FUNCTIONS]
 
-#[section, $markdown:
+#[section, $md:
     [codeblock, $code("bst"):
         -- The simplest possible function
         main ||:

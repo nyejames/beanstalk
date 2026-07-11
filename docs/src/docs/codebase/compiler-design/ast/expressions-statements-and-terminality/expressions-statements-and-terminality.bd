@@ -1,0 +1,143 @@
+
+AST body emission parses executable bodies against the completed environment.
+This is where source statements and expressions become typed AST.
+
+The goal is strict, local semantics.
+Expression evaluation finds the natural type.
+Contextual coercion is applied only by the frontend site that owns the receiving boundary.
+
+## Main paths
+
+- `src/compiler_frontend/ast/module_ast/emission/`
+- `src/compiler_frontend/ast/expressions/`
+- `src/compiler_frontend/ast/statements/`
+- `src/compiler_frontend/ast/field_access/`
+- `src/compiler_frontend/type_coercion/`
+- `src/compiler_frontend/value_mode.rs`
+
+## Body emission
+
+`emit_ast_nodes` parses function, start and template bodies against the completed environment.
+It validates function terminality, emits AST nodes and emits const-template output.
+
+It owns:
+
+- executable body parsing
+- body-local declarations
+- expression parsing
+- expression type checking
+- receiver lookup
+- field access
+- builtin member validation
+- call validation
+- operator result typing
+- contextual coercion at owned boundaries
+- function terminality validation
+
+Body-local declarations use shared declaration-shell syntax where appropriate, but they are not participants in top-level dependency sorting.
+
+## Expression typing
+
+Expression evaluation determines the natural type of an expression.
+It stays strict.
+
+Contextual coercion is applied only at explicit receiving sites such as:
+
+- declarations
+- assignments
+- returns
+- template/string content
+- explicit `cast` target boundaries
+- backend/prelude call contracts
+- struct fields
+- choice payload fields
+- collection and map entries
+- default values
+- `then` arms whose enclosing value-producing block has an explicit receiver
+
+Generic parameter slots are not cast targets.
+Generic inference doesn't look through `cast`.
+
+## Access modes
+
+`value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments and receiver use.
+
+Mutability and reference state stay separate from semantic type identity.
+Runtime ownership is a later borrow/lowering concern.
+
+A `~T` parameter accepts either explicit `~place` for an existing mutable place or a fresh rvalue that HIR can materialise into a hidden local before borrow validation.
+`~` remains place-only source syntax.
+
+## Runtime expressions before HIR
+
+Runtime expressions that can't fold are currently represented in AST as stack-oriented RPN node vectors before HIR lowering.
+
+Those expression vectors are expression-only structures, not broad statement fragments.
+`ExpressionKind::Runtime` carries `ExpressionRpn`.
+Copy expressions carry `PlaceExpression`.
+`ExpressionKind::ValueBlock` is the only expression variant allowed to carry statement bodies.
+
+This keeps expression handling explicit while HIR still owns final control-flow lowering.
+
+## Value-producing blocks
+
+Value-producing blocks are not general expressions.
+They produce one or more values at closed receiving sites.
+
+Supported producers include:
+
+- value-producing `if`
+- full match
+- block-form `catch:` recovery
+
+Valid receiving sites include declarations, assignments, multi-bind, returns and nested `then`.
+They are rejected in function arguments, operator operands, constructor arguments, collection literals, template interpolation and expression statements.
+
+AST must enforce the receiver arity on every producing path.
+
+## Terminality
+
+AST validates terminality before HIR lowering.
+
+Non-unit success returns must be statically terminal.
+`assert(false)` and `assert(false, "message")` are statically terminal.
+Dynamic `assert(condition)` isn't.
+
+If HIR later sees a non-unit function that can fall through, HIR reports an internal transformation invariant.
+The user-facing source diagnostic should have happened in AST.
+
+## Diagnostics
+
+AST expression and statement diagnostics are user-facing.
+Use `CompilerDiagnostic` with source locations and structured reason payloads.
+
+Good diagnostics should explain the boundary that failed:
+
+- expected type versus actual type
+- invalid receiving context
+- invalid access mode
+- missing mutable access marker
+- unavailable receiver method
+- invalid terminal path
+- unsupported deferred syntax
+
+Type diagnostics should carry semantic `TypeId`s and render through `DiagnosticRenderContext`.
+Don't clone `DataType` values into diagnostic payloads once semantic types exist.
+
+## Common mistakes
+
+- Applying contextual coercion from the callee side instead of the receiving boundary.
+- Treating `~` as a type shape rather than access syntax.
+- Letting value-producing blocks behave like general expressions.
+- Letting HIR diagnose a user terminality error AST should catch.
+- Passing untyped or syntax-level `DataType` through expression checking after resolution.
+- Re-resolving imports from raw tokens during body emission.
+
+## Related reading
+
+- @../ (AST internals): AST phase owners and invariants
+- @../environment-and-type-resolution (AST environment and type resolution): `ScopeContext` and type resolution
+- @../generics-traits-and-casts (Generics, traits and casts): generic inference and cast boundaries
+- @../../../memory-management/access-and-aliasing
+  (Access and aliasing): shared bindings, explicit copies, `~` and fresh mutable arguments
+- @../../stages/hir-generation (Stage 5: HIR generation): the IR that receives emitted AST nodes

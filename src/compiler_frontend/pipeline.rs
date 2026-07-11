@@ -152,7 +152,6 @@ impl CompilerFrontend {
     ///       string table. This allows per-file tokenization against local string-table forks.
     /// WHY: parallel and fork-based frontend preparation need to tokenize independently before
     ///      merging deltas back into the module/global table.
-    #[allow(clippy::result_large_err)]
     pub(crate) fn tokenize_source(
         source_files: &SourceFileTable,
         style_directives: &StyleDirectiveRegistry,
@@ -160,7 +159,7 @@ impl CompilerFrontend {
         module_path: &PathBuf,
         tokenizer_entry_mode: TokenizerEntryMode,
         string_table: &mut StringTable,
-    ) -> Result<FileTokens, CompilerDiagnostic> {
+    ) -> Result<FileTokens, Box<CompilerDiagnostic>> {
         let identity = source_file_identity(source_files, module_path, string_table);
 
         let mut tokens = tokenize(
@@ -224,7 +223,7 @@ impl CompilerFrontend {
                     Err(diagnostic) => {
                         return Err(FileFrontendPrepareError {
                             warnings: Vec::new(),
-                            diagnostic: Box::new(diagnostic),
+                            diagnostic,
                         });
                     }
                 };

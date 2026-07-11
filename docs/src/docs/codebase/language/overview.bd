@@ -1,0 +1,31 @@
+# Compiler-facing language reference
+
+Compiler changes should start from the language contract. This reference
+connects user-visible semantics to the design documents that constrain their
+implementation.
+
+## Language semantics authority
+
+`docs/language-overview.md` is the canonical compiler-facing language
+reference. It owns syntax, semantic invariants, edge cases and deferred
+language surface.
+
+## User-facing documentation
+
+`docs/src/docs/**` contains explanations, examples and topic pages for language
+users.
+
+## Design boundaries
+
+`docs/src/docs/codebase/design-scope/overview.bd` summarises accepted
+mechanisms, constraints and intentionally excluded complexity.
+
+## Memory access
+
+`docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`
+covers shared reads, explicit copies and `~` access.
+
+## Compiler ownership
+
+`docs/src/docs/codebase/compiler-design/overview.bd` routes each language
+feature to the stage or topic that owns its implementation.

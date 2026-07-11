@@ -1,0 +1,179 @@
+
+## Design contract
+
+Backends may choose different allocation, GC, handle and ownership
+representations. They may not choose different language semantics.
+
+Every backend must preserve shared read-only access, exclusive mutation,
+explicit copy behaviour, move safety, reactive liveness and GC-equivalent
+observable results.
+
+## Main backend paths
+
+- `src/backends/js/`
+- `src/backends/wasm/`
+- `src/backends/wasm/hir_to_lir/ownership.rs`
+- `src/backends/wasm/lir/`
+- `src/backends/wasm/runtime/`
+
+## Backend-neutral semantics
+
+- Borrow validation precedes target lowering.
+- Invalid source access is rejected before backend codegen.
+- Backend doesn't infer access from source syntax.
+- Backend consumes HIR plus borrow facts.
+- Ownership optimisation is optional.
+- Backend representation can't affect `copy`, alias or `~` semantics.
+- Fallback always preserves valid program behaviour.
+
+## GC baseline
+
+Heap-managed values may remain under GC. No deterministic drop is required for
+correctness. `drop_if_owned` may be a no-op. Borrowed/owned distinctions may
+be omitted at runtime when irrelevant. Borrow validation still applies.
+
+GC can be host GC, Wasm GC, a runtime collector or another backend strategy.
+Exact current target support belongs in the progress matrix.
+
+## Debug and development configurations
+
+Debug and development configurations may deliberately retain the GC baseline
+even where ownership-aware lowering is available.
+
+Unless a configuration is specifically intended to exercise ownership
+behaviour, debuggability, instrumentation and predictable runtime behaviour
+take priority over deterministic-destruction optimisation.
+
+Release configurations may still fall back to GC per value whenever ownership
+proof is unavailable.
+
+## JavaScript lowering
+
+JavaScript normally realises the GC baseline through host reachability. Borrow
+validation still determines valid source behaviour. Ownership-specific
+advisory facts may be ignored. Explicit copy and alias semantics must still be
+preserved. JS host behaviour must not silently mutate shared aliases or
+duplicate values contrary to Beanstalk semantics. Reactive cells and mounted
+fragments stay alive through runtime reachability.
+
+## Wasm lowering
+
+Wasm can use GC-backed, linear-memory, handle or hybrid lowering.
+Ownership-aware heap values use handles or pointers carrying ownership state.
+Borrow facts identify legal transfer and destruction points. Conditional drops
+release owned handles. Missing ownership proof falls back to GC-managed
+behaviour. Runtime helpers own allocation, release, string, collection and handle contracts. The unified ownership ABI applies across ownership-aware
+calls. Source semantics remain backend independent.
+
+`src/backends/wasm/hir_to_lir/ownership.rs` is the ownership projection seam,
+and Wasm LIR includes conditional `DropIfOwned` plus reserved retain support.
+
+## Runtime ownership metadata
+
+- ownership bit or tag on heap handles.
+- borrowed versus owned state.
+- mask and extract value representation.
+- callee responsibility.
+- propagation of ownership metadata through calls.
+- no source-visible owned/borrowed overload.
+- scalar values need not use tagged handles.
+- representation details can evolve while preserving the accepted contract.
+
+## Drop and retain behaviour
+
+- Release only owned values.
+- Never release borrowed values.
+- Retain when a runtime representation requires extending shared storage
+  lifetime.
+- Remove retain and release checks when static proof permits.
+- Avoid double release.
+- Ensure all potential ownership paths reach release or safe transfer.
+- GC lowering can erase ownership-specific operations.
+
+## Borrow-fact consumption
+
+Backends may consume:
+
+- value access classifications.
+- call effects.
+- return-alias summaries.
+- move decisions.
+- advisory drop sites.
+- region/exit information.
+- reactive invalidation and liveness metadata.
+
+Backends must not:
+
+- mutate those facts.
+- reinterpret source syntax.
+- invent new move points that invalidate borrow validation.
+- treat missing facts as proof of ownership.
+
+## Reactive and mounted-fragment liveness
+
+Live reactive subscriptions and mounted fragments can keep state observable.
+Ownership-aware lowering must not free a source or template instance while it
+remains observable. GC reachability is the semantic reference behaviour.
+Finer invalidation granularity may improve performance but not lifetime
+semantics. Runtime fragment and reactive mount behaviour remain separate
+concerns.
+
+## Backend specialisation
+
+Allowed optimisations include:
+
+- ownership-effect specialisation.
+- drop-check elimination.
+- retain elimination.
+- region allocation.
+- stack or arena allocation.
+- GC elision.
+- devirtualized runtime helpers.
+- target-specific handle representation.
+
+Requirements:
+
+- same source behaviour.
+- same validation result.
+- no unchecked aliasing.
+- no source-visible lifetime or ownership surface.
+- graceful GC fallback.
+
+## Fallback requirements
+
+When a backend can't prove or implement an ownership optimisation safely, it
+must retain GC-managed behaviour for that value or feature.
+
+A missing optimisation is valid. A semantic divergence isn't.
+
+## What backends must not do
+
+- Skip borrow validation.
+- Accept aliasing rejected by other backends.
+- Reinterpret `~` as an unconditional move.
+- Silently copy shared values.
+- Destroy borrowed data.
+- Expose source lifetimes.
+- Rediscover source imports or access syntax.
+- Require deterministic destruction for correctness.
+- Make reactive observability depend on target-specific early release.
+
+## Common mistakes
+
+- Treating the JS path as semantically weaker because it uses GC.
+- Presenting current Wasm scaffolding as the whole accepted memory
+  architecture.
+- Treating every runtime value as a tagged heap pointer.
+- Lowering advisory drops without checking ownership.
+- Freeing reactive state too early.
+- Treating missing ownership proof as an error.
+- Creating separate borrowed/owned language APIs.
+
+## Related reading
+
+- @../ (Memory management): core contract
+- @../ownership-and-drops (Ownership and drops): unified ABI and destruction
+- @../borrow-validation (Borrow validation): analysis facts
+- @../../compiler-design/backend/js-lowering (JavaScript lowering)
+- @../../compiler-design/backend/wasm-lowering (Wasm lowering)
+- @../../compiler-design/stages/backend-lowering (Compiler Stage 7)

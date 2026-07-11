@@ -76,6 +76,64 @@ fn parses_stable_benchmark_timing_lines() {
 }
 
 #[test]
+fn parses_dotted_stable_benchmark_timing_lines() {
+    let stdout = concat!(
+        "BST_BENCH timing command.check.path_validation=1.25ms\n",
+        "BST_BENCH timing build_project.compile_project_frontend=42ms\n",
+        "BST_BENCH timing stage0.module_root_discovery.total=3.5ms\n",
+    );
+
+    let observations = parse_stdout_observations(stdout);
+
+    assert_eq!(observations.stage_timings.len(), 3);
+    assert_metric_value(
+        &observations.stage_timings,
+        "command.check.path_validation",
+        1.25,
+    );
+    assert_metric_value(
+        &observations.stage_timings,
+        "build_project.compile_project_frontend",
+        42.0,
+    );
+    assert_metric_value(
+        &observations.stage_timings,
+        "stage0.module_root_discovery.total",
+        3.5,
+    );
+}
+
+#[test]
+fn parses_ast_substage_stable_timing_lines() {
+    let stdout = concat!(
+        "BST_BENCH timing ast_function_body_parse_ms=4.5ms\n",
+        "BST_BENCH timing ast_start_body_parse_ms=0.75ms\n",
+        "BST_BENCH timing ast_const_template_parse_ms=1.25ms\n",
+        "BST_BENCH timing ast_const_template_fold_ms=0.5ms\n",
+    );
+
+    let observations = parse_stdout_observations(stdout);
+
+    assert_eq!(observations.stage_timings.len(), 4);
+    assert_metric_value(
+        &observations.stage_timings,
+        "ast_function_body_parse_ms",
+        4.5,
+    );
+    assert_metric_value(&observations.stage_timings, "ast_start_body_parse_ms", 0.75);
+    assert_metric_value(
+        &observations.stage_timings,
+        "ast_const_template_parse_ms",
+        1.25,
+    );
+    assert_metric_value(
+        &observations.stage_timings,
+        "ast_const_template_fold_ms",
+        0.5,
+    );
+}
+
+#[test]
 fn parses_stable_counter_line() {
     let observations = parse_stdout_observations("BST_BENCH counter string_table_full_clones=8\n");
 

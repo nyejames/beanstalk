@@ -1,7 +1,8 @@
 //! Top-level doc-template collection and stripping.
 //!
-//! WHAT: extracts `$doc` comment template output into `AstDocFragment` metadata
-//! and strips those declarations from executable function bodies.
+//! WHAT: extracts `$doc` comment template output from authoritative TIR into
+//! `AstDocFragment` metadata and strips those declarations from executable
+//! function bodies.
 //! WHY: documentation extraction is a separate concern from runtime fragment
 //! synthesis and should remain independently auditable.
 
@@ -11,12 +12,15 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TirFoldCache};
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstDocFragmentKind,
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // -------------------------
 //  Fragment Extraction
@@ -28,8 +32,16 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
     template_const_loop_iteration_limit: usize,
+    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     let mut fragments = Vec::new();
+    let mut context = DocFragmentCollectionContext {
+        project_path_resolver,
+        path_format_config,
+        string_table,
+        template_const_loop_iteration_limit,
+        template_ir_registry,
+    };
 
     for node in ast_nodes.iter_mut() {
         let NodeKind::Function(_, _, body) = &mut node.kind else {
@@ -40,14 +52,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
 
         for statement in std::mem::take(body) {
             if let Some(comment_template) = as_top_level_template_comment_declaration(&statement) {
-                collect_doc_fragments(
-                    comment_template,
-                    &mut fragments,
-                    project_path_resolver,
-                    path_format_config,
-                    string_table,
-                    template_const_loop_iteration_limit,
-                )?;
+                collect_doc_fragments(comment_template, &mut fragments, &mut context)?;
                 continue;
             }
 
@@ -60,13 +65,26 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
     // Sort fragments deterministically by source location.
     fragments.sort_by_key(|fragment| {
         (
-            fragment.location.scope.to_string(string_table),
+            fragment.location.scope.to_string(context.string_table),
             fragment.location.start_pos.line_number,
             fragment.location.start_pos.char_column,
         )
     });
 
     Ok(fragments)
+}
+
+/// Shared state for doc-template extraction.
+///
+/// WHAT: carries fold services through top-level comment extraction.
+/// WHY: every fold should see the same module registry authority without
+/// growing helper signatures.
+struct DocFragmentCollectionContext<'a, 'strings> {
+    project_path_resolver: &'a ProjectPathResolver,
+    path_format_config: &'a PathStringFormatConfig,
+    string_table: &'strings mut StringTable,
+    template_const_loop_iteration_limit: usize,
+    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
 }
 
 // -------------------------
@@ -88,28 +106,26 @@ fn as_top_level_template_comment_declaration(node: &AstNode) -> Option<&Template
     matches!(template.kind, TemplateType::Comment(_)).then_some(template.as_ref())
 }
 
-/// Recursively traverses a template and its children to extract `$doc` fragments.
+/// Extracts one top-level `$doc` fragment.
 fn collect_doc_fragments(
     template: &Template,
     fragments: &mut Vec<AstDocFragment>,
-    project_path_resolver: &ProjectPathResolver,
-    path_format_config: &PathStringFormatConfig,
-    string_table: &mut StringTable,
-    template_const_loop_iteration_limit: usize,
+    context: &mut DocFragmentCollectionContext<'_, '_>,
 ) -> Result<(), TemplateError> {
     if matches!(
         template.kind,
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ) {
         let mut fold_context = TemplateFoldContext {
-            string_table,
-            project_path_resolver,
-            path_format_config,
+            string_table: context.string_table,
+            project_path_resolver: context.project_path_resolver,
+            path_format_config: context.path_format_config,
             source_file_scope: &template.location.scope,
-            template_const_loop_iteration_limit,
+            template_const_loop_iteration_limit: context.template_const_loop_iteration_limit,
+            template_ir_registry: context.template_ir_registry.as_ref().map(Rc::clone),
             bindings: Vec::new(),
+            fold_cache: TirFoldCache::new(),
         };
-
         let rendered = template.fold_into_stringid(&mut fold_context)?;
 
         fragments.push(AstDocFragment {
@@ -117,18 +133,6 @@ fn collect_doc_fragments(
             value: rendered,
             location: template.location.to_owned(),
         });
-    }
-
-    // Continue recursive scan into children.
-    for child in &template.doc_children {
-        collect_doc_fragments(
-            child,
-            fragments,
-            project_path_resolver,
-            path_format_config,
-            string_table,
-            template_const_loop_iteration_limit,
-        )?;
     }
 
     Ok(())

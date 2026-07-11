@@ -17,6 +17,7 @@ use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::builtins::casts::targets::{BuiltinCastPolicyId, BuiltinCastTarget};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -31,7 +32,7 @@ use crate::compiler_frontend::hir::reactivity::{
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::{
-    location, register_local, setup_builder,
+    location, materialize_runtime_template_handoff_for_test, register_local, setup_builder,
 };
 use crate::compiler_frontend::hir::tests::symbol;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -60,6 +61,7 @@ fn string_expr(
 fn runtime_template_expression(
     location: crate::compiler_frontend::ast::ast_nodes::SourceLocation,
     content: Vec<Expression>,
+    string_table: &StringTable,
 ) -> Expression {
     let mut template = Template::empty();
     template.location = location.clone();
@@ -68,10 +70,12 @@ fn runtime_template_expression(
         template.content.add(expression);
     }
 
-    template.resync_runtime_metadata();
+    let mut store = TemplateIrStore::new();
     template.kind = TemplateType::StringFunction;
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn find_format_float_statements(
@@ -313,6 +317,8 @@ fn runtime_float_template_interpolation_lowers_to_format_float_statement() {
         ValueMode::ImmutableReference,
     );
 
+    let expr = runtime_template_expression(loc.clone(), vec![value_ref], &string_table);
+
     let mut builder = setup_builder(&mut string_table);
     register_local(
         &mut builder,
@@ -322,7 +328,6 @@ fn runtime_float_template_interpolation_lowers_to_format_float_statement() {
         loc.clone(),
     );
 
-    let expr = runtime_template_expression(loc.clone(), vec![value_ref]);
     let _lowered = builder
         .lower_expression(&expr)
         .expect("Float template interpolation lowering should succeed");
@@ -342,8 +347,9 @@ fn runtime_string_template_chunk_does_not_emit_format_float() {
     let loc = location(1);
     let text = string_expr("hello", &mut string_table, loc.clone());
 
+    let expr = runtime_template_expression(loc.clone(), vec![text], &string_table);
+
     let mut builder = setup_builder(&mut string_table);
-    let expr = runtime_template_expression(loc.clone(), vec![text]);
     let _lowered = builder
         .lower_expression(&expr)
         .expect("String template chunk lowering should succeed");
@@ -366,25 +372,8 @@ fn reactive_float_template_subscription_keeps_lazy_formatter_expression() {
         kind: ReactiveSourceKind::Declaration,
     };
 
-    let mut builder = setup_builder(&mut string_table);
-    register_local(
-        &mut builder,
-        value_path.clone(),
-        value_local,
-        builtin_type_ids::FLOAT,
-        loc.clone(),
-    );
-    builder.side_table.bind_reactive_source(HirReactiveSource {
-        id: ReactiveSourceId(0),
-        local_id: value_local,
-        path: value_path.clone(),
-        kind: HirReactiveSourceKind::Declaration,
-        type_id: builtin_type_ids::FLOAT,
-        location: loc.clone(),
-    });
-
     let value_ref = reference_expr(
-        value_path,
+        value_path.clone(),
         builtin_type_ids::FLOAT,
         loc.clone(),
         ValueMode::ImmutableReference,
@@ -402,10 +391,29 @@ fn reactive_float_template_subscription_keeps_lazy_formatter_expression() {
         TemplateSegmentOrigin::Head,
         subscription,
     );
-    template.resync_runtime_metadata();
+    let mut store = TemplateIrStore::new();
     template.kind = TemplateType::StringFunction;
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, &string_table);
 
-    let expr = Expression::template(template, ValueMode::ImmutableOwned);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        value_path.clone(),
+        value_local,
+        builtin_type_ids::FLOAT,
+        loc.clone(),
+    );
+    builder.side_table.bind_reactive_source(HirReactiveSource {
+        id: ReactiveSourceId(0),
+        local_id: value_local,
+        path: value_path.clone(),
+        kind: HirReactiveSourceKind::Declaration,
+        type_id: builtin_type_ids::FLOAT,
+        location: loc.clone(),
+    });
+
+    let expr = Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned);
     let lowered = builder
         .lower_expression(&expr)
         .expect("reactive Float template subscription lowering should succeed");

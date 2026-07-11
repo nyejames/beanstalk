@@ -5,7 +5,7 @@
 //! - `project_roots`            — config root interpretation and path-resolver setup
 //! - `source_library_discovery` — project-local source-library scanning and prefix checks
 //! - `facade_validation`        — source-library `#mod.bst` preflight
-//! - `entry_discovery`          — directory-project root entry-file scanning
+//! - `source_tree_index`        — one directory-project source-tree traversal
 //! - `module_inventory`         — project-level module assembly
 //! - `reachable_file_discovery` — BFS traversal over import graphs
 //! - `import_scanning`          — per-file import path extraction
@@ -18,7 +18,6 @@
 
 mod collision_detection;
 mod compilation;
-mod entry_discovery;
 mod facade_validation;
 mod frontend_orchestration;
 pub(crate) mod import_scanning;
@@ -29,6 +28,7 @@ mod reachable_file_discovery;
 pub(crate) mod source_discovery_error;
 mod source_library_discovery;
 pub(crate) mod source_loading;
+mod source_tree_index;
 
 #[cfg(test)]
 pub(super) use module_inventory::{DiscoveredModule, discover_all_modules_in_project};
@@ -67,8 +67,9 @@ pub fn compile_project_frontend(
     libraries: &mut LibrarySet,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
-    // Detailed counters are command-scoped. The counter storage is atomic so
-    // directory module compilation can update it safely from Rayon workers.
+    // Frontend counters are command-scoped and gated by `benchmark_counters`.
+    // The counter storage is atomic so directory module compilation can update
+    // it safely from Rayon workers.
     reset_frontend_counters();
 
     let build_profile = if flags.contains(&Flag::Release) {
@@ -81,7 +82,15 @@ pub fn compile_project_frontend(
     //  Dispatch: Single File vs. Directory
     // ---------------------------------------
 
-    let result = if let Some(extension) = config.entry_dir.extension() {
+    let result = if config.entry_dir.is_dir() {
+        compilation::compile_directory_frontend(
+            config,
+            build_profile,
+            style_directives,
+            libraries,
+            string_table,
+        )
+    } else if let Some(extension) = config.entry_dir.extension() {
         compilation::compile_single_file_frontend(
             config,
             build_profile,
@@ -90,7 +99,7 @@ pub fn compile_project_frontend(
             extension,
             string_table,
         )
-    } else if !config.entry_dir.is_dir() {
+    } else {
         use crate::compiler_frontend::compiler_errors::CompilerError;
 
         let err = CompilerError::file_error(
@@ -102,14 +111,6 @@ pub fn compile_project_frontend(
         );
 
         Err(CompilerMessages::from_error_ref(err, string_table))
-    } else {
-        compilation::compile_directory_frontend(
-            config,
-            build_profile,
-            style_directives,
-            libraries,
-            string_table,
-        )
     };
 
     log_frontend_counters();

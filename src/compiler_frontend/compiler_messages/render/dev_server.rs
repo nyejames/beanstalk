@@ -5,16 +5,84 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, display_column_number, display_line_number, render_payload,
-    resolve_source_file_path,
+    DiagnosticRenderContext, display_column_number, display_line_number,
+    relative_display_path_from_root, render_payload, resolve_source_file_path,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticSeverity};
 #[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::Path;
 
+fn severity_display(severity: DiagnosticSeverity) -> (&'static str, &'static str, &'static str) {
+    match severity {
+        DiagnosticSeverity::Error => (
+            "Error",
+            "(\u{256F}\u{00B0}\u{25A1}\u{00B0})\u{256F} \u{1F525}",
+            "badge",
+        ),
+        DiagnosticSeverity::Warning => ("Warning", "\u{26A0}\u{FE0F}", "badge warning"),
+        DiagnosticSeverity::Note => ("Note", "\u{1F4DD}", "badge info"),
+    }
+}
+
+fn render_source_frame(
+    diagnostic: &CompilerDiagnostic,
+    project_root: &std::path::Path,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let string_table = context.string_table;
+    let resolved_path = resolve_source_file_path(&diagnostic.primary_location.scope, string_table);
+    let display_root = match std::fs::canonicalize(project_root) {
+        Ok(canonical_root) => canonical_root,
+        Err(_) => project_root.to_path_buf(),
+    };
+    let relative_path = relative_display_path_from_root(&resolved_path, &display_root);
+    let line = display_line_number(diagnostic.primary_location.start_pos.line_number);
+    let column = display_column_number(diagnostic.primary_location.start_pos.char_column);
+
+    // Use a simple file:// link to the resolved source path. The terminal
+    // renderer works fine with this; browser-hosted dev-server links are a
+    // follow-up once a cross-environment open strategy is settled.
+    let file_href = format!("file://{}", escape_html(&resolved_path.to_string_lossy()));
+
+    // Read the source line for the source frame. Missing files are handled gracefully.
+    let source_line_index = diagnostic.primary_location.start_pos.line_number.max(0) as usize;
+    let source_line = match std::fs::read_to_string(&resolved_path) {
+        Ok(file) => file
+            .lines()
+            .nth(source_line_index)
+            .unwrap_or("")
+            .to_string(),
+        Err(_) => String::new(),
+    };
+
+    let line_label = line.to_string();
+    let gutter_padding = " ".repeat(3usize.saturating_sub(line_label.len()));
+    let escaped_line = escape_html(&source_line);
+
+    if source_line.is_empty() {
+        return format!(
+            r#"<div class="source-frame"><a class="source-location" href="{file_href}">--> {relative_path}:{line}:{column}</a></div>"#
+        );
+    }
+
+    // Underline the primary span with carets.
+    let underline_start = diagnostic.primary_location.start_pos.char_column.max(0) as usize;
+    let underline_length = (diagnostic.primary_location.end_pos.char_column
+        - diagnostic.primary_location.start_pos.char_column
+        + 1)
+    .max(1) as usize;
+    let padding = " ".repeat(underline_start);
+    let underlines = "^".repeat(underline_length);
+
+    format!(
+        r#"<div class="source-frame"><a class="source-location" href="{file_href}">--> {relative_path}:{line}:{column}</a><br><span class="source-line-number">{gutter_padding}{line_label} | </span><span class="source-line">{escaped_line}</span><br><span class="source-line-number">{gutter_padding}  | </span><span class="source-caret">{padding}{underlines}</span></div>"#
+    )
+}
+
 #[cfg(test)]
-#[allow(dead_code)] // Test suites call the context-aware variant directly in targeted cases only.
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn render_diagnostics_html(
     diagnostics: &[CompilerDiagnostic],
     project_root: &Path,
@@ -43,19 +111,18 @@ pub(crate) fn render_diagnostics_html_with_context(
 
 pub(crate) fn render_compiler_messages_html(
     messages: &CompilerMessages,
-    project_root: &Path,
+    project_root: &std::path::Path,
 ) -> String {
     if messages.diagnostic_slice().is_empty() {
         return String::from("<p>No compiler diagnostics available.</p>");
     }
 
     messages
-        .diagnostic_slice()
-        .iter()
-        .enumerate()
-        .map(|(diagnostic_index, diagnostic)| {
+        .diagnostic_display_order()
+        .into_iter()
+        .map(|diagnostic_index| {
             render_diagnostic_card(
-                diagnostic,
+                &messages.diagnostic_slice()[diagnostic_index],
                 project_root,
                 messages.diagnostic_render_context(diagnostic_index),
             )
@@ -66,65 +133,43 @@ pub(crate) fn render_compiler_messages_html(
 
 fn render_diagnostic_card(
     diagnostic: &CompilerDiagnostic,
-    project_root: &Path,
+    project_root: &std::path::Path,
     context: DiagnosticRenderContext<'_>,
 ) -> String {
-    let string_table = context.string_table;
     let descriptor = diagnostic.kind.descriptor();
-    let severity_badge = match diagnostic.severity {
-        DiagnosticSeverity::Error => "ERROR",
-        DiagnosticSeverity::Warning => "WARNING",
-        DiagnosticSeverity::Note => "NOTE",
-    };
-    let badge_class = match diagnostic.severity {
-        DiagnosticSeverity::Error => "badge",
-        DiagnosticSeverity::Warning => "badge warning",
-        DiagnosticSeverity::Note => "badge info",
-    };
+    let (severity_label, severity_visual, badge_class) = severity_display(diagnostic.severity);
 
-    let mut details = String::from("<ul class=\"detail-list\">");
+    // The code is available as a data attribute for debugging but not shown
+    // visibly in the browser card. Terse/terminal output still shows codes.
+    let data_code = format!(
+        r#" data-diagnostic-code="{}""#,
+        escape_html(descriptor.code)
+    );
 
-    let resolved_path = resolve_source_file_path(&diagnostic.primary_location.scope, string_table);
-    let display_root = match std::fs::canonicalize(project_root) {
-        Ok(canonical_root) => canonical_root,
-        Err(_) => project_root.to_path_buf(),
-    };
-    let display_label =
-        crate::compiler_frontend::compiler_messages::render::relative_display_path_from_root(
-            &resolved_path,
-            &display_root,
-        );
-    let line = display_line_number(diagnostic.primary_location.start_pos.line_number);
-    let column = display_column_number(diagnostic.primary_location.start_pos.char_column);
-
-    details.push_str(&format!(
-        "<li><a href=\"file://{}\">{}</a> - line {}, col {}</li>",
-        escape_html(&resolved_path.to_string_lossy()),
-        escape_html(&display_label),
-        line,
-        column
-    ));
+    let source_frame = render_source_frame(diagnostic, project_root, context);
 
     let rendered_payload = render_payload(&diagnostic.payload, context);
+
+    let mut body = String::new();
+
     if !rendered_payload.message.is_empty() {
-        details.push_str(&format!(
-            "<li>{}</li>",
+        body.push_str(&format!(
+            r#"<p class="diagnostic-message">{}</p>"#,
             escape_html(&rendered_payload.message)
         ));
     }
-    for guidance in rendered_payload.guidance {
-        details.push_str(&format!("<li>{}</li>", escape_html(&guidance)));
+
+    for guidance in &rendered_payload.guidance {
+        body.push_str(&format!(
+            r#"<p class="guidance">Hint: {}</p>"#,
+            escape_html(guidance)
+        ));
     }
 
-    details.push_str("</ul>");
+    body.push_str(&source_frame);
 
     format!(
-        "<article class=\"diagnostic\">\
-         <header><span class=\"{badge_class}\">{severity_badge}</span> \
-         <code>{code}</code> {title}</header>\
-         {details}\
-         </article>",
-        code = escape_html(descriptor.code),
+        r#"<article class="diagnostic"{data_code}><div class="diagnostic-head"><span class="{badge_class}">{severity_visual} {severity_label}</span><span class="kind">{title}</span></div>{body}</article>"#,
         title = escape_html(descriptor.title),
     )
 }

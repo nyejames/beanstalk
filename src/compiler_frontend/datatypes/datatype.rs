@@ -66,6 +66,7 @@ pub enum DataType {
         const_record: bool,
         generic_instance_key: Option<GenericInstantiationKey>,
     },
+    #[cfg(test)]
     Reference(Box<DataType>),
     Range, // Iterable that must always be owned.
     Returns(Vec<DataType>),
@@ -119,6 +120,7 @@ pub enum DataType {
         success: Box<DataType>,
         error: Box<DataType>,
     },
+    #[cfg(test)]
     TemplateWrapper, // Foldable template with a slot (becomes two string slices)
     #[allow(dead_code)] // Planned: explicit None literal/type flows.
     None, // The None result of an option, or empty argument
@@ -206,124 +208,6 @@ impl DataType {
         }
     }
 
-    /// Returns the nominal path for a struct type.
-    ///
-    /// WHAT: reads the inline nominal path from `DataType` for HIR/diagnostic
-    ///       compatibility paths that do not have `TypeEnvironment` access.
-    /// WHY: some HIR lowering paths still work with `DataType`-shaped struct
-    ///      metadata; this is display/compatibility logic, not semantic identity.
-    pub fn struct_nominal_path(&self) -> Option<&InternedPath> {
-        match self {
-            DataType::Struct { nominal_path, .. } => Some(nominal_path),
-            _ => None,
-        }
-    }
-
-    /// Returns the nominal path using TypeEnvironment.
-    pub fn struct_nominal_path_with_env<'a>(
-        &self,
-        env: &'a TypeEnvironment,
-    ) -> Option<&'a InternedPath> {
-        match self {
-            DataType::Struct { type_id, .. } => env.nominal_path(*type_id),
-            _ => None,
-        }
-    }
-
-    /// Returns the generic instance key if this is an instantiated generic struct or choice.
-    ///
-    /// Kept for HIR and diagnostic compatibility. Prefer
-    /// `generic_instance_key_with_env` in new code.
-    pub fn generic_instance_key(&self) -> Option<&GenericInstantiationKey> {
-        match self {
-            DataType::Struct {
-                generic_instance_key,
-                ..
-            } => generic_instance_key.as_ref(),
-            DataType::Choices {
-                generic_instance_key,
-                ..
-            } => generic_instance_key.as_ref(),
-            _ => None,
-        }
-    }
-
-    /// Returns the generic instance key using TypeEnvironment.
-    ///
-    /// NOTE: returns `GenericInstanceKey` (TypeEnvironment's compact key), not
-    /// `GenericInstantiationKey` (the HIR/diagnostic bridge key). Callers that
-    /// start from semantic types should prefer this `TypeEnvironment` key.
-    pub fn generic_instance_key_with_env<'a>(
-        &self,
-        env: &'a TypeEnvironment,
-    ) -> Option<&'a crate::compiler_frontend::datatypes::ids::GenericInstanceKey> {
-        match self {
-            DataType::Struct { type_id, .. } | DataType::Choices { type_id, .. } => {
-                env.generic_instance_key(*type_id)
-            }
-            _ => None,
-        }
-    }
-
-    /// Returns true if this is a const-record struct.
-    ///
-    /// WHAT: reads the diagnostic-only const-record marker stored on struct
-    /// spellings for display purposes.
-    /// WHY: `DataType` must not drive executable semantics. Value-level
-    /// const-record restrictions should inspect `Expression::const_record_state`
-    /// instead of this diagnostic spelling.
-    pub fn is_const_record_struct(&self) -> bool {
-        match self {
-            DataType::Struct { const_record, .. } => *const_record,
-            _ => false,
-        }
-    }
-
-    /// Returns true if this is a const-record struct using TypeEnvironment.
-    pub fn is_const_record_struct_with_env(&self, env: &TypeEnvironment) -> bool {
-        match self {
-            DataType::Struct { type_id, .. } => env.is_const_record(*type_id),
-            _ => false,
-        }
-    }
-
-    /// Returns true if this is a resolved nominal generic instantiation.
-    ///
-    /// Compatibility path for type_coercion and HIR callers. AST callers should use
-    /// `is_resolved_generic_nominal_instance_with_env` when `TypeEnvironment` is available.
-    pub fn is_resolved_generic_nominal_instance(&self) -> bool {
-        matches!(
-            self,
-            DataType::Struct {
-                generic_instance_key: Some(..),
-                ..
-            } | DataType::Choices {
-                generic_instance_key: Some(..),
-                ..
-            }
-        )
-    }
-
-    /// Returns true if this is a resolved nominal generic instantiation using TypeEnvironment.
-    pub fn is_resolved_generic_nominal_instance_with_env(&self, env: &TypeEnvironment) -> bool {
-        match self {
-            DataType::Struct { type_id, .. } | DataType::Choices { type_id, .. } => {
-                env.generic_instance_key(*type_id).is_some()
-            }
-            _ => false,
-        }
-    }
-
-    pub fn is_unresolved_generic_application(&self) -> bool {
-        matches!(
-            self,
-            DataType::GenericInstance {
-                base: GenericBaseType::Named(_) | GenericBaseType::ResolvedNominal(_),
-                ..
-            }
-        )
-    }
-
     /// Constructs a growable collection type using the canonical generic instance representation.
     ///
     /// WHAT: `DataType::Collection` is being removed; this is the one canonical constructor.
@@ -365,36 +249,14 @@ impl DataType {
         }
     }
 
-    /// Returns true if this type is a map (builtin generic instance with two arguments).
-    pub fn is_map(&self) -> bool {
-        matches!(
-            self,
-            DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
-                arguments,
-            } if arguments.len() == 2
-        )
-    }
-
-    /// Returns the key and value types of a map, if this is a map type.
-    pub fn map_types(&self) -> Option<(&DataType, &DataType)> {
-        match self {
-            DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
-                arguments,
-            } => match arguments.as_slice() {
-                [key, value] => Some((key, value)),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    /// Returns true if this type is a collection (builtin generic instance with one argument).
+    /// Test-only diagnostic spelling query for collection fixtures.
+    #[cfg(test)]
     pub fn is_collection(&self) -> bool {
         self.is_builtin_generic_collection()
     }
 
+    /// Test-only implementation shared by collection fixture queries.
+    #[cfg(test)]
     pub fn is_builtin_generic_collection(&self) -> bool {
         matches!(
             self,
@@ -405,7 +267,8 @@ impl DataType {
         )
     }
 
-    /// Returns the element type of a collection, if this is a collection type.
+    /// Returns a collection fixture's diagnostic element type.
+    #[cfg(test)]
     pub fn collection_element_type(&self) -> Option<&DataType> {
         match self {
             DataType::GenericInstance {
@@ -414,15 +277,6 @@ impl DataType {
             } => arguments.first(),
             _ => None,
         }
-    }
-
-    /// Returns a cloned copy of the collection element type, if any.
-    pub fn collection_element_type_cloned(&self) -> Option<DataType> {
-        self.collection_element_type().cloned()
-    }
-
-    pub fn is_textual_cast_input(&self) -> bool {
-        matches!(self, DataType::StringSlice | DataType::Template)
     }
 
     // -----------------
@@ -473,6 +327,7 @@ impl DataType {
                 }
             }
 
+            #[cfg(test)]
             DataType::Reference(inner) => {
                 inner.remap_string_ids(remap);
             }
@@ -531,6 +386,7 @@ impl DataType {
                 error.remap_string_ids(remap);
             }
 
+            #[cfg(test)]
             DataType::TemplateWrapper => {}
 
             DataType::None | DataType::True | DataType::False => {}
@@ -545,6 +401,7 @@ impl DataType {
     /// This method should be used instead of Display when a StringTable is available.
     pub fn display_with_table(&self, string_table: &StringTable) -> String {
         match self {
+            #[cfg(test)]
             DataType::Reference(inner_type) => {
                 format!("{} Reference", inner_type.display_with_table(string_table),)
             }
@@ -561,6 +418,7 @@ impl DataType {
             }
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
+            #[cfg(test)]
             DataType::TemplateWrapper => "String".to_string(),
             DataType::Char => "Char".to_string(),
             DataType::Float => "Float".to_string(),
@@ -763,6 +621,7 @@ impl PartialEq for DataType {
                     arguments: arguments_b,
                 },
             ) => base_a == base_b && arguments_a == arguments_b,
+            #[cfg(test)]
             (DataType::Reference(a), DataType::Reference(b)) => a == b,
             (DataType::Bool, DataType::Bool) => true,
             (DataType::Range, DataType::Range) => true,
@@ -974,7 +833,6 @@ fn type_id_to_data_type(type_id: ids::TypeId, type_environment: &TypeEnvironment
                     .map(|argument| type_id_to_data_type(*argument, type_environment))
                     .collect(),
             ),
-            _ => DataType::None,
         },
         Some(TypeDefinition::Function(_)) => {
             // Function types cannot be fully reconstructed as DataType because

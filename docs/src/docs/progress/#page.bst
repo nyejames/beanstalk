@@ -2,7 +2,7 @@ import @html {center}
 import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Progress Matrix"
-page_description #= "Current implementation status, coverage, and feature progress for the Beanstalk compiler."
+page_description #= "Current implementation status, coverage and feature progress for the Beanstalk compiler."
 page_head #= theme_head
 
 red #= [$css("inline"): background-color: rgb(232, 109, 171)]
@@ -12,12 +12,15 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
 #[navbar]
 #[title, center: PROGRESS MATRIX]
 
-#[section, $markdown:
+#[section, $md:
     This page tracks Beanstalk's current implementation progress.
 
     It is the source of truth for what the compiler currently supports, partially supports,
     cleanly rejects, keeps experimental, defers, or treats as outside scope. It is not a full
     language reference, roadmap, or test manifest.
+
+    The compiler and memory design references may describe accepted end-state architecture that
+    has not fully landed. This matrix determines what the compiler supports today.
 
     Use this together with `tests/cases/manifest.toml` when changing language features.
 
@@ -25,9 +28,12 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
 
     - Keep rows focused on current compiler behavior.
     - Put user-facing explanations and examples in docs pages under `docs/src/docs/**`.
-    - Put future design plans and unimplemented ideas in `docs/roadmap/roadmap.md`.
-    - Put compiler architecture and stage ownership in `docs/compiler-design-overview.md`.
-    - Put contributor workflow, benchmarking, and tooling details in `CONTRIBUTING.md`.
+    - Put implementation sequencing, active project plans and proposals that have
+      not been accepted as design in `docs/roadmap/roadmap.md`.
+    - Put accepted end-state architecture in the relevant compiler, memory or
+      language design reference even when the implementation is incomplete.
+    - Put compiler architecture and stage ownership in the narrowest relevant page under `docs/src/docs/codebase/compiler-design/**`.
+    - Put contributor workflow, benchmarking and tooling details in `CONTRIBUTING.md`.
     - Prefer short coverage summaries over long fixture lists unless fixture names identify a fragile surface.
     - Use the status labels from this page's legend. Put nuance such as removed, reserved,
       not Alpha, or backend-specific in the notes column instead of inventing new status labels.
@@ -43,12 +49,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     - JavaScript backend
     - HTML project builder
     - docs-style static site generation
-
-    All tests should pass before each commit, so tests can be assumed green for the current state
-    of the compiler unless this page explicitly says otherwise.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Status legend
 
     [styled_table:
@@ -112,7 +115,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core Alpha surface
 
     [styled_table:
@@ -179,7 +182,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Supported]
             [: Broad template parsing, directive, slot, const/runtime fragment, template control-flow, markdown inline-code, diagnostics, and JS/HTML integration coverage.]
             [: HTML / JS]
-            [: Main Alpha surface. Supported shapes include const and runtime templates, slots/inserts, [$html:<code>$children</code>] / [$html:<code>$fresh</code>] routing, markdown/code/raw/html/css/escape directives, template Bool and option branching, template loops, runtime slot applications, and const expansion guards. Full match-style template heads and full CommonMark remain outside the current surface.]
+            [: Main Alpha surface. Supported shapes include const and runtime templates, slots/inserts, [$html:<code>$children</code>] / [$html:<code>$fresh</code>] routing, markdown/code/raw/html/css/escape directives, template Bool and option branching, template loops, runtime slot applications, import namespace member access in template heads (e.g. namespace-dot-member expressions), and const expansion guards. Full match-style template heads and full CommonMark remain outside the current surface. Templates are represented in an AST-local Template IR (TIR) during parsing, composition, folding, formatting, and HIR handoff preparation; TIR is internal, behaviour-preserving, and does not change template language semantics. Post-TIR performance follow-ups are deferred and tracked in the roadmap.]
         ]
 
         [data:
@@ -187,7 +190,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted compiler-integrated import, synthetic content constant, markdown folding, facade re-export, direct API, diagnostics, and integration coverage.]
             [: HTML builder / frontend]
-            [: [$html:<code>.bd</code>] files are builder-supported source assets that synthesize one private compile-time [$html:<code>content #String</code>] constant from an implicit [$html:<code>$markdown</code>] template body. They import extensionlessly into [$html:<code>.bst</code>], can be re-exported by [$html:<code>#mod.bst</code>], and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.]
+            [: [$html:<code>.bd</code>] files are builder-supported source assets that synthesize one private compile-time [$html:<code>content #String</code>] constant from an implicit [$html:<code>$md</code>] template body. Nested templates with no explicit directive also default to [$html:<code>$md</code>], and any explicit nested directive overrides that default. They import extensionlessly into [$html:<code>.bst</code>], can be re-exported by [$html:<code>#mod.bst</code>], and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.]
         ]
 
         [data:
@@ -376,7 +379,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core and builder packages
 
     [styled_table:
@@ -435,7 +438,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>#config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
+            [: Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
         ]
 
         [data:
@@ -464,7 +467,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Compiler-owned builtin surfaces
 
     [styled_table:
@@ -512,7 +515,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Reactivity V1
 
     [styled_table:
@@ -548,7 +551,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Experimental backend surfaces
 
     [styled_table:
@@ -557,7 +560,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: HTML-Wasm]
             [: Experimental]
-            [: Backend experiment and integration path for future Wasm output.]
+            [: Backend experiment and integration path for future Wasm output. Ordinary entry `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.]
             [: Keep behind [$html:<code>--html-wasm</code>]. Tests may pin current behavior, but Alpha support is JS / HTML.]
         ]
 
@@ -577,7 +580,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Compiler implementation and tooling
 
     [styled_table:
@@ -592,7 +595,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Deferred, rejected, and outside-scope surfaces
 
     [styled_table:
@@ -603,6 +606,13 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Deferred]
             [: Current implemented trait diagnostics are tracked in the core Traits row.]
             [: Default methods, associated items, inheritance/composition, generic traits, specialized conformance, deriving, operator traits, formatting/display coercion, hashing, ordering, iteration, serialization, downcasting/reflection, and broad standard trait taxonomy remain outside the Alpha trait slice.]
+        ]
+
+        [data:
+            [: Post-TIR template performance follow-ups]
+            [: Deferred]
+            [: Not part of the current Alpha surface.]
+            [: Deferred items are source-span-backed template body text, a per-template parse cache, a formatter-output cache, dev-mode source-hash keyed template reuse, dependency-aware invalidation for imported consts/directives, formatter algorithm rewrites if profiling justifies them, incremental module/template compilation after module-boundary incremental builds exist, and parallel nested-template folding after a separate profiling-backed plan.]
         ]
 
         [data:
@@ -796,14 +806,17 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Maintenance rule
 
     This matrix should stay concise and current.
 
     - Move workflow and benchmark details to `CONTRIBUTING.md`.
-    - Move future sequencing and design plans to `docs/roadmap/roadmap.md`.
+    - Move implementation sequencing, active project plans and proposals that have
+      not been accepted as design to `docs/roadmap/roadmap.md`.
+    - Move accepted end-state architecture to the narrowest relevant compiler,
+      memory or language design reference, even when implementation is incomplete.
     - Move syntax examples and beginner explanations to docs pages under `docs/src/docs/**`.
-    - Move compiler architecture details to `docs/compiler-design-overview.md`.
+    - Move compiler architecture details to the narrowest relevant page under `docs/src/docs/codebase/compiler-design/**`.
     - Keep this page focused on support status, coverage level, clean rejection, target-gating, and experimental status.
 ]

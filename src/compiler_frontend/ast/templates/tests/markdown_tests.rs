@@ -1,12 +1,11 @@
 use super::MarkdownTemplateFormatter;
-use crate::compiler_frontend::ast::templates::styles::markdown::{
-    render_markdown_stream, split_text_into_lines,
-};
-use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
-use crate::compiler_frontend::ast::templates::template_render_plan::{
+use super::{MarkdownInlineAtom, MarkdownLine};
+use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
     FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece,
 };
+use crate::compiler_frontend::ast::templates::styles::markdown::render_markdown_stream;
+use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -29,6 +28,25 @@ fn formatter_text_piece(text: &str, string_table: &mut StringTable) -> Formatter
         text: string_table.intern(text),
         location: SourceLocation::default(),
     })
+}
+
+/// Splits plain text into markdown lines for test helpers.
+///
+/// WHAT: mirrors the production `split_formatter_input_into_lines` logic
+/// without building a `FormatterInput`, so tests can drive `render_markdown_stream`
+/// directly from source strings.
+fn split_text_into_lines(content: &str) -> Vec<MarkdownLine> {
+    let mut lines = vec![MarkdownLine::default()];
+
+    for ch in content.chars() {
+        if ch == '\n' {
+            lines.push(MarkdownLine::default());
+        } else {
+            super::push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Char(ch));
+        }
+    }
+
+    lines
 }
 
 fn to_markdown(content: &str, default_tag: &str) -> String {

@@ -6,8 +6,6 @@
 //! `parse_headers` orchestration-first and leaves dependency sorting as the owner of declaration
 //! ordering.
 
-#![allow(clippy::result_large_err)]
-
 use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::builtins::error_type::{
     is_reserved_builtin_symbol, register_builtin_error_types,
@@ -103,7 +101,7 @@ fn validate_declared_name(
         header.name_location.to_owned(),
         string_table,
     ) {
-        diagnostic_bag.push(diagnostic);
+        diagnostic_bag.push(*diagnostic);
         return false;
     }
 

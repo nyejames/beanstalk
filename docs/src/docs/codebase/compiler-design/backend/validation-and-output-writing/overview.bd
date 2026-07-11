@@ -1,0 +1,23 @@
+# Backend validation and output writing
+
+Target contracts before lowering and central output writing.
+
+## Contract
+
+- Input: validated HIR, external package metadata and selected target contract
+- Output: user-visible target-contract diagnostics and `OutputFile` records
+- Decides: which HIR features a target can lower, how stale outputs are cleaned
+- Must not decide: frontend semantics, HIR shape, final file writes
+- Invariant: backend validation runs before lowering: output writing stays in the build system
+
+## Main paths
+
+- `src/backends/backend_feature_validation.rs`
+- `src/backends/external_package_validation.rs`
+- `src/build_system/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/backend/validation-and-output-writing/validation-and-output-writing.bd`
+- `docs/src/docs/codebase/compiler-design/backend/html-project-assembly/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/backend-lowering/overview.bd`

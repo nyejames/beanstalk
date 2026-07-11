@@ -62,6 +62,17 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn same_logi
     left.start_pos.line_number == right.start_pos.line_number
 }
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: the shared inline then/else parser family returns
+/// `Result<T, Box<CompilerDiagnostic>>` through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when
+/// stored directly in a `Result` variant. Boxing the error at this owner boundary keeps
+/// the `Result` envelope small without changing `DiagnosticBag`, `CompilerMessages`, or
+/// any shared error type. The direct callers `inline_if.rs` and `inline_match.rs` consume
+/// the boxed result directly without unbox/rebox churn.
+type InlineThenElseResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parses the shared `then <branch> else <branch>` inline shape.
 ///
 /// WHAT: assumes the current token is `then`. Consumes it, parses then and else
@@ -70,7 +81,7 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn same_logi
 /// single-predicate value-match.
 pub(super) fn parse_inline_then_else(
     input: InlineThenElseInput<'_, '_>,
-) -> Result<InlineThenElseOutput, CompilerDiagnostic> {
+) -> InlineThenElseResult<InlineThenElseOutput> {
     let InlineThenElseInput {
         token_stream,
         then_context,
@@ -85,9 +96,11 @@ pub(super) fn parse_inline_then_else(
     token_stream.advance(); // consume `then`
 
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -185,9 +198,11 @@ pub(super) fn parse_inline_then_else(
         .map_err(|error| -> CompilerDiagnostic { error.into() })?;
 
     if !same_logical_line(&then_location, &else_expr.location) {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            else_expr.location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                else_expr.location.clone(),
+            ),
         ));
     }
 
@@ -248,18 +263,22 @@ fn cast_target_context_for_inline_branch(
 fn require_else_inline(
     token_stream: &FileTokens,
     then_location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> InlineThenElseResult<()> {
     if token_stream.current_token_kind() != &TokenKind::Else {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfMissingElse,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfMissingElse,
+                token_stream.current_location(),
+            ),
         ));
     }
 
     if !same_logical_line(then_location, &token_stream.current_location()) {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -267,11 +286,13 @@ fn require_else_inline(
 }
 
 /// Rejects `else then`, which is never valid in inline value-producing `if`.
-fn reject_else_then(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+fn reject_else_then(token_stream: &FileTokens) -> InlineThenElseResult<()> {
     if token_stream.current_token_kind() == &TokenKind::Then {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfElseThen,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfElseThen,
+                token_stream.current_location(),
+            ),
         ));
     }
 
@@ -279,11 +300,13 @@ fn reject_else_then(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic>
 }
 
 /// Rejects a newline immediately after `else` in inline form.
-fn reject_newline_after_else(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+fn reject_newline_after_else(token_stream: &FileTokens) -> InlineThenElseResult<()> {
     if token_stream.current_token_kind() == &TokenKind::Newline {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::InlineValueIfMultiline,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
         ));
     }
 

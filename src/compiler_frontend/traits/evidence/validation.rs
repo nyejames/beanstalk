@@ -28,6 +28,14 @@ use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId};
 use rustc_hash::FxHashMap;
 
+/// Boxed-diagnostic result for trait-evidence conformance validation.
+///
+/// `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when
+/// returned directly in `Result`. Boxing the error variant keeps the validation
+/// family's `Result` enum small; callers unbox at existing plain-diagnostic
+/// accumulation boundaries.
+type TraitEvidenceValidationResult<T = ()> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Inputs needed to validate evidence after trait definitions and receiver methods exist.
 pub(crate) struct ValidateTraitEvidenceInput<'a> {
     pub(crate) sorted_headers: &'a [Header],
@@ -68,7 +76,7 @@ struct IncompatibleEvidence {
 pub(crate) fn validate_trait_evidence(
     input: ValidateTraitEvidenceInput<'_>,
     evidence_environment: &mut TraitEvidenceEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> TraitEvidenceValidationResult {
     let mut pending_evidence = Vec::new();
     let mut pending_canonical_locations: FxHashMap<(TypeId, TraitId), SourceLocation> =
         FxHashMap::default();
@@ -85,7 +93,8 @@ pub(crate) fn validate_trait_evidence(
                 InvalidTraitConformanceReason::ModuleFacade,
                 conformance.location.clone(),
                 Vec::new(),
-            ));
+            )
+            .into());
         }
 
         let visibility = input
@@ -132,7 +141,8 @@ pub(crate) fn validate_trait_evidence(
                     InvalidTraitConformanceReason::BuiltinEvidenceOverride,
                     trait_ref.location.clone(),
                     previous_declaration_label(previous_location),
-                ));
+                )
+                .into());
             }
 
             let key = (target.type_id, trait_id);
@@ -143,7 +153,8 @@ pub(crate) fn validate_trait_evidence(
                     InvalidTraitConformanceReason::DuplicateCanonicalEvidence,
                     trait_ref.location.clone(),
                     previous_declaration_label(Some(previous_location.clone())),
-                ));
+                )
+                .into());
             }
 
             if let Some(incompatible) = find_incompatible_evidence(
@@ -165,7 +176,8 @@ pub(crate) fn validate_trait_evidence(
                     },
                     trait_ref.location.clone(),
                     secondary_labels,
-                ));
+                )
+                .into());
             }
 
             pending_canonical_locations.insert(key, conformance.location.clone());
@@ -187,7 +199,8 @@ pub(crate) fn validate_trait_evidence(
             return Err(CompilerDiagnostic::unknown_trait_name(
                 pending.trait_name,
                 pending.trait_location.clone(),
-            ));
+            )
+            .into());
         };
 
         let mut requirement_context = RequirementValidationContext {

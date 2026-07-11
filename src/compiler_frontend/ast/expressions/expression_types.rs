@@ -207,6 +207,7 @@ impl CatchErrorBinding {
 }
 
 /// Success or error variant for fallible carrier construction.
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FallibleCarrierVariant {
     Success,

@@ -8,18 +8,36 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [Optimisation plan](docs/roadmap/plans/template-optimisation-and-tir-implementation-plan.md)
+- [TIR Finalisation plan](docs/roadmap/plans/final-tir-completion-plan.md)
+- [New Module and export system updates](docs/roadmap/plans/hash-root-export-block-module-system-plan.md)
+- [Diagnostics Improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
+- [Config Blocks replacing top level project builder keys](docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md)
+- [New Number type for precise numerical values](docs/roadmap/plans/number_type_numeric_plan.md)
+- [#Import values and anonymous records plan](docs/roadmap/plans/import_values_anonymous_records_plan.md)
+- [HTML project builder Wasm backend plan](docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md)
 
+# Post-TIR template performance follow-ups (deferred)
+
+The final TIR architecture creates safe extension hooks, but the actual optimisations below are deferred until profiling or broader compiler infrastructure justifies them:
+
+- source-span-backed template body text instead of eager `StringId` interning;
+- per-template parse cache;
+- formatter-output cache;
+- dev-mode source-hash keyed template reuse;
+- dependency-aware invalidation for imported consts/directives;
+- formatter algorithm rewrites only if post-TIR profiling justifies them;
+- incremental module/template compilation after module-boundary incremental builds exist;
+- parallel nested-template folding after a separate profiling-backed plan.
 
 # Follow up notes and possible TODOs for future plans
+
+- Investigate slow module root discovery
 
 - [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md):
   template churn/capacity/clone-reduction work has been split out into the active
   [`template-optimisation-and-tir-implementation-plan.md`](docs/roadmap/plans/template-optimisation-and-tir-implementation-plan.md).
   Broad template-to-TIR arena migration remains deferred until Plan A measurement and Plan B
   scaffolding justify it.
-
-- Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 
 - Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
 
@@ -34,15 +52,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
   template-owned event/action/effect syntax, `$bind(...)`, typed component messages, IO sink
   design, fine-grained DOM updates, nested reactive regions, keyed loop diffing, and HTML-Wasm
   support.
-
-- Checked numeric follow-ups after `docs/roadmap/plans/expression_refactor_checked_numeric_plan.md`:
-  explicit Decimal / BigInt / high-precision numeric type design, numeric check elision and range
-  analysis, more aggressive trap-mode lowering where builtin `Error` construction is unnecessary,
-  explicit unchecked or narrower numeric types as opt-in safety/performance tradeoffs, and full
-  Wasm parity for checked numeric helpers, Float formatting, and external Float boundary
-  validation.
-
-- Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
 
 - Hash map follow-ups after V1: Wasm runtime/lowering for the existing scalar-keyed builtin map
   surface and possible read-only map iteration only if it does not introduce `HASHABLE`, custom

@@ -301,6 +301,14 @@ enum ResolvedGraphPath {
     SourceLibraryFacadeExport(InternedPath),
 }
 
+/// Boxed diagnostic result shared by the DFS visit and edge-recursion boundaries.
+///
+/// WHAT: one file-local alias for the boxed `CompilerDiagnostic` error variant returned by
+/// `visit_node` and `visit_dependency_edge`.
+/// WHY: recursive visits propagate one diagnostic through nested edges, while the outer resolver
+/// owns plain diagnostic accumulation. The single unbox stays at that `DiagnosticBag` boundary.
+type VisitResult = Result<(), Box<CompilerDiagnostic>>;
+
 /// Topologically sort headers and finalize the header-owned module symbol package.
 ///
 /// WHAT: sorts top-level declaration headers (non-start) by their header-provided dependency edges,
@@ -372,7 +380,7 @@ pub fn resolve_module_dependencies(
                     string_table,
                     diagnostic_location,
                 ) {
-                    diagnostic_bag.push(error);
+                    diagnostic_bag.push(*error);
                 }
             }
         }
@@ -413,7 +421,6 @@ pub fn resolve_module_dependencies(
 }
 
 /// DFS visit for one module node, pushing clones into `sorted`.
-#[allow(clippy::result_large_err)]
 fn visit_node(
     node_path: &InternedPath,
     graph: &DependencyGraph<'_>,
@@ -421,14 +428,14 @@ fn visit_node(
     sorted: &mut Vec<Header>,
     string_table: &mut StringTable,
     diagnostic_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> VisitResult {
     tracker.visit_count += 1;
 
     let Some(resolved_graph_path) = graph.resolve_requested_path(node_path, string_table) else {
-        return Err(CompilerDiagnostic::missing_import_target(
+        return Err(Box::new(CompilerDiagnostic::missing_import_target(
             node_path.to_owned(),
             diagnostic_location,
-        ));
+        )));
     };
 
     let resolved_path = match resolved_graph_path {
@@ -440,23 +447,25 @@ fn visit_node(
     };
 
     if tracker.is_in_current_stack(&resolved_path) {
-        return Err(CompilerDiagnostic::circular_dependency(
+        return Err(Box::new(CompilerDiagnostic::circular_dependency(
             resolved_path,
             diagnostic_location,
-        ));
+        )));
     }
 
     if !tracker.visited.contains(&resolved_path) {
         let Some(header) = graph.header_for_path(&resolved_path) else {
-            return Err(CompilerError::new(
-                format!(
-                    "Dependency ordering resolved '{}' but it was missing from the graph.",
-                    resolved_path.to_portable_string(string_table)
-                ),
-                diagnostic_location,
-                ErrorType::Compiler,
-            )
-            .into());
+            return Err(Box::new(
+                CompilerError::new(
+                    format!(
+                        "Dependency ordering resolved '{}' but it was missing from the graph.",
+                        resolved_path.to_portable_string(string_table)
+                    ),
+                    diagnostic_location,
+                    ErrorType::Compiler,
+                )
+                .into(),
+            ));
         };
 
         tracker.enter(resolved_path.to_owned());
@@ -466,12 +475,9 @@ fn visit_node(
         // Executable body references are excluded.
         let dependency_edges = graph.sorted_dependency_edges_for_header(header, string_table);
         for edge in dependency_edges {
-            let dependency_result =
-                visit_dependency_edge(edge, graph, tracker, sorted, string_table);
-
-            if let Err(error) = dependency_result {
+            if let Err(error) = visit_dependency_edge(edge, graph, tracker, sorted, string_table) {
                 tracker.abandon(&resolved_path);
-                return Err(*error);
+                return Err(error);
             }
         }
 
@@ -488,7 +494,7 @@ fn visit_dependency_edge(
     tracker: &mut DependencyTracker,
     sorted: &mut Vec<Header>,
     string_table: &mut StringTable,
-) -> Result<(), Box<CompilerDiagnostic>> {
+) -> VisitResult {
     match edge.kind {
         DependencyEdgeKind::GraphHeader => {
             let Some(resolved_path) = edge.resolved_path else {
@@ -510,7 +516,6 @@ fn visit_dependency_edge(
                 string_table,
                 edge.location,
             )
-            .map_err(Box::new)
         }
 
         DependencyEdgeKind::SourceLibraryFacadeExport => {

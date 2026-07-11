@@ -1,0 +1,116 @@
+//! Formatter anchor shapes and pipeline adapters.
+//!
+//! WHAT: Owns the production formatter-facing data shapes (`FormatterAnchorId`,
+//! `FormatterInput`, `FormatterOutput`, …) and the output-to-input adapter used
+//! between whitespace and formatter stages.
+//!
+//! WHY: These shapes are intentionally narrow so formatters operate on text and
+//! opaque anchors only, without reaching into template internals.
+
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+
+// -------------------------
+//  Formatter Anchors
+// -------------------------
+
+/// Stable opaque anchor into compiler-owned non-text pieces.
+/// A formatter may preserve or reorder these anchors, but it must not inspect
+/// or interpret the content they represent (child templates, dynamic expressions, etc.).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FormatterAnchorId(pub usize);
+
+/// Structural classification for opaque formatter anchors.
+///
+/// WHAT:
+/// - Distinguishes folded child-template outputs from generic dynamic expressions.
+///
+/// WHY:
+/// - Some formatters such as `$md` need narrow structural behavior changes
+///   for direct child templates without inspecting their sealed content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FormatterOpaqueKind {
+    ChildTemplate,
+    DynamicExpression,
+}
+
+/// Opaque formatter piece metadata carried through whitespace/formatter pipelines.
+///
+/// WHAT:
+/// - Preserves both the stable side-table id and the anchor classification.
+///
+/// WHY:
+/// - Formatter chaining must retain whether an anchor is a child template or a
+///   generic runtime expression without exposing the underlying content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FormatterOpaquePiece {
+    pub id: FormatterAnchorId,
+    pub kind: FormatterOpaqueKind,
+}
+
+// -------------------------
+//  Formatter Input/Output
+// -------------------------
+
+/// The only data a formatter should see:
+/// - body text it may rewrite
+/// - opaque anchors that preserve ordering around non-text content
+#[derive(Debug, Clone)]
+pub struct FormatterInput {
+    pub pieces: Vec<FormatterInputPiece>,
+}
+
+/// A single piece of formatter input — either rewritable text or an opaque anchor.
+#[derive(Debug, Clone)]
+pub enum FormatterInputPiece {
+    Text(FormatterTextPiece),
+    Opaque(FormatterOpaquePiece),
+}
+
+/// Body text visible to a formatter, with source location for diagnostics.
+#[derive(Debug, Clone)]
+pub struct FormatterTextPiece {
+    pub text: StringId,
+    pub location: SourceLocation,
+}
+
+/// Formatter output — newly generated text and preserved opaque anchors.
+/// No slots, no expressions, no child-template contents, no head content.
+#[derive(Debug, Clone)]
+pub struct FormatterOutput {
+    pub pieces: Vec<FormatterOutputPiece>,
+}
+
+/// A single piece of formatter output — either transformed text or a preserved anchor.
+#[derive(Debug, Clone)]
+pub enum FormatterOutputPiece {
+    Text(String),
+    Opaque(FormatterOpaquePiece),
+}
+
+/// Converts formatter output back into formatter input for the next pipeline stage.
+///
+/// WHAT: interns transformed text with the formatter run's representative
+/// source location and preserves opaque anchors unchanged.
+/// WHY: pre-format whitespace, directive formatting and post-format whitespace
+/// share one narrow contract without exposing TIR nodes or template content.
+pub(crate) fn output_to_input(
+    output: FormatterOutput,
+    representative_location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> FormatterInput {
+    let pieces = output
+        .pieces
+        .into_iter()
+        .map(|piece| match piece {
+            FormatterOutputPiece::Text(text) => FormatterInputPiece::Text(FormatterTextPiece {
+                text: string_table.intern(&text),
+                location: representative_location.clone(),
+            }),
+
+            FormatterOutputPiece::Opaque(anchor) => FormatterInputPiece::Opaque(anchor),
+        })
+        .collect();
+
+    FormatterInput { pieces }
+}

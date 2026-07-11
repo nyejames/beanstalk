@@ -1,0 +1,22 @@
+# Constants and folding
+
+Compile-time-only values and shared runtime semantics.
+
+## Contract
+
+- Input: constant declarations and constant-eligible expressions
+- Output: folded constants, const facts and const page-fragment metadata
+- Decides: what folds, const-record shape, config extraction, compile-time template folding
+- Must not decide: runtime code generation, HIR control flow, backend lowering
+- Invariant: compile-time folding agrees with runtime lowering
+
+## Main paths
+
+- `src/compiler_frontend/ast/const_eval/`
+- `src/compiler_frontend/ast/module_ast/finalization/const_fact_collection.rs`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/ast/constants-and-folding/constants-and-folding.bd`
+- `docs/src/docs/codebase/compiler-design/ast/templates-tir-and-reactivity/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/project-structure/overview.bd`

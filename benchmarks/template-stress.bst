@@ -3,7 +3,7 @@
 -- - Deeply nested template composition (10+ levels)
 -- - Heavy slot usage (positional, named, default, repeated replay)
 -- - Complex $children(..) wrapper chains
--- - Multiple formatter directives ($markdown, $css, $html, $raw, $escape_html)
+-- - Multiple formatter directives ($md, $css, $html, $raw, $escape_html)
 -- - $fresh opt-out patterns
 -- - Large compile-time template folding
 -- - Runtime template construction in loops
@@ -83,7 +83,7 @@ nested_wrapper #= [$children([:<div class="outer-wrap">[$slot]</div>]):
 ]
 
 -- Formatter directive templates
-markdown_block #= [$markdown:
+markdown_block #= [$md:
     ## Markdown Section
     
     This is **bold** and *italic* text.

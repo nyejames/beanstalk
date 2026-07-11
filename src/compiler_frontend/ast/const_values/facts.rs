@@ -74,9 +74,13 @@ pub enum ConstFactValueKind {
 }
 
 impl ConstFactValueKind {
-    /// Derive the fact value kind from an expression's const classification.
-    pub fn from_expression(expression: &Expression) -> Self {
-        match expression.const_value_kind() {
+    /// Derive the fact value kind from an expression const classification.
+    ///
+    /// WHAT: callers provide the already-computed `ConstValueKind` so production
+    ///       const fact collection can classify templates through fresh TIR
+    ///       instead of the legacy no-store template path.
+    pub fn from_const_value_kind(kind: ConstValueKind) -> Self {
+        match kind {
             ConstValueKind::Literal => Self::Literal,
             ConstValueKind::Composite => Self::Composite,
             ConstValueKind::RenderableTemplate => Self::RenderableTemplate,

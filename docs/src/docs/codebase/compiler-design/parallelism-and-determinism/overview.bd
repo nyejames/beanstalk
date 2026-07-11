@@ -1,0 +1,24 @@
+# Parallelism and determinism
+
+Deterministic identity, ordered merge and clear parallel ownership.
+
+## Contract
+
+- Input: source text, tokens, headers and module inventories
+- Output: parallel speedup where safe, with deterministic IDs and diagnostics
+- Decides: where parallelism is allowed, how string-table deltas merge, how source files are scheduled
+- Must not decide: semantic resolution, HIR shape, backend behavior
+- Invariant: parallel work must explain how identities are merged and remapped before later stages consume them
+
+## Main paths
+
+- `src/build_system/create_project_modules/`
+- `src/compiler_frontend/tokenizer/`
+- `src/compiler_frontend/headers/`
+- `src/compiler_frontend/module_ast/environment/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/parallelism-and-determinism/parallelism-and-determinism.bd`
+- `docs/src/docs/codebase/compiler-design/stages/tokenization/overview.bd`
+- `docs/src/docs/codebase/compiler-design/stages/header-parsing/overview.bd`

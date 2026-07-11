@@ -55,6 +55,13 @@ pub fn run_bean_command(
     let output = Command::new(bean_path)
         .arg(command)
         .args(args)
+        // Stable machine-readable timing lines for benchmark parsing.
+        // The subprocess is built with the concise `timers` feature, so
+        // BST_TIMERS=bench emits BST_BENCH timing lines without verbose
+        // human prose. BST_COUNTERS=off suppresses counter output so
+        // normal benchmark runs stay low-noise.
+        .env("BST_TIMERS", "bench")
+        .env("BST_COUNTERS", "off")
         .output()
         .map_err(|e| {
             format!(

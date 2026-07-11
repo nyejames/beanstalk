@@ -1,0 +1,253 @@
+## Testing standards
+
+This document owns test selection, test structure, assertions, fixture design
+and test pruning for compiler work.
+
+It does not define the final validation command. For completion gates, read
+`docs/src/docs/codebase/style-guide/validation.bd`.
+
+The primary goal is end-to-end language and artifact correctness. Prefer real
+usage patterns and complete Beanstalk snippets over narrow implementation-shaped
+tests.
+
+### Default testing preference
+
+Integration tests written in Beanstalk are the default for user-visible language behaviour. They exercise the real compiler path and usually provide the strongest regression coverage.
+
+- Prefer integration coverage for user-visible language behaviour
+- Add or update unit tests only where subsystem-local behaviour genuinely benefits from them
+- Avoid redundant fixtures that assert the same behaviour in slightly different forms
+- Prefer meaningful end-to-end cases over brittle implementation-shaped assertions
+- When backend or runtime behaviour matters, strengthen artifact assertions where goldens alone are too vague
+
+### Supporting rules
+
+- Prefer externally observable behaviour over implementation detail.
+- Use unit tests for hidden invariants that integration output cannot inspect.
+- Use one clear primary test owner per behaviour.
+- Do not create multiple fixtures that prove the same contract without a distinct stage or backend reason.
+- Prefer realistic end-to-end snippets.
+- Tests should remain understandable without reading the implementation first.
+- Do not make exact internal layout contractual unless that layout is the invariant.
+
+### Test ownership
+
+[table:
+    [th:
+        [: **Behavior**]
+        [: **Owner**]
+    ]
+
+    [td:
+        [: Pure data or invariant behavior]
+        [: Focused unit test near the owning subsystem]
+    ]
+
+    [td:
+        [: Compiler-stage invariant]
+        [: Stage-local unit test naming the invariant]
+    ]
+
+    [td:
+        [: Stage-boundary orchestration]
+        [: Minimal pipeline/build smoke test]
+    ]
+
+    [td:
+        [: User-facing language behavior]
+        [: Integration case under `tests/cases/`]
+    ]
+
+    [td:
+        [: Backend artifact behavior]
+        [: Backend-specific artifact assertions or contractual goldens]
+    ]
+
+    [td:
+        [: Side-table or hidden compiler fact]
+        [: Focused unit test if external output cannot expose it]
+    ]
+
+    [td:
+        [: Cross-backend semantic parity]
+        [: One integration input with backend-specific assertions]
+    ]
+]
+
+Each behavior should have one primary owner. Secondary coverage is justified only when it protects a distinct boundary, target, diagnostic lane or internal invariant.
+
+### Test location and module layout
+
+- Tests do not live in production implementation files.
+- Module-specific tests belong under the module's test directory, for example:
+
+[codeblock, $code("text"):
+    src/compiler_frontend/hir/tests/
+]
+
+- End-to-end or multi-module Rust harness tests belong under:
+
+[codeblock, $code("text"):
+    src/compiler_tests/
+]
+
+- Language and project integration cases belong under:
+
+[codeblock, $code("text"):
+    tests/cases/
+]
+
+- Test-only utilities should live with the tests that own them.
+- Do not create broad shared test utility modules for one or two callers.
+- Split cross-stage test support only when actual ownership boundaries justify it.
+
+### Unit tests
+
+Retain unit tests for:
+
+- pure data invariants
+- impossible states
+- side-table facts
+- transfer rules
+- backend planning policy not observable from artifacts
+- narrow parser or formatter algorithms
+
+Prefer integration tests for user-visible behavior.
+Once a subsystem is stable, prune superseded unit tests.
+Rewrite obsolete tests rather than preserving old API shapes.
+A unit test should name the invariant it protects.
+Do not use unit coverage as a substitute for an end-to-end case when user behavior changed.
+
+### Integration cases
+
+- `bean tests` runs the integration test runner.
+- Use real Beanstalk snippets.
+- Each canonical case is one self-contained scenario directory.
+- Keep helper source files inside the owning case's `input/` directory.
+- Do not let helper files become unintended standalone cases.
+- Add strong output assertions where behavior is visible.
+- Prefer top-level templates to simulate output.
+- Avoid `io.line(...)` unless console behavior is itself under test.
+
+For new type-system syntax, include:
+
+- positive usage
+- value/type namespace misuse
+- import visibility
+- duplicates
+- cross-file resolution
+- target/backend rejection where relevant
+
+Canonical fixture shape:
+
+[codeblock, $code("text"):
+    tests/cases/
+    ├── manifest.toml
+    └── case_name/
+        ├── input/
+        │   ├── main.bst
+        │   └── helper.bst
+        ├── expect.toml
+        └── golden/
+            ├── html/
+            └── html_wasm/
+]
+
+- `manifest.toml` may order or tag cases during fixture migrations.
+- One case folder owns all inputs and expectations for that scenario.
+
+### Diagnostics assertions
+
+- Ordinary source/config/import/type/rule/borrow failures should assert stable `diagnostic_codes`.
+- Add rendered message fragments only when wording or rendered labels are part of the contract.
+- Infrastructure-boundary tests may assert infrastructure `ErrorType`.
+- Preserve source location assertions where location behavior is important.
+- Do not use full rendered diagnostic snapshots when a stable code and structured assertion are sufficient.
+- Do not weaken a diagnostic case into a generic "must fail" assertion.
+
+### Backend matrices and artifact assertions
+
+Use one `expect.toml` per case with backend-specific assertion blocks.
+
+[codeblock, $code("text"):
+    entry = "."
+
+    [backends.html]
+    mode = "success"
+    warnings = "forbid"
+
+    [backends.html_wasm]
+    mode = "success"
+    warnings = "forbid"
+
+    [[backends.html_wasm.artifact_assertions]]
+    path = "page.wasm"
+    kind = "wasm"
+    validate_wasm = true
+    must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
+]
+
+- Use backend-specific blocks within one case.
+- Store strict goldens in:
+
+[codeblock, $code("text"):
+    golden/<backend>/
+]
+
+- Use artifact assertions for structure: file presence, Wasm validity, exports, imports, expected snippets, absence of forbidden output.
+- Use strict goldens only where exact emitted text is contractual.
+- Prefer semantic or rendered-output assertions for behavior-first cases.
+- Strengthen artifact assertions when a golden can pass while structural behavior is wrong.
+- Do not require unsupported backends to succeed merely for matrix symmetry. Assert the intended rejection contract.
+
+### HIR and internal-IR assertions
+
+- Assert semantic relationships rather than incidental indexes.
+- Prefer branch joins, merge-local relationships, jump arguments, region ownership, side-table keys, stable call targets and required operation kinds.
+- Avoid exact block IDs or vector offsets unless exact layout is the invariant.
+- Do not make temporary lowering order part of the public test contract.
+- For HIR validation, distinguish malformed-HIR invariant tests from user-facing source diagnostic tests.
+
+### Fixtures and temporary files
+
+- Prefer `tempfile::tempdir()` for temporary directories and files.
+- Use unmanaged paths only when the test intentionally owns cleanup.
+- Keep fixtures local to their owner.
+- Do not commit generated `dev/` or `release/` outputs from test or benchmark projects.
+- Avoid shared fixture builders that hide important source shape.
+
+### Pruning and duplicate coverage
+
+- Remove tests tied only to deleted implementation paths.
+- Avoid several fixtures that differ only cosmetically.
+- Preserve duplicates only when they protect different stages, diagnostic reasons, backends, source locations or artifact contracts.
+- Localize one-caller fixtures.
+- When two tests overlap, identify the primary owner and either merge them, narrow each to a distinct invariant or delete the weaker one.
+- Do not preserve obsolete fixtures for historical compatibility.
+
+### Benchmarks are not correctness tests
+
+Benchmark fixtures are performance evidence, not correctness coverage.
+
+Do not use benchmark coverage as a substitute for unit or integration tests.
+Negative diagnostics belong in `tests/cases`, not benchmark fixtures.
+
+Use `bench-check` to detect broad performance regressions after correctness has
+already been established by ordinary tests.
+
+### Testing checklist
+
+Before considering test coverage complete, check:
+
+- The behavior has one clear primary test owner.
+- User-visible behavior has end-to-end integration coverage.
+- Internal-only invariants have focused unit coverage where needed.
+- Failure cases assert stable diagnostic codes.
+- Rendered text is asserted only when it is contractual.
+- Backend behavior uses the narrowest useful artifact assertions.
+- Goldens are used only where exact output is a contract.
+- HIR tests avoid incidental block and local numbering.
+- Multi-file fixtures remain inside one case directory.
+- Temporary files use owned cleanup.
+- No benchmark fixture is being used as a correctness substitute.
+- Redundant or obsolete coverage has been removed.

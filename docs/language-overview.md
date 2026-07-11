@@ -26,6 +26,10 @@ This document separates future work into two categories:
 A feature listed outside design scope should not be implemented unless the language philosophy is
 explicitly changed first.
 
+A concise maintainer-facing summary is published at
+`docs/src/docs/codebase/design-scope/overview.bd`. This document remains the
+complete compiler-facing authority for the exact language-scope list.
+
 ## Outside the Language Design Scope
 
 The following surfaces are intentionally outside Beanstalk's language design scope.
@@ -52,8 +56,9 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 ## Related references
 
 - `docs/src/docs/**` — user-facing docs-site pages and real `.bst` examples
-- `docs/compiler-design-overview.md` — compiler stage ownership and cross-stage data flow
-- `docs/memory-management-design.md` — GC fallback, ownership optimisation, and borrow-analysis strategy
+- `docs/src/docs/codebase/compiler-design/overview.bd` — compiler stage ownership and cross-stage data flow
+- `docs/src/docs/codebase/memory-management/overview.bd` — GC fallback, ownership optimisation and borrow-analysis strategy
+- `docs/src/docs/codebase/design-scope/overview.bd` — accepted mechanisms, constraints and outside-scope families
 - `docs/src/docs/progress/#page.bst` — current implementation status
 - `docs/roadmap/roadmap.md` — planned work
 
@@ -607,7 +612,7 @@ Templates use `[]`; collections use `{}`. `""` creates escaped string slices, an
 Template head/body shape:
 
 ```beanstalk
-[$markdown, $children([:<li>[$slot]</li>]):
+[$md, $children([:<li>[$slot]</li>]):
     # Title
     [: child]
 ]
@@ -617,7 +622,7 @@ Core rules:
 - The head and body are separated by `:`.
 - Authored `.bst` templates must close with `]`; truncated heads, bodies, nested child templates, and directive-argument templates produce syntax diagnostics.
 - Template bodies capture variables from the surrounding scope.
-- Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$markdown`). Regular quoted string literals still support escapes.
+- Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$md`). Regular quoted string literals still support escapes.
 - Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]` or `[: [`[This is text inside sqauare brackets as a string]`]]`.
 - Only direct top-level template expressions in an HTML entry file contribute page fragments.
 - Top-level runtime templates run in entry `start()` order.
@@ -637,7 +642,7 @@ Core rules:
 |---|---|
 | `$slot` / `$insert(...)` | Slot declaration/contribution |
 | `$fresh` | Opt out of the immediate parent’s `$children(...)` wrapper |
-| `$markdown` | Parse body as Beanstalk Markdown |
+| `$md` | Parse body as Beanstalk Markdown |
 | `$raw` | Preserve authored body whitespace |
 | `$note` / `$todo` | Ignored comments |
 | `$doc` | Documentation comment template |
@@ -800,19 +805,19 @@ Runtime slot applications are valid inside template control flow after normal sl
 
 ### Markdown Formatting
 
-`$markdown` is Beanstalk's small markdown flavour, not a full CommonMark implementation.
+`$md` is Beanstalk's small markdown flavour, not a full CommonMark implementation.
 
 Inline code uses paired isolated single backticks on the same markdown line and renders as `<code>...</code>`.
 Markdown emphasis and link parsing do not run inside inline code. Empty spans, repeated backtick runs, unmatched backticks, multiline spans, variable-length delimiters, fenced code blocks, and markdown-level backtick escaping are not part of Beanstalk's markdown flavour.
 
-Dynamic expression anchors may appear inside a parent-authored code span, but `$markdown` does not inspect their rendered output. Child templates are opaque barriers to the parent formatter and cannot be inside a parent-authored code span or pair delimiters across that child boundary.
+Dynamic expression anchors may appear inside a parent-authored code span, but `$md` does not inspect their rendered output. Child templates are opaque barriers to the parent formatter and cannot be inside a parent-authored code span or pair delimiters across that child boundary.
 
 ### Beandown `.bd` Content Files
 
 Beandown files are HTML-builder content helpers. A `.bd` file is authored as the body of an implicit compile-time markdown template:
 
 ```beanstalk
-content #String = [$markdown:
+content #String = [$md:
     ...entire .bd file body...
 ]
 ```
@@ -837,7 +842,8 @@ Rules:
 - `.bd` files have no imports, declarations, frontmatter, metadata, or raw-source preservation.
 - A `.bd` body must fully fold at compile time. Runtime functions, runtime bindings, and types are not visible.
 - The implicit markdown template means `--` is body text, not a Beanstalk comment.
-- `.bd` bodies follow normal template-body and `$markdown` semantics. Literal template delimiters use string insertion, such as `["[literal]"]`; nested authored templates still use normal `[...]` syntax and must close explicitly.
+- `.bd` bodies follow normal template-body and `$md` semantics. Literal template delimiters use string insertion, such as `["[literal]"]`; nested authored templates still use normal `[...]` syntax and must close explicitly.
+- Nested `.bd` templates with no explicit directive also default to `$md`. Any explicit directive on that nested template, such as `$raw`, `$fresh`, `$html`, `$code`, `$css`, or `$escape_html`, overrides the Beandown Markdown default for that template.
 
 Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted flat compile-time scope:
 - exported compile-time constants and const records from `@html`, such as `[p: body]`;
@@ -894,7 +900,7 @@ Rules:
 - `.md` files do not see same-directory facade constants or `@html` constants. They have no Beanstalk scope.
 - Raw HTML is preserved in V1. This feature does not add a sanitizer or raw-HTML policy key.
 - Markdown links and images render literal `href` and `src` values in V1. They are not tracked assets and are not rewritten.
-- `.bd` remains the Beanstalk-aware content format. Use `.bd` when content needs `$markdown`,
+- `.bd` remains the Beanstalk-aware content format. Use `.bd` when content needs `$md`,
   nested templates, or the restricted same-directory facade constant scope.
 
 ### If Statements and Pattern Matching
@@ -1271,11 +1277,11 @@ Aliases can target builtins, structs, choices, options, collections, fully concr
 
 ## Module System, Config, and Imports
 
-A module is a directory-scoped set of Beanstalk source files compiled into one output. A directory becomes a module root when it contains one or more `#*.bst` files, excluding `#config.bst`. A project contains one or more modules plus libraries and other builder inputs.
+A module is a directory-scoped set of Beanstalk source files compiled into one output. A directory becomes a module root when it contains one or more `#*.bst` files. A project contains one or more modules plus libraries and other builder inputs.
 
 ### Project config
 
-`#config.bst`:
+`config.bst`:
 - lives at the project root;
 - uses normal declaration syntax;
 - accepts only known top-level `#` constants as config entries;
@@ -1283,7 +1289,7 @@ A module is a directory-scoped set of Beanstalk source files compiled into one o
 - may reference earlier compile-time config keys or constants imported from core/builder source libraries;
 - may contain core/builder imports, type aliases, structs, and choices as support declarations;
 - rejects plain top-level bindings because they are runtime/start-body syntax;
-- rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, traits, conformance metadata, standalone templates, and `#[...]` page fragments.
+- rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, traits, trait conformances, trait incompatibility declarations, standalone templates, and `#[...]` page fragments.
 
 Known config key shapes include:
 - string settings: string literals or folded templates;
@@ -1330,14 +1336,24 @@ Rules:
 - External package namespace imports can expose nested package-local symbol paths such as `io.input.*`.
 - Import records are not first-class values.
 - Import source child paths directly; do not traverse source or facade path segments through namespace fields.
-- Aliases are file-local, not re-exported, and must not collide with visible names.
+- Ordinary import aliases are file-local, cannot be independently re-exported, and must not collide with visible names.
+- An alias authored inside an explicit grouped facade re-export defines the public API name for that exported symbol.
 - Alias leading-case mismatches warn.
+
+```beanstalk
+import @some/path { Symbol as LocalName }
+
+export import @some/path { Symbol as PublicName }
+export @some/path { Symbol as PublicName }
+```
+
+`LocalName` is file-local. `PublicName` is the exported API name created by the explicit facade re-export.
 - Grouped imports cannot use a trailing group-level alias.
 - Direct symbol-path imports such as `import @core/math/sin` are invalid.
 - `.bst` source imports are extensionless.
 - Direct project/local JavaScript imports require `.js` and a builder `.js` external import provider.
 - Invalid namespace path stems require explicit aliases.
-- Direct imports of `#mod.bst`, `#page.bst`, and `#config.bst` are invalid.
+- Direct imports of `#mod.bst`, `#page.bst`, and `config.bst` are invalid.
 
 ### Module roots, entry files, facades, and libraries
 
@@ -1348,7 +1364,7 @@ Rules:
 | non-entry `.bst` files | Declarations only; no top-level executable statements |
 | `#mod.bst` | Only outward-facing module export surface |
 | module root without `#mod.bst` | Exports nothing outside itself |
-| `#config.bst` | Affects build behavior; creates no language-visible imports |
+| `config.bst` | Affects build behavior; creates no language-visible imports |
 
 Execution and visibility:
 - Only the module entry file executes top-level runtime code automatically.

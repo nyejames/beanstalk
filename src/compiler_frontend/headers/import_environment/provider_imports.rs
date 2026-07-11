@@ -14,6 +14,14 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::libraries::external_import_providers::provider::ResolvedExternalImport;
 
+/// Boxed diagnostic result for provider-backed import resolution.
+///
+/// WHAT: gives provider-backed grouped and bare import resolution one small error boundary.
+/// WHY: the external registration, namespace record, and namespace name helpers this family
+///      calls already return boxed diagnostics, so boxing here lets `?` propagate directly
+///      without temporary unboxing adapters.
+type ProviderImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 impl<'a> ImportEnvironmentBuilder<'a> {
     /// Try to resolve a grouped import against a provider-backed external file.
     ///
@@ -24,15 +32,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ///
     /// Returns `Ok(Some(()))` if resolved, `Ok(None)` if this import is not
     /// provider-backed, or `Err` for a diagnostic.
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn resolve_provider_backed_grouped_import(
         &mut self,
         file_visibility: &mut FileVisibility,
         registry: &mut VisibleNameRegistry,
         import: &FileImport,
         source_file: &InternedPath,
-    ) -> Result<Option<()>, CompilerDiagnostic> {
+    ) -> ProviderImportResult<Option<()>> {
         let Some((resolved, remaining)) =
             self.find_provider_resolution_with_remaining(source_file, &import.header_path)
         else {
@@ -41,10 +47,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         // Grouped imports must name exactly one symbol within the provider package.
         if remaining.len() != 1 {
-            return Err(CompilerDiagnostic::direct_symbol_path_import(
+            return Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
                 import.header_path.clone(),
                 import.location.clone(),
-            ));
+            )));
         }
 
         let symbol_name = remaining[0];
@@ -52,19 +58,19 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .external_package_registry
             .get_package_by_id(resolved.package_id);
         let Some(package) = package else {
-            return Err(super::diagnostics::missing_import_target(
+            return Err(Box::new(super::diagnostics::missing_import_target(
                 &import.header_path,
                 import.location.clone(),
-            ));
+            )));
         };
 
         let symbol_id = self
             .lookup_external_symbol_id_by_name(&package.path, symbol_name)
             .ok_or_else(|| {
-                super::diagnostics::missing_import_target(
+                Box::new(super::diagnostics::missing_import_target(
                     &import.header_path,
                     import.location.clone(),
-                )
+                ))
             })?;
 
         self.register_external_import(file_visibility, registry, import, symbol_id)?;
@@ -79,15 +85,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ///
     /// Returns `Ok(Some(()))` if resolved, `Ok(None)` if not provider-backed,
     /// or `Err` for a diagnostic.
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn resolve_provider_backed_bare_import(
         &mut self,
         file_visibility: &mut FileVisibility,
         registry: &mut VisibleNameRegistry,
         import: &FileImport,
         source_file: &InternedPath,
-    ) -> Result<Option<()>, CompilerDiagnostic> {
+    ) -> ProviderImportResult<Option<()>> {
         let Some((resolved, remaining)) =
             self.find_provider_resolution_with_remaining(source_file, &import.header_path)
         else {
@@ -97,20 +101,20 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // If there are remaining components after the provider-backed prefix, this is a
         // direct symbol-path import, which is invalid for bare imports.
         if !remaining.is_empty() {
-            return Err(CompilerDiagnostic::direct_symbol_path_import(
+            return Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
                 import.header_path.clone(),
                 import.location.clone(),
-            ));
+            )));
         }
 
         let package = self
             .external_package_registry
             .get_package_by_id(resolved.package_id);
         let Some(package) = package else {
-            return Err(super::diagnostics::missing_import_target(
+            return Err(Box::new(super::diagnostics::missing_import_target(
                 &import.header_path,
                 import.location.clone(),
-            ));
+            )));
         };
 
         let package_path_id = self.string_table.intern(&package.path);

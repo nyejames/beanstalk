@@ -1,12 +1,12 @@
 //! Runtime template aggregate lowering.
 //!
-//! WHAT: appends an aggregate render plan only when the source accumulator structurally emitted
+//! WHAT: appends aggregate wrapper output only when the source accumulator structurally emitted
 //! output.
 //! WHY: loop heads and conditional child wrappers both apply around aggregate output once, while
-//! skipped branches and zero-output loops preserve structural no-output semantics.
+//! skipped branches and zero-output loops preserve structural no-output semantics. Conditional
+//! child wrappers now consume a TIR-derived owned wrapper node; the shared emitted-guard
+//! infrastructure below is reused by both paths.
 
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateAggregateRenderPlan;
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
@@ -25,12 +25,15 @@ pub(super) struct RuntimeTemplateAggregateAppend<'context> {
 }
 
 impl<'a> HirBuilder<'a> {
-    pub(super) fn append_runtime_template_aggregate_if_emitted(
+    pub(super) fn append_runtime_template_aggregate_when_emitted(
         &mut self,
-        template: &Template,
-        aggregate_plan: &TemplateAggregateRenderPlan,
         append: RuntimeTemplateAggregateAppend,
         fallback_location: &SourceLocation,
+        append_aggregate: impl FnOnce(
+            &mut Self,
+            RuntimeTemplateAggregateAppend,
+            &SourceLocation,
+        ) -> Result<(), CompilerError>,
     ) -> Result<(), CompilerError> {
         let condition_block = self.current_block_id_or_error(fallback_location)?;
         let parent_region = self.current_region_or_error(fallback_location)?;
@@ -60,13 +63,7 @@ impl<'a> HirBuilder<'a> {
         if let Some(parent_flag) = append.append_context.emitted_output() {
             self.mark_runtime_template_output_emitted(parent_flag, fallback_location)?;
         }
-        self.append_template_aggregate_plan_with_context(
-            template,
-            aggregate_plan,
-            append.aggregate,
-            append.append_context,
-            fallback_location,
-        )?;
+        append_aggregate(self, append, fallback_location)?;
 
         let then_tail_block = self.current_block_id_or_error(fallback_location)?;
         let then_terminated =

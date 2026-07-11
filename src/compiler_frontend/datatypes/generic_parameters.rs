@@ -13,6 +13,14 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRema
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// Boxed diagnostic result for generic-parameter scope validation.
+///
+/// WHAT: keeps `from_parameter_list` on a small error boundary so the large
+///       `CompilerDiagnostic` value does not inflate every successful scope build.
+/// WHY: both declaration-syntax parsing and AST type-resolution already box
+///      their generic-parameter diagnostic boundaries; this owner should match.
+type GenericParameterScopeResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 // -----------------------------------------------------------
 //  Generic Parameter Declarations
 // -----------------------------------------------------------
@@ -139,49 +147,49 @@ impl GenericParameterScope {
         forbidden_names: &FxHashSet<StringId>,
         string_table: &StringTable,
         _compilation_stage: &str,
-    ) -> Result<Self, CompilerDiagnostic> {
+    ) -> GenericParameterScopeResult<Self> {
         let mut scope = Self::empty();
 
         for parameter in &parameter_list.parameters {
             if scope.parameters_by_name.contains_key(&parameter.name) {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::DuplicateGenericParameter {
                         parameter_name: parameter.name,
                     },
                     None,
                     parameter.location.to_owned(),
-                ));
+                )));
             }
 
             if forbidden_names.contains(&parameter.name) {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::GenericParameterNameCollision {
                         parameter_name: parameter.name,
                     },
                     None,
                     parameter.location.to_owned(),
-                ));
+                )));
             }
 
             let parameter_name = string_table.resolve(parameter.name);
             if is_reserved_generic_parameter_name(parameter_name) {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::ReservedGenericParameterName {
                         parameter_name: parameter.name,
                     },
                     None,
                     parameter.location.to_owned(),
-                ));
+                )));
             }
 
             if !is_generic_parameter_name(parameter_name) {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::InvalidGenericParameterName {
                         parameter_name: parameter.name,
                     },
                     None,
                     parameter.location.to_owned(),
-                ));
+                )));
             }
 
             scope.parameters_by_name.insert(

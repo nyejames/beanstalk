@@ -1,0 +1,23 @@
+# Access and aliasing
+
+Shared reads, explicit copies and `~` access.
+
+## Contract
+
+- Input: source access syntax and binding/argument forms
+- Output: validated shared, exclusive and copy semantics
+- Decides: what counts as shared access, when `copy` is required, where `~` is valid
+- Must not decide: borrow-checker implementation, backend allocation, ownership transfer
+- Invariant: existing values use shared read-only access by default: mutation requires explicit exclusive access
+
+## Main paths
+
+- `src/compiler_frontend/value_mode.rs`
+- `src/compiler_frontend/ast/expressions/`
+- `src/compiler_frontend/ast/statements/`
+- `src/compiler_frontend/ast/field_access/`
+
+## Read next
+
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
+- `docs/src/docs/codebase/compiler-design/ast/expressions-statements-and-terminality/overview.bd`

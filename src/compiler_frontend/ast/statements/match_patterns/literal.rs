@@ -24,6 +24,15 @@ use super::diagnostics::reject_deferred_pattern_lead_token;
 use super::relational::parse_relational_pattern;
 use super::types::MatchPattern;
 
+/// Boxed diagnostic result for the literal pattern family.
+///
+/// WHAT: every function in this module returns errors as `Box<CompilerDiagnostic>`.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err`;
+/// boxing the error variant keeps the success path cheap and matches the
+/// already-boxed `MatchHeaderResult` convention used by the surrounding match
+/// statement parsers.
+type LiteralPatternResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Materialize a `NumericLiteralToken` into an `Expression` with an explicit sign and location.
 ///
 /// WHAT: handles both whole-number (`i32`) and decimal/exponent (`f64`) materialization
@@ -37,10 +46,14 @@ fn materialize_numeric_literal(
     sign: NumericLiteralSign,
     location: SourceLocation,
     string_table: &StringTable,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> LiteralPatternResult<Expression> {
     if token.kind == NumericLiteralKind::WholeNumber {
         let value_i32 = materialize_i32_with_sign(token, sign, string_table).map_err(|reason| {
-            CompilerDiagnostic::invalid_number_literal(token.source_text, reason, location.clone())
+            Box::new(CompilerDiagnostic::invalid_number_literal(
+                token.source_text,
+                reason,
+                location.clone(),
+            ))
         })?;
 
         Ok(Expression::int(
@@ -50,7 +63,11 @@ fn materialize_numeric_literal(
         ))
     } else {
         let value = materialize_f64(token, string_table).map_err(|reason| {
-            CompilerDiagnostic::invalid_number_literal(token.source_text, reason, location.clone())
+            Box::new(CompilerDiagnostic::invalid_number_literal(
+                token.source_text,
+                reason,
+                location.clone(),
+            ))
         })?;
 
         // Negate the float when the sign is negative; the normalised text is unsigned
@@ -69,13 +86,12 @@ fn materialize_numeric_literal(
 }
 
 /// Parse a non-choice match pattern, dispatching to relational or literal parsers.
-#[allow(clippy::result_large_err)]
 pub fn parse_non_choice_pattern(
     token_stream: &mut FileTokens,
     subject_type_id: TypeId,
     string_table: &StringTable,
     type_environment: &TypeEnvironment,
-) -> Result<MatchPattern, CompilerDiagnostic> {
+) -> LiteralPatternResult<MatchPattern> {
     match token_stream.current_token_kind() {
         TokenKind::LessThan
         | TokenKind::LessThanOrEqual
@@ -105,14 +121,15 @@ pub fn parse_non_choice_pattern(
 /// verifies the pattern type is compatible with the scrutinee type.
 /// WHY: catching type mismatches at parse time produces better source-located errors
 /// than deferring the check to HIR lowering.
-#[allow(clippy::result_large_err)]
 pub(super) fn parse_literal_pattern(
     token_stream: &mut FileTokens,
     subject_type_id: TypeId,
     string_table: &StringTable,
     type_environment: &TypeEnvironment,
-) -> Result<Expression, CompilerDiagnostic> {
-    reject_deferred_pattern_lead_token(token_stream)?;
+) -> LiteralPatternResult<Expression> {
+    if let Some(diagnostic) = reject_deferred_pattern_lead_token(token_stream) {
+        return Err(Box::new(diagnostic));
+    }
 
     let pattern = match token_stream.current_token_kind() {
         // Numeric literal — use the shared materialization helper.
@@ -164,32 +181,32 @@ pub(super) fn parse_literal_pattern(
                     expression
                 }
                 _ => {
-                    return Err(CompilerDiagnostic::invalid_match_pattern(
+                    return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                         InvalidMatchPatternReason::NegativeLiteralNotNumeric,
                         None,
                         None,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
             }
         }
 
         // Patterns that are never valid as literal matches.
         TokenKind::NoneLiteral => {
-            return Err(CompilerDiagnostic::invalid_match_pattern(
+            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                 InvalidMatchPatternReason::NonePatternRequiresOptionalScrutinee,
                 None,
                 None,
                 token_stream.current_location(),
-            ));
+            )));
         }
         _ => {
-            return Err(CompilerDiagnostic::invalid_match_pattern(
+            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                 InvalidMatchPatternReason::LiteralTypeUnsupported,
                 None,
                 None,
                 token_stream.current_location(),
-            ));
+            )));
         }
     };
 
@@ -200,12 +217,12 @@ pub(super) fn parse_literal_pattern(
     // Reject literal patterns whose type is incompatible with the scrutinee type
     // at parse time so the user gets a source-located error immediately.
     if !is_type_compatible(subject_type_id, pattern.type_id, type_environment) {
-        return Err(CompilerDiagnostic::type_mismatch(
+        return Err(Box::new(CompilerDiagnostic::type_mismatch(
             subject_type_id,
             pattern.type_id,
             TypeMismatchContext::MatchPattern,
             pattern.location.clone(),
-        ));
+        )));
     }
 
     Ok(pattern)

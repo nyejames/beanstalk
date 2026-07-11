@@ -335,14 +335,26 @@ impl DiagnosticPayload {
             | DiagnosticPayload::InvalidBuiltinCall {
                 builtin_name: name, ..
             }
-            | DiagnosticPayload::InvalidFieldAccess {
-                field_name: name, ..
-            }
             | DiagnosticPayload::InvalidTemplateSlot {
                 slot_name: name, ..
             } => {
                 if let Some(name) = name {
                     *name = remap.get(*name);
+                }
+            }
+
+            // InvalidFieldAccess carries both a field_name and a known_fields list,
+            // both of which need remapping.
+            DiagnosticPayload::InvalidFieldAccess {
+                field_name: name,
+                known_fields,
+                ..
+            } => {
+                if let Some(name) = name {
+                    *name = remap.get(*name);
+                }
+                for field in known_fields {
+                    *field = remap.get(*field);
                 }
             }
 

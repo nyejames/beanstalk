@@ -8,6 +8,7 @@
 //! misuse by the orchestration layer and never reach here.
 
 use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::expressions::external_namespace_members::{
     ExternalNamespaceConstantMemberInput, ExternalNamespaceFunctionMemberInput,
@@ -57,7 +58,7 @@ pub(super) fn resolve_namespace_value_member(
     member_name: StringId,
     member_location: SourceLocation,
     expected_result_evidence_allowed: bool,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), ExpressionParseError> {
     match value_member {
         NamespaceValueMember::SourceDeclaration(symbol_path) => resolve_source_value_member(
             context,
@@ -88,7 +89,7 @@ fn resolve_source_value_member(
     member_name: StringId,
     member_location: SourceLocation,
     expected_result_evidence_allowed: bool,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), ExpressionParseError> {
     let LeafDispatchContext {
         token_stream,
         context,
@@ -104,10 +105,7 @@ fn resolve_source_value_member(
         .declaration_table
         .get_by_path(symbol_path)
     else {
-        return Err(CompilerDiagnostic::unknown_value_name(
-            member_name,
-            member_location,
-        ));
+        return Err(CompilerDiagnostic::unknown_value_name(member_name, member_location).into());
     };
 
     // Namespace fields are not first-class function values. A function member must
@@ -130,7 +128,6 @@ fn resolve_source_value_member(
             type_interner,
             string_table,
         })
-        .map_err(|err| err.into())
     } else {
         let reference_expression = reference_expression_from_declaration(
             declaration,
@@ -152,7 +149,6 @@ fn resolve_source_value_member(
                 wrapper_location: member_location,
             },
         )
-        .map_err(|err| err.into())
     }
 }
 
@@ -170,7 +166,7 @@ fn resolve_external_value_member(
     symbol_id: ExternalSymbolId,
     member_name: StringId,
     member_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), ExpressionParseError> {
     let LeafDispatchContext {
         token_stream,
         context,
@@ -193,7 +189,6 @@ fn resolve_external_value_member(
                 allow_boundary_catch: *allow_boundary_catch,
                 string_table,
             })
-            .map_err(|err| err.into())
         }
 
         ExternalSymbolId::Constant(constant_id) => {
@@ -208,14 +203,12 @@ fn resolve_external_value_member(
                 allow_boundary_catch: *allow_boundary_catch,
                 string_table,
             })
-            .map_err(|err| err.into())
         }
 
         // The orchestration layer filters type symbols before calling the value leaf
         // resolver, so this branch is a proven internal invariant violation.
-        ExternalSymbolId::Type(_) => Err(CompilerDiagnostic::unknown_value_name(
-            member_name,
-            member_location,
-        )),
+        ExternalSymbolId::Type(_) => {
+            Err(CompilerDiagnostic::unknown_value_name(member_name, member_location).into())
+        }
     }
 }

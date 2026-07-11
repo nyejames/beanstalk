@@ -4,11 +4,11 @@
 //! - parsing the narrow `$code` / `$code("ext")` directive syntax
 //! - converting compile-time body string runs into highlighted HTML
 
+use crate::compiler_frontend::ast::templates::formatter_contract::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
-};
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;

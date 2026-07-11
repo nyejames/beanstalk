@@ -22,6 +22,15 @@ use crate::compiler_frontend::traits::syntax::{
 
 use super::types::HeaderBuildContext;
 
+/// Boxed diagnostic result for trait-header parsing.
+///
+/// WHAT: gives every trait declaration, requirement, conformance, specialized-target,
+///      incompatibility and trait-name validation helper one small error boundary.
+/// WHY: the signature-member boundary already returns boxed diagnostics, so trait-header
+///      parsing propagates them directly without unboxing and reboxing at each step. The
+///      header-dispatch boundary also uses boxed diagnostics, so callers stay in sync.
+type TraitHeaderResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 // ------------------------
 //  Trait declaration parsing
 // ------------------------
@@ -31,7 +40,7 @@ pub(super) fn parse_trait_declaration(
     declaration_name: StringId,
     name_location: SourceLocation,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitDeclarationSyntax, CompilerDiagnostic> {
+) -> TraitHeaderResult<TraitDeclarationSyntax> {
     let mut requirements = Vec::new();
 
     token_stream.skip_newlines();
@@ -44,10 +53,10 @@ pub(super) fn parse_trait_declaration(
             }
 
             TokenKind::Eof => {
-                return Err(CompilerDiagnostic::unexpected_end_of_file(
+                return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
                     Some(context.string_table.intern(";")),
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             TokenKind::Newline => {
@@ -72,20 +81,20 @@ pub(super) fn parse_trait_declaration(
 fn parse_trait_requirement(
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitRequirementSyntax, CompilerDiagnostic> {
+) -> TraitHeaderResult<TraitRequirementSyntax> {
     let name_location = token_stream.current_location();
 
     let TokenKind::Symbol(method_name) = token_stream.current_token_kind() else {
-        return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::unexpected_token_in_declaration(token_stream.current_location()),
         ));
     };
     let method_name = *method_name;
     token_stream.advance();
 
     if token_stream.current_token_kind() != &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::unexpected_token_in_declaration(token_stream.current_location()),
         ));
     }
 
@@ -107,10 +116,10 @@ fn parse_trait_requirement(
             .map(|id| context.string_table.resolve(id))
             .unwrap_or("");
         if param_name != "This" {
-            return Err(CompilerDiagnostic::invalid_signature_member(
+            return Err(Box::new(CompilerDiagnostic::invalid_signature_member(
                 InvalidSignatureMemberReason::TraitReceiverMustBeThis,
                 first_param.location.clone(),
-            ));
+            )));
         }
 
         if first_param.value_mode.is_mutable() {
@@ -119,10 +128,10 @@ fn parse_trait_requirement(
             TraitThisUsage::Immutable
         }
     } else {
-        return Err(CompilerDiagnostic::invalid_signature_member(
+        return Err(Box::new(CompilerDiagnostic::invalid_signature_member(
             InvalidSignatureMemberReason::TraitReceiverMustBeThis,
             name_location.clone(),
-        ));
+        )));
     };
 
     Ok(TraitRequirementSyntax {
@@ -142,7 +151,7 @@ pub(super) fn parse_trait_conformance(
     token_stream: &mut FileTokens,
     target: ConformanceTargetSyntax,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitConformanceSyntax, CompilerDiagnostic> {
+) -> TraitHeaderResult<TraitConformanceSyntax> {
     let mut traits = Vec::new();
 
     loop {
@@ -164,15 +173,17 @@ pub(super) fn parse_trait_conformance(
 
             _ => {
                 if traits.is_empty() {
-                    return Err(CompilerDiagnostic::invalid_declaration(
+                    return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                         InvalidDeclarationReason::TraitConformanceMissingTrait,
                         Some(target.name),
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unexpected_token_in_declaration(
+                        token_stream.current_location(),
+                    ),
                 ));
             }
         }
@@ -188,9 +199,9 @@ pub(super) fn parse_trait_conformance(
                     token_stream.current_token_kind(),
                     TokenKind::End | TokenKind::Eof
                 ) {
-                    return Err(CompilerDiagnostic::unexpected_trailing_comma(
+                    return Err(Box::new(CompilerDiagnostic::unexpected_trailing_comma(
                         comma_location,
-                    ));
+                    )));
                 }
             }
 
@@ -199,16 +210,18 @@ pub(super) fn parse_trait_conformance(
             }
 
             TokenKind::End => {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::TraitConformanceSemicolon,
                     Some(target.name),
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             _ => {
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unexpected_token_in_declaration(
+                        token_stream.current_location(),
+                    ),
                 ));
             }
         }
@@ -225,7 +238,7 @@ pub(super) fn parse_specialized_conformance_target(
     token_stream: &mut FileTokens,
     target_name: StringId,
     name_location: SourceLocation,
-) -> Result<ConformanceTargetSyntax, CompilerDiagnostic> {
+) -> TraitHeaderResult<ConformanceTargetSyntax> {
     token_stream.advance(); // past `of`
 
     loop {
@@ -239,8 +252,10 @@ pub(super) fn parse_specialized_conformance_target(
             }
 
             TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unexpected_token_in_declaration(
+                        token_stream.current_location(),
+                    ),
                 ));
             }
 
@@ -253,7 +268,7 @@ pub(super) fn parse_trait_incompatibility(
     token_stream: &mut FileTokens,
     subject: TraitReferenceSyntax,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitIncompatibilitySyntax, CompilerDiagnostic> {
+) -> TraitHeaderResult<TraitIncompatibilitySyntax> {
     let mut incompatible_traits = Vec::new();
 
     loop {
@@ -275,15 +290,17 @@ pub(super) fn parse_trait_incompatibility(
 
             _ => {
                 if incompatible_traits.is_empty() {
-                    return Err(CompilerDiagnostic::invalid_declaration(
+                    return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                         InvalidDeclarationReason::TraitIncompatibilityMissingTrait,
                         Some(subject.name),
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
 
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unexpected_token_in_declaration(
+                        token_stream.current_location(),
+                    ),
                 ));
             }
         }
@@ -298,9 +315,9 @@ pub(super) fn parse_trait_incompatibility(
                     token_stream.current_token_kind(),
                     TokenKind::End | TokenKind::Eof
                 ) {
-                    return Err(CompilerDiagnostic::unexpected_trailing_comma(
+                    return Err(Box::new(CompilerDiagnostic::unexpected_trailing_comma(
                         comma_location,
-                    ));
+                    )));
                 }
             }
 
@@ -309,16 +326,18 @@ pub(super) fn parse_trait_incompatibility(
             }
 
             TokenKind::End => {
-                return Err(CompilerDiagnostic::invalid_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                     InvalidDeclarationReason::TraitIncompatibilitySemicolon,
                     Some(subject.name),
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             _ => {
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
+                return Err(Box::new(
+                    CompilerDiagnostic::unexpected_token_in_declaration(
+                        token_stream.current_location(),
+                    ),
                 ));
             }
         }
@@ -363,14 +382,14 @@ pub(super) fn ensure_trait_name_is_all_caps(
     trait_name: StringId,
     location: SourceLocation,
     string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> TraitHeaderResult<()> {
     if is_uppercase_constant_name(string_table.resolve(trait_name)) {
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::invalid_declaration(
+    Err(Box::new(CompilerDiagnostic::invalid_declaration(
         InvalidDeclarationReason::InvalidTraitName,
         Some(trait_name),
         location,
-    ))
+    )))
 }

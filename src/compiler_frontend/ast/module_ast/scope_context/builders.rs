@@ -13,22 +13,54 @@
 use super::*;
 
 impl ScopeContext {
-    // --------------------------
-    //  Template capacity policy
-    // --------------------------
-
-    /// Set the per-template capacity policy derived from module-level estimates.
+    /// Install the registry-owned primary TIR store for this scope tree.
     ///
-    /// WHAT: lets the AST emitter inject the narrow policy after creating the root
-    ///       scope context, without changing `ScopeContext::new`'s signature.
-    /// WHY: keeps the policy optional for test contexts while still wiring it into
-    ///      production emission paths.
-    pub(crate) fn with_template_capacity_policy(
+    /// WHAT: replaces the context's default registry, store ID, and store handle with the
+    ///       module-level registry and primary store from `AstPhaseContext`.
+    /// WHY: production AST phases allocate one capacity-sized primary store through the
+    ///      registry; child scope contexts must share the same registry owner and store
+    ///      identity so store-qualified refs resolve consistently.
+    pub(crate) fn with_template_ir_registry(
         mut self,
-        policy: TemplateCapacityPolicy,
+        registry: Rc<RefCell<TemplateIrRegistry>>,
+        store_id: TemplateStoreId,
+        store: Rc<RefCell<TemplateIrStore>>,
     ) -> ScopeContext {
-        self.template_capacity_policy = policy;
+        self.template_ir_registry = registry;
+        self.template_ir_store_id = store_id;
+        self.template_ir_store = store;
         self
+    }
+
+    /// Set the shared parser-emitted TIR store for this scope tree.
+    ///
+    /// WHAT: adopts the given store into a fresh registry-backed primary store so the
+    ///       context never carries a store handle without a matching registry owner.
+    /// WHY: tests and isolated contexts construct a store directly and then need a
+    ///      registry-backed identity so the context does not drift into two unrelated
+    ///      ownership paths. Production callers should prefer `with_template_ir_registry`
+    ///      to share the module-level registry.
+    #[cfg(test)]
+    pub(crate) fn with_template_ir_store(
+        mut self,
+        store: Rc<RefCell<TemplateIrStore>>,
+    ) -> ScopeContext {
+        let mut registry = TemplateIrRegistry::new();
+        let store_id = registry.adopt_store(Rc::clone(&store));
+
+        self.template_ir_registry = Rc::new(RefCell::new(registry));
+        self.template_ir_store_id = store_id;
+        self.template_ir_store = store;
+        self
+    }
+
+    /// Clone the shared parser-emitted TIR store handle.
+    ///
+    /// Tests use this to inspect B6 draft output without making the store a public
+    /// language or HIR-facing API.
+    #[cfg(test)]
+    pub(crate) fn template_ir_store(&self) -> Rc<RefCell<TemplateIrStore>> {
+        Rc::clone(&self.template_ir_store)
     }
 
     // --------------------------

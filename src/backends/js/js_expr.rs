@@ -247,6 +247,7 @@ impl<'hir> JsEmitter<'hir> {
                 let tag = if variant_index == 0 { "none" } else { "some" };
                 format!("tag: \"{tag}\"")
             }
+            #[cfg(test)]
             HirVariantCarrier::Fallible => {
                 let tag = if variant_index == 0 { "ok" } else { "err" };
                 format!("tag: \"{tag}\"")
@@ -287,7 +288,9 @@ impl<'hir> JsEmitter<'hir> {
                 })?;
                 escape_js_string(self.string_table.resolve(field.name))
             }
-            HirVariantCarrier::Option | HirVariantCarrier::Fallible => "\"value\"".to_owned(),
+            HirVariantCarrier::Option => "\"value\"".to_owned(),
+            #[cfg(test)]
+            HirVariantCarrier::Fallible => "\"value\"".to_owned(),
         };
         Ok(format!("({source_js})[{field_name_js}]"))
     }

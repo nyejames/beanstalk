@@ -1,7 +1,7 @@
 //! Per-module frontend compilation pipeline for Beanstalk projects.
 //!
 //! Drives a single discovered module through the full frontend pipeline:
-//! parallel file preparation (tokenization + header parsing) → dependency sort → AST → HIR →
+//! scheduled file preparation (tokenization + header parsing) → dependency sort → AST → HIR →
 //! borrow checking.
 
 use crate::build_system::build::{CompiledModuleResult, InputFile, Module, ResolvedConstFragment};
@@ -26,21 +26,127 @@ use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
 };
 use crate::libraries::external_import_providers::provider::BuilderRuntimePackageMetadata;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 
+#[cfg(feature = "detailed_timers")]
+use crate::benchmark_timer_log;
+use crate::borrow_log;
 use crate::projects::settings::Config;
-use crate::{benchmark_timer_log, borrow_log};
 
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
+use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(feature = "detailed_timers")]
 use std::time::Instant;
+
+/// Parallel file-preparation scheduling policy.
+///
+/// WHAT: keeps the production strategy thresholds near the code that applies them.
+/// WHY: these values are benchmark policy, not language semantics. `RAYON_NUM_THREADS` remains
+/// the external concurrency override; this pass deliberately does not add a custom Rayon pool,
+/// unsafe scheduling, or hidden per-build thread control.
+///
+/// File count at or below which Rayon scheduling is consistently more expensive than useful.
+///
+/// WHY: benchmark checks showed tiny modules regressing under Rayon, while fanout-style modules
+/// and the documentation build still benefit from parallel file preparation. Medium modules stay
+/// serial unless their total source size crosses `FILE_PREPARATION_MEDIUM_PARALLEL_MIN_BYTES`.
+const FILE_PREPARATION_ALWAYS_SERIAL_FILE_COUNT: usize = 2;
+
+/// File count at which chunked Rayon scheduling is consistently worth the overhead.
+///
+/// WHY: eight-file fanout is the first stable win from the Phase 1 benchmark set, but running one
+/// task per small file over-schedules many tiny-file modules. Chunking starts here.
+const FILE_PREPARATION_ALWAYS_PARALLEL_FILE_COUNT: usize = 8;
+
+/// Source-size threshold that lets medium-sized modules use parallel file preparation.
+///
+/// This is benchmark policy, not a language semantic: 3-7 file modules avoid Rayon overhead by
+/// default, but a large enough source payload can amortize scheduling and string-table fork costs.
+const FILE_PREPARATION_MEDIUM_PARALLEL_MIN_BYTES: usize = 64 * 1024;
+
+/// Target parallel chunks per Rayon worker for many-file module preparation.
+///
+/// WHY: a small multiple of the worker count gives Rayon enough tasks to balance uneven source
+/// sizes without returning to one scheduling task per tiny file.
+const FILE_PREPARATION_TARGET_TASKS_PER_THREAD: usize = 2;
+
+/// Lower bound for chunk size when planning chunked file preparation.
+///
+/// WHY: chunking only helps if each scheduled task does enough serial file preparation to amortize
+/// fork and scheduling overhead.
+const FILE_PREPARATION_MIN_CHUNK_SIZE: usize = 4;
+
+struct FilePreparationChunk {
+    chunk_index: usize,
+    file_range: Range<usize>,
+    local_string_table: StringTable,
+    results: Vec<PreparedFileResult>,
+}
+
+struct PreparedFileResult {
+    file_index: usize,
+    result: Result<FileFrontendPrepareOutput, FileFrontendPrepareError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FilePreparationChunkPlan {
+    chunk_index: usize,
+    file_range: Range<usize>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilePreparationStrategy {
+    Serial,
+    ParallelPerFile,
+    ParallelChunked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilePreparationStrategyReason {
+    SmallSerial,
+    ByteThresholdSerial,
+    MediumByteThresholdParallel,
+    LargeChunkedParallel,
+}
+
+impl FilePreparationStrategy {
+    #[cfg(test)]
+    fn for_module(source_file_count: usize, source_byte_count: usize) -> Self {
+        Self::selection_for_module(source_file_count, source_byte_count).0
+    }
+
+    fn selection_for_module(
+        source_file_count: usize,
+        source_byte_count: usize,
+    ) -> (Self, FilePreparationStrategyReason) {
+        if source_file_count <= FILE_PREPARATION_ALWAYS_SERIAL_FILE_COUNT {
+            (Self::Serial, FilePreparationStrategyReason::SmallSerial)
+        } else if source_file_count >= FILE_PREPARATION_ALWAYS_PARALLEL_FILE_COUNT {
+            (
+                Self::ParallelChunked,
+                FilePreparationStrategyReason::LargeChunkedParallel,
+            )
+        } else if source_byte_count >= FILE_PREPARATION_MEDIUM_PARALLEL_MIN_BYTES {
+            (
+                Self::ParallelPerFile,
+                FilePreparationStrategyReason::MediumByteThresholdParallel,
+            )
+        } else {
+            (
+                Self::Serial,
+                FilePreparationStrategyReason::ByteThresholdSerial,
+            )
+        }
+    }
+}
 
 // -------------------------
 //  Compilation Context
@@ -72,6 +178,12 @@ impl FrontendModuleBuildContext<'_> {
     ) -> Result<CompiledModuleResult, CompilerMessages> {
         let source_byte_count = record_module_input_counters(module);
 
+        // Build a human-readable attribution label so the concise timing summary can
+        // show the slowest module without flooding output with per-module lines.
+        let module_label_text =
+            module_timing_label(entry_file_path, module.len(), source_byte_count);
+        let module_label: Option<&str> = Some(&module_label_text);
+
         let external_import_resolution_table = self.external_import_resolution_table;
 
         let mut compiler = CompilerFrontend::new(
@@ -82,6 +194,8 @@ impl FrontendModuleBuildContext<'_> {
             self.project_path_resolver.clone(),
         );
 
+        // Record the total frontend time for this module (success or error).
+        let module_total_start = crate::timing::start_pipeline_timing();
         let compile_result = (|| {
             let mut warnings = Vec::new();
 
@@ -90,15 +204,20 @@ impl FrontendModuleBuildContext<'_> {
 
             // 2. Prepare all files: tokenize and parse headers in one local string-table
             //    per file, then merge/remap once before aggregation.
-            let (module_headers, file_warnings) =
-                timed_frontend_stage("file_prepare_ms", "Files Prepared in: ", || {
+            let (module_headers, file_warnings) = timed_frontend_stage(
+                "frontend.file_prepare",
+                "Files Prepared in: ",
+                module_label,
+                || {
                     Self::prepare_module_files(
                         &mut compiler,
                         module,
                         entry_file_path,
                         external_import_resolution_table,
+                        source_byte_count,
                     )
-                })?;
+                },
+            )?;
             warnings.extend(file_warnings);
 
             let capacity_estimate =
@@ -106,23 +225,25 @@ impl FrontendModuleBuildContext<'_> {
 
             // 3. Resolve dependencies and sort headers for linear processing.
             let sorted = timed_frontend_stage(
-                "dependency_sort_ms",
+                "frontend.dependency_sort",
                 "Dependency graph created in: ",
+                module_label,
                 || Self::sort_headers(&mut compiler, module_headers, &warnings),
             )?;
 
             let entry_runtime_fragment_count = sorted.entry_runtime_fragment_count;
 
             // 4. Build the Abstract Syntax Tree (AST).
-            let module_ast = timed_frontend_stage("ast_ms", "AST created in: ", || {
-                self.build_ast(
-                    &mut compiler,
-                    sorted,
-                    entry_file_path,
-                    capacity_estimate,
-                    &mut warnings,
-                )
-            })?;
+            let module_ast =
+                timed_frontend_stage("frontend.ast", "AST created in: ", module_label, || {
+                    self.build_ast(
+                        &mut compiler,
+                        sorted,
+                        entry_file_path,
+                        capacity_estimate,
+                        &mut warnings,
+                    )
+                })?;
 
             // 5. Resolve const fragment StringIds to strings before AST is consumed by HIR.
             let const_top_level_fragments = module_ast
@@ -136,15 +257,17 @@ impl FrontendModuleBuildContext<'_> {
 
             // 6. Lower AST to Higher-level Intermediate Representation (HIR).
             let (hir_module, type_environment) =
-                timed_frontend_stage("hir_ms", "HIR generated in: ", || {
+                timed_frontend_stage("frontend.hir", "HIR generated in: ", module_label, || {
                     Self::lower_hir(&mut compiler, module_ast, &warnings)
                 })?;
 
             // 7. Run static analysis (Borrow Checker).
-            let borrow_analysis =
-                timed_frontend_stage("borrow_ms", "Borrow checking completed in: ", || {
-                    Self::check_borrows(&compiler, &hir_module, &warnings)
-                })?;
+            let borrow_analysis = timed_frontend_stage(
+                "frontend.borrow",
+                "Borrow checking completed in: ",
+                module_label,
+                || Self::check_borrows(&compiler, &hir_module, &warnings),
+            )?;
             record_borrow_counters(&borrow_analysis);
 
             // Runtime import metadata is tied to calls that can execute from entry `start`.
@@ -232,6 +355,12 @@ impl FrontendModuleBuildContext<'_> {
             })
         })();
 
+        crate::timing::record_started_pipeline_timing_with_label(
+            "frontend.module.total",
+            module_total_start,
+            module_label,
+        );
+
         let string_table = compiler.string_table;
 
         compile_result.map(|module| CompiledModuleResult {
@@ -263,20 +392,19 @@ impl FrontendModuleBuildContext<'_> {
         Ok(())
     }
 
-    /// Prepare all source files in the module by tokenizing and header-parsing each one in
-    /// parallel against a local string-table fork, then merging and remapping in deterministic
-    /// input order.
+    /// Prepare all source files in the module by tokenizing and header-parsing each one against a
+    /// local string-table fork, then merging and remapping in deterministic input order.
     ///
-    /// WHAT: replaces the previous serial loop with a Rayon parallel map where each worker owns
-    ///       its own immutable inputs and local string table. Results are collected and merged
-    ///       back into the module table in deterministic input order before module-wide aggregation.
-    /// WHY: parallel preparation avoids serializing per-file work on the global string table,
-    ///      while deterministic merge ordering preserves stable output across runs.
+    /// WHAT: small modules use a serial fast path, while large modules use Rayon. Both paths
+    ///       produce the same per-file result records and share the same merge/remap aggregation.
+    /// WHY: keeping scheduling separate from aggregation avoids Rayon overhead on tiny modules
+    ///      without changing deterministic merge order or frontend ownership boundaries.
     fn prepare_module_files(
         compiler: &mut CompilerFrontend,
         module: &[InputFile],
         entry_file_path: &Path,
         external_import_resolution_table: &ExternalImportResolutionTable,
+        source_byte_count: usize,
     ) -> Result<(Headers, Vec<CompilerDiagnostic>), CompilerMessages> {
         let entry_file_id = compiler
             .source_files
@@ -288,9 +416,9 @@ impl FrontendModuleBuildContext<'_> {
             project_path_resolver: compiler.project_path_resolver.clone(),
         };
 
-        // Create one shared fork source for all parallel workers. Each worker gets its own local
-        // table forked from this immutable base, so no worker needs mutable access to the module
-        // string table during tokenization or header parsing.
+        // Create one shared fork source for all file-preparation workers. Each scheduled chunk
+        // gets a local table forked from this immutable base, so preparation never needs mutable
+        // access to the module string table during tokenization or header parsing.
         let fork_source = compiler.string_table.fork_source();
         let base_len = fork_source.base_len();
 
@@ -300,95 +428,157 @@ impl FrontendModuleBuildContext<'_> {
         let const_template_offset = 0usize;
         let runtime_fragment_offset = 0usize;
 
-        // -------------------------
-        //  Parallel file preparation
-        // -------------------------
-
-        let parallel_results: Vec<(
-            usize,
-            Result<FileFrontendPrepareOutput, FileFrontendPrepareError>,
-            StringTable,
-        )> = {
-            let prepare_context = FrontendFilePrepareContext {
-                source_files: &compiler.source_files,
-                style_directives: &compiler.style_directives,
-                external_package_registry: compiler.external_package_registry.as_ref(),
-                entry_file_path,
-                options: &options,
-            };
-
-            module
-                .par_iter()
-                .enumerate()
-                .map(|(index, file)| {
-                    let (mut local_string_table, _) = fork_source.fork_for_module().into_parts();
-                    let input = FrontendFilePrepareInput {
-                        source_code: &file.source_code,
-                        source_path: &file.source_path,
-                        source_kind: file.source_kind,
-                        const_template_offset,
-                        runtime_fragment_offset,
-                    };
-                    let result = CompilerFrontend::prepare_file_frontend_local(
-                        &prepare_context,
-                        input,
-                        &mut local_string_table,
-                    );
-                    (index, result, local_string_table)
-                })
-                .collect()
+        let prepare_context = FrontendFilePrepareContext {
+            source_files: &compiler.source_files,
+            style_directives: &compiler.style_directives,
+            external_package_registry: compiler.external_package_registry.as_ref(),
+            entry_file_path,
+            options: &options,
         };
 
-        // Sort by original module input index so merge and aggregation stay deterministic
-        // regardless of which parallel worker finishes first.
-        let mut parallel_results = parallel_results;
-        parallel_results.sort_by_key(|(index, _, _)| *index);
+        add_frontend_counter(FrontendCounter::FilePreparationInputFileCount, module.len());
+        add_frontend_counter(
+            FrontendCounter::FilePreparationInputByteCount,
+            source_byte_count,
+        );
 
-        let mut prepared_outputs = Vec::with_capacity(module.len());
+        let (strategy, strategy_reason) = timed_frontend_substep(
+            "file_prepare_strategy_selection_ms",
+            "File preparation strategy selected in: ",
+            || FilePreparationStrategy::selection_for_module(module.len(), source_byte_count),
+        );
+        record_file_preparation_strategy(strategy, strategy_reason);
+
+        let preparation_chunks = timed_frontend_substep(
+            "file_prepare_result_production_ms",
+            "File preparation results produced in: ",
+            || {
+                Self::prepare_module_file_chunks(
+                    module,
+                    &fork_source,
+                    &prepare_context,
+                    const_template_offset,
+                    runtime_fragment_offset,
+                    strategy,
+                )
+            },
+        );
+
+        Self::merge_file_preparation_chunks(
+            compiler,
+            preparation_chunks,
+            base_len,
+            external_import_resolution_table,
+            &options,
+        )
+    }
+
+    /// Merge chunk-local string tables and aggregate prepared file outputs.
+    ///
+    /// WHAT: all scheduling strategies converge here after producing ordered chunk records.
+    /// WHY: chunk-local workers may finish in any order, but the frontend's source identity,
+    /// warning, diagnostic, and header order must follow the original module input order.
+    fn merge_file_preparation_chunks(
+        compiler: &mut CompilerFrontend,
+        mut preparation_chunks: Vec<FilePreparationChunk>,
+        base_len: usize,
+        external_import_resolution_table: &ExternalImportResolutionTable,
+        options: &HeaderParseOptions,
+    ) -> Result<(Headers, Vec<CompilerDiagnostic>), CompilerMessages> {
+        // Completion order is a scheduler detail. Merge order is the module input order encoded
+        // by deterministic chunk indexes.
+        timed_frontend_substep(
+            "file_prepare_result_sort_ms",
+            "File preparation results sorted in: ",
+            || preparation_chunks.sort_by_key(|chunk| chunk.chunk_index),
+        );
+
+        let mut prepared_outputs = Vec::new();
         let mut warnings = Vec::new();
         let mut diagnostics = Vec::new();
         let mut const_fragment_source_count = 0usize;
         let mut runtime_fragment_source_count = 0usize;
 
-        for (_index, result, local_string_table) in parallel_results {
-            let remap = compiler
-                .string_table
-                .merge_delta_from(&local_string_table, base_len);
-            #[cfg(feature = "detailed_timers")]
-            let remap_is_identity = remap.is_identity();
+        let prepared_file_capacity = preparation_chunks
+            .iter()
+            .map(|chunk| chunk.results.len())
+            .sum();
+        prepared_outputs.reserve(prepared_file_capacity);
 
-            match result {
-                Ok(mut output) => {
-                    if output.const_template_count > 0 {
-                        const_fragment_source_count += 1;
+        let mut expected_file_index = 0usize;
+        for chunk in preparation_chunks {
+            debug_assert_eq!(
+                chunk.file_range.start, expected_file_index,
+                "file preparation chunks must be merged in original source-file order"
+            );
+            expected_file_index = chunk.file_range.end;
+
+            let remap = timed_frontend_substep(
+                "file_prepare_string_table_delta_merge_ms",
+                "File preparation string-table delta merged in: ",
+                || {
+                    compiler
+                        .string_table
+                        .merge_delta_from(&chunk.local_string_table, base_len)
+                },
+            );
+            let remap_is_identity = remap.is_identity();
+            add_frontend_counter(FrontendCounter::FilePreparationResultMergeCount, 1);
+            if remap_is_identity {
+                add_frontend_counter(FrontendCounter::FilePreparationIdentityRemapCount, 1);
+            } else {
+                add_frontend_counter(FrontendCounter::FilePreparationNonIdentityRemapCount, 1);
+            }
+
+            for (expected_chunk_file_index, prepared_file) in
+                (chunk.file_range.start..).zip(chunk.results)
+            {
+                debug_assert_eq!(
+                    prepared_file.file_index, expected_chunk_file_index,
+                    "prepared file records must stay ordered inside each chunk"
+                );
+
+                match prepared_file.result {
+                    Ok(mut output) => {
+                        if output.const_template_count > 0 {
+                            const_fragment_source_count += 1;
+                        }
+                        if output.runtime_fragment_count > 0 {
+                            runtime_fragment_source_count += 1;
+                        }
+                        if !remap_is_identity {
+                            add_frontend_counter(FrontendCounter::FilePrepareOutputRemapCalls, 1);
+                            #[cfg(feature = "benchmark_counters")]
+                            add_frontend_counter(
+                                FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
+                                1,
+                            );
+                            timed_frontend_substep(
+                                "file_prepare_payload_remap_ms",
+                                "File preparation payload remapped in: ",
+                                || output.remap_string_ids(&remap),
+                            );
+                        }
+                        warnings.append(&mut output.warnings);
+                        prepared_outputs.push(output);
                     }
-                    if output.runtime_fragment_count > 0 {
-                        runtime_fragment_source_count += 1;
+                    Err(mut error) => {
+                        if !remap_is_identity {
+                            add_frontend_counter(FrontendCounter::FilePrepareErrorRemapCalls, 1);
+                            #[cfg(feature = "benchmark_counters")]
+                            add_frontend_counter(
+                                FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
+                                1,
+                            );
+                            timed_frontend_substep(
+                                "file_prepare_payload_remap_ms",
+                                "File preparation payload remapped in: ",
+                                || error.remap_string_ids(&remap),
+                            );
+                        }
+                        warnings.extend(error.warnings);
+                        diagnostics.push(*error.diagnostic);
                     }
-                    add_frontend_counter(FrontendCounter::FilePrepareOutputRemapCalls, 1);
-                    #[cfg(feature = "detailed_timers")]
-                    if !remap_is_identity {
-                        add_frontend_counter(
-                            FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
-                            1,
-                        );
-                    }
-                    output.remap_string_ids(&remap);
-                    warnings.append(&mut output.warnings);
-                    prepared_outputs.push(output);
-                }
-                Err(mut error) => {
-                    add_frontend_counter(FrontendCounter::FilePrepareErrorRemapCalls, 1);
-                    #[cfg(feature = "detailed_timers")]
-                    if !remap_is_identity {
-                        add_frontend_counter(
-                            FrontendCounter::FilePrepareNonIdentityPayloadRemaps,
-                            1,
-                        );
-                    }
-                    error.remap_string_ids(&remap);
-                    warnings.extend(error.warnings);
-                    diagnostics.push(*error.diagnostic);
                 }
             }
         }
@@ -414,12 +604,18 @@ impl FrontendModuleBuildContext<'_> {
             .iter()
             .map(|output| output.token_count)
             .sum();
-        let headers = parse_headers(
-            prepared_outputs,
-            compiler.external_package_registry.as_ref(),
-            external_import_resolution_table,
-            options.project_path_resolver.as_ref(),
-            &mut compiler.string_table,
+        let headers = timed_frontend_substep(
+            "file_prepare_parse_headers_aggregation_ms",
+            "File preparation headers aggregated in: ",
+            || {
+                parse_headers(
+                    prepared_outputs,
+                    compiler.external_package_registry.as_ref(),
+                    external_import_resolution_table,
+                    options.project_path_resolver.as_ref(),
+                    &mut compiler.string_table,
+                )
+            },
         )
         .map_err(|bag| {
             let mut messages = CompilerMessages::from_diagnostics(
@@ -435,6 +631,104 @@ impl FrontendModuleBuildContext<'_> {
         record_header_counters(&headers);
 
         Ok((headers, warnings))
+    }
+
+    fn prepare_module_file_chunks(
+        module: &[InputFile],
+        fork_source: &StringTableForkSource,
+        prepare_context: &FrontendFilePrepareContext<'_>,
+        const_template_offset: usize,
+        runtime_fragment_offset: usize,
+        strategy: FilePreparationStrategy,
+    ) -> Vec<FilePreparationChunk> {
+        match strategy {
+            FilePreparationStrategy::Serial => {
+                let plan = FilePreparationChunkPlan {
+                    chunk_index: 0,
+                    file_range: 0..module.len(),
+                };
+                vec![Self::prepare_module_file_chunk(
+                    plan,
+                    module,
+                    fork_source,
+                    prepare_context,
+                    const_template_offset,
+                    runtime_fragment_offset,
+                )]
+            }
+
+            FilePreparationStrategy::ParallelPerFile => (0..module.len())
+                .into_par_iter()
+                .map(|index| {
+                    let plan = FilePreparationChunkPlan {
+                        chunk_index: index,
+                        file_range: index..index + 1,
+                    };
+                    Self::prepare_module_file_chunk(
+                        plan,
+                        module,
+                        fork_source,
+                        prepare_context,
+                        const_template_offset,
+                        runtime_fragment_offset,
+                    )
+                })
+                .collect(),
+
+            FilePreparationStrategy::ParallelChunked => {
+                let plans =
+                    plan_file_preparation_chunks(module.len(), rayon::current_num_threads());
+                plans
+                    .into_par_iter()
+                    .map(|plan| {
+                        Self::prepare_module_file_chunk(
+                            plan,
+                            module,
+                            fork_source,
+                            prepare_context,
+                            const_template_offset,
+                            runtime_fragment_offset,
+                        )
+                    })
+                    .collect()
+            }
+        }
+    }
+
+    fn prepare_module_file_chunk(
+        plan: FilePreparationChunkPlan,
+        module: &[InputFile],
+        fork_source: &StringTableForkSource,
+        prepare_context: &FrontendFilePrepareContext<'_>,
+        const_template_offset: usize,
+        runtime_fragment_offset: usize,
+    ) -> FilePreparationChunk {
+        let (mut local_string_table, _) = fork_source.fork_for_module().into_parts();
+        let mut results = Vec::with_capacity(plan.file_range.len());
+
+        for file_index in plan.file_range.clone() {
+            let file = &module[file_index];
+            let input = FrontendFilePrepareInput {
+                source_code: &file.source_code,
+                source_path: &file.source_path,
+                source_kind: file.source_kind,
+                const_template_offset,
+                runtime_fragment_offset,
+            };
+            let result = CompilerFrontend::prepare_file_frontend_local(
+                prepare_context,
+                input,
+                &mut local_string_table,
+            );
+            results.push(PreparedFileResult { file_index, result });
+        }
+
+        FilePreparationChunk {
+            chunk_index: plan.chunk_index,
+            file_range: plan.file_range,
+            local_string_table,
+            results,
+        }
     }
 
     fn sort_headers(
@@ -504,6 +798,41 @@ impl FrontendModuleBuildContext<'_> {
 //  Shared Helpers
 // -------------------------
 
+fn plan_file_preparation_chunks(
+    source_file_count: usize,
+    worker_thread_count: usize,
+) -> Vec<FilePreparationChunkPlan> {
+    if source_file_count == 0 {
+        return Vec::new();
+    }
+
+    let worker_thread_count = worker_thread_count.max(1);
+    let target_chunk_count =
+        worker_thread_count.saturating_mul(FILE_PREPARATION_TARGET_TASKS_PER_THREAD);
+    let max_chunk_count_by_size = (source_file_count / FILE_PREPARATION_MIN_CHUNK_SIZE).max(1);
+    let chunk_count = target_chunk_count
+        .min(max_chunk_count_by_size)
+        .min(source_file_count)
+        .max(1);
+
+    let base_chunk_size = source_file_count / chunk_count;
+    let larger_chunk_count = source_file_count % chunk_count;
+
+    let mut plans = Vec::with_capacity(chunk_count);
+    let mut start_file_index = 0usize;
+    for chunk_index in 0..chunk_count {
+        let chunk_size = base_chunk_size + usize::from(chunk_index < larger_chunk_count);
+        let end_file_index = start_file_index + chunk_size;
+        plans.push(FilePreparationChunkPlan {
+            chunk_index,
+            file_range: start_file_index..end_file_index,
+        });
+        start_file_index = end_file_index;
+    }
+
+    plans
+}
+
 fn record_module_input_counters(module: &[InputFile]) -> usize {
     add_frontend_counter(FrontendCounter::ModuleCount, 1);
     add_frontend_counter(FrontendCounter::SourceFileCount, module.len());
@@ -514,6 +843,47 @@ fn record_module_input_counters(module: &[InputFile]) -> usize {
         .sum();
     add_frontend_counter(FrontendCounter::SourceByteCount, source_byte_count);
     source_byte_count
+}
+
+fn record_file_preparation_strategy(
+    strategy: FilePreparationStrategy,
+    reason: FilePreparationStrategyReason,
+) {
+    match strategy {
+        FilePreparationStrategy::Serial => {
+            add_frontend_counter(FrontendCounter::FilePreparationSerialModuleCount, 1);
+        }
+
+        FilePreparationStrategy::ParallelPerFile | FilePreparationStrategy::ParallelChunked => {
+            add_frontend_counter(FrontendCounter::FilePreparationParallelModuleCount, 1);
+        }
+    }
+
+    match reason {
+        FilePreparationStrategyReason::SmallSerial => {
+            add_frontend_counter(FrontendCounter::FilePreparationStrategySmallSerialCount, 1);
+        }
+
+        FilePreparationStrategyReason::ByteThresholdSerial => {
+            add_frontend_counter(
+                FrontendCounter::FilePreparationStrategyByteThresholdSerialCount,
+                1,
+            );
+        }
+
+        FilePreparationStrategyReason::MediumByteThresholdParallel => {
+            add_frontend_counter(
+                FrontendCounter::FilePreparationStrategyParallelPerFileCount,
+                1,
+            );
+            add_frontend_counter(FrontendCounter::FilePreparationStrategyParallelCount, 1);
+        }
+
+        FilePreparationStrategyReason::LargeChunkedParallel => {
+            add_frontend_counter(FrontendCounter::FilePreparationStrategyChunkedCount, 1);
+            add_frontend_counter(FrontendCounter::FilePreparationStrategyParallelCount, 1);
+        }
+    }
 }
 
 fn record_header_counters(headers: &Headers) {
@@ -656,20 +1026,75 @@ fn collect_module_source_logical_paths(
     Ok(logical_paths)
 }
 
+/// Format a bounded, human-readable attribution label for one module's timing.
+///
+/// WHAT: combines the entry path, source file count, and source byte count into a
+///      short label suitable for the concise timing summary's "slowest module" line.
+/// WHY:  the label stays out of stable `BST_BENCH timing` lines; it is display-only
+///       evidence so the summary can attribute the max sample without per-module listing.
+fn module_timing_label(
+    entry_file_path: &Path,
+    source_file_count: usize,
+    source_byte_count: usize,
+) -> String {
+    let file_word = if source_file_count == 1 {
+        "file"
+    } else {
+        "files"
+    };
+    format!(
+        "{} ({} {}, {:.1}KB)",
+        entry_file_path.display(),
+        source_file_count,
+        file_word,
+        source_byte_count as f64 / 1024.0,
+    )
+}
+
+/// Record one frontend pipeline stage through the central `timers` substrate.
+///
+/// WHAT: wraps a `Result`-returning stage so its duration is always recorded,
+///      regardless of success or error, with an optional module attribution label.
+/// WHY:  Phase 4 migrates public frontend stage timings from the `detailed_timers`
+///       macro to the central `timers` collector so concise `timers`-only builds
+///       see project-level aggregates.  Human prose stays gated by `detailed_timers`
+///       for verbose developer output; the xtask legacy parser reads that prose to
+///       attribute legacy metric names until Phase 6 updates xtask ratio definitions.
 fn timed_frontend_stage<T>(
-    metric_name: &str,
-    label: &str,
+    metric: &str,
+    prose_label: &str,
+    module_label: Option<&str>,
     stage: impl FnOnce() -> Result<T, CompilerMessages>,
 ) -> Result<T, CompilerMessages> {
-    let start = Instant::now();
+    let start = crate::timing::start_pipeline_timing();
     let result = stage();
-    benchmark_timer_log!(start, metric_name, label);
+    crate::timing::record_started_pipeline_timing_with_label(metric, start, module_label);
 
-    // Detailed-timer builds consume these through the macro; regular builds
-    // still need to keep them visibly used.
-    let _ = (start, metric_name, label);
+    // Human prose stays gated by detailed_timers for verbose developer output.
+    #[cfg(feature = "detailed_timers")]
+    {
+        if crate::compiler_frontend::compiler_messages::compiler_dev_logging::detailed_timer_output_enabled() {
+            saying::say!(prose_label, Green #start.elapsed());
+        }
+    }
+
+    // Keep parameters visibly used when detailed_timers is off.
+    let _ = prose_label;
 
     result
+}
+
+#[cfg(feature = "detailed_timers")]
+fn timed_frontend_substep<T>(metric_name: &str, label: &str, substep: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let result = substep();
+    benchmark_timer_log!(start, metric_name, label);
+    result
+}
+
+#[cfg(not(feature = "detailed_timers"))]
+fn timed_frontend_substep<T>(_metric_name: &str, _label: &str, substep: impl FnOnce() -> T) -> T {
+    substep()
 }
 
 /// Maps reachable external functions to the packages that own them.

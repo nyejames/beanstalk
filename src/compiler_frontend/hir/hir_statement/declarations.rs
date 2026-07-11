@@ -148,6 +148,7 @@ impl<'a> HirBuilder<'a> {
                     Box::new(lowered_end),
                 )))
             }
+            #[cfg(test)]
             ExpressionKind::FallibleCarrierConstruct { variant, value } => {
                 let Some(lowered_value) = self.lower_const_value(value, location)? else {
                     return Ok(None);

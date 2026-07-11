@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -370,19 +373,23 @@ body {
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>SERIALIZABLE</span>
     </code></pre><p>The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.</p></section>
     <section class="container"><h1>Canonical evidence</h1><p>Beanstalk stores explicit conformance as evidence selected by the frontend.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Evidence</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> When it is created</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Visibility</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Evidence</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> When it is created</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Visibility</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Canonical</td>
      <td style="padding: 0.2em 0.5em;  "> The conformance target is a struct, choice, or generic type constructor declared in the same file.</td>
      <td style="padding: 0.2em 0.5em;  "> Reusable wherever both the target type and trait are visible.</td>
         </tr>
-        
+            
+
     </table><p>User-authored conformances for builtin, imported, dependency/library, external opaque, and other-file types are rejected. Use a local wrapper choice or struct when adapting values owned by another file or package.</p></section>
     <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

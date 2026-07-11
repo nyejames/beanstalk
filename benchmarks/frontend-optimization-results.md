@@ -1014,3 +1014,456 @@ project style guide.
 
 No progress-matrix update was needed because template language support and backend behavior did
 not change.
+
+## Phase B2 - TIR-Native Folding Route - 2026-06-20
+
+### Scope
+
+Phase B2 routes non-formatting compile-time template folding through the AST-local TIR path.
+Formatter-dependent templates still use the legacy render-plan fold path until the planned TIR
+formatter view lands in Phase B3, and aggregate wrapper handling keeps a narrow temporary bridge
+until Phase B4 owns TIR render units.
+
+### Files
+
+- `src/compiler_frontend/ast/templates/tir/fold.rs`
+- `src/compiler_frontend/ast/templates/tir/convert_from_template.rs`
+- `src/compiler_frontend/ast/templates/tir/node.rs`
+- `src/compiler_frontend/ast/templates/template_folding.rs`
+- `src/compiler_frontend/instrumentation/ast_counters.rs`
+- `src/compiler_frontend/ast/templates/tir/tests/fold_parity_tests.rs`
+
+### Validation Status
+
+- `cargo fmt`: passed in the implementation slice.
+- `cargo test --lib compiler_frontend::ast::templates`: passed in the implementation slice.
+- `cargo test --lib instrumentation --features detailed_timers`: passed in the implementation slice.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed in the implementation slice.
+- `just validate`: passed after measurement. Clippy passed on native, Linux, and Windows targets;
+  unit tests passed `2747/2747`; integration tests passed `1707/1707`; docs check passed; embedded
+  `bench-check` reported `-5ms avg`; `10 faster`, `0 slower`, `25/25 cases`.
+
+### Benchmark Results
+
+Baseline: parent before the TIR folding route commit, `71aef350`.
+Change: `6ba5104e` (`TIR - template folding IR p1`).
+Suites: five recorded `just bench-frontend` runs, five recorded `just bench` runs, and
+`just bench-report`.
+
+Recorded frontend run summaries:
+
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg -1ms`
+- `no measurable change: avg 0ms`
+
+Recorded end-to-end run summaries:
+
+- `-5ms avg`; `10 faster`, `0 slower`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+
+The five-run frontend and end-to-end medians are both inside benchmark noise. Latest
+`just bench-report` results:
+
+- Frontend phases: `no measurable change: avg 0ms; 16/16 cases`, with no stage or counter
+  movement.
+- End-to-end CLI: `no measurable change: avg 0ms; 25/25 cases`, with `file_prepare_ms -6ms`,
+  `ast_emit_nodes_ms -5ms`, and `ast_build_environment_ms +4ms`.
+- End-to-end counter movement was broad run-to-run noise:
+  `ast_visible_source_type_lookup_attempts -9%`,
+  `ast_public_surface_validation_checks -9%`, and
+  `ast_template_wrapper_applications -9%`.
+
+Relevant template cases show the intended routing:
+
+- `check_benchmarks_template-stress_bst`: old fold-plan fallback counters stayed at zero
+  (`ast_template_fold_plan_pieces_visited=0`,
+  `ast_template_fold_fallback_plan_builds=0`,
+  `ast_template_fold_expression_clone_requests=0`); TIR folding recorded
+  `ast_tir_fold_templates_folded=91`, `ast_tir_fold_nodes_visited=341`, and
+  `ast_tir_fold_output_bytes=8299`.
+- `check_benchmarks_adversarial_template-render-plan-churn_bst`: old fold-plan fallback counters
+  stayed at zero; TIR folding recorded `ast_tir_fold_templates_folded=62`,
+  `ast_tir_fold_nodes_visited=240`, and `ast_tir_fold_output_bytes=2840`.
+- `check_benchmarks_adversarial_constant-dag-churn_bst`: old fold-plan fallback counters stayed at
+  zero; TIR folding recorded `ast_tir_fold_templates_folded=50`,
+  `ast_tir_fold_nodes_visited=185`, and `ast_tir_fold_output_bytes=1157`.
+
+No targeted profile was run. The five-run suite medians are neutral, the latest frontend report
+has no stage or counter movement, and the remaining end-to-end movement does not point at a
+template-specific regression.
+
+### Decision
+
+Accepted. Phase B2 preserves template semantics, validation passed, five-run timing is neutral,
+and the measured template cases show the old render-plan fallback counters are no longer active on
+the non-formatting fold route while TIR fold counters record the production work.
+
+No progress-matrix update was needed because template language support and backend behavior did
+not change.
+
+## Phase B3 - TIR-Native Formatter View - 2026-06-20
+
+### Scope
+
+Phase B3 routes formatter-dependent compile-time template folding through a TIR-native formatter
+view. Existing formatter algorithms stay unchanged; the adapter exposes TIR body text, dynamic
+expression anchors, and opaque child-template anchors as `FormatterInput`, then maps
+`FormatterOutput` directly back to TIR nodes.
+
+### Files
+
+- `src/compiler_frontend/ast/templates/tir/formatter_view.rs`
+- `src/compiler_frontend/ast/templates/tir/tests/formatter_parity_tests.rs`
+- `src/compiler_frontend/ast/templates/tir/convert_from_template.rs`
+- `src/compiler_frontend/ast/templates/template_folding.rs`
+- `src/compiler_frontend/ast/templates/template_formatting.rs`
+- `src/compiler_frontend/instrumentation/ast_counters.rs`
+
+### Validation Status
+
+- `cargo fmt`: passed.
+- `cargo test --lib compiler_frontend::ast::templates`: passed, 368 template tests.
+- `cargo test --lib instrumentation --features detailed_timers`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- Worker validation before parent corrections also passed `cargo test --quiet`, `cargo run --quiet -- tests`, `cargo run --quiet -- check docs`, and `just validate`.
+
+### Benchmark Results
+
+Baseline: `7799a61f` (Phase B2 measurement closure).
+Change: Phase B3 TIR formatter-view slice.
+Suites: five recorded `just bench-frontend` runs, five recorded `just bench` runs,
+`just bench-report`, and one targeted `just profile-case check_docs normal`.
+
+Recorded frontend run summaries:
+
+- `no measurable change: avg +1ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+
+Recorded end-to-end run summaries:
+
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+
+Latest `just bench-report` results:
+
+- End-to-end CLI: `no measurable change: avg 0ms; 25/25 cases`.
+- Frontend phases: `no measurable change: avg 0ms; 16/16 cases`.
+- Counter movement was limited to TIR conversion/fold reductions:
+  `ast_tir_fold_output_bytes -14%`,
+  `ast_tir_converter_templates_converted -14%`,
+  `ast_tir_templates_created -8%`,
+  and `ast_tir_nodes_created -7%`.
+
+The stable `ast_template_fold_fallback_plan_builds` metric remains emitted at zero so future
+reports can keep showing the legacy render-plan fallback path is inactive. The targeted
+`check_docs` profile completed (`check_docs ~130ms`, Samply ~1556ms), but symbolication reported
+`failed_raw_addresses`; no function-level attribution is claimed.
+
+### Decision
+
+Accepted. Phase B3 preserves formatter semantics, keeps `$md` child-template opacity and
+dynamic-expression anchor behavior intact, adds TIR formatter parity coverage, and keeps five-run
+frontend and end-to-end medians neutral. No progress-matrix update was needed because template
+language support and backend behavior did not change.
+
+## Phase B5 - HIR Runtime Metadata from TIR - 2026-06-21
+
+### Scope
+
+Phase B5 moved HIR runtime slot lowering onto the AST-owned runtime-template handoff materialized
+from TIR. The handoff keeps TIR IDs inside AST internals while preserving runtime slot source/site
+plans, repeated slot replay, control-flow runtime template nodes, aggregate-output markers, and
+reactive metadata copied after final template annotation.
+
+### Validation Status
+
+- `just validate`: passed. Unit tests passed `2803/2803`; integration tests passed `1707/1707`;
+  docs check passed; the embedded validation-safe benchmark check reported `+9ms avg` with
+  AST-stage movement.
+- Five recorded `just bench-frontend` runs completed.
+- Five recorded `just bench` runs completed.
+- `just bench-report` completed after the recorded runs.
+
+### Benchmark Results
+
+Baseline/change commit: `1b18223f` (`HIR runtime slot lowering now consumes
+OwnedRuntimeSlotApplicationHandoff`).
+
+Recorded frontend run summaries:
+
+- `+10ms avg`; `0 faster`, `5 slower`
+- `no measurable change: avg 0ms`
+- `-3ms avg`; `1 faster`, `0 slower`
+- `+2ms avg`; `0 faster`, `1 slower`
+- `mixed: avg -1ms`; `1 faster`, `1 slower`
+
+Recorded end-to-end run summaries:
+
+- `+6ms avg`; `0 faster`, `11 slower`
+- `no measurable change: avg 0ms`
+- `+1ms avg`; `0 faster`, `1 slower`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg +4ms`
+
+Latest `just bench-report` results:
+
+- Frontend phases: `mixed: avg -1ms; 1 faster, 1 slower; 16/16 cases`, with small stage movement
+  (`ast_build_environment_ms +2ms`, `ast_ms +2ms`, `borrow_ms +1ms`).
+- End-to-end CLI: `no measurable change: avg +4ms; 25/25 cases`.
+- End-to-end attribution showed AST/file-prep movement (`ast_ms +268ms`,
+  `ast_emit_nodes_ms +156ms`, `ast_build_environment_ms +82ms`, `file_prepare_ms +67ms`) and no
+  backend-stage movement.
+- Counter movement was broad run-to-run template/finalization volume noise:
+  `ast_templates_folded_during_finalization +17%`,
+  `ast_module_constant_normalization_expressions_visited +17%`, and
+  `ast_tir_fold_nodes_visited +13%`.
+
+### Decision
+
+Accepted. Phase B5 keeps HIR free of TIR IDs and formatter/directive/slot-schema parsing,
+validation passed, five-run frontend and end-to-end medians are neutral, and no backend-time
+regression appeared. The narrow legacy runtime-slot-plan adapter remains intentionally temporary
+for B6/B7 deletion work. No progress-matrix update was needed because template language support and
+backend behavior did not change.
+
+## Phase B5 Steering Checkpoint - Boundary and Bridge Counters - 2026-06-21
+
+### Scope
+
+This steering slice corrected the AST/HIR handoff boundary name, made B5 bridge work visible with
+narrow detailed-timer counters, and marked the legacy handoff adapters for B6/B7 deletion. Behavior
+was intentionally unchanged.
+
+### Validation Status
+
+- `just validate`: passed. Unit tests passed `2810/2810`; integration tests passed `1707/1707`;
+  docs check passed; the embedded validation-safe benchmark check reported `-5ms avg`.
+- Five recorded `just bench-frontend` runs completed.
+- Five recorded `just bench` runs completed.
+- `just bench-report` completed after the recorded runs.
+
+### Benchmark Results
+
+Recorded frontend run summaries:
+
+- `mixed: avg -1ms`; `1 faster`, `1 slower`
+- `no measurable change: avg -1ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg -1ms`
+- `no measurable change: avg +1ms`
+
+Recorded end-to-end run summaries:
+
+- `-5ms avg`; `2 faster`, `0 slower`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `no measurable change: avg 0ms`
+- `0ms avg`; `2 faster`, `0 slower`
+
+Latest `just bench-report` results:
+
+- Frontend phases: `no measurable change: avg +1ms; 16/16 cases`, with small stage movement
+  (`ast_ms +3ms`, `hir_ms +2ms`, `ast_build_environment_ms +1ms`).
+- End-to-end CLI: `0ms avg; 2 faster, 0 slower; 25/25 cases`, with small stage movement
+  (`ast_emit_nodes_ms -5ms`, `ast_ms -4ms`, `file_prepare_ms -4ms`).
+- No backend-stage movement was reported.
+
+B5 bridge counter snapshot:
+
+- Frontend: `RuntimeSlotHandoffsMaterialized=3`, `RuntimeSlotHandoffTemplateClones=3`,
+  `RuntimeSlotHandoffFreshTirStores=3`, `RuntimeSlotHandoffOwnedNodesMaterialized=48`,
+  `RuntimeSlotHandoffLegacyAdapterCalls=0`.
+- End-to-end: `RuntimeSlotHandoffsMaterialized=4`, `RuntimeSlotHandoffTemplateClones=4`,
+  `RuntimeSlotHandoffFreshTirStores=4`, `RuntimeSlotHandoffOwnedNodesMaterialized=78`,
+  `RuntimeSlotHandoffLegacyAdapterCalls=0`.
+- Normal docs/template benchmark workloads did not call the temporary legacy adapter.
+
+### Decision
+
+Accepted. HIR now imports owned runtime handoff data through a neutral AST-template boundary, the
+temporary B5 bridge costs are measurable, and the five-run checkpoint is neutral/bounded. B6 may
+continue, but B6/B7 must reduce or delete the bridge counters and remove the legacy handoff
+adapters rather than leaving a permanent dual-template system.
+
+## Phase B6 - Direct Parser-To-TIR Emission - 2026-06-21
+
+### Scope
+
+Phase B6 made the template parser emit TIR nodes directly alongside the temporary legacy
+`TemplateContent` path. The phase added a module-owned parser TIR store, parser draft emission for
+body text, nested child templates, template control flow, slots/inserts, head output segments,
+same-store head template references, wrapper metadata, diagnostic parity coverage, and B7 deletion
+checkpoints for remaining old-path bridges.
+
+### Validation Status
+
+- `just validate`: passed after the B6 diagnostic and deletion-checkpoint slices. Unit tests passed
+  `2849/2849`; integration tests passed `1707/1707`; docs check passed.
+- Five recorded `just bench-frontend` runs completed.
+- Five recorded `just bench` runs completed.
+- `just bench-report` completed after the recorded runs.
+
+### Benchmark Results
+
+Recorded frontend run summaries:
+
+- `mixed: avg +113ms`; `4 faster`, `2 slower`
+- `-2ms avg`; `1 faster`, `0 slower`
+- `no measurable change: avg -4ms`
+- `+9ms avg`; `0 faster`, `1 slower`
+- `no measurable change: avg -8ms`
+
+Recorded end-to-end run summaries:
+
+- `mixed: avg +39ms`; `8 faster`, `1 slower`
+- `no measurable change: avg -1ms`
+- `0ms avg`; `1 faster`, `0 slower`
+- `+4ms avg`; `0 faster`, `1 slower`
+- `mixed: avg -1ms`; `1 faster`, `1 slower`
+
+Latest `just bench-report` results:
+
+- Frontend phases: `no measurable change: avg -8ms; 16/16 cases`.
+- End-to-end CLI: `mixed: avg -1ms; 1 faster, 1 slower; 25/25 cases`.
+- The first frontend and end-to-end runs were noisy outliers. Later runs and the latest report are
+  effectively neutral.
+
+### Decision
+
+Accepted as semantic-parity migration progress, not as a measured speedup. B6 leaves the remaining
+legacy `TemplateContent` / `TemplateRenderPlan` authority paths intentionally marked for B7
+deletion. Phase B7 should now move the smallest production authority surface onto TIR and remove
+old-path work instead of broadening the dual representation.
+
+## Phase B7 Final TIR Evidence Summary - 2026-06-23
+
+### Scope
+
+Phase B7 made TIR the primary internal representation for synced templates through incremental
+widening slices (B7a through B7ac). The phase added parser-TIR finalized references, string-ID
+remap through TIR, HIR legacy fallback removal, render-unit output sync, formatter attribution,
+thread-local counters, control-flow body sync, and sync miss attribution counters.
+
+### TIR Coverage
+
+Profiled on `check_docs` with `detailed_timers`:
+
+- Parser-TIR fold: 375 candidates, 159 hits (42.4%), 216 fallbacks
+  - 186 `unsafe_has_formatter` (templates whose TIR still has `has_formatter` because sync failed)
+  - 30 `ast_content_root_mismatch` (content modified after TIR build)
+  - All other fold fallback reasons: 0
+- Parser-TIR sync: 4788 attempts, 3105 successes (64.9%), 1683 skips
+  - 944 `unresolved_slots` (templates with `$slot` atoms not yet resolved by composition)
+  - 739 `child_template_missing_cross_store_proof` (child templates without same-store TIR reference)
+  - All other sync skip reasons: 0
+
+### Remaining Blockers
+
+The sync surface cannot be widened further without addressing:
+
+1. **Unresolved slots** (944 skips): templates with `$slot(name)` atoms cannot be synced via the
+   simple finalized path because TIR's `build_finalized_simple_tir_root` only handles `Content`
+   atoms. These templates need post-composition sync or TIR slot-definition representation.
+2. **Cross-store proof** (739 skips): child templates from different modules or unsynced children
+   cannot be proven same-store. These need cross-store TIR references or pre-composition sync.
+3. **Formatter flag persistence** (186 fold fallbacks): templates that failed sync for the above
+   reasons keep the parser draft's `has_formatter` flag, blocking TIR-based folding.
+
+These are deferred to follow-up work (see `docs/roadmap/roadmap.md`).
+
+### Validation Status
+
+- `just validate` passed after the final B7ac slice: clippy, 2897 unit tests, 1707/1707 integration
+  cases, docs check, and `bench-check` (`-20ms avg`; 25/25 cases).
+- `cargo test --lib compiler_frontend::ast::templates` (496+ passed across slices).
+- `cargo test --lib compiler_frontend::instrumentation::tests --features detailed_timers` (2 passed).
+
+### Benchmark Results
+
+`bench-check` at the final B7ac commit: `-20ms avg`; 20 faster, 0 slower; 25/25 cases.
+Stage movement: `ast -2052ms`, `ast emit -1934ms`, `ast env -90ms`.
+
+### Decision
+
+Intermediate parser-TIR primary-path checkpoint for B7 widening. TIR is the primary internal
+representation for synced templates (65% sync coverage, 42% fold coverage). Legacy
+`TemplateContent` and `TemplateRenderPlan` paths remain as narrow fallbacks for templates with
+unresolved slots or cross-store children. Full removal of legacy paths is now active work under
+the TIR final-authority plan, which implements post-composition sync and cross-store child
+materialization.
+
+The B7 structural deletion items (replacing `Template.content` authority, removing
+`TemplateContent`/`TemplateRenderPlan`/`unformatted_content`/`render_plan` fields) remain open
+because they depend on the sync surface being wider. These are tracked in the plan and deferred
+to follow-up work.
+
+## TIR Finalisation Plan F0 Baseline - 2026-06-24
+
+### Scope
+
+F0 baseline freeze for `docs/roadmap/plans/tir-final-authority-implementation-plan.md` on the
+`templates-refactor` branch. This entry records the starting counter state before Phase F2
+implementation work begins.
+
+### Baseline
+
+- Branch: `templates-refactor`
+- Commit: `44babbf6` (`next TIR work`)
+- Starting worktree: clean
+- `just validate`: confirmed by prior F0 checkpoint
+
+### B7ac Counter Confirmation
+
+`cargo run --features detailed_timers -- check docs` confirmed all B7ac parser-TIR sync and fold
+counters are visible. Representative values from the largest docs module batch:
+
+| Counter | Value |
+|---|---:|
+| `ast_template_parser_tir_sync_attempts` | `749` |
+| `ast_template_parser_tir_sync_successes` | `597` (`79.7%`) |
+| `ast_template_parser_tir_sync_skipped_unresolved_slots` | `30` |
+| `ast_template_parser_tir_sync_skipped_child_template_missing_cross_store_proof` | `122` |
+| `ast_template_parser_tir_fold_candidates` | `19` |
+| `ast_template_parser_tir_fold_hits` | `8` (`42.1%`) |
+| `ast_template_parser_tir_fold_fallbacks` | `11` |
+| `ast_template_parser_tir_fold_fallback_unsafe_has_formatter` | `10` |
+| `ast_template_parser_tir_fold_fallback_ast_content_root_mismatch` | `1` |
+| `ast_tir_templates_created` | `22683` |
+| `ast_tir_nodes_created` | `67650` |
+| `ast_tir_fold_templates_folded` | `1988` |
+
+Legacy counters still active in production:
+
+| Counter | Value |
+|---|---:|
+| `ast_template_render_plans_built` | `892` |
+| `ast_template_content_clones_for_render_units` | `749` |
+| `ast_template_content_rebuilds_after_formatting` | `141` |
+| `ast_template_wrapper_vector_clones` | `789` |
+| `ast_template_fold_fallback_plan_builds` | `0` |
+| `ast_runtime_render_plans_rebuilt` | `2` |
+
+### Known Blockers
+
+1. **Unresolved slots** (30 skips): templates with `$slot` atoms not resolved by composition.
+2. **Cross-store proof** (122 skips): child templates without same-store TIR reference.
+3. **Formatter flag persistence** (10 fold fallbacks): templates that failed sync keep
+   `has_formatter`, blocking TIR-based folding.
+
+### F1 Cleanup Note
+
+F1 deleted `Ast::remap_template_ir_store_string_ids` (dead code; TIR store is always consumed
+before the module-wide StringId remap boundary). `TemplateIrStore::remap_string_ids` remains as a
+store-level capability for tests. The `template_ir_store` field on `Ast` carries
+`#[allow(dead_code)]` until Phases F2-F8 wire production TIR consumers. No behavior change.

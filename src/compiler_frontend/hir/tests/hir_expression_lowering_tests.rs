@@ -18,23 +18,22 @@ use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry
 use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
+use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::{
+    install_same_store_control_flow_body_refs, materialize_body_content_ref,
+    materialize_text_aggregate_wrapper_ref,
+};
 use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent,
-    TemplateSegmentOrigin,
+    ReactiveSubscription, SlotKey, TemplateContent, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
-    TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow, TemplateFallbackBranch,
-    TemplateLoopControlFlow, TemplateLoopHeader,
-};
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    RenderPiece, TemplateRenderPlan,
-};
-use crate::compiler_frontend::ast::templates::template_slots::{
-    RuntimeSlotApplicationPlan, RuntimeSlotContributionSource, RuntimeSlotContributionSourceId,
-    RuntimeSlotSiteId, RuntimeSlotSitePiece, RuntimeSlotSitePlan, RuntimeSlotSiteRenderPlan,
+    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
+    TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, finalized_template_tir_id};
+use crate::compiler_frontend::ast::templates::{
+    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
+};
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_errors::ErrorType;
@@ -146,7 +145,11 @@ fn field_symbol(
     parent.append(string_table.intern(field_name))
 }
 
-fn runtime_template_expression(location: SourceLocation, content: Vec<Expression>) -> Expression {
+fn runtime_template_expression(
+    location: SourceLocation,
+    content: Vec<Expression>,
+    string_table: &StringTable,
+) -> Expression {
     let mut template = Template::empty();
     template.location = location.clone();
 
@@ -154,11 +157,51 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
         template.content.add(expr);
     }
 
-    template.resync_runtime_metadata();
+    let mut store = TemplateIrStore::new();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
+}
+
+fn runtime_template_handoff_expression(
+    location: SourceLocation,
+    content: Vec<Expression>,
+    string_table: &StringTable,
+) -> Expression {
+    runtime_template_expression(location, content, string_table)
+}
+
+pub(crate) fn materialize_runtime_template_handoff_for_test(
+    template: &mut Template,
+    store: &mut TemplateIrStore,
+    string_table: &StringTable,
+) -> OwnedRuntimeTemplateHandoff {
+    // Runtime templates now reach HIR exclusively through the AST-owned
+    // handoff. Unresolved slot placeholders materialize as no-output `Slot`
+    // nodes; escaped `$insert(...)` helpers are rejected by materialization.
+    install_same_store_control_flow_body_refs(template, store, string_table)
+        .expect("test runtime-template body roots should materialize");
+    let template_id = finalized_template_tir_id(template, store, string_table)
+        .expect("test runtime template should materialize to TIR");
+
+    store
+        .owned_runtime_template_handoff_for_template(template_id)
+        .expect("test runtime template should materialize an owned handoff")
+        .expect("test runtime template should have an owned handoff")
+}
+
+fn install_control_flow_body_refs_for_test(
+    template: &mut Template,
+    store: &mut TemplateIrStore,
+    string_table: &StringTable,
+) {
+    install_same_store_control_flow_body_refs(template, store, string_table)
+        .expect("test control-flow body roots should materialize");
 }
 
 fn template_content_from_expressions(expressions: Vec<Expression>) -> TemplateContent {
@@ -175,35 +218,50 @@ fn runtime_template_bool_if_expression(
     then_content: TemplateContent,
     else_content: Option<TemplateContent>,
     location: SourceLocation,
+    string_table: &StringTable,
 ) -> Expression {
-    let then_render_plan = TemplateRenderPlan::from_content(&then_content);
-    let else_render_plan = else_content.as_ref().map(TemplateRenderPlan::from_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let mut store = TemplateIrStore::new();
+    let then_body_ref =
+        materialize_body_content_ref(&then_content, location.clone(), &mut store, string_table)
+            .expect("test branch body should materialize");
     template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
         TemplateBranchChain {
             branches: vec![TemplateConditionalBranch {
+                body_tir_reference: Some(then_body_ref),
                 selector: TemplateBranchSelector::Bool(condition),
-                content: then_content,
-                render_plan: Some(then_render_plan),
                 location: location.clone(),
             }],
-            fallback: else_content.map(|content| TemplateFallbackBranch {
-                content,
-                render_plan: else_render_plan,
-                location: location.clone(),
+            fallback: else_content.map(|content| {
+                let body_ref = materialize_body_content_ref(
+                    &content,
+                    location.clone(),
+                    &mut store,
+                    string_table,
+                )
+                .expect("test fallback body should materialize");
+                TemplateFallbackBranch {
+                    body_tir_reference: Some(body_ref),
+                    location: location.clone(),
+                }
             }),
             location,
         },
     )));
-    template.resync_runtime_metadata();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "test fixture builder mirrors template option-capture payloads"
+)]
 fn runtime_template_option_capture_expression(
     scrutinee: Expression,
     capture_name: crate::compiler_frontend::symbols::string_interning::StringId,
@@ -212,17 +270,20 @@ fn runtime_template_option_capture_expression(
     then_content: TemplateContent,
     else_content: Option<TemplateContent>,
     location: SourceLocation,
+    string_table: &StringTable,
 ) -> Expression {
-    let then_render_plan = TemplateRenderPlan::from_content(&then_content);
-    let else_render_plan = else_content.as_ref().map(TemplateRenderPlan::from_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let mut store = TemplateIrStore::new();
+    let then_body_ref =
+        materialize_body_content_ref(&then_content, location.clone(), &mut store, string_table)
+            .expect("test branch body should materialize");
     template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
         TemplateBranchChain {
             branches: vec![TemplateConditionalBranch {
+                body_tir_reference: Some(then_body_ref),
                 selector: TemplateBranchSelector::OptionPresentCapture {
                     scrutinee,
                     pattern: Box::new(MatchPattern::OptionPresentCapture {
@@ -233,181 +294,156 @@ fn runtime_template_option_capture_expression(
                         binding_location: location.clone(),
                     }),
                 },
-                content: then_content,
-                render_plan: Some(then_render_plan),
                 location: location.clone(),
             }],
-            fallback: else_content.map(|content| TemplateFallbackBranch {
-                content,
-                render_plan: else_render_plan,
-                location: location.clone(),
+            fallback: else_content.map(|content| {
+                let body_ref = materialize_body_content_ref(
+                    &content,
+                    location.clone(),
+                    &mut store,
+                    string_table,
+                )
+                .expect("test fallback body should materialize");
+                TemplateFallbackBranch {
+                    body_tir_reference: Some(body_ref),
+                    location: location.clone(),
+                }
             }),
             location,
         },
     )));
-    template.resync_runtime_metadata();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn runtime_template_range_loop_expression(
     bindings: LoopBindings,
     range: RangeLoopSpec,
     body_content: TemplateContent,
-    aggregate_plan: TemplateAggregateRenderPlan,
+    aggregate_prefix: StringId,
+    aggregate_suffix: StringId,
     location: SourceLocation,
+    string_table: &StringTable,
 ) -> Expression {
-    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let mut store = TemplateIrStore::new();
+    let body_tir_reference =
+        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
+            .expect("test loop body should materialize");
+    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
+        Some(aggregate_prefix),
+        Some(aggregate_suffix),
+        location.clone(),
+        &mut store,
+        string_table,
+    );
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
+            body_tir_reference: Some(body_tir_reference),
             header: TemplateLoopHeader::Range {
                 bindings: Box::new(bindings),
                 range: Box::new(range),
             },
-            body_content,
-            body_render_plan: Some(body_render_plan),
-            aggregate_render_plan: Some(aggregate_plan),
+            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
+            #[cfg(test)]
             location,
         },
     )));
-    template.resync_runtime_metadata();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn runtime_template_collection_loop_expression(
     bindings: LoopBindings,
     iterable: Expression,
     body_content: TemplateContent,
-    aggregate_plan: TemplateAggregateRenderPlan,
+    aggregate_prefix: StringId,
+    aggregate_suffix: StringId,
     location: SourceLocation,
+    string_table: &StringTable,
 ) -> Expression {
-    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let mut store = TemplateIrStore::new();
+    let body_tir_reference =
+        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
+            .expect("test loop body should materialize");
+    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
+        Some(aggregate_prefix),
+        Some(aggregate_suffix),
+        location.clone(),
+        &mut store,
+        string_table,
+    );
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
+            body_tir_reference: Some(body_tir_reference),
             header: TemplateLoopHeader::Collection {
                 bindings: Box::new(bindings),
                 iterable: Box::new(iterable),
             },
-            body_content,
-            body_render_plan: Some(body_render_plan),
-            aggregate_render_plan: Some(aggregate_plan),
+            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
+            #[cfg(test)]
             location,
         },
     )));
-    template.resync_runtime_metadata();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn runtime_template_conditional_loop_expression(
     condition: Expression,
     body_content: TemplateContent,
-    aggregate_plan: TemplateAggregateRenderPlan,
+    aggregate_prefix: StringId,
+    aggregate_suffix: StringId,
     location: SourceLocation,
+    string_table: &StringTable,
 ) -> Expression {
-    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let mut store = TemplateIrStore::new();
+    let body_tir_reference =
+        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
+            .expect("test loop body should materialize");
+    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
+        Some(aggregate_prefix),
+        Some(aggregate_suffix),
+        location.clone(),
+        &mut store,
+        string_table,
+    );
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
+            body_tir_reference: Some(body_tir_reference),
             header: TemplateLoopHeader::Conditional {
                 condition: Box::new(condition),
             },
-            body_content,
-            body_render_plan: Some(body_render_plan),
-            aggregate_render_plan: Some(aggregate_plan),
+            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
+            #[cfg(test)]
             location,
         },
     )));
-    template.resync_runtime_metadata();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
+    let handoff =
+        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
 
-    Expression::template(template, ValueMode::ImmutableOwned)
-}
-
-fn runtime_slot_application_template_expression(
-    wrapper_plan: TemplateRenderPlan,
-    contribution_sources: Vec<RuntimeSlotContributionSource>,
-    slot_sites: Vec<RuntimeSlotSitePlan>,
-    location: SourceLocation,
-) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.runtime_slot_application = Some(RuntimeSlotApplicationPlan {
-        wrapper_plan,
-        contribution_sources,
-        slot_sites,
-        location,
-    });
-    template.resync_runtime_metadata();
-
-    Expression::template(template, ValueMode::ImmutableOwned)
-}
-
-fn runtime_slot_source(
-    id: usize,
-    target: SlotKey,
-    render_plan: TemplateRenderPlan,
-    location: SourceLocation,
-) -> RuntimeSlotContributionSource {
-    RuntimeSlotContributionSource {
-        id: RuntimeSlotContributionSourceId(id),
-        target,
-        render_plan,
-        renders_wrapper_unconditionally: true,
-        location,
-    }
-}
-
-fn runtime_slot_site(
-    id: usize,
-    key: SlotKey,
-    pieces: Vec<RuntimeSlotSitePiece>,
-    location: SourceLocation,
-) -> RuntimeSlotSitePlan {
-    RuntimeSlotSitePlan {
-        id: RuntimeSlotSiteId(id),
-        key,
-        render_plan: RuntimeSlotSiteRenderPlan { pieces },
-        location,
-    }
-}
-
-fn aggregate_plan_around_body(
-    prefix: StringId,
-    suffix: StringId,
-    location: SourceLocation,
-) -> TemplateAggregateRenderPlan {
-    TemplateAggregateRenderPlan {
-        pieces: vec![
-            TemplateAggregatePiece::Render(Box::new(RenderPiece::Text(
-                crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
-                    text: prefix,
-                    location: location.clone(),
-                },
-            ))),
-            TemplateAggregatePiece::Aggregate,
-            TemplateAggregatePiece::Render(Box::new(RenderPiece::Text(
-                crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
-                    text: suffix,
-                    location,
-                },
-            ))),
-        ],
-    }
+    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn loop_binding(name: &str, type_id: TypeId, string_table: &mut StringTable) -> Declaration {
@@ -424,35 +460,52 @@ fn loop_binding(name: &str, type_id: TypeId, string_table: &mut StringTable) -> 
 }
 
 #[test]
-fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir() {
+fn runtime_template_slot_placeholder_materializes_as_no_output_owned_node() {
     let mut string_table = StringTable::new();
     let before = string_table.intern("before ");
     let after = string_table.intern("after");
     let location = location(1);
-    let mut builder = setup_builder(&mut string_table);
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.content.add(Expression::string_slice(
-        before,
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    ));
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
-    template.content.add(Expression::string_slice(
-        after,
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: crate::compiler_frontend::ast::templates::template::TemplateType::String,
+        body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
+            children: vec![
+                OwnedRuntimeTemplateNode::Text {
+                    text: before,
+                    byte_len: 7,
+                    reactive_subscription: None,
+                    location: location.clone(),
+                },
+                OwnedRuntimeTemplateNode::Slot {
+                    location: location.clone(),
+                },
+                OwnedRuntimeTemplateNode::Text {
+                    text: after,
+                    byte_len: 5,
+                    reactive_subscription: None,
+                    location: location.clone(),
+                },
+            ],
+            location: location.clone(),
+        }),
         location,
-        ValueMode::ImmutableOwned,
-    ));
-    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
-    template.resync_runtime_metadata();
+    };
+    let body = match &handoff.body {
+        crate::compiler_frontend::ast::templates::OwnedRuntimeTemplateBody::Render(node) => node,
+        _ => panic!("slot-shaped template should have a render handoff body"),
+    };
+    assert!(
+        matches!(body, OwnedRuntimeTemplateNode::Sequence { children, .. } if children.iter().any(|child| matches!(child, OwnedRuntimeTemplateNode::Slot { .. }))),
+        "slot-shaped template handoff should contain a no-output Slot node"
+    );
 
+    let mut builder = setup_builder(&mut string_table);
     let lowered = builder
-        .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
-        .expect("wrapper-shaped runtime templates should lower in HIR");
+        .lower_expression(&Expression::runtime_template_handoff(
+            handoff,
+            ValueMode::ImmutableOwned,
+        ))
+        .expect("slot-shaped runtime templates should lower in HIR");
 
     assert!(lowered.prelude.is_empty());
     assert!(builder.module.functions.is_empty());
@@ -485,7 +538,8 @@ fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
         location.clone(),
         ValueMode::ImmutableOwned,
     ));
-    helper.resync_runtime_metadata();
+    let mut store = TemplateIrStore::new();
+    install_control_flow_body_refs_for_test(&mut helper, &mut store, builder.string_table);
 
     let err = builder
         .lower_expression(&Expression::template(helper, ValueMode::ImmutableOwned))
@@ -494,12 +548,38 @@ fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
     assert_eq!(err.error_type, ErrorType::HirTransformation);
     assert!(
         err.msg
-            .contains("Template helper reached HIR runtime-template lowering")
+            .contains("Raw template reached HIR runtime-template lowering")
     );
 }
 
 #[test]
-fn runtime_template_without_render_plan_reports_compiler_bug() {
+fn escaped_slot_definition_helpers_fail_when_they_reach_hir_runtime_lowering() {
+    let mut string_table = StringTable::new();
+    let body_slot = string_table.intern("body");
+    let location = location(2);
+    let mut builder = setup_builder(&mut string_table);
+
+    let mut helper = Template::empty();
+    helper.location = location.clone();
+    helper.kind = crate::compiler_frontend::ast::templates::template::TemplateType::SlotDefinition(
+        SlotKey::named(body_slot),
+    );
+    let mut store = TemplateIrStore::new();
+    install_control_flow_body_refs_for_test(&mut helper, &mut store, builder.string_table);
+
+    let err = builder
+        .lower_expression(&Expression::template(helper, ValueMode::ImmutableOwned))
+        .expect_err("escaped slot definition helpers should be rejected in HIR");
+
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(
+        err.msg
+            .contains("Raw template reached HIR runtime-template lowering")
+    );
+}
+
+#[test]
+fn runtime_template_without_handoff_reports_compiler_bug() {
     let mut string_table = StringTable::new();
     let location = location(2);
     let hello = string_table.intern("hello");
@@ -516,10 +596,45 @@ fn runtime_template_without_render_plan_reports_compiler_bug() {
 
     let err = builder
         .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
-        .expect_err("runtime templates without render plans should fail");
+        .expect_err("runtime templates without an owned handoff should fail");
 
     assert_eq!(err.error_type, ErrorType::HirTransformation);
-    assert!(err.msg.contains("without a render plan"));
+    assert!(
+        err.msg
+            .contains("Raw template reached HIR runtime-template lowering")
+    );
+}
+
+#[test]
+fn top_level_loop_control_handoff_reports_compiler_bug() {
+    let mut string_table = StringTable::new();
+    let location = location(2);
+    let mut builder = setup_builder(&mut string_table);
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: template.kind.clone(),
+        body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::LoopControl {
+            kind: TemplateLoopControlKind::Break,
+            location: location.clone(),
+        }),
+        location: location.clone(),
+    };
+
+    let err = builder
+        .lower_expression(&Expression::runtime_template_handoff(
+            handoff,
+            ValueMode::ImmutableOwned,
+        ))
+        .expect_err("top-level loop control handoffs should be rejected in HIR");
+
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(
+        err.msg
+            .contains("Template loop-control signal reached HIR outside")
+    );
 }
 
 #[test]
@@ -1542,6 +1657,7 @@ fn runtime_template_expression_lowers_inline_to_accumulator() {
             location,
             ValueMode::ImmutableOwned,
         )],
+        builder.string_table,
     );
 
     let lowered = builder
@@ -1565,6 +1681,93 @@ fn runtime_template_expression_lowers_inline_to_accumulator() {
 }
 
 #[test]
+fn runtime_template_handoff_expression_lowers_inline_to_accumulator() {
+    let mut string_table = StringTable::new();
+    let hello = string_table.intern("hello");
+    let location = location(10);
+    let mut builder = setup_builder(&mut string_table);
+
+    let expr = runtime_template_handoff_expression(
+        location.clone(),
+        vec![Expression::string_slice(
+            hello,
+            location,
+            ValueMode::ImmutableOwned,
+        )],
+        builder.string_table,
+    );
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("owned runtime template handoff expression should lower");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
+    assert!(matches!(
+        lowered.value.kind,
+        HirExpressionKind::Copy(HirPlace::Local(_))
+    ));
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_string_literal(entry_block, "hello"));
+}
+
+#[test]
+fn runtime_template_handoff_expression_flattens_nested_linear_handoff() {
+    let mut string_table = StringTable::new();
+    let before = string_table.intern("before ");
+    let inner = string_table.intern("inner");
+    let after = string_table.intern(" after");
+    let location = location(10);
+
+    let inner_template = runtime_template_handoff_expression(
+        location.clone(),
+        vec![Expression::string_slice(
+            inner,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )],
+        &string_table,
+    );
+    let outer_template = runtime_template_handoff_expression(
+        location.clone(),
+        vec![
+            Expression::string_slice(before, location.clone(), ValueMode::ImmutableOwned),
+            inner_template,
+            Expression::string_slice(after, location, ValueMode::ImmutableOwned),
+        ],
+        &string_table,
+    );
+
+    let mut builder = setup_builder(&mut string_table);
+    let lowered = builder
+        .lower_expression(&outer_template)
+        .expect("owned nested runtime template handoffs should lower");
+
+    assert!(lowered.prelude.is_empty());
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert_eq!(
+        count_empty_string_initializers(entry_block),
+        1,
+        "nested owned linear handoffs should append into the parent accumulator without creating a child accumulator"
+    );
+    assert!(block_assigns_string_literal(entry_block, "before "));
+    assert!(block_assigns_string_literal(entry_block, "inner"));
+    assert!(block_assigns_string_literal(entry_block, " after"));
+}
+
+#[test]
 fn runtime_template_inline_accumulator_coerces_non_string_segments() {
     let mut string_table = StringTable::new();
     let location = location(11);
@@ -1573,6 +1776,7 @@ fn runtime_template_inline_accumulator_coerces_non_string_segments() {
     let expr = runtime_template_expression(
         location.clone(),
         vec![Expression::int(5, location, ValueMode::ImmutableOwned)],
+        builder.string_table,
     );
 
     let lowered = builder
@@ -1637,10 +1841,16 @@ fn reactive_linear_template_keeps_subscription_chunks_lazy() {
         TemplateSegmentOrigin::Head,
         subscription,
     );
-    template.resync_runtime_metadata();
+    let mut store = TemplateIrStore::new();
+    install_control_flow_body_refs_for_test(&mut template, &mut store, builder.string_table);
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let handoff = materialize_runtime_template_handoff_for_test(
+        &mut template,
+        &mut store,
+        builder.string_table,
+    );
+    let expression = Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned);
 
     let lowered = builder
         .lower_expression(&expression)
@@ -1679,6 +1889,7 @@ fn runtime_template_lowers_nested_templates_in_order() {
             location.clone(),
             ValueMode::ImmutableOwned,
         )],
+        builder.string_table,
     );
 
     let expr = runtime_template_expression(
@@ -1688,6 +1899,7 @@ fn runtime_template_lowers_nested_templates_in_order() {
             nested,
             Expression::string_slice(c, location, ValueMode::ImmutableOwned),
         ],
+        builder.string_table,
     );
 
     let lowered = builder
@@ -1706,182 +1918,9 @@ fn runtime_template_lowers_nested_templates_in_order() {
     assert!(block_assigns_string_literal(entry_block, "A"));
     assert!(block_assigns_string_literal(entry_block, "B"));
     assert!(block_assigns_string_literal(entry_block, "C"));
-    assert!(block_appends_local_string(entry_block));
-}
-
-#[test]
-fn runtime_slot_application_replays_repeated_slot_accumulator() {
-    let mut string_table = StringTable::new();
-    let slot_text = string_table.intern("slot");
-    let location = location(12);
-    let mut builder = setup_builder(&mut string_table);
-
-    let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
-        slot_text,
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    )]);
-    let source = runtime_slot_source(
-        0,
-        SlotKey::Default,
-        TemplateRenderPlan::from_content(&contribution_content),
-        location.clone(),
-    );
-    let wrapper_plan = TemplateRenderPlan {
-        pieces: vec![
-            RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0)),
-            RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(1)),
-        ],
-    };
-    let slot_sites = vec![
-        runtime_slot_site(
-            0,
-            SlotKey::Default,
-            vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
-            location.clone(),
-        ),
-        runtime_slot_site(
-            1,
-            SlotKey::Default,
-            vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
-            location.clone(),
-        ),
-    ];
-    let expr = runtime_slot_application_template_expression(
-        wrapper_plan,
-        vec![source],
-        slot_sites,
-        location,
-    );
-
-    let lowered = builder
-        .lower_expression(&expr)
-        .expect("runtime slot application should lower through slot accumulators");
-
-    assert!(lowered.prelude.is_empty());
-    assert!(builder.module.functions.is_empty());
-    assert!(matches!(
-        lowered.value.kind,
-        HirExpressionKind::Copy(HirPlace::Local(_))
-    ));
-
-    let entry_block = builder
-        .module
-        .blocks
-        .iter()
-        .find(|block| block.id == BlockId(0))
-        .expect("entry block should exist");
-    assert!(block_assigns_string_literal(entry_block, "slot"));
-    assert!(
-        count_block_appends_local_string(entry_block) >= 2,
-        "repeated slot placeholders should append the same slot accumulator at each site"
-    );
-}
-
-#[test]
-fn runtime_slot_application_missing_slot_appends_empty_accumulator() {
-    let mut string_table = StringTable::new();
-    let title_slot = string_table.intern("title");
-    let location = location(12);
-    let mut builder = setup_builder(&mut string_table);
-
-    let wrapper_plan = TemplateRenderPlan {
-        pieces: vec![RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0))],
-    };
-    let slot_sites = vec![runtime_slot_site(
-        0,
-        SlotKey::Named(title_slot),
-        vec![],
-        location.clone(),
-    )];
-    let expr =
-        runtime_slot_application_template_expression(wrapper_plan, vec![], slot_sites, location);
-
-    let lowered = builder
-        .lower_expression(&expr)
-        .expect("runtime missing slot should lower as an empty slot accumulator");
-
-    assert!(lowered.prelude.is_empty());
-    assert!(builder.module.functions.is_empty());
-    assert!(matches!(
-        lowered.value.kind,
-        HirExpressionKind::Copy(HirPlace::Local(_))
-    ));
-
-    let entry_block = builder
-        .module
-        .blocks
-        .iter()
-        .find(|block| block.id == BlockId(0))
-        .expect("entry block should exist");
-    assert_eq!(
-        count_block_appends_local_string(entry_block),
-        0,
-        "missing runtime slot sites should render as initialized empty output"
-    );
-}
-
-#[test]
-fn runtime_slot_application_preserves_slot_context_inside_nested_control_flow() {
-    let mut string_table = StringTable::new();
-    let slot_text = string_table.intern("slot");
-    let location = location(12);
-    let mut builder = setup_builder(&mut string_table);
-
-    let mut branch_expression = runtime_template_bool_if_expression(
-        Expression::bool(true, location.clone(), ValueMode::ImmutableOwned),
-        TemplateContent {
-            atoms: vec![TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default))],
-        },
-        None,
-        location.clone(),
-    );
-    if let ExpressionKind::Template(template) = &mut branch_expression.kind
-        && let Some(TemplateControlFlow::BranchChain(branch_chain)) = &mut template.control_flow
-    {
-        branch_chain.branches[0].render_plan = Some(TemplateRenderPlan {
-            pieces: vec![RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0))],
-        });
-    }
-    let wrapper_content = template_content_from_expressions(vec![branch_expression]);
-    let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
-        slot_text,
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    )]);
-    let source = runtime_slot_source(
-        0,
-        SlotKey::Default,
-        TemplateRenderPlan::from_content(&contribution_content),
-        location.clone(),
-    );
-    let wrapper_plan = TemplateRenderPlan::from_content(&wrapper_content);
-    let slot_sites = vec![runtime_slot_site(
-        0,
-        SlotKey::Default,
-        vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
-        location.clone(),
-    )];
-    let expr = runtime_slot_application_template_expression(
-        wrapper_plan,
-        vec![source],
-        slot_sites,
-        location,
-    );
-
-    let lowered = builder
-        .lower_expression(&expr)
-        .expect("runtime slot application should lower nested control-flow placeholders");
-
-    assert!(lowered.prelude.is_empty());
-    assert!(matches!(
-        lowered.value.kind,
-        HirExpressionKind::Copy(HirPlace::Local(_))
-    ));
-    assert!(
-        builder.module.blocks.iter().any(block_appends_local_string),
-        "slot placeholders inside nested control flow should append the active slot accumulator"
-    );
+    // The owned runtime-template handoff flattens nested child templates into the
+    // same accumulator, so all three literals are appended directly rather than
+    // through an intermediate child-template local.
 }
 
 #[test]
@@ -1916,8 +1955,13 @@ fn runtime_template_control_flow_bool_if_lowers_inline_without_helper_call() {
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let expr =
-        runtime_template_bool_if_expression(condition, then_content, Some(else_content), location);
+    let expr = runtime_template_bool_if_expression(
+        condition,
+        then_content,
+        Some(else_content),
+        location,
+        builder.string_table,
+    );
 
     let lowered = builder
         .lower_expression(&expr)
@@ -2023,8 +2067,13 @@ fn runtime_template_control_flow_bool_if_branch_preserves_fallible_propagation_c
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let expr =
-        runtime_template_bool_if_expression(condition, then_content, Some(else_content), location);
+    let expr = runtime_template_bool_if_expression(
+        condition,
+        then_content,
+        Some(else_content),
+        location,
+        builder.string_table,
+    );
 
     builder
         .lower_expression(&expr)
@@ -2094,7 +2143,13 @@ fn runtime_template_control_flow_bool_if_without_else_appends_nothing_on_false_p
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let expr = runtime_template_bool_if_expression(condition, then_content, None, location);
+    let expr = runtime_template_bool_if_expression(
+        condition,
+        then_content,
+        None,
+        location,
+        builder.string_table,
+    );
 
     builder
         .lower_expression(&expr)
@@ -2160,7 +2215,13 @@ fn runtime_template_control_flow_bool_if_coerces_dynamic_branch_chunks() {
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let expr = runtime_template_bool_if_expression(condition, then_content, None, location);
+    let expr = runtime_template_bool_if_expression(
+        condition,
+        then_content,
+        None,
+        location,
+        builder.string_table,
+    );
 
     builder
         .lower_expression(&expr)
@@ -2231,6 +2292,7 @@ fn runtime_template_control_flow_option_capture_lowers_match_and_payload_binding
         then_content,
         Some(else_content),
         location,
+        builder.string_table,
     );
 
     let lowered = builder
@@ -2348,6 +2410,7 @@ fn runtime_template_control_flow_option_capture_without_else_appends_nothing_whe
         then_content,
         None,
         location,
+        builder.string_table,
     );
 
     builder
@@ -2422,8 +2485,10 @@ fn runtime_template_control_flow_loop_range_lowers_inline_and_wraps_aggregate_wh
         },
         range,
         body_content,
-        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        prefix,
+        suffix,
         location,
+        builder.string_table,
     );
 
     builder
@@ -2496,8 +2561,10 @@ fn runtime_template_control_flow_loop_collection_materializes_iterable_and_lengt
         },
         iterable,
         body_content,
-        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        prefix,
+        suffix,
         location,
+        builder.string_table,
     );
 
     builder
@@ -2560,8 +2627,10 @@ fn runtime_template_control_flow_conditional_loop_rechecks_condition_and_wraps_w
     let expr = runtime_template_conditional_loop_expression(
         condition,
         body_content,
-        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        prefix,
+        suffix,
         location,
+        builder.string_table,
     );
 
     builder
@@ -2617,8 +2686,10 @@ fn runtime_template_control_flow_loop_empty_body_does_not_mark_iteration_emitted
         },
         range,
         body_content,
-        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        prefix,
+        suffix,
         location,
+        builder.string_table,
     );
 
     builder
@@ -2651,6 +2722,23 @@ fn block_assigns_string_literal(block: &HirBlock, expected: &str) -> bool {
             HirExpressionKind::StringLiteral(ref value) if value == expected
         )
     })
+}
+
+fn count_empty_string_initializers(block: &HirBlock) -> usize {
+    block
+        .statements
+        .iter()
+        .filter(|statement| {
+            let HirStatementKind::Assign { value, .. } = &statement.kind else {
+                return false;
+            };
+
+            matches!(
+                value.kind,
+                HirExpressionKind::StringLiteral(ref value) if value.is_empty()
+            )
+        })
+        .count()
 }
 
 fn expression_contains_load_of_local(

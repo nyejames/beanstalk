@@ -11,7 +11,7 @@
 //! - The structured entry point allows whitespace passes to run without flattening
 //!   opaque child-template anchors into a temporary string buffer.
 
-use crate::compiler_frontend::ast::templates::template_render_plan::{
+use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterInput, FormatterInputPiece, FormatterOpaquePiece, FormatterOutput,
     FormatterOutputPiece,
 };
@@ -76,7 +76,7 @@ impl TemplateWhitespacePassProfile {
 /// Scans the start of a text buffer for the leading whitespace pattern
 /// (optional spaces + newline + indentation) and returns the shared dedent width
 /// and the char-index end of the leading boundary block.
-fn compute_leading_dedent_info(content: &str) -> (usize, usize) {
+pub(crate) fn compute_leading_dedent_info(content: &str) -> (usize, usize) {
     let chars: Vec<char> = content.chars().collect();
     let mut char_index = 0usize;
 
@@ -101,7 +101,7 @@ fn compute_leading_dedent_info(content: &str) -> (usize, usize) {
     }
 }
 
-fn dedent_after_newlines(input: &str, dedent_width: usize) -> String {
+pub(crate) fn dedent_after_newlines(input: &str, dedent_width: usize) -> String {
     if dedent_width == 0 {
         return input.to_owned();
     }
@@ -134,7 +134,7 @@ fn dedent_after_newlines(input: &str, dedent_width: usize) -> String {
     output
 }
 
-fn trim_trailing_whitespace_from_final_newline(content: &mut String) {
+pub(crate) fn trim_trailing_whitespace_from_final_newline(content: &mut String) {
     let chars: Vec<char> = content.chars().collect();
     let Some(last_newline) = chars.iter().rposition(|ch| *ch == '\n') else {
         return;
@@ -274,6 +274,21 @@ fn normalize_structured_default_whitespace(
         .iter()
         .position(|p| matches!(p, ResolvedInputPiece::Text(t) if !t.is_empty()));
 
+    // Boundary trimming only applies to actual run boundaries. Opaque anchors
+    // before the first text or after the last text represent already-emitted
+    // child templates or expressions, so adjacent text is interior separator
+    // whitespace and must not be trimmed as if it began or ended the template.
+    let leading_text_is_run_boundary = first_text_index.is_some_and(|first_index| {
+        pieces[..first_index]
+            .iter()
+            .all(|piece| matches!(piece, ResolvedInputPiece::Text(text) if text.is_empty()))
+    });
+    let trailing_text_is_run_boundary = last_text_index.is_some_and(|last_index| {
+        pieces[last_index + 1..]
+            .iter()
+            .all(|piece| matches!(piece, ResolvedInputPiece::Text(text) if text.is_empty()))
+    });
+
     let mut result = Vec::with_capacity(pieces.len());
 
     for (index, piece) in pieces.into_iter().enumerate() {
@@ -292,7 +307,11 @@ fn normalize_structured_default_whitespace(
 
                 // Leading boundary trim: strip the leading whitespace + newline + indentation
                 // block from the first text piece only.
-                if trim_leading && is_first_text && leading_trim_end > 0 {
+                if trim_leading
+                    && is_first_text
+                    && leading_text_is_run_boundary
+                    && leading_trim_end > 0
+                {
                     text = text.chars().skip(leading_trim_end).collect();
                 }
 
@@ -303,7 +322,7 @@ fn normalize_structured_default_whitespace(
 
                 // Trailing boundary trim: remove whitespace-only content after the last
                 // newline in the final text piece.
-                if trim_trailing && is_last_text {
+                if trim_trailing && is_last_text && trailing_text_is_run_boundary {
                     trim_trailing_whitespace_from_final_newline(&mut text);
                 }
 

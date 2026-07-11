@@ -10,8 +10,8 @@
 //! Constants and choices are handled in earlier passes; they do not emit nodes here.
 //! Struct node emission reads the resolved field table produced by environment construction.
 
-use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionBodyValidationInput, GenericFunctionInstance, GenericFunctionInstanceKey,
@@ -34,6 +34,7 @@ use crate::compiler_frontend::ast::statements::terminality::{
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::compiler_messages::{
@@ -53,7 +54,7 @@ use crate::compiler_frontend::datatypes::ids::{
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
@@ -63,8 +64,10 @@ use std::rc::Rc;
 
 #[cfg(feature = "detailed_timers")]
 use crate::compiler_frontend::compiler_messages::compiler_dev_logging::{
-    detailed_timer_output_enabled, log_aggregated_duration,
+    detailed_timer_output_enabled, log_aggregated_duration, log_benchmark_timing,
 };
+#[cfg(feature = "detailed_timers")]
+use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 #[cfg(feature = "detailed_timers")]
 use std::time::Duration;
 #[cfg(feature = "detailed_timers")]
@@ -75,9 +78,9 @@ pub(in crate::compiler_frontend::ast) struct AstEmission {
     pub(in crate::compiler_frontend::ast) ast: Vec<AstNode>,
     /// Warnings accumulated during emission (unused variables, deprecated uses, etc.).
     pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerDiagnostic>,
-    /// Compile-time template fragments keyed by the source file that declared them.
+    /// Folded top-level const template result records keyed by source file.
     pub(in crate::compiler_frontend::ast) const_templates_by_path:
-        FxHashMap<InternedPath, StringId>,
+        FxHashMap<InternedPath, FoldedConstTemplateResult>,
     /// Concrete generic function instances emitted while lowering visible calls.
     pub(in crate::compiler_frontend::ast) generic_instance_count: usize,
 }
@@ -95,7 +98,6 @@ struct BaseScopeContextInput<'scope> {
     visibility: Rc<FileVisibility>,
     source_file_scope: InternedPath,
     scope_frame_capacity: usize,
-    template_capacity_policy: TemplateCapacityPolicy,
 }
 
 /// AST-local spender for module-level scope-frame capacity estimates.
@@ -187,7 +189,7 @@ pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'en
     environment: &'environment mut AstModuleEnvironment,
     ast: Vec<AstNode>,
     warnings: Vec<CompilerDiagnostic>,
-    const_templates_by_path: FxHashMap<InternedPath, StringId>,
+    const_templates_by_path: FxHashMap<InternedPath, FoldedConstTemplateResult>,
     compatibility_cache: TypeCompatibilityCache,
     generic_function_instantiation_requests: Rc<RefCell<Vec<GenericFunctionInstantiationRequest>>>,
     generic_function_instances_by_key:
@@ -195,14 +197,6 @@ pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'en
 }
 
 impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environment> {
-    /// Narrow per-template capacity policy derived from the module estimate.
-    ///
-    /// WHAT: avoids threading the whole `FrontendArenaCapacityEstimate` through the
-    ///       emission helpers while still giving every root parse context the same policy.
-    fn template_capacity_policy(&self) -> TemplateCapacityPolicy {
-        self.context.capacity_estimate.template_capacity_policy()
-    }
-
     pub(in crate::compiler_frontend::ast) fn new(
         context: &'context AstPhaseContext<'services>,
         environment: &'environment mut AstModuleEnvironment,
@@ -237,7 +231,11 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Vec::<TypeId>::new(),
             input.scope_frame_capacity,
         )
-        .with_template_capacity_policy(input.template_capacity_policy)
+        .with_template_ir_registry(
+            Rc::clone(&self.context.template_ir_registry),
+            self.context.template_ir_store_id,
+            Rc::clone(&self.context.template_ir_store),
+        )
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_file_visibility(input.visibility)
@@ -379,7 +377,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         visibility,
                         source_file_scope,
                         scope_frame_capacity: scope_frame_capacity_budget.next_root_capacity(),
-                        template_capacity_policy: self.template_capacity_policy(),
                     });
 
                     #[cfg(feature = "detailed_timers")]
@@ -394,7 +391,8 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
 
                     #[cfg(feature = "detailed_timers")]
                     let const_template_fold_start = Instant::now();
-                    let html = self.fold_const_template(template, &context, string_table)?;
+                    let folded_result =
+                        self.fold_const_template(template, &context, string_table)?;
                     #[cfg(feature = "detailed_timers")]
                     {
                         total_const_template_fold_time += const_template_fold_start.elapsed();
@@ -402,7 +400,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                     }
 
                     self.const_templates_by_path
-                        .insert(template_tokens.src_path, html);
+                        .insert(template_tokens.src_path, folded_result);
                 }
 
                 // --------------------------
@@ -430,18 +428,25 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 "AST/node emission/function bodies parsed in: ",
                 total_function_body_parse_time,
             );
+            log_benchmark_timing("ast_function_body_parse_ms", total_function_body_parse_time);
             log_aggregated_duration(
                 "AST/node emission/start bodies parsed in: ",
                 total_start_body_parse_time,
             );
+            log_benchmark_timing("ast_start_body_parse_ms", total_start_body_parse_time);
             log_aggregated_duration(
                 "AST/node emission/const templates parsed in: ",
+                total_const_template_parse_time,
+            );
+            log_benchmark_timing(
+                "ast_const_template_parse_ms",
                 total_const_template_parse_time,
             );
             log_aggregated_duration(
                 "AST/node emission/const templates folded in: ",
                 total_const_template_fold_time,
             );
+            log_benchmark_timing("ast_const_template_fold_ms", total_const_template_fold_time);
             if detailed_timer_output_enabled() {
                 saying::say!(
                     "AST/node emission/headers emitted: \n functions = ", Dark Green function_headers_emitted,
@@ -450,6 +455,23 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                     Reset "\n const templates = ", Dark Green const_templates_emitted
                 );
             }
+
+            add_frontend_counter(
+                FrontendCounter::AstFunctionBodyRootCount,
+                function_headers_emitted,
+            );
+            add_frontend_counter(
+                FrontendCounter::AstStartBodyRootCount,
+                start_headers_emitted,
+            );
+            add_frontend_counter(
+                FrontendCounter::AstConstTemplateFoldedCount,
+                const_templates_emitted,
+            );
+            add_frontend_counter(
+                FrontendCounter::AstRootScopeArenaCount,
+                root_scope_consumer_count,
+            );
         }
 
         Ok(AstEmission {
@@ -681,7 +703,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope: template.source_file.clone(),
                 scope_frame_capacity: 0,
-                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations)
             .with_active_generic_type_context(generic_type_context)
@@ -710,7 +731,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Ok(body) => body,
             Err(diagnostic) => {
                 let diagnostic = with_generic_instantiation_context(
-                    diagnostic,
+                    *diagnostic,
                     GenericInstantiationDiagnosticContext {
                         call_location: request.call_location.clone(),
                         declaration_location: template.declaration_location.clone(),
@@ -820,7 +841,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope,
                 scope_frame_capacity,
-                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations);
         let generic_type_context = self.build_active_generic_type_context(
@@ -846,7 +866,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             warnings: &mut self.warnings,
             string_table,
         })
-        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))
+        .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))
     }
 
     fn emit_function(
@@ -893,7 +913,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 visibility,
                 source_file_scope,
                 scope_frame_capacity,
-                template_capacity_policy: self.template_capacity_policy(),
             })
             .with_visible_declarations(visible_declarations);
         let expected_result_type_ids = resolved_signature.signature.success_return_type_ids();
@@ -921,7 +940,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             string_table,
         );
 
-        let body = body_result.map_err(|error| self.diagnostic_messages(error, string_table))?;
+        let body = body_result.map_err(|error| self.diagnostic_messages(*error, string_table))?;
 
         self.validate_body_terminality(
             &body,
@@ -964,7 +983,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             visibility,
             source_file_scope,
             scope_frame_capacity,
-            template_capacity_policy: self.template_capacity_policy(),
         });
 
         let mut token_stream = header.tokens;
@@ -982,7 +1000,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             string_table,
         );
 
-        let body = body_result.map_err(|error| self.diagnostic_messages(error, string_table))?;
+        let body = body_result.map_err(|error| self.diagnostic_messages(*error, string_table))?;
 
         // --------------------------
         //  Synthesize implicit start signature and emit node
@@ -1087,9 +1105,19 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         );
 
         let template =
-            template_result.map_err(|error| self.diagnostic_messages(error, string_table))?;
+            template_result.map_err(|error| self.diagnostic_messages(*error, string_table))?;
 
-        match template.const_value_kind() {
+        // Construction leaves const-required templates on the module registry's
+        // Composed-or-later effective root. Classify that exact root so slot,
+        // wrapper and expression overlays stay aligned with the following fold.
+        let template_const_kind = classify_template_from_effective_tir(
+            &template,
+            &context.template_ir_registry,
+            string_table,
+        )
+        .map_err(|error| self.template_error_messages(error, string_table))?;
+
+        match template_const_kind {
             // WHAT: top-level const templates can be direct strings or wrapper
             // templates with optional, unfilled slots.
             // WHY: unfilled slots are rendered as empty strings at compile time.
@@ -1097,7 +1125,8 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             // wrapper, but the final top-level const value itself cannot be a raw
             // `$insert(...)` helper artifact.
             TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {}
-            TemplateConstValueKind::SlotInsertHelper => {
+            TemplateConstValueKind::LoopControlSignal
+            | TemplateConstValueKind::SlotInsertHelper => {
                 return Err(self.diagnostic_messages(
                     CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::HelperInConstTemplate,
@@ -1125,7 +1154,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         template: Template,
         context: &ScopeContext,
         string_table: &mut StringTable,
-    ) -> Result<StringId, CompilerMessages> {
+    ) -> Result<FoldedConstTemplateResult, CompilerMessages> {
         let mut fold_context = match context
             .new_template_fold_context(string_table, "top-level const template folding")
         {
@@ -1135,9 +1164,13 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             }
         };
 
-        template
+        let value = template
             .fold_into_stringid(&mut fold_context)
-            .map_err(|error| self.template_error_messages(error, string_table))
+            .map_err(|error| self.template_error_messages(error, string_table))?;
+
+        let result = FoldedConstTemplateResult::new(value);
+
+        Ok(result)
     }
 
     /// Wraps an internal [`CompilerError`] into [`CompilerMessages`], preserving current

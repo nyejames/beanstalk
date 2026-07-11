@@ -18,9 +18,10 @@
 //! must be emitted as `CompilerDiagnostic` from AST or earlier stages.
 
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+#[cfg(test)]
+use crate::compiler_frontend::ast::expressions::expression::FallibleCarrierVariant as AstFallibleCarrierVariant;
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, FallibleCarrierVariant as AstFallibleCarrierVariant,
-    FallibleExpressionHandling, FallibleHandling,
+    Expression, ExpressionKind, FallibleExpressionHandling, FallibleHandling,
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
@@ -48,6 +49,7 @@ use crate::compiler_frontend::hir::ids::{FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::module::HirChoice;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+#[cfg(test)]
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::hir_log;
@@ -124,7 +126,14 @@ impl<'a> HirBuilder<'a> {
                     });
                 }
 
-                let value_kind = if fields.iter().all(|f| f.value.is_compile_time_constant()) {
+                // WHY: classify const-ness from the already-lowered HIR field values
+                //      instead of reaching back into AST no-store expression classification.
+                //      Each field's `value_kind` is set during lowering and is the HIR-stage
+                //      authority for whether that field is a compile-time constant.
+                let value_kind = if hir_fields
+                    .iter()
+                    .all(|field| field.value.value_kind == ValueKind::Const)
+                {
                     ValueKind::Const
                 } else {
                     ValueKind::RValue
@@ -176,6 +185,7 @@ impl<'a> HirBuilder<'a> {
                 HirExpressionKind::StringLiteral(self.string_table.resolve(*value).to_owned()),
             ),
 
+            #[cfg(test)]
             ExpressionKind::Path(compile_time_paths) => {
                 // Compile-time path values lower to string literals in HIR.
                 // Formatting applies #origin for root-based paths and trailing
@@ -321,6 +331,7 @@ impl<'a> HirBuilder<'a> {
                 },
             ),
 
+            #[cfg(test)]
             ExpressionKind::FallibleCarrierConstruct { variant, value } => {
                 let mut prelude = Vec::new();
                 let lowered_value = self.lower_child_expression_for_parent(&mut prelude, value)?;
@@ -512,6 +523,18 @@ impl<'a> HirBuilder<'a> {
                 self.lower_runtime_template_expression(template.as_ref(), &expr.location)
             }
 
+            ExpressionKind::RuntimeTemplateHandoff(handoff) => self
+                .lower_runtime_template_expression_from_owned_handoff(
+                    handoff.as_ref(),
+                    &expr.location,
+                ),
+
+            ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => self
+                .lower_runtime_slot_application_expression_from_owned_handoff(
+                    handoff.as_ref(),
+                    &expr.location,
+                ),
+
             // Lower the inner value and override the HIR type with the declared
             // coercion target. Numeric coercions are resolved by the code generation
             // backend based on the type annotation. Option coercions materialize
@@ -693,8 +716,11 @@ impl<'a> HirBuilder<'a> {
                         .iter()
                         .any(|arg| self.expression_needs_current_block_lowering(&arg.value))
             }
-            ExpressionKind::FallibleCarrierConstruct { value, .. }
-            | ExpressionKind::Coerced { value, .. } => {
+            #[cfg(test)]
+            ExpressionKind::FallibleCarrierConstruct { value, .. } => {
+                self.expression_needs_current_block_lowering(value)
+            }
+            ExpressionKind::Coerced { value, .. } => {
                 self.expression_needs_current_block_lowering(value)
             }
             ExpressionKind::Copy(_) => false,
@@ -719,9 +745,9 @@ impl<'a> HirBuilder<'a> {
                 }
                 ExpressionRpnItem::Operator { .. } => false,
             }),
-            ExpressionKind::Template(template) => {
-                template.render_plan.is_some() || template.control_flow.is_some()
-            }
+            ExpressionKind::Template(_) => true,
+            ExpressionKind::RuntimeTemplateHandoff(_)
+            | ExpressionKind::RuntimeSlotApplicationHandoff(_) => true,
             ExpressionKind::ValueBlock { .. } => true,
 
             ExpressionKind::Int(_)
@@ -729,12 +755,13 @@ impl<'a> HirBuilder<'a> {
             | ExpressionKind::Bool(_)
             | ExpressionKind::Char(_)
             | ExpressionKind::StringSlice(_)
-            | ExpressionKind::Path(_)
             | ExpressionKind::Reference(_)
             | ExpressionKind::Function(_)
             | ExpressionKind::StructDefinition(_)
             | ExpressionKind::NoValue
             | ExpressionKind::OptionNone => false,
+            #[cfg(test)]
+            ExpressionKind::Path(_) => false,
         }
     }
 

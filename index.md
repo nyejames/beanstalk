@@ -1,0 +1,167 @@
+# Beanstalk codebase index for quick navigation
+
+Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compiler_frontend](src/compiler_frontend/) → tokenizer → headers → module_dependencies → ast → hir → borrow_checker → backends/projects.
+
+## Root
+
+- [bean CLI entry](src/main.rs)
+- [crate module surface](src/lib.rs)
+- [Beanstalk source library packages](libraries/): #mod.bst roots. kw: html, core packages.
+- [validate/bench/docs workflow](justfile)
+- [contributor workflow and validation commands](CONTRIBUTING.md)
+
+## Project/build shell
+
+- [user commands and project modes](src/projects/): kw — cli, check, build, dev, new, routing.
+    - [cli.rs](src/projects/cli.rs): dispatches commands.
+    - [check.rs](src/projects/check.rs): frontend-only diagnostics.
+    - [routing.rs](src/projects/routing.rs): path/origin rules.
+    - [settings.rs](src/projects/settings.rs): Config/defaults/known paths.
+    - [repl.rs](src/projects/repl.rs): template-focused REPL placeholder.
+    - [dev_server](src/projects/dev_server/): HTTP/SSE/watch rebuild loop. kw: serve, hot reload.
+    - [html_project](src/projects/html_project/): HTML builder and HTML-Wasm integration. kw: shell, assets, wasm.
+- [builder boundary above frontend](src/build_system/): kw — config, modules, artifacts, cleanup.
+    - [build.rs](src/build_system/build.rs): build_project, BuildResult, output writing.
+    - [project_config.rs](src/build_system/project_config.rs) + [project_config/](src/build_system/project_config/): config.bst parse/validate through frontend+AST.
+    - [path_validation.rs](src/build_system/path_validation.rs): project path policy checks.
+    - [utils.rs](src/build_system/utils.rs): shared builder helpers.
+    - [create_project_modules](src/build_system/create_project_modules/): Stage 0 module/source discovery.
+        - [frontend_orchestration.rs](src/build_system/create_project_modules/frontend_orchestration.rs): per-module frontend pipeline.
+        - [module_inventory.rs](src/build_system/create_project_modules/module_inventory.rs), [reachable_file_discovery.rs](src/build_system/create_project_modules/reachable_file_discovery.rs), [import_scanning.rs](src/build_system/create_project_modules/import_scanning.rs): module graph.
+        - [source_library_discovery.rs](src/build_system/create_project_modules/source_library_discovery.rs), [facade_validation.rs](src/build_system/create_project_modules/facade_validation.rs): library roots/#mod.bst.
+        - [entry_discovery.rs](src/build_system/create_project_modules/entry_discovery.rs), [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): entry roots and source load.
+        - [collision_detection.rs](src/build_system/create_project_modules/collision_detection.rs), [project_structure_diagnostics.rs](src/build_system/create_project_modules/project_structure_diagnostics.rs): layout/name conflicts.
+        - [project_roots.rs](src/build_system/create_project_modules/project_roots.rs): project/entry roots.
+        - [source_discovery_error.rs](src/build_system/create_project_modules/source_discovery_error.rs): diagnostic boundary.
+    - [output_cleanup.rs](src/build_system/output_cleanup.rs): stale output manifest cleanup.
+- [backend-declared library set](src/libraries/): core packages, external import providers.
+
+## Frontend stage map
+
+- [frontend module map](src/compiler_frontend/mod.rs); [CompilerFrontend driver](src/compiler_frontend/pipeline.rs)
+- [tokenizer](src/compiler_frontend/tokenizer/): lex source/templates into tokens. kw: TokenizeMode, SourceLocation.
+- [headers](src/compiler_frontend/headers/): imports, declarations, start-body split, ModuleSymbols. kw: facade, visibility.
+- [declaration_syntax](src/compiler_frontend/declaration_syntax/): shared declaration/type shell parsers. kw: signatures, ParsedTypeRef.
+- [module_dependencies.rs](src/compiler_frontend/module_dependencies.rs): topological header ordering. kw: dependency edges, cycles.
+- [compiler_messages](src/compiler_frontend/compiler_messages/): CompilerDiagnostic/CompilerError/rendering. kw: diagnostic codes, labels.
+- [symbols](src/compiler_frontend/symbols/): StringId, InternedPath, compiler symbols, naming policy.
+- [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
+- [source_libraries](src/compiler_frontend/source_libraries/): #mod/#page/config identity and library import boundaries.
+- [external_packages](src/compiler_frontend/external_packages/): virtual package registry, external IDs. kw: @core, @web, opaque.
+- [builtins](src/compiler_frontend/builtins/): compiler-owned types/ops/casts/runtime error metadata.
+- [style_directives](src/compiler_frontend/style_directives/): frontend+builder template directive registry.
+- [datatypes](src/compiler_frontend/datatypes/): DataType parse spelling + TypeEnvironment/TypeId semantic identity.
+- [type_coercion](src/compiler_frontend/type_coercion/): compatibility/contextual/string coercion.
+- [value_mode.rs](src/compiler_frontend/value_mode.rs): access modes (frontend root, shared by coercion and lowering).
+- [traits](src/compiler_frontend/traits/): trait definitions, evidence, syntax helpers.
+- [numeric_text](src/compiler_frontend/numeric_text/): numeric literal text parsing.
+- [plain_markdown.rs](src/compiler_frontend/plain_markdown.rs): plain-markdown source handling outside template pipeline.
+- [syntax_errors](src/compiler_frontend/syntax_errors/): shared syntax error construction.
+- [utilities](src/compiler_frontend/utilities/): small frontend-local helpers.
+- [keywords.rs](src/compiler_frontend/keywords.rs): reserved-word tables.
+- [arena](src/compiler_frontend/arena/): AST/HIR allocation arenas and capacity budgeting.
+- [instrumentation](src/compiler_frontend/instrumentation/): compile-time counters and frontend stats.
+- [const_eval](src/compiler_frontend/ast/const_eval/): AST-stage const expression folding (RPN stack evaluator).
+
+## AST stage
+
+- [Stage 4 entry](src/compiler_frontend/ast/mod.rs): env build → emission → finalization.
+- [module_ast orchestration](src/compiler_frontend/ast/module_ast/)
+    - [environment](src/compiler_frontend/ast/module_ast/environment/): declarations, aliases, nominal types, signatures, constants.
+    - [emission](src/compiler_frontend/ast/module_ast/emission/): function/start/body emission.
+    - [finalization](src/compiler_frontend/ast/module_ast/finalization/): normalize constants/templates, const facts, type validation.
+    - [scope_context](src/compiler_frontend/ast/module_ast/scope_context/): visibility/local declarations/diagnostic sinks.
+- [type_resolution](src/compiler_frontend/ast/type_resolution/): parsed type syntax → TypeId.
+    - [context.rs](src/compiler_frontend/ast/type_resolution/context.rs): state.
+    - [resolve_type.rs](src/compiler_frontend/ast/type_resolution/resolve_type.rs): orchestration + diagnostic TypeId bridge.
+    - [lookup.rs](src/compiler_frontend/ast/type_resolution/lookup.rs): names/namespaces/trait-name rejection.
+    - [aliases.rs](src/compiler_frontend/ast/type_resolution/aliases.rs): alias re-resolution.
+    - [collections.rs](src/compiler_frontend/ast/type_resolution/collections.rs): fixed capacity.
+    - [maps.rs](src/compiler_frontend/ast/type_resolution/maps.rs): map key/nesting.
+    - [generics.rs](src/compiler_frontend/ast/type_resolution/generics.rs): nominal instances.
+    - [signatures.rs](src/compiler_frontend/ast/type_resolution/signatures.rs), [struct_fields.rs](src/compiler_frontend/ast/type_resolution/struct_fields.rs), [choice_variants.rs](src/compiler_frontend/ast/type_resolution/choice_variants.rs), [recursive_types.rs](src/compiler_frontend/ast/type_resolution/recursive_types.rs).
+- [expressions](src/compiler_frontend/ast/expressions/): parsing/type checking/calls/constructors/mutation/options/namespaces.
+- [field_access](src/compiler_frontend/ast/field_access/): fields, receiver calls, collection/map builtins.
+- [statements](src/compiler_frontend/ast/statements/): bodies, declarations, returns, loops, matches, catch, value production.
+- [templates](src/compiler_frontend/ast/templates/): template parse/compose/fold/format/render plans/slots/control flow/reactive metadata.
+    - [template_head_parser](src/compiler_frontend/ast/templates/template_head_parser/): directives, subscriptions, suffix control flow.
+    - [template_control_flow](src/compiler_frontend/ast/templates/template_control_flow/): const eval/folding/validation/remap.
+    - [template_slots](src/compiler_frontend/ast/templates/template_slots/): slot schema, contributions, runtime plan construction.
+    - [styles](src/compiler_frontend/ast/templates/styles/): directive-owned formatters (markdown, raw, whitespace).
+    - [template_types.rs](src/compiler_frontend/ast/templates/template_types.rs), [template_composition.rs](src/compiler_frontend/ast/templates/template_composition.rs), [template_folding.rs](src/compiler_frontend/ast/templates/template_folding.rs), [template_formatting.rs](src/compiler_frontend/ast/templates/template_formatting.rs).
+    - [template_render_units.rs](src/compiler_frontend/ast/templates/template_render_units.rs), [template_render_plan.rs](src/compiler_frontend/ast/templates/template_render_plan.rs), [template_renderability.rs](src/compiler_frontend/ast/templates/template_renderability.rs).
+    - [create_template_node.rs](src/compiler_frontend/ast/templates/create_template_node.rs), [top_level_templates.rs](src/compiler_frontend/ast/templates/top_level_templates.rs), [doc_fragments.rs](src/compiler_frontend/ast/templates/doc_fragments.rs), [error.rs](src/compiler_frontend/ast/templates/error.rs).
+    - [runtime_handoff.rs](src/compiler_frontend/ast/templates/runtime_handoff.rs), [runtime_template_expression.rs](src/compiler_frontend/ast/templates/runtime_template_expression.rs), [reactive_template_metadata.rs](src/compiler_frontend/ast/templates/reactive_template_metadata.rs).
+    - [tir](src/compiler_frontend/ast/templates/tir/): Template IR — AST-local authoritative template representation. kw: TemplateIrStore.
+        - [store.rs](src/compiler_frontend/ast/templates/tir/store.rs), [ids.rs](src/compiler_frontend/ast/templates/tir/ids.rs), [node.rs](src/compiler_frontend/ast/templates/tir/node.rs), [summary.rs](src/compiler_frontend/ast/templates/tir/summary.rs), [validation.rs](src/compiler_frontend/ast/templates/tir/validation.rs): central owned storage + shape metadata.
+        - [builder.rs](src/compiler_frontend/ast/templates/tir/builder.rs), [parser_builder_state.rs](src/compiler_frontend/ast/templates/tir/parser_builder_state.rs): parser-facing direct TIR emission.
+        - [finalize_sync.rs](src/compiler_frontend/ast/templates/tir/finalize_sync.rs): mirror finalized Template state into TIR.
+        - [expression_payload_walker.rs](src/compiler_frontend/ast/templates/tir/expression_payload_walker.rs): shared read-only expression-payload traversal.
+        - [classification.rs](src/compiler_frontend/ast/templates/tir/classification.rs): store-aware TIR shape queries.
+        - [fold.rs](src/compiler_frontend/ast/templates/tir/fold.rs), [formatter_view.rs](src/compiler_frontend/ast/templates/tir/formatter_view.rs), [render_unit.rs](src/compiler_frontend/ast/templates/tir/render_unit.rs): TIR-native fold/format/render-unit prep.
+        - [slot_plan.rs](src/compiler_frontend/ast/templates/tir/slot_plan.rs), [slot_composition.rs](src/compiler_frontend/ast/templates/tir/slot_composition.rs), [wrapper_sets.rs](src/compiler_frontend/ast/templates/tir/wrapper_sets.rs): slot routing and wrapper reuse.
+        - [hir_handoff.rs](src/compiler_frontend/ast/templates/tir/hir_handoff.rs): owned runtime-template trees for HIR lowering.
+- [generic_functions](src/compiler_frontend/ast/generic_functions/): generic templates, calls, inference, instances, diagnostics.
+- [const_values](src/compiler_frontend/ast/const_values/): const fact resolver.
+- [generic_bounds.rs](src/compiler_frontend/ast/generic_bounds.rs): static bound evidence checks.
+
+## HIR + analysis
+
+- [backend-facing semantic IR](src/compiler_frontend/hir/): kw — CFG, locals, TypeId, reachability.
+    - [hir_builder](src/compiler_frontend/hir/hir_builder/), [hir_builder.rs](src/compiler_frontend/hir/hir_builder.rs): AST → HIR lowering state.
+    - [hir_expression](src/compiler_frontend/hir/hir_expression/), [hir_statement](src/compiler_frontend/hir/hir_statement/): lowering implementation owners.
+    - [validation](src/compiler_frontend/hir/validation/): internal invariant checks only.
+    - [reachability.rs](src/compiler_frontend/hir/reachability.rs): function/block/external/map/runtime-cast feature facts.
+    - [reactivity.rs](src/compiler_frontend/hir/reactivity.rs): HIR reactive metadata.
+- [borrow_checker](src/compiler_frontend/analysis/borrow_checker/): HIR side-table borrow facts. kw — exclusivity, moves, aliases.
+    - [engine.rs](src/compiler_frontend/analysis/borrow_checker/engine.rs): fixed-point flow.
+    - [transfer.rs](src/compiler_frontend/analysis/borrow_checker/transfer.rs), [transfer/](src/compiler_frontend/analysis/borrow_checker/transfer/): access policy.
+    - [state.rs](src/compiler_frontend/analysis/borrow_checker/state.rs): lattice.
+    - [diagnostics.rs](src/compiler_frontend/analysis/borrow_checker/diagnostics.rs).
+
+## Backends
+
+- [reachable unsupported-feature checks](src/backends/backend_feature_validation.rs)
+- [external call/package backend support](src/backends/external_package_validation.rs)
+- [shared backend error surface](src/backends/error_types.rs)
+- [JS backend](src/backends/js/): HIR → JS. kw — readable JS, GC baseline, reachable emission.
+    - [emitter.rs](src/backends/js/emitter.rs), [js_expr.rs](src/backends/js/js_expr.rs), [js_statement.rs](src/backends/js/js_statement.rs), [js_function.rs](src/backends/js/js_function.rs), [js_calls.rs](src/backends/js/js_calls.rs)
+    - [runtime](src/backends/js/runtime/): helpers for strings/maps/casts.
+- [Wasm backend](src/backends/wasm/): experimental core Wasm. kw — HIR→LIR, linear memory, emit.
+    - [hir_to_lir](src/backends/wasm/hir_to_lir/): semantic lowering to Wasm LIR.
+    - [lir](src/backends/wasm/lir/): Wasm-neutral low IR.
+    - [emit](src/backends/wasm/emit/): binary emission/sections/validation.
+    - [runtime](src/backends/wasm/runtime/): imports/memory/strings.
+- [HTML-Wasm artifact plan](src/projects/html_project/wasm/): bootstrap/export roots.
+
+## HTML project
+
+- [BackendBuilder implementation](src/projects/html_project/html_project_builder.rs)
+- [HTML document assembly](src/projects/html_project/output_plan.rs), [page_metadata.rs](src/projects/html_project/page_metadata.rs), [document_shell.rs](src/projects/html_project/document_shell.rs), [document_config.rs](src/projects/html_project/document_config.rs)
+- [compile_input.rs](src/projects/html_project/compile_input.rs), [diagnostics.rs](src/projects/html_project/diagnostics.rs), [js_path.rs](src/projects/html_project/js_path.rs), [path_policy.rs](src/projects/html_project/path_policy.rs), [style_directives.rs](src/projects/html_project/style_directives.rs): build inputs/policy.
+- [styles](src/projects/html_project/styles/): $html/$css/$escape_html/$code validation/rendering.
+- [external_js](src/projects/html_project/external_js/): provider-backed JS imports, runtime modules/assets/glue.
+- [external_libraries](src/projects/html_project/external_libraries/): external library resolution for HTML projects.
+- [beandown](src/projects/html_project/beandown/): direct .bd compile/extract support.
+- [tracked_assets.rs](src/projects/html_project/tracked_assets.rs): copied assets.
+- [new_html_project](src/projects/html_project/new_html_project/): scaffold command.
+
+## Tests/tooling
+
+- [integration test runner](src/compiler_tests/integration_test_runner/): manifest fixtures, expectations, execution.
+- [integration fixtures](tests/cases/): expect.toml backend matrices.
+- [subsystem unit tests](src/): `*/tests` and module tests throughout src/.
+- [in-process compiler benchmark API](src/benchmarking/): for xtask/dev tooling.
+- [benchmark/report/check/profile tooling](xtask/)
+- [perf cases/data/summaries](benchmarks/): local-data ignored.
+
+## Docs
+
+- [docs entry point](docs/): comprehensive compiler and language documentation.
+- [compiler architecture overview](docs/compiler-design-overview.md)
+- [language semantics overview](docs/language-overview.md)
+- [memory management design](docs/memory-management-design.md)
+- [codebase style guide](docs/codebase-style-guide.md)
+- [docs website source](docs/src/docs/); [generated output](docs/release/)
+- [language support progress matrix](docs/src/docs/progress/#page.bst)
+- [planned work and implementation plans](docs/roadmap/)

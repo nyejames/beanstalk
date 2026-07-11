@@ -2,7 +2,8 @@
 //!
 //! WHAT: measures the compiler frontend pipeline (Stage 0 through borrow
 //! validation) for a single entry path, collecting total time and per-stage
-//! timings when `detailed_timers` is enabled.
+//! timings when `timers` is enabled (counters additionally require
+//! `benchmark_counters`).
 //! WHY: avoids subprocess noise while reusing the exact same setup path as
 //! `bean check`.
 
@@ -81,8 +82,9 @@ impl std::error::Error for FrontendBenchmarkError {}
 /// WHY: this is the narrow dev-tooling entry point that keeps benchmark
 /// orchestration out of the compiler frontend while reusing production setup.
 ///
-/// Stage timings and counters are only populated when the `detailed_timers`
-/// feature is enabled and a collection scope is active during compilation.
+/// Stage timings are populated when the `timers` feature is enabled and a
+/// collection scope is active during compilation. Counters are additionally
+/// populated when `benchmark_counters` is also enabled.
 pub fn run_frontend_benchmark(
     options: FrontendBenchmarkOptions,
 ) -> Result<FrontendBenchmarkReport, FrontendBenchmarkError> {
@@ -113,7 +115,7 @@ pub fn run_frontend_benchmark(
 
     let project_builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
 
-    #[cfg(feature = "detailed_timers")]
+    #[cfg(feature = "timers")]
     crate::compiler_frontend::compiler_messages::compiler_dev_logging::start_benchmark_collection(
         true,
     );
@@ -126,7 +128,7 @@ pub fn run_frontend_benchmark(
     } = match bootstrap_project_build(&project_builder, valid_path) {
         Ok(bootstrap) => bootstrap,
         Err(messages) => {
-            #[cfg(feature = "detailed_timers")]
+            #[cfg(feature = "timers")]
             let _ = crate::compiler_frontend::compiler_messages::compiler_dev_logging::stop_and_collect_benchmark_observations();
 
             return Err(FrontendBenchmarkError {
@@ -151,14 +153,14 @@ pub fn run_frontend_benchmark(
         Err(messages) => messages,
     };
 
-    #[cfg(feature = "detailed_timers")]
+    #[cfg(feature = "timers")]
     let raw_observations =
         crate::compiler_frontend::compiler_messages::compiler_dev_logging::stop_and_collect_benchmark_observations();
 
-    #[cfg(not(feature = "detailed_timers"))]
+    #[cfg(not(feature = "timers"))]
     let stages: Vec<FrontendBenchmarkStage> = Vec::new();
 
-    #[cfg(not(feature = "detailed_timers"))]
+    #[cfg(not(all(feature = "timers", feature = "benchmark_counters")))]
     let counters: Vec<FrontendBenchmarkCounter> = Vec::new();
 
     let total_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -169,7 +171,7 @@ pub fn run_frontend_benchmark(
         });
     }
 
-    #[cfg(feature = "detailed_timers")]
+    #[cfg(feature = "timers")]
     let stages = raw_observations
         .timings
         .into_iter()
@@ -179,7 +181,7 @@ pub fn run_frontend_benchmark(
         })
         .collect();
 
-    #[cfg(feature = "detailed_timers")]
+    #[cfg(all(feature = "timers", feature = "benchmark_counters"))]
     let counters = raw_observations
         .counters
         .into_iter()

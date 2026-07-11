@@ -25,53 +25,56 @@ const COUNTER_MOVEMENT_LIMIT: usize = 3;
 const RATIO_LIMIT: usize = 5;
 const INVESTIGATION_LIMIT: usize = 3;
 const MEANINGFUL_COUNTER_RATIO: f64 = 0.03;
+const UNATTRIBUTED_LIMIT: usize = 3;
+const UNATTRIBUTED_MS_THRESHOLD: f64 = 100.0;
+const UNATTRIBUTED_RATIO_THRESHOLD: f64 = 0.25;
 
 const RATIO_CATALOG: &[RatioSpec] = &[
     RatioSpec::new(
-        "file_prepare_ms/source_file_count",
-        "file_prepare_ms",
+        "frontend.file_prepare/source_file_count",
+        "frontend.file_prepare",
         "source_file_count",
         "ms/file",
         Some("inspect tokenization, header parsing, string-table merge/remap"),
     ),
     RatioSpec::new(
-        "file_prepare_ms/source_byte_count",
-        "file_prepare_ms",
+        "frontend.file_prepare/source_byte_count",
+        "frontend.file_prepare",
         "source_byte_count",
         "ms/byte",
         None,
     ),
     RatioSpec::new(
-        "file_prepare_ms/token_count",
-        "file_prepare_ms",
+        "frontend.file_prepare/token_count",
+        "frontend.file_prepare",
         "token_count",
         "ms/token",
         None,
     ),
     RatioSpec::new(
-        "file_prepare_ms/string_table_delta_entries_scanned",
-        "file_prepare_ms",
+        "frontend.file_prepare/string_table_delta_entries_scanned",
+        "frontend.file_prepare",
         "string_table_delta_entries_scanned",
         "ms/delta-entry",
         Some("inspect string-table delta merge/remap pressure"),
     ),
     RatioSpec::new(
-        "file_prepare_ms/file_prepare_output_remap_calls",
-        "file_prepare_ms",
+        "frontend.file_prepare/file_prepare_output_remap_calls",
+        "frontend.file_prepare",
         "file_prepare_output_remap_calls",
         "ms/output-remap",
         Some("inspect unconditional per-file payload remapping"),
     ),
     RatioSpec::new(
-        "dependency_sort_ms/dependency_edge_count",
-        "dependency_sort_ms",
+        "frontend.dependency_sort/dependency_edge_count",
+        "frontend.dependency_sort",
         "dependency_edge_count",
         "ms/edge",
         Some("inspect duplicate edges or graph traversal"),
     ),
     RatioSpec::new(
-        "ast_ms/ast_header_count",
-        "ast_ms",
+        "frontend.ast/ast_header_count",
+        "frontend.ast",
         "ast_header_count",
         "ms/header",
         None,
@@ -119,57 +122,57 @@ const RATIO_CATALOG: &[RatioSpec] = &[
         None,
     ),
     RatioSpec::new(
-        "ast_ms/type_compatibility_cache_lookups",
-        "ast_ms",
+        "frontend.ast/type_compatibility_cache_lookups",
+        "frontend.ast",
         "type_compatibility_cache_lookups",
         "ms/lookup",
         None,
     ),
     RatioSpec::new(
-        "ast_ms/type_compatibility_cache_misses",
-        "ast_ms",
+        "frontend.ast/type_compatibility_cache_misses",
+        "frontend.ast",
         "type_compatibility_cache_misses",
         "ms/miss",
         Some("inspect compatibility caching or repeated type checks"),
     ),
     RatioSpec::new(
-        "hir_ms/hir_statement_count",
-        "hir_ms",
+        "frontend.hir/hir_statement_count",
+        "frontend.hir",
         "hir_statement_count",
         "ms/statement",
         None,
     ),
     RatioSpec::new(
-        "borrow_ms/borrow_conflict_check_count",
-        "borrow_ms",
+        "frontend.borrow/borrow_conflict_check_count",
+        "frontend.borrow",
         "borrow_conflict_check_count",
         "ms/check",
         Some("inspect borrow state representation"),
     ),
     RatioSpec::new(
-        "borrow_ms/borrow_state_join_count",
-        "borrow_ms",
+        "frontend.borrow/borrow_state_join_count",
+        "frontend.borrow",
         "borrow_state_join_count",
         "ms/join",
         Some("inspect borrow state join pressure"),
     ),
     RatioSpec::new(
-        "borrow_ms/borrow_place_access_count",
-        "borrow_ms",
+        "frontend.borrow/borrow_place_access_count",
+        "frontend.borrow",
         "borrow_place_access_count",
         "ms/place-access",
         None,
     ),
     RatioSpec::new(
-        "borrow_ms/borrow_statement_fact_count",
-        "borrow_ms",
+        "frontend.borrow/borrow_statement_fact_count",
+        "frontend.borrow",
         "borrow_statement_fact_count",
         "ms/statement-fact",
         None,
     ),
     RatioSpec::new(
-        "borrow_ms/borrow_value_fact_count",
-        "borrow_ms",
+        "frontend.borrow/borrow_value_fact_count",
+        "frontend.borrow",
         "borrow_value_fact_count",
         "ms/value-fact",
         None,
@@ -230,6 +233,7 @@ pub(crate) struct SuiteReport {
     pub(crate) latest_commit: Option<String>,
     pub(crate) comparison: BenchmarkComparison,
     pub(crate) slowest_cases: Vec<SlowCaseReport>,
+    pub(crate) unattributed_cases: Vec<UnattributedCaseReport>,
     pub(crate) stage_movements: Vec<BenchmarkStageMovement>,
     pub(crate) counter_movements: Vec<CounterMovement>,
     pub(crate) ratios: Vec<RatioReport>,
@@ -241,6 +245,13 @@ pub(crate) struct SlowCaseReport {
     pub(crate) name: String,
     pub(crate) mean_ms: f64,
     pub(crate) stages: Vec<BenchmarkMetric>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct UnattributedCaseReport {
+    pub(crate) name: String,
+    pub(crate) unattributed_ms: f64,
+    pub(crate) unattributed_ratio: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -360,6 +371,7 @@ fn calculate_suite_report(
     let comparison = BenchmarkComparison::new(&current_cases, previous_cases.as_deref());
 
     let slowest_cases = calculate_slowest_cases(&current_cases);
+    let unattributed_cases = calculate_unattributed_cases(suite_kind, &current_cases);
     let stage_movements = calculate_meaningful_stage_movements(&comparison);
     let counter_movements = calculate_counter_movements(&current_cases, previous_cases.as_deref());
     let ratios = calculate_ratios(&current_cases);
@@ -379,6 +391,7 @@ fn calculate_suite_report(
         latest_commit: selection.latest.commit.clone(),
         comparison,
         slowest_cases,
+        unattributed_cases,
         stage_movements,
         counter_movements,
         ratios,
@@ -405,6 +418,107 @@ fn calculate_slowest_cases(cases: &[BenchmarkCaseResult]) -> Vec<SlowCaseReport>
             }
         })
         .collect()
+}
+
+fn calculate_unattributed_cases(
+    suite_kind: BenchmarkSuiteKind,
+    cases: &[BenchmarkCaseResult],
+) -> Vec<UnattributedCaseReport> {
+    if suite_kind != BenchmarkSuiteKind::EndToEndCli {
+        return Vec::new();
+    }
+
+    let mut reports = Vec::new();
+    for case in cases {
+        let Some(attributed_ms) = attributed_wall_time_ms(case) else {
+            continue;
+        };
+
+        let unattributed_ms = (case.mean_ms - attributed_ms).max(0.0);
+        let unattributed_ratio = if case.mean_ms > 0.0 {
+            unattributed_ms / case.mean_ms
+        } else {
+            0.0
+        };
+
+        if unattributed_ms < UNATTRIBUTED_MS_THRESHOLD
+            && unattributed_ratio < UNATTRIBUTED_RATIO_THRESHOLD
+        {
+            continue;
+        }
+
+        reports.push(UnattributedCaseReport {
+            name: case.case_name.clone(),
+            unattributed_ms,
+            unattributed_ratio,
+        });
+    }
+
+    reports.sort_by(|left, right| right.unattributed_ms.total_cmp(&left.unattributed_ms));
+    reports.truncate(UNATTRIBUTED_LIMIT);
+    reports
+}
+
+fn attributed_wall_time_ms(case: &BenchmarkCaseResult) -> Option<f64> {
+    // Top-level non-nested pipeline phases for each command. These are the
+    // dotted metrics emitted by the concise `timers` feature under
+    // BST_TIMERS=bench. We deliberately exclude `.total` and `_total`
+    // wrapper metrics (e.g. command.check.total, build_project.total,
+    // output.write_total) because they nest the sub-phases listed here and
+    // would double-count if summed alongside them.
+    let command_phase_names = match case.command.as_str() {
+        "check" => &[
+            "command.check.path_validation",
+            "command.check.builder_construction",
+            "command.check.bootstrap",
+            "command.check.compile_project_frontend",
+            "command.check.message_rendering",
+        ][..],
+        "build" => &[
+            "build_project.path_validation",
+            "build_project.bootstrap",
+            "build_project.compile_project_frontend",
+            "build_project.backend",
+            "command.build.output_write",
+        ][..],
+        _ => &[][..],
+    };
+
+    let command_phase_sum = command_phase_names
+        .iter()
+        .filter_map(|name| metric_value(&case.observations.stage_timings, name))
+        .sum::<f64>();
+    if command_phase_sum > 0.0 {
+        return Some(command_phase_sum);
+    }
+
+    // Legacy benchmark records only carried lower-level frontend stage timers.
+    // Keeping this fallback makes old attribution holes visible in bench-report
+    // instead of hiding them until all command-phase metrics are present.
+    let fallback_sum = case
+        .observations
+        .stage_timings
+        .iter()
+        .filter(|metric| !is_total_wrapper_metric(&metric.name))
+        .map(|metric| metric.value)
+        .sum::<f64>();
+    if fallback_sum > 0.0 {
+        Some(fallback_sum)
+    } else {
+        None
+    }
+}
+
+/// Whether a metric name is a total/wrapper that nests sub-phases.
+///
+/// WHAT: matches dotted totals (e.g. `command.check.total`,
+/// `build_project.total`, `stage0.single_file.total`) and underscore
+/// totals (e.g. `output.write_total`, `config.load_total`) so the
+/// fallback attribution sum does not double-count nested phases.
+/// WHY: both naming conventions exist in the current metric set;
+/// a single predicate keeps the filter consistent as new stages land.
+fn is_total_wrapper_metric(name: &str) -> bool {
+    name.ends_with(".total") || name.ends_with("_total")
 }
 
 fn calculate_meaningful_stage_movements(
@@ -518,10 +632,31 @@ fn calculate_ratios(cases: &[BenchmarkCaseResult]) -> Vec<RatioReport> {
 }
 
 fn metric_value(metrics: &[BenchmarkMetric], name: &str) -> Option<f64> {
-    metrics
+    let exact = metrics
         .iter()
         .find(|metric| metric.name == name)
-        .map(|metric| metric.value)
+        .map(|metric| metric.value);
+    if exact.is_some() {
+        return exact;
+    }
+
+    legacy_stage_metric_alias(name).and_then(|legacy_name| {
+        metrics
+            .iter()
+            .find(|metric| metric.name == legacy_name)
+            .map(|metric| metric.value)
+    })
+}
+
+fn legacy_stage_metric_alias(name: &str) -> Option<&'static str> {
+    match name {
+        "frontend.file_prepare" => Some("file_prepare_ms"),
+        "frontend.dependency_sort" => Some("dependency_sort_ms"),
+        "frontend.ast" => Some("ast_ms"),
+        "frontend.hir" => Some("hir_ms"),
+        "frontend.borrow" => Some("borrow_ms"),
+        _ => None,
+    }
 }
 
 fn calculate_investigation_hints(
@@ -672,6 +807,7 @@ pub(crate) fn format_benchmark_report(report: &BenchmarkReport) -> String {
         ));
 
         append_slowest_cases(&mut output, suite);
+        append_unattributed_cases(&mut output, suite);
         append_stage_movement(&mut output, suite);
         append_counter_movement(&mut output, suite);
         append_ratios(&mut output, suite);
@@ -712,6 +848,27 @@ fn append_slowest_cases(output: &mut String, suite: &SuiteReport) {
                 stage_text
             ));
         }
+    }
+}
+
+fn append_unattributed_cases(output: &mut String, suite: &SuiteReport) {
+    if suite.suite_kind != BenchmarkSuiteKind::EndToEndCli {
+        return;
+    }
+
+    output.push_str("\nUnattributed wall time:\n");
+    if suite.unattributed_cases.is_empty() {
+        output.push_str("  none\n");
+        return;
+    }
+
+    for case in &suite.unattributed_cases {
+        output.push_str(&format!(
+            "  {:<28} ~{}ms ({:.0}%)\n",
+            case.name,
+            case.unattributed_ms.round() as i64,
+            case.unattributed_ratio * 100.0
+        ));
     }
 }
 

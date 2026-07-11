@@ -24,8 +24,11 @@ use crate::compiler_frontend::symbols::string_interning::StringId;
 /// keeps backend lowering uniform while preserving distinct semantic type identity.
 #[derive(Debug, Clone)]
 pub enum HirVariantCarrier {
-    Choice { choice_id: ChoiceId },
+    Choice {
+        choice_id: ChoiceId,
+    },
     Option,
+    #[cfg(test)]
     Fallible,
 }
 
@@ -241,6 +244,7 @@ pub enum HirExpressionKind {
 
 // Option none/some are represented through VariantConstruct with HirVariantCarrier::Option.
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FallibleCarrierVariant {
     Success,

@@ -6,6 +6,7 @@
 # Other comment lines are ignored
 
 # group: core
+check benchmark-root-single-file.bst
 check benchmarks/speed-test.bst
 build benchmarks/speed-test.bst
 
@@ -34,6 +35,8 @@ check benchmarks/import-fanout
 build benchmarks/import-fanout
 check benchmarks/external-js-imports
 build benchmarks/external-js-imports
+check benchmarks/module-root-stress
+build benchmarks/module-root-stress
 check benchmarks/adversarial/import-external-churn
 build benchmarks/adversarial/import-external-churn
 

@@ -153,7 +153,8 @@ pub(crate) fn infer_generic_nominal_constructor(
             instance_type_id,
             input.location.clone(),
             &evidence_context,
-        )?;
+        )
+        .map_err(CallValidationError::Diagnostic)?;
     }
 
     Ok(GenericNominalInference {

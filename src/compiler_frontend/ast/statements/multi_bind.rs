@@ -11,7 +11,6 @@
 //! Future surfaces (e.g. pattern-match blocks) should be added by extending the classifier, not by
 //! broadening regular declaration syntax.
 
-#![allow(clippy::result_large_err)]
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind,
@@ -45,6 +44,17 @@ use crate::compiler_frontend::utilities::token_scan::has_top_level_comma_before_
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::collections::HashSet;
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: every multi-bind parser, validation, RHS classification, and target-resolution helper
+/// in this module returns `Result<T, Box<CompilerDiagnostic>>` through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when stored
+/// directly in a `Result` variant. Boxing the error at the owner boundary keeps the `Result`
+/// envelope small without changing `DiagnosticBag`, `CompilerMessages`, or any shared error type.
+/// Already-boxed helpers (type resolution) flow through unchanged; still-plain external helpers
+/// (binding-target parsing, expression parsing) are adapted at their narrow call sites below.
+type MultiBindResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 struct ResolvedMultiBindTargets {
     targets: Vec<MultiBindTarget>,
     new_declarations: Vec<Declaration>,
@@ -59,7 +69,7 @@ pub(crate) fn parse_multi_bind_statement(
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Option<AstNode>, CompilerDiagnostic> {
+) -> MultiBindResult<Option<AstNode>> {
     if !has_top_level_comma_before_statement_end(token_stream) {
         return Ok(None);
     }
@@ -108,14 +118,14 @@ pub(crate) fn parse_multi_bind_statement(
     let rhs_slots = extract_rhs_slot_types(&rhs_expression, type_interner.environment())?;
 
     if rhs_slots.len() != parsed_targets.len() {
-        return Err(CompilerDiagnostic::invalid_multi_bind(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::ArityMismatch {
                 expected: parsed_targets.len(),
                 found: rhs_slots.len(),
             },
             None,
             rhs_expression.location.clone(),
-        ));
+        )));
     }
 
     let resolved_targets = resolve_multi_bind_targets(
@@ -144,7 +154,7 @@ fn validate_multi_bind_target_identifiers(
     parsed_targets: &[BindingTargetSyntax],
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindResult<()> {
     for target in parsed_targets {
         ensure_not_keyword_shadow_identifier(
             target.name,
@@ -153,12 +163,12 @@ fn validate_multi_bind_target_identifiers(
         )?;
 
         if context.is_assignment_target_unavailable(target.name) {
-            return Err(CompilerDiagnostic::invalid_assignment_target(
+            return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
                 InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
                 Some(target.name),
                 None,
                 target.location.to_owned(),
-            ));
+            )));
         }
 
         if context.get_reference(&target.name).is_none()
@@ -182,24 +192,24 @@ fn validate_multi_bind_target_identifiers(
 fn parse_target_list(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
-) -> Result<Option<Vec<BindingTargetSyntax>>, CompilerDiagnostic> {
+) -> MultiBindResult<Option<Vec<BindingTargetSyntax>>> {
     let start_index = token_stream.index;
     let mut parsed_targets = Vec::new();
     let mut saw_comma = false;
 
     loop {
         if token_stream.current_token_kind() == &TokenKind::This {
-            return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+            return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
                 InvalidMultiBindReason::ThisTargetReserved,
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         let TokenKind::Symbol(name) = token_stream.current_token_kind().to_owned() else {
-            return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+            return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
                 InvalidMultiBindReason::ExpectedTargetName,
                 token_stream.current_location(),
-            ));
+            )));
         };
 
         token_stream.advance();
@@ -216,27 +226,27 @@ fn parse_target_list(
                     token_stream.current_token_kind(),
                     TokenKind::Comma | TokenKind::Assign | TokenKind::Newline | TokenKind::End
                 ) {
-                    return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+                    return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
                         InvalidMultiBindReason::MissingTargetAfterComma,
                         token_stream.current_location(),
-                    ));
+                    )));
                 }
             }
 
             TokenKind::Assign => break,
 
             TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
-                return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+                return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
                     InvalidMultiBindReason::MissingAssignmentOperator,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             _ => {
-                return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+                return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
                     InvalidMultiBindReason::InvalidTokenAfterTarget,
                     token_stream.current_location(),
-                ));
+                )));
             }
         }
     }
@@ -254,15 +264,15 @@ fn parse_target_list(
 fn validate_target_mutability(
     target_syntax: &BindingTargetSyntax,
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindResult<()> {
     if target_syntax.binding_mode.is_mutable()
         && target_syntax.type_annotation.eq(&ParsedTypeRef::Inferred)
     {
-        return Err(CompilerDiagnostic::invalid_multi_bind(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::MutableTargetNeedsExplicitType,
             Some(target_syntax.name),
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     Ok(())
@@ -272,15 +282,15 @@ fn validate_target_mutability(
 fn validate_unique_target_names(
     parsed_targets: &[BindingTargetSyntax],
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindResult<()> {
     let mut seen_target_names = HashSet::new();
     for target in parsed_targets {
         if !seen_target_names.insert(target.name) {
-            return Err(CompilerDiagnostic::invalid_multi_bind(
+            return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
                 InvalidMultiBindReason::DuplicateTarget,
                 Some(target.name),
                 target.location.clone(),
-            ));
+            )));
         }
     }
 
@@ -293,15 +303,15 @@ fn parse_multi_bind_rhs_expression(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> MultiBindResult<Expression> {
     if matches!(
         token_stream.current_token_kind(),
         TokenKind::Newline | TokenKind::End | TokenKind::Eof
     ) {
-        return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
             InvalidMultiBindReason::MissingRightHandExpression,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     let mut inferred_rhs_type = ExpectedType::Infer;
@@ -313,13 +323,14 @@ fn parse_multi_bind_rhs_expression(
         &ValueMode::ImmutableOwned,
         false,
         string_table,
-    )?;
+    )
+    .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
 
     if token_stream.current_token_kind() == &TokenKind::Comma {
-        return Err(CompilerDiagnostic::invalid_multi_bind_syntax(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind_syntax(
             InvalidMultiBindReason::MultipleRightHandExpressions,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     Ok(rhs_expression)
@@ -336,7 +347,7 @@ fn resolve_known_slot_types(
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Vec<Option<TypeId>>, CompilerDiagnostic> {
+) -> MultiBindResult<Vec<Option<TypeId>>> {
     let mut known = Vec::with_capacity(parsed_targets.len());
 
     for target_syntax in parsed_targets {
@@ -362,7 +373,7 @@ fn resolve_known_slot_types(
 fn classify_multi_bind_rhs(
     expression: &Expression,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> MultiBindResult<()> {
     match &expression.kind {
         ExpressionKind::FunctionCall { .. }
         | ExpressionKind::HandledFallibleFunctionCall { .. }
@@ -371,29 +382,29 @@ fn classify_multi_bind_rhs(
 
         ExpressionKind::ValueBlock { .. } => {
             let Some(tuple_fields) = type_environment.tuple_field_ids(expression.type_id) else {
-                return Err(CompilerDiagnostic::invalid_multi_bind(
+                return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
                     InvalidMultiBindReason::RhsNotMultiValue,
                     None,
                     expression.location.clone(),
-                ));
+                )));
             };
 
             if tuple_fields.len() < 2 {
-                return Err(CompilerDiagnostic::invalid_multi_bind(
+                return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
                     InvalidMultiBindReason::RhsNotMultiValue,
                     None,
                     expression.location.clone(),
-                ));
+                )));
             }
 
             Ok(())
         }
 
-        _ => Err(CompilerDiagnostic::invalid_multi_bind(
+        _ => Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::UnsupportedRhs,
             None,
             expression.location.clone(),
-        )),
+        ))),
     }
 }
 
@@ -401,15 +412,15 @@ fn classify_multi_bind_rhs(
 fn extract_rhs_slot_types(
     rhs_expression: &Expression,
     type_environment: &TypeEnvironment,
-) -> Result<Vec<TypeId>, CompilerDiagnostic> {
+) -> MultiBindResult<Vec<TypeId>> {
     classify_multi_bind_rhs(rhs_expression, type_environment)?;
 
     let Some(tuple_fields) = type_environment.tuple_field_ids(rhs_expression.type_id) else {
-        return Err(CompilerDiagnostic::invalid_multi_bind(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::RhsNotMultiValue,
             None,
             rhs_expression.location.clone(),
-        ));
+        )));
     };
 
     Ok(tuple_fields.to_vec())
@@ -425,7 +436,7 @@ fn resolve_multi_bind_targets(
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ResolvedMultiBindTargets, CompilerDiagnostic> {
+) -> MultiBindResult<ResolvedMultiBindTargets> {
     let mut resolved_bindings = Vec::with_capacity(parsed_targets.len());
     let mut new_declarations = Vec::new();
 
@@ -509,41 +520,41 @@ fn resolve_existing_target(
     _slot_index: usize,
     _string_table: &StringTable,
     _type_environment: &TypeEnvironment,
-) -> Result<MultiBindTarget, CompilerDiagnostic> {
+) -> MultiBindResult<MultiBindTarget> {
     if target_syntax.binding_mode.is_mutable() {
-        return Err(CompilerDiagnostic::invalid_multi_bind(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::ExistingTargetMutableMarker,
             Some(target_syntax.name),
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     if !existing_declaration.value.value_mode.is_mutable() {
-        return Err(CompilerDiagnostic::invalid_multi_bind(
+        return Err(Box::new(CompilerDiagnostic::invalid_multi_bind(
             InvalidMultiBindReason::ExistingTargetImmutable,
             Some(target_syntax.name),
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     if let Some(explicit_type_id) = explicit_type_id
         && *explicit_type_id != existing_declaration.value.type_id
     {
-        return Err(CompilerDiagnostic::type_mismatch(
+        return Err(Box::new(CompilerDiagnostic::type_mismatch(
             existing_declaration.value.type_id,
             *explicit_type_id,
             TypeMismatchContext::General,
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     if existing_declaration.value.type_id != slot_type {
-        return Err(CompilerDiagnostic::type_mismatch(
+        return Err(Box::new(CompilerDiagnostic::type_mismatch(
             existing_declaration.value.type_id,
             slot_type,
             TypeMismatchContext::General,
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     Ok(MultiBindTarget {
@@ -567,19 +578,19 @@ fn resolve_new_target_data_type(
     _slot_index: usize,
     _string_table: &StringTable,
     type_environment: &TypeEnvironment,
-) -> Result<DataType, CompilerDiagnostic> {
+) -> MultiBindResult<DataType> {
     let Some(explicit_type_id) = explicit_type_id else {
         // Display-only diagnostic spelling for the declaration.
         return Ok(diagnostic_type_spelling(slot_type, type_environment));
     };
 
     if explicit_type_id != slot_type {
-        return Err(CompilerDiagnostic::type_mismatch(
+        return Err(Box::new(CompilerDiagnostic::type_mismatch(
             explicit_type_id,
             slot_type,
             TypeMismatchContext::General,
             target_syntax.location.clone(),
-        ));
+        )));
     }
 
     // Return the explicit annotation's diagnostic spelling if available.
@@ -610,7 +621,7 @@ fn resolve_target_explicit_type(
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<Option<(TypeId, DataType)>, CompilerDiagnostic> {
+) -> MultiBindResult<Option<(TypeId, DataType)>> {
     if target_syntax.type_annotation.eq(&ParsedTypeRef::Inferred) {
         return Ok(None);
     }
@@ -655,8 +666,7 @@ fn resolve_target_explicit_type(
             &mut type_resolution_context,
             string_table,
             Some(context),
-        )
-        .map_err(|diagnostic| *diagnostic)?
+        )?
     };
 
     if matches!(resolved_annotation.diagnostic_type, DataType::Inferred) {
@@ -667,8 +677,7 @@ fn resolve_target_explicit_type(
         &resolved_annotation.diagnostic_type,
         type_interner.environment_mut_for_derived_types(),
         &target_syntax.location,
-    )
-    .map_err(|diagnostic| *diagnostic)?;
+    )?;
 
     Ok(Some((type_id, resolved_annotation.diagnostic_type)))
 }

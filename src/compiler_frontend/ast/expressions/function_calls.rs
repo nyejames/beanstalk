@@ -622,11 +622,16 @@ fn route_argument_slot_before_value_parse(
         }
 
         if *request.positional_cursor >= occupied_slots.len() {
+            let callee_name = match request.named_arguments {
+                NamedArgumentSyntax::Supported { callee_name }
+                | NamedArgumentSyntax::UnsupportedCall { callee_name } => callee_name,
+                NamedArgumentSyntax::UnsupportedBuiltinMember { .. } => None,
+            };
             return Err(CompilerDiagnostic::invalid_call_shape(
                 InvalidCallShapeReason::ExtraPositionalArgument {
                     expected_count: expectations.len(),
                 },
-                None,
+                callee_name,
                 request.argument_location,
             )
             .into());

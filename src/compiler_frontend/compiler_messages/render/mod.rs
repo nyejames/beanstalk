@@ -16,6 +16,7 @@ mod declarations;
 mod import_config;
 mod paths;
 mod payload;
+mod suggestions;
 mod syntax;
 mod templates;
 
@@ -27,6 +28,7 @@ pub(crate) use declarations::*;
 pub(crate) use import_config::*;
 pub(crate) use paths::*;
 pub(crate) use payload::*;
+pub(crate) use suggestions::*;
 pub(crate) use syntax::*;
 pub(crate) use templates::*;
 
@@ -44,6 +46,9 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::display::display_type;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::source_libraries::root_file::{
+    hash_root_file_name_from_import_component, import_component_is_config_file,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
@@ -203,6 +208,21 @@ pub(crate) fn invalid_template_directive_message(
         }
         InvalidTemplateDirectiveReason::DirectiveNotAllowedHere => {
             format!("Template directive '{name}' is not allowed here.")
+        }
+        InvalidTemplateDirectiveReason::UnexpectedArguments => {
+            format!("`${name}` does not take arguments. Write `${name}:` instead.")
+        }
+        InvalidTemplateDirectiveReason::EmptyArguments => {
+            format!("`${name}()` has empty parentheses. Remove the parentheses or provide an argument.")
+        }
+        InvalidTemplateDirectiveReason::InvalidSlotTarget => {
+            "`$slot` accepts no argument, a string name, or a positive whole-number position.\n                 Use `$slot`, `$slot(\"title\")`, or `$slot(1)`.".to_owned()
+        }
+        InvalidTemplateDirectiveReason::InvalidInsertTarget => {
+            "`$insert(...)` requires a string slot name.\n                 Use `$insert(\"title\")`.".to_owned()
+        }
+        InvalidTemplateDirectiveReason::InvalidChildrenArgument => {
+            "`$children(...)` requires one wrapper template or string argument.\n                 Example: `$children([:<li>[$slot]</li>])`.".to_owned()
         }
     }
 }
@@ -395,7 +415,12 @@ pub(crate) fn invalid_choice_variant_message(
     let variant_name = variant_name
         .map(|name| string_table.resolve(name).to_owned())
         .unwrap_or_default();
-    let available_variants = if available_variants.is_empty() {
+
+    // Keep name suggestions consistent across named arguments, fields and choice variants.
+    let variant_suggestion =
+        closest_name_suggestion(&variant_name, available_variants, string_table);
+
+    let available_variants_hint = if available_variants.is_empty() {
         String::new()
     } else {
         let names = available_variants
@@ -403,7 +428,7 @@ pub(crate) fn invalid_choice_variant_message(
             .map(|name| string_table.resolve(*name).to_owned())
             .collect::<Vec<_>>()
             .join(", ");
-        format!(". Available variants: [{names}]")
+        format!(" Available variants: [{names}].")
     };
 
     match reason {
@@ -426,9 +451,14 @@ pub(crate) fn invalid_choice_variant_message(
         InvalidChoiceVariantReason::MissingVariants => {
             "Choice declarations must define at least one variant.".to_owned()
         }
-        InvalidChoiceVariantReason::UnknownVariant => {
-            format!("Unknown variant '{choice_name}::{variant_name}'{available_variants}.")
-        }
+        InvalidChoiceVariantReason::UnknownVariant => match variant_suggestion.as_deref() {
+            Some(suggested) => format!(
+                "Unknown variant '{choice_name}::{variant_name}'. Did you mean '{suggested}'?{available_variants_hint}"
+            ),
+            None => {
+                format!("Unknown variant '{choice_name}::{variant_name}'.{available_variants_hint}")
+            }
+        },
         InvalidChoiceVariantReason::UnitVariantWithParentheses => {
             format!(
                 "Unit variant '{choice_name}::{variant_name}' cannot be called with empty parentheses."
@@ -575,26 +605,28 @@ pub(crate) fn invalid_expression_message() -> String {
 
 /// Determine which special file name is referenced by an import path.
 ///
-/// WHAT: inspects path components to find `#mod`, `#page`, or `#config` references.
+/// WHAT: inspects path components to find a hash root or canonical config reference.
 /// WHY: the direct-special-file diagnostic covers all special files, and renderers
 /// should name the specific file when possible.
 pub(crate) fn special_file_name_from_path(
     path: &InternedPath,
     string_table: &StringTable,
-) -> &'static str {
+) -> String {
+    // Hash-prefixed files are unambiguous even when an earlier folder is named `config`.
     for component in path.as_components() {
         let segment = string_table.resolve(*component);
-        if segment == "#mod" || segment == "#mod.bst" {
-            return "#mod.bst";
-        }
-        if segment == "#page" || segment == "#page.bst" {
-            return "#page.bst";
-        }
-        if segment == "#config" || segment == "#config.bst" {
-            return "#config.bst";
+        if let Some(file_name) = hash_root_file_name_from_import_component(segment) {
+            return file_name;
         }
     }
-    "special file"
+
+    for component in path.as_components() {
+        let segment = string_table.resolve(*component);
+        if import_component_is_config_file(segment) {
+            return "config.bst".to_owned();
+        }
+    }
+    "special file".to_owned()
 }
 
 fn named_value_or_default(

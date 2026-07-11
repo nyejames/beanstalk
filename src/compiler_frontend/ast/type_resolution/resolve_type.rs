@@ -92,7 +92,7 @@ pub(crate) fn resolve_parsed_type_annotation(
                             // Literal invalid values (zero, overflow) must still be rejected.
                             let is_non_constant_because_no_scope = scope_context.is_none()
                                 && matches!(
-                                    &diagnostic.payload,
+                                    &diagnostic.as_diagnostic().payload,
                                     crate::compiler_frontend::compiler_messages::DiagnosticPayload::InvalidCollectionType {
                                         reason: InvalidCollectionTypeReason::CapacityNotConstant,
                                         ..
@@ -106,7 +106,7 @@ pub(crate) fn resolve_parsed_type_annotation(
                                     string_table,
                                 );
                             }
-                            return Err(Box::new(diagnostic));
+                            return Err(diagnostic.into_boxed());
                         }
                     }
                 }
@@ -346,7 +346,9 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
         DataType::Char => Some(type_environment.builtins().char),
         DataType::Range => Some(type_environment.builtins().range),
         DataType::None => Some(type_environment.builtins().none),
-        DataType::Template | DataType::TemplateWrapper => Some(type_environment.builtins().string),
+        DataType::Template => Some(type_environment.builtins().string),
+        #[cfg(test)]
+        DataType::TemplateWrapper => Some(type_environment.builtins().string),
         DataType::True | DataType::False => Some(type_environment.builtins().bool),
         DataType::Option(inner) => {
             let inner_id = resolve_diagnostic_type_to_type_id_opt(inner, type_environment)?;
@@ -357,6 +359,7 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
             let error_id = resolve_diagnostic_type_to_type_id_opt(error, type_environment)?;
             Some(type_environment.intern_fallible_carrier(success_id, error_id))
         }
+        #[cfg(test)]
         DataType::Reference(inner) => {
             resolve_diagnostic_type_to_type_id_opt(inner, type_environment)
         }
@@ -477,9 +480,9 @@ pub(crate) fn returns_diagnostic_type_to_type_id_opt(
     }
 }
 
-// -----------------
+// ------------------------------------
 //  Type resolution
-// -----------------
+// ------------------------------------
 
 pub(crate) fn resolve_type(
     data_type: &DataType,
@@ -543,6 +546,7 @@ pub(crate) fn resolve_type(
 
             Ok(DataType::Option(Box::new(resolved_inner)))
         }
+        #[cfg(test)]
         DataType::Reference(inner) => Ok(DataType::Reference(Box::new(resolve_type(
             inner,
             location,

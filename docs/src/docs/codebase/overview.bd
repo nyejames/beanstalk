@@ -1,0 +1,64 @@
+# Codebase documentation
+
+`docs/src/docs/codebase/**` owns compiler architecture, memory design, design scope, implementation style, testing and validation.
+
+`docs/language-overview.md` owns compiler-facing language semantics.
+
+Use the progress matrix for current support. Use the roadmap for sequencing and unaccepted proposals.
+
+## Core reading
+
+- `docs/src/docs/codebase/style-guide/style-guide.bd`
+- `docs/src/docs/codebase/memory-management/overview.bd`
+
+Read `docs/src/docs/codebase/style-guide/validation.bd` before completing or
+reviewing a non-trivial change.
+
+Read `docs/src/docs/codebase/style-guide/testing.bd` when work changes
+behaviour, diagnostics, compiler stages, backends, tests or fixtures.
+
+For compiler work, use
+`docs/src/docs/codebase/compiler-design/overview.bd` to select the smallest
+relevant set of stage and topic references.
+
+For design-boundary questions, read
+`docs/src/docs/codebase/design-scope/overview.bd`.
+
+## Compiler flow
+
+[codeblock, $code("text"):
+    project files
+        -> Stage 0: project structure and source discovery
+        -> Stage 1: tokenization
+        -> Stage 2: header parsing
+        -> Stage 3: dependency sorting
+        -> Stage 4: AST construction
+        -> Stage 5: HIR generation
+        -> Stage 6: borrow validation
+        -> Stage 7: backend lowering
+        -> output files
+]
+
+## Core architectural rules
+
+- User-facing source, syntax, import, type, rule, borrow, config and deferred-feature failures use `CompilerDiagnostic`. `CompilerError` is for internal compiler, filesystem, backend, dev-server and tooling failures.
+- `TypeEnvironment` owns semantic type identity. Use `TypeId` equality in the active environment for semantic decisions.
+- Header parsing owns top-level declaration discovery and declaration shells. AST consumes sorted headers and header-built visibility.
+- Import preparation builds the visibility environment used by dependency sorting and AST. Expression and type resolution use the active `ScopeContext`.
+- Generics, traits and explicit cast evidence resolve before HIR.
+- AST owns template composition, constant folding, slot routing, runtime render-plan preparation and compile-time page fragment metadata.
+- HIR is the first backend-facing semantic IR. It makes control flow explicit.
+- Borrow validation reads HIR and writes side-table facts. It doesn't mutate HIR or decide final runtime ownership.
+- GC is the semantic baseline. Ownership and deterministic destruction are optimisation layers.
+- Existing values use shared, read-only access by default. Copies are explicit, `~` requests exclusive access and ownership transfer remains compiler-inferred.
+- Backend lowerers consume validated HIR, the paired `TypeEnvironment`, borrow facts and builder metadata. They should not reinterpret source syntax.
+
+## Design scope in one minute
+
+- Keep the source language small, explicit and statically inspectable.
+- Prefer templates, constants and directives over general macro systems.
+- Prefer generic trait bounds for static reuse and choices for runtime heterogeneity.
+- Keep ownership and lifetime optimisation behind the compiler rather than in source syntax.
+- Treat deferred implementation and outside-scope design as different categories.
+
+See `docs/src/docs/codebase/design-scope/overview.bd` for the review rules and rationale.

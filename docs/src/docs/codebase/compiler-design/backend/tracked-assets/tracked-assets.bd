@@ -1,0 +1,64 @@
+
+Tracked assets are a builder policy over frontend-rendered path usages.
+
+The frontend records semantic path facts while rendering paths.
+The HTML builder decides what becomes an emitted asset.
+
+## Main path
+
+`src/projects/html_project/tracked_assets.rs`
+
+Related paths:
+
+- `src/projects/html_project/`
+- `src/compiler_frontend/hir/`
+- rendered path usage metadata carried from AST/HIR into builder-facing modules
+
+## Frontend role
+
+The frontend records rendered path usages as semantic facts.
+It should not decide final asset emission policy.
+
+Those facts can survive into builder-facing compiled modules along with doc fragments, warnings and other metadata.
+
+## HTML builder role
+
+The HTML builder owns:
+
+- deciding which file paths become emitted assets
+- choosing output paths relative to the final page route
+- reporting asset warnings and conflicts
+- returning asset bytes as ordinary `OutputFile` artifacts
+
+Tracked assets are emitted through the same build-system output path as other artifacts.
+They should not be copied directly by a lowerer.
+
+## Route-relative paths
+
+Asset output paths are chosen relative to the final page route.
+That keeps generated HTML and emitted file layout consistent across pages.
+
+The builder has the route context.
+The frontend doesn't.
+
+## Warnings and conflicts
+
+Asset warnings and conflicts are builder policy.
+They should be reported with structured diagnostics or warnings where the builder can point to useful source/rendered path context.
+
+Don't hide missing or conflicting assets inside generic filesystem errors when the user wrote a path the builder can report.
+
+## Common mistakes
+
+- Treating asset copying as frontend behaviour.
+- Emitting tracked assets outside the `OutputFile` path.
+- Deciding route-relative output paths before the HTML builder knows the page route.
+- Losing rendered path source context before asset warnings are produced.
+- Letting stale emitted assets survive because the output writer wasn't given a cleanup policy.
+
+## Related reading
+
+- @../ (Backend overview): backend boundaries
+- @../html-project-assembly (HTML project assembly): route-level asset planning
+- @../../stages/hir-generation (Stage 5: HIR generation): where rendered path usages survive into compiled modules
+- @../../stages/ast-construction (Stage 4: AST construction): where rendered path usages are recorded

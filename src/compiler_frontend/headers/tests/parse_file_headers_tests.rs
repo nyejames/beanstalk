@@ -95,7 +95,7 @@ fn prepare_test_source_file(
         Err(diagnostic) => {
             return Err(FileFrontendPrepareError {
                 warnings: Vec::new(),
-                diagnostic: Box::new(diagnostic),
+                diagnostic,
             });
         }
     };

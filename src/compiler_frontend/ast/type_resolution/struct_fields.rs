@@ -1,10 +1,13 @@
 //! Struct field type resolution and default-value constant inlining.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::eval_expression::ExpressionTypingError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
@@ -21,6 +24,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use rustc_hash::FxHashSet;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -68,22 +72,40 @@ impl From<ExpressionTypingError> for StructFieldResolutionError {
     }
 }
 
-// ------------------------------
+impl From<TemplateError> for StructFieldResolutionError {
+    fn from(error: TemplateError) -> Self {
+        match error {
+            TemplateError::Diagnostic(diagnostic) => {
+                StructFieldResolutionError::Diagnostic(diagnostic)
+            }
+            TemplateError::Infrastructure(error) => {
+                StructFieldResolutionError::Infrastructure(error)
+            }
+        }
+    }
+}
+
+// ----------------------------------
 //  Struct field type resolution
-// ------------------------------
+// ----------------------------------
 
 /// Resolve all declared struct field types against visible declarations.
 pub(crate) fn resolve_struct_field_types(
     struct_path: &InternedPath,
     fields: &[Declaration],
     type_resolution_context: &mut TypeResolutionContext<'_>,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, StructFieldResolutionError> {
-    let resolved_fields = resolve_struct_field_types_inner(
-        fields,
+    let mut resolved_fields =
+        resolve_struct_field_type_shells(fields, type_resolution_context, string_table)?;
+    resolve_struct_field_defaults(
+        &mut resolved_fields,
         type_resolution_context,
+        template_ir_registry,
+        template_ir_store,
         string_table,
-        StructFieldResolutionMode::FinalDefinition,
     )?;
 
     validate_resolved_field_parent_paths(struct_path, &resolved_fields)?;
@@ -104,12 +126,8 @@ pub(crate) fn resolve_struct_constructor_shell_types(
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, StructFieldResolutionError> {
-    let resolved_fields = resolve_struct_field_types_inner(
-        fields,
-        type_resolution_context,
-        string_table,
-        StructFieldResolutionMode::ConstructorShell,
-    )?;
+    let resolved_fields =
+        resolve_struct_field_type_shells(fields, type_resolution_context, string_table)?;
 
     validate_resolved_field_parent_paths(struct_path, &resolved_fields)?;
 
@@ -143,17 +161,10 @@ fn validate_resolved_field_parent_paths(
     Ok(())
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum StructFieldResolutionMode {
-    ConstructorShell,
-    FinalDefinition,
-}
-
-fn resolve_struct_field_types_inner(
+fn resolve_struct_field_type_shells(
     fields: &[Declaration],
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &mut StringTable,
-    mode: StructFieldResolutionMode,
 ) -> Result<Vec<Declaration>, StructFieldResolutionError> {
     // WHY: Struct fields must enter AST/HIR in fully resolved nominal form so later
     // phases do not carry unresolved `NamedType` placeholders.
@@ -177,29 +188,56 @@ fn resolve_struct_field_types_inner(
             &resolved_field.value.location,
         )?;
 
-        if mode == StructFieldResolutionMode::FinalDefinition {
-            resolved_field.value = inline_visible_constant_references(
-                &resolved_field.value,
-                type_resolution_context.declaration_table,
-                type_resolution_context.visible_declaration_ids,
-                type_environment,
-                string_table,
-            )?;
-
-            if !matches!(resolved_field.value.kind, ExpressionKind::NoValue)
-                && !resolved_field.value.is_compile_time_constant()
-            {
-                return Err(CompilerDiagnostic::invalid_struct_default_value(
-                    resolved_field.value.location.clone(),
-                )
-                .into());
-            }
-        }
-
         resolved_fields.push(resolved_field);
     }
 
     Ok(resolved_fields)
+}
+
+/// Inline visible constants, then validate each final field default through the module registry.
+///
+/// WHAT: final struct definitions resolve default values after all constant headers are available.
+/// WHY: constructor shells need only field types, so keeping default classification here avoids
+///      lending the TIR store through an earlier type-only pass that cannot consume it.
+fn resolve_struct_field_defaults(
+    resolved_fields: &mut [Declaration],
+    type_resolution_context: &mut TypeResolutionContext<'_>,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
+    string_table: &mut StringTable,
+) -> Result<(), StructFieldResolutionError> {
+    for resolved_field in resolved_fields {
+        let type_environment = &mut *type_resolution_context.type_environment;
+        resolved_field.value = inline_visible_constant_references(
+            &resolved_field.value,
+            type_resolution_context.declaration_table,
+            type_resolution_context.visible_declaration_ids,
+            type_environment,
+            template_ir_registry,
+            template_ir_store,
+            string_table,
+        )?;
+
+        // Reference eligibility and final validation use the same registry authority. Runtime
+        // expression rebuilding still evaluates through the active primary store.
+        let default_value_is_constant = resolved_field
+            .value
+            .const_value_kind_with_template_classifier(&mut |template| {
+                classify_template_from_effective_tir(template, template_ir_registry, string_table)
+            })?
+            .is_compile_time_value();
+
+        if !matches!(resolved_field.value.kind, ExpressionKind::NoValue)
+            && !default_value_is_constant
+        {
+            return Err(CompilerDiagnostic::invalid_struct_default_value(
+                resolved_field.value.location.clone(),
+            )
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 // ----------------------------------
@@ -211,6 +249,8 @@ fn inline_visible_constant_references(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, StructFieldResolutionError> {
     inline_visible_constant_references_impl(
@@ -218,6 +258,8 @@ fn inline_visible_constant_references(
         declaration_table,
         visible_declaration_ids,
         type_environment,
+        template_ir_registry,
+        template_ir_store,
         string_table,
     )
 }
@@ -227,26 +269,29 @@ fn inline_visible_constant_references_impl(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, StructFieldResolutionError> {
     match &expression.kind {
         // Direct reference — try to resolve to a visible compile-time constant.
-        ExpressionKind::Reference(path) => Ok(declaration_table
-            .get_visible_resolved_by_path(path, visible_declaration_ids)
-            .filter(|declaration| declaration.value.is_compile_time_constant())
-            .or_else(|| {
-                path.name().and_then(|name| {
-                    declaration_table
-                        .get_visible_resolved_by_name(name, visible_declaration_ids)
-                        .filter(|declaration| declaration.value.is_compile_time_constant())
+        ExpressionKind::Reference(path) => {
+            let inlinable_declaration = visible_compile_time_constant_reference(
+                path,
+                declaration_table,
+                visible_declaration_ids,
+                template_ir_registry,
+                string_table,
+            )?;
+
+            Ok(inlinable_declaration
+                .map(|declaration| {
+                    let mut resolved = declaration.value.to_owned();
+                    resolved.location = expression.location.clone();
+                    resolved
                 })
-            })
-            .map(|declaration| {
-                let mut resolved = declaration.value.to_owned();
-                resolved.location = expression.location.clone();
-                resolved
-            })
-            .unwrap_or_else(|| expression.to_owned())),
+                .unwrap_or_else(|| expression.to_owned()))
+        }
 
         // Runtime expression — inline constants inside nested nodes, then re-evaluate.
         ExpressionKind::Runtime(rpn) => {
@@ -258,12 +303,15 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
+                    template_ir_registry,
+                    template_ir_store,
                     string_table,
                 )?);
             }
 
             let mut current_type = ExpectedType::Known(expression.type_id);
 
+            let template_ir_store_id = template_ir_store.borrow().store_id();
             let mut evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
@@ -271,6 +319,11 @@ fn inline_visible_constant_references_impl(
                 Arc::new(ExternalPackageRegistry::new()),
                 Vec::new(),
                 0,
+            )
+            .with_template_ir_registry(
+                Rc::clone(template_ir_registry),
+                template_ir_store_id,
+                Rc::clone(template_ir_store),
             );
 
             if let Some(visible) = visible_declaration_ids {
@@ -308,6 +361,8 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
+                    template_ir_registry,
+                    template_ir_store,
                     string_table,
                 )?);
             }
@@ -330,6 +385,8 @@ fn inline_visible_constant_references_impl(
                         declaration_table,
                         visible_declaration_ids,
                         type_environment,
+                        template_ir_registry,
+                        template_ir_store,
                         string_table,
                     )?,
                 });
@@ -350,6 +407,8 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
+                    template_ir_registry,
+                    template_ir_store,
                     string_table,
                 )?),
                 Box::new(inline_visible_constant_references(
@@ -357,12 +416,15 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
+                    template_ir_registry,
+                    template_ir_store,
                     string_table,
                 )?),
             ),
         )),
 
         // Result construct — inline the wrapped value.
+        #[cfg(test)]
         ExpressionKind::FallibleCarrierConstruct { variant, value } => {
             Ok(expression_with_inlined_kind(
                 expression,
@@ -373,6 +435,8 @@ fn inline_visible_constant_references_impl(
                         declaration_table,
                         visible_declaration_ids,
                         type_environment,
+                        template_ir_registry,
+                        template_ir_store,
                         string_table,
                     )?),
                 },
@@ -388,6 +452,8 @@ fn inline_visible_constant_references_impl(
                     declaration_table,
                     visible_declaration_ids,
                     type_environment,
+                    template_ir_registry,
+                    template_ir_store,
                     string_table,
                 )?),
                 to_type: *to_type,
@@ -397,6 +463,60 @@ fn inline_visible_constant_references_impl(
         // Everything else — no inlining needed.
         _ => Ok(expression.to_owned()),
     }
+}
+
+fn visible_compile_time_constant_reference<'a>(
+    path: &InternedPath,
+    declaration_table: &'a Rc<TopLevelDeclarationTable>,
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<Option<&'a Declaration>, StructFieldResolutionError> {
+    if let Some(declaration) =
+        declaration_table.get_visible_resolved_by_path(path, visible_declaration_ids)
+    {
+        let declaration_is_constant = expression_is_compile_time_constant_from_effective_tir(
+            &declaration.value,
+            template_ir_registry,
+            string_table,
+        )?;
+
+        if declaration_is_constant {
+            return Ok(Some(declaration));
+        }
+    }
+
+    let Some(name) = path.name() else {
+        return Ok(None);
+    };
+
+    let Some(declaration) =
+        declaration_table.get_visible_resolved_by_name(name, visible_declaration_ids)
+    else {
+        return Ok(None);
+    };
+
+    if expression_is_compile_time_constant_from_effective_tir(
+        &declaration.value,
+        template_ir_registry,
+        string_table,
+    )? {
+        return Ok(Some(declaration));
+    }
+
+    Ok(None)
+}
+
+fn expression_is_compile_time_constant_from_effective_tir(
+    expression: &Expression,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<bool, StructFieldResolutionError> {
+    Ok(expression
+        .const_value_kind_with_template_classifier(&mut |template| {
+            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+        })?
+        .is_compile_time_value())
 }
 
 fn expression_with_inlined_kind(expression: &Expression, kind: ExpressionKind) -> Expression {
@@ -424,6 +544,8 @@ fn inline_visible_constant_references_in_rpn_item(
     declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     type_environment: &mut TypeEnvironment,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &mut StringTable,
 ) -> Result<ExpressionRpnItem, StructFieldResolutionError> {
     match item {
@@ -433,6 +555,8 @@ fn inline_visible_constant_references_in_rpn_item(
                 declaration_table,
                 visible_declaration_ids,
                 type_environment,
+                template_ir_registry,
+                template_ir_store,
                 string_table,
             )?,
         )),

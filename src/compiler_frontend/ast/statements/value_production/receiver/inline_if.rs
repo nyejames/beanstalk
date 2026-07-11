@@ -11,6 +11,18 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueIfBlock;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: the inline-if parser returns `Result<T, Box<CompilerDiagnostic>>` through
+/// this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when
+/// stored directly in a `Result` variant. Boxing the error at the owner boundary keeps
+/// the `Result` envelope small without changing `DiagnosticBag`, `CompilerMessages`, or
+/// any shared error type. The still-plain `parse_inline_then_else` result is adapted at
+/// its narrow call site; the caller in `receiver/mod.rs` unboxes once at the plain
+/// accumulation boundary.
+type InlineIfResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parses an inline Bool value-if after the condition has been parsed.
 ///
 /// WHAT: assumes the current token is `then`. Parses then/else branches and
@@ -19,7 +31,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 /// single-predicate matching.
 pub(super) fn parse_inline_value_if(
     input: ValueIfParseInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> InlineIfResult<Expression> {
     let ValueIfParseInput {
         token_stream,
         context,

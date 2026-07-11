@@ -4,11 +4,11 @@
 //! core data shapes of the Template IR. A template owns a root node ID; nodes
 //! form a tree via child references back into the store.
 //!
-//! WHY: the current AST `Template` type mixes content atoms, render plans,
-//! control-flow metadata, and formatting state. TIR separates those concerns into
-//! a clean tree of typed nodes so folding, formatting, and HIR preparation can
-//! work from a single stable representation without ping-pong between
-//! `TemplateContent`, `TemplateRenderPlan`, and rebuilt content.
+//! WHY: the current AST `Template` type still mixes content atoms,
+//! control-flow metadata, and formatting state. TIR separates those concerns
+//! into a clean tree of typed nodes so folding, formatting, and HIR preparation
+//! can work from a single stable representation without ping-pong between
+//! `TemplateContent` and rebuilt content.
 //!
 //! ## Ownership contract
 //!
@@ -22,32 +22,28 @@
 //! `Template` → `TemplateContent` path. Behaviour changes are out of scope
 //! unless they are bug fixes with regression tests.
 //!
-//! ## Temporary converter deletion plan
-//!
-//! The `convert_from_template.rs` converter (Phase B1) translates current
-//! `Template` values into TIR. That converter is temporary — once TIR is the
-//! authoritative path, the converter and the old `Template`-based folding/formatting
-//! internals it replaces will be deleted at a documented checkpoint.
-//!
 //! ## No feature flag
 //!
-//! TIR is implemented directly on `main`. There is no feature flag gating
-//! TIR types or the eventual production route.
+//! TIR types and the production route are implemented directly without a
+//! feature flag.
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::template::Style;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotPlaceholder, TemplateSegmentOrigin, TemplateType,
+    ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateAggregateRenderPlan, TemplateBranchSelector, TemplateLoopControlKind,
-    TemplateLoopHeader,
+    TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateIrNodeId};
+use crate::compiler_frontend::ast::templates::tir::ids::{
+    ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
+    TemplateSlotPlanId, TemplateWrapperSetId,
+};
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::symbols::string_interning::StringId;
+#[cfg(test)]
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // -------------------------
@@ -65,7 +61,7 @@ pub(crate) struct TemplateIr {
     /// Root node of this template's body tree.
     pub(crate) root: TemplateIrNodeId,
 
-    /// Style directive configuration (e.g., `$markdown`, `$raw`).
+    /// Style directive configuration (e.g., `$md`, `$raw`).
     pub(crate) style: Style,
 
     /// High-level template classification (string, string-function, slot, etc.).
@@ -80,14 +76,31 @@ pub(crate) struct TemplateIr {
     /// Parent `$children(..)` wrappers that must be applied around this
     /// template's output during folding.
     ///
-    /// WHAT: preserves the wrappers from the AST `Template` so the TIR fold
-    /// path can apply them without re-walking the old `Template` tree.
-    /// WHY: conditional child wrappers are consumed during fold-time
-    /// composition; storing them here keeps the TIR fold path self-contained.
-    pub(crate) conditional_child_wrappers: Vec<Template>,
+    /// WHAT: references a `TemplateWrapperSet` side-table entry that stores
+    /// store-local TIR IDs for wrappers inherited from the AST `Template`. The
+    /// TIR fold path resolves the ID and applies those wrapper templates.
+    /// WHY: wrapper sets live in the store so identical wrapper combinations can
+    /// be shared in later phases, and so `TemplateIr` does not own recursive
+    /// wrapper template values per template.
+    pub(crate) conditional_child_wrapper_set: Option<TemplateWrapperSetId>,
+
+    /// AST-prepared runtime slot application plan, when this template is the
+    /// wrapper output for a runtime slot application.
+    ///
+    /// WHAT: references a `TemplateSlotPlan` side-table entry. Runtime slot site
+    /// nodes inside this template also carry the same plan ID so each site ID is
+    /// anchored to the plan that owns it.
+    /// WHY: runtime slot routing remains AST-owned, but TIR needs a stable
+    /// handoff before HIR/runtime metadata can migrate away from `Template`.
+    pub(crate) runtime_slot_plan: Option<TemplateSlotPlanId>,
 }
 
 impl TemplateIr {
+    /// Creates a top-level TIR template with no wrapper set or slot plan attached.
+    ///
+    /// WHAT: stores the root node, style, kind, summary, and source location.
+    /// WHY: side-table links (`conditional_child_wrapper_set`, `runtime_slot_plan`)
+    ///      are attached later by composition or slot-plan materialization.
     pub(crate) fn new(
         root: TemplateIrNodeId,
         style: Style,
@@ -101,7 +114,8 @@ impl TemplateIr {
             kind,
             summary,
             location,
-            conditional_child_wrappers: Vec::new(),
+            conditional_child_wrapper_set: None,
+            runtime_slot_plan: None,
         }
     }
 }
@@ -125,6 +139,7 @@ pub(crate) struct TemplateIrNode {
 }
 
 impl TemplateIrNode {
+    /// Creates a TIR node with the given structural kind and source location.
     pub(crate) fn new(kind: TemplateIrNodeKind, location: SourceLocation) -> Self {
         Self { kind, location }
     }
@@ -160,8 +175,18 @@ pub(crate) enum TemplateIrNodeKind {
 
     /// Literal interned text.
     Text {
+        /// Interned text content.
         text: StringId,
+
+        /// Byte length of the original text segment.
+        ///
+        /// WHAT: records the UTF-8 byte length of the source text that was
+        /// interned, used by formatting and span calculations.
+        /// WHY: the interned string loses original byte-length information, but
+        /// downstream formatting decisions need the original segment size.
         byte_len: u32,
+
+        /// Origin classification for diagnostics and formatting.
         origin: TemplateSegmentOrigin,
     },
 
@@ -169,46 +194,248 @@ pub(crate) enum TemplateIrNodeKind {
     DynamicExpression {
         expression: Box<Expression>,
         origin: TemplateSegmentOrigin,
+        /// Direct `$(source)` reactive subscription carried by this splice, if any.
+        ///
+        /// WHAT: preserves the per-segment subscription marker that the AST
+        /// attaches to `$(source)` template chunks.
+        /// WHY: HIR lowering needs to distinguish direct subscriptions (lazy)
+        /// from ordinary dynamic reads (snapshots) without re-parsing template
+        /// directives or consulting legacy render-plan fixtures.
+        reactive_subscription: Option<ReactiveSubscription>,
+        /// Document-order site ID assigned when this node is emitted.
+        ///
+        /// WHAT: a per-store counter assigns this ID in construction order so
+        /// expression overlays can address this splice site deterministically.
+        /// WHY: stable site keys let later overlay phases map effective
+        /// expressions to the correct splice without relying on traversal order.
+        site_id: ExpressionSiteId,
     },
 
     /// Opaque child template reference.
-    ChildTemplate { template: TemplateIrId },
+    ChildTemplate {
+        /// Store-qualified view identity for the referenced child template.
+        ///
+        /// WHAT: carries the root, phase, and overlay set needed to build a
+        /// precise [`TirView`](super::view::TirView) when this child is folded.
+        /// WHY: a bare `TemplateIrId` is not enough for cross-store folding or
+        /// for cache keys that include phase and overlay context.
+        reference: TemplateTirChildReference,
+
+        /// Document-order occurrence ID assigned when this node is emitted.
+        ///
+        /// WHAT: a per-store counter assigns this ID in construction order so
+        /// wrapper overlays can address this child-template boundary
+        /// deterministically.
+        /// WHY: stable occurrence keys let later overlay phases map wrapper
+        /// contexts to the correct child-template without relying on traversal
+        /// order.
+        occurrence_id: ChildTemplateOccurrenceId,
+    },
 
     /// Structural slot placeholder awaiting composition.
-    Slot { slot: SlotPlaceholder },
+    Slot { placeholder: TirSlotPlaceholder },
 
     /// Content contributed by an `$insert("name")` directive.
     InsertContribution { template: TemplateIrId },
 
     /// Conditional branch chain (`if` / `else if` / `else`).
     BranchChain {
+        /// Branches evaluated in source order until one selector matches.
         branches: Vec<TemplateIrBranch>,
+
+        /// Optional trailing `else` body executed when no branch matches.
         fallback: Option<TemplateIrNodeId>,
     },
 
     /// Loop with a body node and optional aggregate wrapper.
+    ///
+    /// WHAT: the `aggregate_wrapper` subtree carries the text, child templates,
+    /// and dynamic expressions that surround the loop aggregate output. The
+    /// `AggregateOutput` marker node inside that subtree is replaced at fold
+    /// time with the already-folded aggregate string.
+    /// WHY: representing wrapper contents directly in TIR removes the old
+    /// AST aggregate-plan detour. Keeping the wrapper as a normal subtree lets
+    /// folding reuse the existing node walker instead of a parallel render-piece
+    /// fold path.
     Loop {
         header: TemplateLoopHeader,
-        body: TemplateIrNodeId,
-        aggregate_wrapper: Option<TemplateIrNodeId>,
 
-        /// Temporary Phase B2 support for loop aggregate wrapper folding.
+        /// Document-order expression-site IDs for the loop header's expressions.
         ///
-        /// WHAT: carries the AST `TemplateAggregateRenderPlan` that wraps the
-        /// loop aggregate output until Phase B4 replaces it with a TIR-native
-        /// render-unit representation.
-        /// WHY: the current TIR `aggregate_wrapper` node is an empty placeholder;
-        /// folding needs the actual render-plan pieces to preserve wrapper
-        /// semantics. This field is a narrow, local bridge and must be deleted
-        /// once TIR owns aggregate wrappers natively.
-        aggregate_render_plan: Option<TemplateAggregateRenderPlan>,
+        /// WHAT: mirrors the `TemplateLoopHeader` shape with one
+        /// `ExpressionSiteId` per expression-bearing position (condition,
+        /// range start/end/optional step, collection iterable).
+        /// WHY: stable site keys let later overlay phases address each
+        /// loop-header expression deterministically without relying on
+        /// traversal order. The IDs share the same document-order counter
+        /// as `DynamicExpression` and branch-selector site IDs.
+        header_sites: TemplateLoopHeaderExpressionSites,
+
+        /// Body node executed once for each loop iteration.
+        body: TemplateIrNodeId,
+
+        /// Optional wrapper subtree surrounding the loop aggregate output.
+        ///
+        /// WHAT: see variant-level documentation above.
+        /// WHY: keeping the wrapper reference inline lets the fold path replace
+        /// the nested `AggregateOutput` marker without a separate render plan.
+        aggregate_wrapper: Option<TemplateIrNodeId>,
     },
+
+    /// Marker for the position of the loop aggregate output inside an
+    /// `aggregate_wrapper` subtree.
+    ///
+    /// WHAT: a leaf that the TIR fold path replaces with the per-loop aggregate
+    /// string after the body has been folded.
+    /// WHY: this replaces the AST aggregate-plan placeholder and makes the
+    /// aggregate wrapper a first-class TIR subtree.
+    AggregateOutput,
 
     /// Loop control signal (`break` / `continue`).
     LoopControl { kind: TemplateLoopControlKind },
 
     /// Runtime slot site placeholder resolved by AST planning.
-    RuntimeSlotSite { site: RuntimeSlotSiteId },
+    RuntimeSlotSite {
+        /// Runtime slot plan that owns this site.
+        ///
+        /// WHAT: anchors the site ID to the AST-prepared plan so later phases
+        /// can resolve which slots are available and how they map to arguments.
+        /// WHY: runtime slot routing is still AST-owned; TIR carries only a
+        /// stable plan handle until the handoff to HIR/runtime metadata.
+        plan: TemplateSlotPlanId,
+
+        /// Site identity within the runtime slot plan.
+        site: RuntimeSlotSiteId,
+    },
+}
+
+// -------------------------
+//  TIR Slot Placeholder
+// -------------------------
+
+/// Final TIR-owned payload for an unresolved slot occurrence.
+///
+/// WHAT: records the slot key, stable occurrence ID, source location, and the
+/// TIR-owned wrapper-set IDs needed by the remaining runtime slot planner.
+/// WHY: the legacy AST `SlotPlaceholder` stores recursive `Template` values.
+/// TIR must not own those templates directly; wrapper sets store same-store
+/// `TemplateIrId`s instead, preserving current behavior until wrapper context
+/// moves fully into overlays.
+#[derive(Clone, Debug)]
+pub(crate) struct TirSlotPlaceholder {
+    /// Slot key (name and source location from the original placeholder).
+    pub(crate) key: SlotKey,
+
+    /// Stable occurrence ID for this slot placeholder.
+    pub(crate) occurrence_id: SlotOccurrenceId,
+
+    /// Source location for diagnostics.
+    pub(crate) location: SourceLocation,
+
+    /// Wrappers already applied around this slot's fallback content.
+    ///
+    /// WHAT: references a `TemplateWrapperSet` that was already resolved and
+    /// applied to the placeholder's fallback children in the AST path.
+    /// WHY: TIR does not own recursive wrapper templates; it stores the
+    /// same-store wrapper-set ID so folding can replay the applied wrappers.
+    pub(crate) applied_child_wrapper_set: Option<TemplateWrapperSetId>,
+
+    /// Wrappers to apply around this slot's resolved children.
+    ///
+    /// WHAT: references a `TemplateWrapperSet` that must wrap any children
+    /// contributed into this slot during composition.
+    /// WHY: this captures the wrapper context from the AST placeholder so
+    /// composition can apply the correct wrappers without re-parsing the
+    /// original template expression.
+    pub(crate) child_wrapper_set: Option<TemplateWrapperSetId>,
+
+    /// Whether parent-provided child wrappers should be skipped for this slot.
+    ///
+    /// WHAT: when true, the slot explicitly overrides the inherited wrapper
+    /// context and only uses its own `child_wrapper_set`.
+    /// WHY: some slot directives suppress outer wrappers to avoid double-wrapping
+    /// or to force raw child insertion.
+    pub(crate) skip_parent_child_wrappers: bool,
+}
+
+impl TirSlotPlaceholder {
+    /// Creates a slot placeholder with no wrapper context.
+    #[cfg(test)]
+    pub(crate) fn new(
+        key: SlotKey,
+        occurrence_id: SlotOccurrenceId,
+        location: SourceLocation,
+    ) -> Self {
+        Self {
+            key,
+            occurrence_id,
+            location,
+            applied_child_wrapper_set: None,
+            child_wrapper_set: None,
+            skip_parent_child_wrappers: false,
+        }
+    }
+
+    /// Creates a slot placeholder with TIR-owned wrapper-set context.
+    pub(crate) fn with_wrapper_sets(
+        key: SlotKey,
+        occurrence_id: SlotOccurrenceId,
+        location: SourceLocation,
+        applied_child_wrapper_set: Option<TemplateWrapperSetId>,
+        child_wrapper_set: Option<TemplateWrapperSetId>,
+        skip_parent_child_wrappers: bool,
+    ) -> Self {
+        Self {
+            key,
+            occurrence_id,
+            location,
+            applied_child_wrapper_set,
+            child_wrapper_set,
+            skip_parent_child_wrappers,
+        }
+    }
+
+    /// Remaps interned names stored by the slot key and source location.
+    #[cfg(test)]
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.key.remap_string_ids(remap);
+        self.location.remap_string_ids(remap);
+    }
+}
+
+// -------------------------
+//  Loop Header Expression Sites
+// -------------------------
+
+/// TIR-local expression-site IDs for the expressions inside a `TemplateLoopHeader`.
+///
+/// WHAT: mirrors the `TemplateLoopHeader` enum shape, carrying one
+/// `ExpressionSiteId` per expression-bearing position in the header.
+/// WHY: overlay phases need stable keys for each loop-header expression site
+/// (condition, range bounds, collection iterable) so they can address effective
+/// expressions deterministically without relying on traversal order.
+/// The IDs are allocated from the same document-order counter as
+/// `DynamicExpression` and branch-selector site IDs.
+///
+/// ## Ownership contract
+///
+/// This type is TIR-local. It is not pushed into the AST-owned
+/// `TemplateLoopHeader`, HIR handoff shapes, or backend data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TemplateLoopHeaderExpressionSites {
+    /// `while (condition)` loop: one expression site for the condition.
+    Conditional { condition: ExpressionSiteId },
+
+    /// `for (item in start..end[ step])` loop: sites for start, end, and the
+    /// optional step expression.
+    Range {
+        start: ExpressionSiteId,
+        end: ExpressionSiteId,
+        step: Option<ExpressionSiteId>,
+    },
+
+    /// `for (item in iterable)` loop: one expression site for the iterable.
+    Collection { iterable: ExpressionSiteId },
 }
 
 // -------------------------
@@ -237,9 +464,24 @@ pub(crate) struct TemplateIrBranch {
 
     /// Source location for diagnostics.
     pub(crate) location: SourceLocation,
+
+    /// Document-order expression-site ID for the branch selector expression.
+    ///
+    /// WHAT: a per-store counter assigns this ID so expression overlays can
+    /// address the branch selector's effective expression deterministically.
+    /// WHY: stable site keys let later overlay phases map effective branch
+    /// selectors without relying on traversal order or node-vector positions.
+    /// The ID shares the same document-order counter as `DynamicExpression`
+    /// site IDs and loop-header expression sites.
+    pub(crate) selector_site_id: ExpressionSiteId,
 }
 
 impl TemplateIrBranch {
+    /// Creates one branch inside a `BranchChain` node.
+    ///
+    /// The `selector_site_id` is initialized to a placeholder and overwritten
+    /// by the TIR builder when the branch is pushed, or set explicitly via
+    /// `with_selector_site_id` by direct-push construction paths.
     pub(crate) fn new(
         selector: TemplateBranchSelector,
         body: TemplateIrNodeId,
@@ -249,7 +491,19 @@ impl TemplateIrBranch {
             selector,
             body,
             location,
+            selector_site_id: ExpressionSiteId::new(0),
         }
+    }
+
+    /// Sets the branch selector's expression-site ID, returning the updated branch.
+    ///
+    /// WHAT: used by direct-push construction paths (current-state materialization,
+    /// slot expansion) that allocate or preserve a site ID outside the builder.
+    /// WHY: keeps site-ID assignment in one clear place per construction path
+    /// without changing the `new` signature used by the parser-facing builder.
+    pub(crate) fn with_selector_site_id(mut self, site_id: ExpressionSiteId) -> Self {
+        self.selector_site_id = site_id;
+        self
     }
 
     /// Returns the condition expression for this branch.
@@ -263,5 +517,92 @@ impl TemplateIrBranch {
             TemplateBranchSelector::Bool(expression) => expression,
             TemplateBranchSelector::OptionPresentCapture { scrutinee, .. } => scrutinee,
         }
+    }
+}
+
+// -------------------------
+//  String-table remapping
+// -------------------------
+
+impl TemplateIr {
+    /// Remap interned string identities stored on this template entry.
+    ///
+    /// WHAT: remaps the source location, template kind (for slot keys), and any
+    /// owned wrapper child templates carried by the style.
+    /// WHY: per-file string-table merges require every interned path/name in the
+    /// TIR store to be rewritten to the merged table's IDs.
+    #[cfg(test)]
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.location.remap_string_ids(remap);
+        self.kind.remap_string_ids(remap);
+    }
+}
+
+impl TemplateIrNode {
+    /// Remap interned string identities stored on this node.
+    #[cfg(test)]
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.location.remap_string_ids(remap);
+        self.kind.remap_string_ids(remap);
+    }
+}
+
+impl TemplateIrNodeKind {
+    /// Remap interned string identities inside the node payload.
+    ///
+    /// NOTE: store-local IDs such as `TemplateIrId` and `TemplateIrNodeId` are
+    /// indexes, not string identities, and must not be remapped. The store-level
+    /// walk visits every template and node directly, so child/parent references do
+    /// not need recursive traversal here.
+    #[cfg(test)]
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            TemplateIrNodeKind::Sequence { .. } => {}
+
+            TemplateIrNodeKind::Text { text, .. } => {
+                *text = remap.get(*text);
+            }
+
+            TemplateIrNodeKind::DynamicExpression {
+                expression,
+                reactive_subscription,
+                ..
+            } => {
+                expression.remap_string_ids(remap);
+                if let Some(subscription) = reactive_subscription {
+                    subscription.remap_string_ids(remap);
+                }
+            }
+
+            TemplateIrNodeKind::ChildTemplate { .. } => {}
+            TemplateIrNodeKind::InsertContribution { .. } => {}
+
+            TemplateIrNodeKind::Slot { placeholder } => {
+                placeholder.remap_string_ids(remap);
+            }
+
+            TemplateIrNodeKind::BranchChain { branches, .. } => {
+                for branch in branches {
+                    branch.remap_string_ids(remap);
+                }
+            }
+
+            TemplateIrNodeKind::Loop { header, .. } => {
+                header.remap_string_ids(remap);
+            }
+
+            TemplateIrNodeKind::AggregateOutput => {}
+            TemplateIrNodeKind::LoopControl { .. } => {}
+            TemplateIrNodeKind::RuntimeSlotSite { .. } => {}
+        }
+    }
+}
+
+impl TemplateIrBranch {
+    /// Remap interned string identities stored on this branch.
+    #[cfg(test)]
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.selector.remap_string_ids(remap);
+        self.location.remap_string_ids(remap);
     }
 }

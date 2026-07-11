@@ -1,7 +1,8 @@
-//! Detailed benchmark observation parsing.
+//! Benchmark observation parsing.
 //!
-//! WHAT: extracts stage timings and local performance counters from the
-//! compiler's `detailed_timers` stdout.
+//! WHAT: extracts stage timings and local performance counters from stable
+//! `BST_BENCH` lines, while still accepting legacy human timer prose from
+//! older local benchmark records.
 //! WHY: raw benchmark history should preserve local diagnostic evidence without
 //! making public monthly summaries noisy.
 

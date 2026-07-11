@@ -412,8 +412,16 @@ fn compiler_messages_preserve_type_context_ranges_when_prepending_and_appending(
         first_messages.render_type_contexts()[1].diagnostic_range,
         2..3
     );
-    assert!(rendered[1].contains("expected Point, found Int"));
-    assert!(rendered[2].contains("expected Status, found String"));
+    assert!(
+        rendered[0].contains("expected Point, found Int"),
+        "errors should render before warnings; first rendered line should be the Point error, got: {}",
+        rendered[0]
+    );
+    assert!(
+        rendered[1].contains("expected Status, found String"),
+        "second rendered line should be the Status error, got: {}",
+        rendered[1]
+    );
 }
 
 #[test]
@@ -687,6 +695,84 @@ fn syntax_and_choice_renderers_use_user_facing_messages_not_reason_debug_names()
             "Terse line should not expose enum variant '{debug_name}': {terse_line}",
         );
     }
+}
+
+#[test]
+fn choice_variant_unknown_variant_suggests_close_candidate() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let choice_name = string_table.intern("Status");
+    let misspelled = string_table.intern("Reay");
+    let ready = string_table.intern("Ready");
+    let error = string_table.intern("Error");
+    let available = vec![ready, error];
+
+    let diagnostic = CompilerDiagnostic::invalid_choice_variant(
+        InvalidChoiceVariantReason::UnknownVariant,
+        Some(choice_name),
+        Some(misspelled),
+        available,
+        location(source_path),
+    );
+    let render_context = DiagnosticRenderContext::new(&string_table);
+    let guidance = terminal::format_payload_guidance(&diagnostic.payload, render_context);
+
+    let message = guidance
+        .iter()
+        .find(|line| line.contains("Unknown variant"))
+        .expect("expected an unknown-variant message");
+
+    assert!(
+        message.contains("Status::Reay"),
+        "message should name the full misspelled variant: {message}",
+    );
+    assert!(
+        message.contains("Did you mean 'Ready'?"),
+        "message should suggest the closest existing variant: {message}",
+    );
+    assert!(
+        message.contains("Available variants: [Ready, Error]"),
+        "message must retain the available-variants list: {message}",
+    );
+}
+
+#[test]
+fn choice_variant_unknown_variant_no_suggestion_for_unrelated_name() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let choice_name = string_table.intern("Status");
+    let unrelated = string_table.intern("Xyzzy");
+    let ready = string_table.intern("Ready");
+    let error = string_table.intern("Error");
+    let available = vec![ready, error];
+
+    let diagnostic = CompilerDiagnostic::invalid_choice_variant(
+        InvalidChoiceVariantReason::UnknownVariant,
+        Some(choice_name),
+        Some(unrelated),
+        available,
+        location(source_path),
+    );
+    let render_context = DiagnosticRenderContext::new(&string_table);
+    let guidance = terminal::format_payload_guidance(&diagnostic.payload, render_context);
+
+    let message = guidance
+        .iter()
+        .find(|line| line.contains("Unknown variant"))
+        .expect("expected an unknown-variant message");
+
+    assert!(
+        message.contains("Status::Xyzzy"),
+        "message should name the full misspelled variant: {message}",
+    );
+    assert!(
+        !message.contains("Did you mean"),
+        "an unrelated name must not get a bogus suggestion: {message}",
+    );
+    assert!(
+        message.contains("Available variants: [Ready, Error]"),
+        "message must retain the available-variants list: {message}",
+    );
 }
 
 #[test]
@@ -1208,4 +1294,215 @@ fn borrow_conflict_rendering_hides_payload_debug_names() {
         "{terminal_guidance}"
     );
     assert!(!terse_line.contains("BorrowConflict"), "{terse_line}");
+}
+
+#[test]
+fn diagnostic_display_order_buckets_errors_before_warnings_before_notes() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+
+    let warning = CompilerDiagnostic::with_severity(
+        DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+        DiagnosticSeverity::Warning,
+        location(source_path.clone()),
+        DiagnosticPayload::UnknownName {
+            name: string_table.intern("warning"),
+            namespace: NameNamespace::Value,
+        },
+    );
+    let error = unknown_name_diagnostic(
+        string_table.intern("error"),
+        NameNamespace::Value,
+        location(source_path.clone()),
+    );
+    let note = CompilerDiagnostic::with_severity(
+        DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+        DiagnosticSeverity::Note,
+        location(source_path),
+        DiagnosticPayload::UnknownName {
+            name: string_table.intern("note"),
+            namespace: NameNamespace::Value,
+        },
+    );
+
+    let messages = CompilerMessages::from_diagnostics(vec![warning, error, note], string_table);
+
+    assert_eq!(
+        messages.diagnostic_display_order(),
+        vec![1, 0, 2],
+        "errors should render first, then warnings, then notes"
+    );
+}
+
+#[test]
+fn diagnostic_display_order_preserves_original_order_within_each_severity_bucket() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let mut make = |name: &str, severity| {
+        CompilerDiagnostic::with_severity(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+            severity,
+            location(source_path.clone()),
+            DiagnosticPayload::UnknownName {
+                name: string_table.intern(name),
+                namespace: NameNamespace::Value,
+            },
+        )
+    };
+
+    let error_first = make("error_first", DiagnosticSeverity::Error);
+    let warning_first = make("warning_first", DiagnosticSeverity::Warning);
+    let error_second = make("error_second", DiagnosticSeverity::Error);
+    let warning_second = make("warning_second", DiagnosticSeverity::Warning);
+
+    let messages = CompilerMessages::from_diagnostics(
+        vec![error_first, warning_first, error_second, warning_second],
+        string_table,
+    );
+
+    assert_eq!(
+        messages.diagnostic_display_order(),
+        vec![0, 2, 1, 3],
+        "original order within each severity bucket must be stable"
+    );
+}
+
+#[test]
+fn diagnostic_display_order_keeps_type_context_lookups_aligned_with_original_indexes() {
+    let mut string_table = StringTable::new();
+    let point_path = InternedPath::from_single_str("Point", &mut string_table);
+    let status_path = InternedPath::from_single_str("Status", &mut string_table);
+
+    let mut point_environment = TypeEnvironment::new();
+    let (_, point_type) = point_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: point_path,
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+    let mut status_environment = TypeEnvironment::new();
+    let (_, status_type) = status_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: status_path,
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+
+    // Stored order is warning first, error second, but display order must put the error first.
+    let mut warning = CompilerDiagnostic::type_mismatch(
+        status_type,
+        status_environment.builtins().string,
+        TypeMismatchContext::Assignment,
+        SourceLocation::default(),
+    );
+    warning.severity = DiagnosticSeverity::Warning;
+    let error = CompilerDiagnostic::type_mismatch(
+        point_type,
+        point_environment.builtins().int,
+        TypeMismatchContext::Assignment,
+        SourceLocation::default(),
+    );
+
+    let warning_messages = CompilerMessages::from_diagnostics(vec![warning], string_table.clone())
+        .with_type_context_for_all_diagnostics(status_environment);
+    let error_messages = CompilerMessages::from_diagnostics(vec![error], string_table)
+        .with_type_context_for_all_diagnostics(point_environment);
+
+    let mut messages = warning_messages;
+    messages.append_messages_preserving_context(error_messages);
+
+    let rendered =
+        crate::compiler_frontend::compiler_messages::display_messages::format_terse_compiler_messages(
+            &messages,
+        );
+
+    assert_eq!(
+        messages.diagnostic_display_order(),
+        vec![1, 0],
+        "display order should use original indexes, not stored order"
+    );
+    assert!(
+        rendered[0].contains("Point") && rendered[0].contains("Int"),
+        "first rendered line should come from the error's point/int type context, got: {}",
+        rendered[0]
+    );
+    assert!(
+        rendered[1].contains("Status") && rendered[1].contains("String"),
+        "second rendered line should come from the warning's status/string type context, got: {}",
+        rendered[1]
+    );
+}
+
+#[test]
+fn terse_renderer_outputs_errors_before_warnings_in_display_order() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let mut make = |name: &str, severity| {
+        CompilerDiagnostic::with_severity(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+            severity,
+            location(source_path.clone()),
+            DiagnosticPayload::UnknownName {
+                name: string_table.intern(name),
+                namespace: NameNamespace::Value,
+            },
+        )
+    };
+
+    let warning = make("warning", DiagnosticSeverity::Warning);
+    let error = make("error", DiagnosticSeverity::Error);
+    let messages = CompilerMessages::from_diagnostics(vec![warning, error], string_table);
+
+    let rendered =
+        crate::compiler_frontend::compiler_messages::display_messages::format_terse_compiler_messages(
+            &messages,
+        );
+
+    assert_eq!(rendered.len(), 2);
+    assert!(
+        rendered[0].contains("BST-RULE-0001") && rendered[0].contains("error"),
+        "first terse line should be the error, got: {}",
+        rendered[0]
+    );
+    assert!(
+        rendered[1].contains("BST-RULE-0001") && rendered[1].contains("warning"),
+        "second terse line should be the warning, got: {}",
+        rendered[1]
+    );
+}
+
+#[test]
+fn dev_server_html_renderer_outputs_error_card_before_warning_card() {
+    use crate::compiler_frontend::compiler_messages::render::dev_server;
+
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let mut make = |name: &str, severity| {
+        CompilerDiagnostic::with_severity(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnknownName),
+            severity,
+            location(source_path.clone()),
+            DiagnosticPayload::UnknownName {
+                name: string_table.intern(name),
+                namespace: NameNamespace::Value,
+            },
+        )
+    };
+
+    let warning = make("warning", DiagnosticSeverity::Warning);
+    let error = make("error", DiagnosticSeverity::Error);
+    let messages = CompilerMessages::from_diagnostics(vec![warning, error], string_table);
+
+    let html = dev_server::render_compiler_messages_html(&messages, std::path::Path::new("/tmp"));
+
+    let error_pos = html.find("Error").expect("error badge should be present");
+    let warning_pos = html
+        .find("Warning")
+        .expect("warning badge should be present");
+    assert!(
+        error_pos < warning_pos,
+        "error card should appear before warning card in dev-server HTML"
+    );
 }

@@ -79,10 +79,22 @@ impl BackendBuilder for HtmlProjectBuilder {
         flags: &[Flag],
         string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
-        parse_html_site_config(config, string_table)
-            .map_err(|error| error.into_messages(string_table.clone()))?;
-        let document_config = parse_html_document_config(config, string_table)
-            .map_err(|error| error.into_messages(string_table.clone()))?;
+        // Record the full backend build duration on every exit path (success or error).
+        let _total_guard = crate::timing::PipelineTimingGuard::new("backend.html.total");
+
+        {
+            let _site_config_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.site_config");
+            parse_html_site_config(config, string_table)
+                .map_err(|error| error.into_messages(string_table.clone()))?;
+        }
+
+        let document_config = {
+            let _document_config_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.document_config");
+            parse_html_document_config(config, string_table)
+                .map_err(|error| error.into_messages(string_table.clone()))?
+        };
 
         if modules.is_empty() {
             return Err(CompilerMessages::from_error(
@@ -95,7 +107,11 @@ impl BackendBuilder for HtmlProjectBuilder {
 
         let release_build = flags.contains(&Flag::Release);
         let wasm_enabled = flags.contains(&Flag::HtmlWasm);
-        let entry_paths = HtmlEntryPathPlan::from_config(config, string_table)?;
+        let entry_paths = {
+            let _entry_path_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.entry_path_plan");
+            HtmlEntryPathPlan::from_config(config, string_table)?
+        };
 
         let mut output_files = Vec::new();
         let mut output_paths = HashSet::new();
@@ -105,50 +121,54 @@ impl BackendBuilder for HtmlProjectBuilder {
         let mut compiled_html_output_paths = Vec::with_capacity(modules.len());
         let mut warnings = Vec::new();
 
-        for (module_index, module) in modules.iter().enumerate() {
-            // Derive the canonical page route once. Both JS-only and HTML+Wasm output modes
-            // consume this same path — downstream code must not re-derive route semantics.
-            let logical_html_output_path = html_output_path(
-                &module.entry_point,
-                entry_paths.resolved_entry_root.as_deref(),
-                string_table,
-            )
-            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+        {
+            let _module_compile_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.module_compile_total");
+            for (module_index, module) in modules.iter().enumerate() {
+                // Derive the canonical page route once. Both JS-only and HTML+Wasm output modes
+                // consume this same path — downstream code must not re-derive route semantics.
+                let logical_html_output_path = html_output_path(
+                    &module.entry_point,
+                    entry_paths.resolved_entry_root.as_deref(),
+                    string_table,
+                )
+                .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-            let compiled_artifacts = self.compile_one_module(
-                module,
-                &logical_html_output_path,
-                config.project_name.as_str(),
-                &document_config,
-                release_build,
-                wasm_enabled,
-                string_table,
-            )?;
+                let compiled_artifacts = self.compile_one_module(
+                    module,
+                    &logical_html_output_path,
+                    config.project_name.as_str(),
+                    &document_config,
+                    release_build,
+                    wasm_enabled,
+                    string_table,
+                )?;
 
-            let html_output_path = compiled_artifacts.html_output_path.clone();
-            for output_file in compiled_artifacts.output_files {
-                let output_path = output_file.relative_output_path().to_path_buf();
-                if let Some(existing_entry_point) = output_path_owners.get(&output_path) {
-                    return Err(duplicate_output_path_error(
-                        &module.entry_point,
-                        existing_entry_point,
-                        &output_path,
-                        string_table,
-                    ));
+                let html_output_path = compiled_artifacts.html_output_path.clone();
+                for output_file in compiled_artifacts.output_files {
+                    let output_path = output_file.relative_output_path().to_path_buf();
+                    if let Some(existing_entry_point) = output_path_owners.get(&output_path) {
+                        return Err(duplicate_output_path_error(
+                            &module.entry_point,
+                            existing_entry_point,
+                            &output_path,
+                            string_table,
+                        ));
+                    }
+                    output_paths.insert(output_path.clone());
+                    output_path_owners.insert(output_path.clone(), module.entry_point.clone());
+                    output_files.push(output_file);
                 }
-                output_paths.insert(output_path.clone());
-                output_path_owners.insert(output_path.clone(), module.entry_point.clone());
-                output_files.push(output_file);
-            }
-            compiled_html_output_paths.push((module_index, html_output_path.clone()));
+                compiled_html_output_paths.push((module_index, html_output_path.clone()));
 
-            if let Some(homepage_entry) = entry_paths.expected_homepage_entry.as_ref() {
-                if module.entry_point == *homepage_entry {
-                    has_directory_homepage = true;
-                    entry_page_rel = Some(html_output_path.clone());
+                if let Some(homepage_entry) = entry_paths.expected_homepage_entry.as_ref() {
+                    if module.entry_point == *homepage_entry {
+                        has_directory_homepage = true;
+                        entry_page_rel = Some(html_output_path.clone());
+                    }
+                } else if entry_page_rel.is_none() {
+                    entry_page_rel = Some(html_output_path);
                 }
-            } else if entry_page_rel.is_none() {
-                entry_page_rel = Some(html_output_path);
             }
         }
 
@@ -160,56 +180,73 @@ impl BackendBuilder for HtmlProjectBuilder {
 
         let runtime_emission_plan = HtmlExternalRuntimeEmissionPlan::from_modules(&modules);
 
-        output_files.extend(emit_external_js_runtime_assets(
-            &runtime_emission_plan,
-            &mut output_paths,
-            string_table,
-        )?);
+        {
+            let _runtime_assets_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.external_runtime_assets");
+            output_files.extend(emit_external_js_runtime_assets(
+                &runtime_emission_plan,
+                &mut output_paths,
+                string_table,
+            )?);
+        }
 
-        output_files.extend(emit_build_runtime_modules(
-            &runtime_emission_plan,
-            &mut output_paths,
-            string_table,
-        )?);
+        {
+            let _runtime_glue_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.external_runtime_glue");
+            output_files.extend(emit_build_runtime_modules(
+                &runtime_emission_plan,
+                &mut output_paths,
+                string_table,
+            )?);
+        }
 
         let mut tracked_assets = Vec::new();
         let mut tracked_asset_sources_by_output: HashMap<PathBuf, PathBuf> = HashMap::new();
-        for (module_index, html_output_path) in &compiled_html_output_paths {
-            let module = &modules[*module_index];
-            let planned_assets =
-                plan_module_tracked_assets(module, html_output_path, string_table)?;
-            warnings.extend(planned_assets.warnings);
+        {
+            let _tracked_assets_plan_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.tracked_assets_plan");
+            for (module_index, html_output_path) in &compiled_html_output_paths {
+                let module = &modules[*module_index];
+                let planned_assets =
+                    plan_module_tracked_assets(module, html_output_path, string_table)?;
+                warnings.extend(planned_assets.warnings);
 
-            for asset in planned_assets.assets {
-                let output_path = asset.emitted_output_path.clone();
+                for asset in planned_assets.assets {
+                    let output_path = asset.emitted_output_path.clone();
 
-                if let Some(existing_source) = tracked_asset_sources_by_output.get(&output_path) {
-                    if *existing_source == asset.source_filesystem_path {
-                        continue;
+                    if let Some(existing_source) = tracked_asset_sources_by_output.get(&output_path)
+                    {
+                        if *existing_source == asset.source_filesystem_path {
+                            continue;
+                        }
+
+                        return Err(conflicting_tracked_asset_output_error(
+                            &asset.source_filesystem_path,
+                            existing_source,
+                            &output_path,
+                            string_table,
+                        ));
                     }
 
-                    return Err(conflicting_tracked_asset_output_error(
-                        &asset.source_filesystem_path,
-                        existing_source,
-                        &output_path,
-                        string_table,
-                    ));
-                }
+                    if !output_paths.insert(output_path.clone()) {
+                        return Err(tracked_asset_conflicts_with_existing_output_error(
+                            &asset.source_filesystem_path,
+                            &output_path,
+                            string_table,
+                        ));
+                    }
 
-                if !output_paths.insert(output_path.clone()) {
-                    return Err(tracked_asset_conflicts_with_existing_output_error(
-                        &asset.source_filesystem_path,
-                        &output_path,
-                        string_table,
-                    ));
+                    tracked_asset_sources_by_output
+                        .insert(output_path.clone(), asset.source_filesystem_path.clone());
+                    tracked_assets.push(asset);
                 }
-
-                tracked_asset_sources_by_output
-                    .insert(output_path.clone(), asset.source_filesystem_path.clone());
-                tracked_assets.push(asset);
             }
         }
-        output_files.extend(emit_tracked_assets(&tracked_assets, string_table)?);
+        {
+            let _tracked_assets_emit_guard =
+                crate::timing::PipelineTimingGuard::new("backend.html.tracked_assets_emit");
+            output_files.extend(emit_tracked_assets(&tracked_assets, string_table)?);
+        }
 
         Ok(Project {
             output_files,

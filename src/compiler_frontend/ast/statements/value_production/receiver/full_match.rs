@@ -33,6 +33,18 @@ use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: every diagnostic result owned by this module returns
+/// `Result<T, Box<CompilerDiagnostic>>` through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err` when stored
+/// directly in a `Result` variant. Boxing the error at the owner boundary keeps the `Result`
+/// envelope small without changing `DiagnosticBag`, `CompilerMessages`, or any shared error type.
+/// The already-boxed `parse_match_block` result flows through unchanged; still-plain external
+/// helpers (expression parsing, result-type inference) are adapted at their narrow call sites.
+/// Callers at the plain receiver boundary (`try_parse_value_block_at_receiver`) unbox once.
+type FullMatchResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Input for `parse_value_match_at_receiver`.
 pub(super) struct ValueMatchParseInput<'a, 'b> {
     pub(super) token_stream: &'a mut FileTokens,
@@ -50,7 +62,7 @@ pub(super) struct ValueMatchParseInput<'a, 'b> {
 /// validates completeness, infers the result type, and builds the expression.
 pub(super) fn parse_value_match_at_receiver(
     input: ValueMatchParseInput<'_, '_>,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> FullMatchResult<Expression> {
     let ValueMatchParseInput {
         token_stream,
         context,
@@ -73,12 +85,15 @@ pub(super) fn parse_value_match_at_receiver(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
+    let scrutinee =
+        create_expression_until(input, &[TokenKind::Is]).map_err(|error| Box::new(error.into()))?;
 
     if token_stream.current_token_kind() != &TokenKind::Is {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
-            token_stream.current_location(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+                token_stream.current_location(),
+            ),
         ));
     }
     token_stream.advance();
@@ -145,7 +160,7 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn validate_
     arms: &[MatchArm],
     default: Option<&[AstNode]>,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FullMatchResult<()> {
     let mut has_producing_path = false;
 
     for arm in arms {
@@ -154,9 +169,11 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn validate_
             BranchFlow::ProducesValue => has_producing_path = true,
             BranchFlow::Terminates => {}
             BranchFlow::FallsThrough => {
-                return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                    InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
-                    location.clone(),
+                return Err(Box::new(
+                    CompilerDiagnostic::invalid_control_flow_statement(
+                        InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                        location.clone(),
+                    ),
                 ));
             }
         }
@@ -168,9 +185,11 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn validate_
             BranchFlow::ProducesValue => has_producing_path = true,
             BranchFlow::Terminates => {}
             BranchFlow::FallsThrough => {
-                return Err(CompilerDiagnostic::invalid_control_flow_statement(
-                    InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
-                    location.clone(),
+                return Err(Box::new(
+                    CompilerDiagnostic::invalid_control_flow_statement(
+                        InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                        location.clone(),
+                    ),
                 ));
             }
         }
@@ -180,8 +199,10 @@ pub(in crate::compiler_frontend::ast::statements::value_production) fn validate_
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::invalid_control_flow_statement(
-        InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-        location.clone(),
+    Err(Box::new(
+        CompilerDiagnostic::invalid_control_flow_statement(
+            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+            location.clone(),
+        ),
     ))
 }

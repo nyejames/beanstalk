@@ -10,16 +10,21 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 
+/// Boxed diagnostic result for external import registration.
+///
+/// WHAT: gives external import registration one small error boundary.
+/// WHY: local-name derivation is already boxed, so registration can propagate it directly
+///      and adapt the plain visible-name registry once.
+type ExternalImportResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 impl<'a> ImportEnvironmentBuilder<'a> {
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn register_external_import(
         &mut self,
         file_visibility: &mut FileVisibility,
         registry: &mut VisibleNameRegistry,
         import: &FileImport,
         symbol_id: ExternalSymbolId,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> ExternalImportResult<()> {
         let local_name = self.derive_import_local_name(import)?;
 
         if let Some(symbol_name) = import.header_path.name() {

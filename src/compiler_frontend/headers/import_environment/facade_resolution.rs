@@ -16,6 +16,13 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+/// Boxed diagnostic result for facade boundary checks.
+///
+/// WHAT: gives source-library and module privacy checks one small error boundary.
+/// WHY: both callers already propagate boxed diagnostics, so the checks can preserve
+///      structured errors without unboxing and reboxing them.
+type BoundaryCheckResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Result of looking up an import path against a module facade.
 pub(crate) enum FacadeLookupResult {
     /// This import does not target a facade; use normal file-based resolution.
@@ -257,7 +264,7 @@ pub(crate) struct SourceLibraryBoundaryCheckInput<'a> {
 /// should already have resolved through `resolve_facade_import`.
 pub(crate) fn check_source_library_boundary(
     input: SourceLibraryBoundaryCheckInput<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> BoundaryCheckResult<()> {
     let Some(target_library) = input.file_library_membership.get(input.target_file) else {
         return Ok(());
     };
@@ -276,12 +283,12 @@ pub(crate) fn check_source_library_boundary(
     }
 
     let facade_name_id = input.string_table.intern(target_library);
-    Err(CompilerDiagnostic::not_exported_by_facade(
+    Err(Box::new(CompilerDiagnostic::not_exported_by_facade(
         input.requested_path.clone(),
         facade_name_id,
         ImportFacadeType::SourceLibrary,
         input.location,
-    ))
+    )))
 }
 
 /// Input bundle for module boundary checking.
@@ -304,11 +311,9 @@ pub(crate) struct ModuleBoundaryCheckInput<'a> {
 /// different module roots, the symbol must be exported by the target module's facade.
 /// WHY: ordinary source declarations are importable inside one module, but cross-module imports
 /// must use the target module's explicit facade surface.
-// The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-#[allow(clippy::result_large_err)]
 pub(crate) fn check_module_boundary(
     input: ModuleBoundaryCheckInput<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> BoundaryCheckResult<()> {
     let importer_root = input.file_module_membership.get(input.importer_file);
     let target_root = input.file_module_membership.get(input.target_file);
 
@@ -325,15 +330,15 @@ pub(crate) fn check_module_boundary(
     // Different module roots: grouped public imports should already have resolved through the
     // target facade. Direct source-path resolution here is therefore a boundary violation.
     if input.module_root_facade_exports.contains_key(target_root) {
-        return Err(diagnostics::cross_module_import_not_exported(
+        return Err(Box::new(diagnostics::cross_module_import_not_exported(
             input.symbol_path,
             input.location,
-        ));
+        )));
     }
 
     // Target module has no facade.
-    Err(diagnostics::missing_module_facade(
+    Err(Box::new(diagnostics::missing_module_facade(
         input.symbol_path,
         input.location,
-    ))
+    )))
 }

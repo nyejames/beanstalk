@@ -23,7 +23,7 @@ fn builder_cannot_override_frontend_owned_directive_by_name() {
 #[test]
 fn builder_cannot_override_frontend_owned_markdown_directive_by_name() {
     let builder_specs = vec![StyleDirectiveSpec::handler_no_op(
-        "markdown",
+        "md",
         TemplateBodyMode::Normal,
     )];
 
@@ -148,7 +148,7 @@ fn supported_directives_for_diagnostic_uses_stable_registry_order() {
 
     assert_eq!(
         registry.supported_directives_for_diagnostic(),
-        "'$children', '$fresh', '$slot', '$insert', '$note', '$todo', '$doc', '$raw', '$markdown'"
+        "'$children', '$fresh', '$slot', '$insert', '$note', '$todo', '$doc', '$raw', '$md'"
     );
 }
 
@@ -166,8 +166,8 @@ fn frontend_built_ins_have_expected_classification() {
     }
 
     let markdown = built_ins
-        .find("markdown")
-        .expect("missing frontend-owned '$markdown' directive");
+        .find("md")
+        .expect("missing frontend-owned '$md' directive");
     assert!(matches!(markdown.kind, StyleDirectiveKind::Handler(_)));
 
     for non_core in ["css", "html", "escape_html"] {
@@ -231,7 +231,7 @@ fn frontend_built_in_head_compatibility_profiles_match_contract() {
         );
     }
 
-    for formatter_directive in ["markdown", "raw"] {
+    for formatter_directive in ["md", "raw"] {
         let directive = built_ins
             .find(formatter_directive)
             .unwrap_or_else(|| panic!("missing '${formatter_directive}' directive"));

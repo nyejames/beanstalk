@@ -9,6 +9,14 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismat
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
+/// Stage-local result for condition-type validation helpers.
+///
+/// WHAT: boxes the condition diagnostic so the `Result` error variant stays small.
+/// WHY: `CompilerDiagnostic` is large enough that returning it directly inside a
+/// `Result` triggers `clippy::result_large_err`; boxing keeps the four condition
+/// helpers uniform without changing diagnostic semantics or caller boundaries.
+type ConditionValidationResult = Result<(), Box<CompilerDiagnostic>>;
+
 /// Shared helper that checks a condition expression against `Bool`.
 ///
 /// WHY: all control-flow condition sites (`if`, `loop`, match guard) share one
@@ -17,24 +25,24 @@ pub(crate) fn ensure_boolean_condition(
     condition: &Expression,
     location: &SourceLocation,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> ConditionValidationResult {
     if condition.type_id == type_environment.builtins().bool {
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::type_mismatch(
+    Err(Box::new(CompilerDiagnostic::type_mismatch(
         type_environment.builtins().bool,
         condition.type_id,
         TypeMismatchContext::Condition,
         location.clone(),
-    ))
+    )))
 }
 
 /// Validate `if` statement condition type with centralized diagnostics policy.
 pub(crate) fn ensure_if_statement_condition(
     condition: &Expression,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> ConditionValidationResult {
     ensure_boolean_condition(condition, &condition.location, type_environment)
 }
 
@@ -42,7 +50,7 @@ pub(crate) fn ensure_if_statement_condition(
 pub(crate) fn ensure_match_guard_condition(
     condition: &Expression,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> ConditionValidationResult {
     ensure_boolean_condition(condition, &condition.location, type_environment)
 }
 
@@ -50,6 +58,6 @@ pub(crate) fn ensure_match_guard_condition(
 pub(crate) fn ensure_loop_condition(
     condition: &Expression,
     type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
+) -> ConditionValidationResult {
     ensure_boolean_condition(condition, &condition.location, type_environment)
 }

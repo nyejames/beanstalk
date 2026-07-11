@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Header-stage import collection.
 //!
 //! WHAT: parses top-level import clauses into normalized header dependency paths.
@@ -16,16 +14,16 @@ pub(super) fn normalize_import_dependency_path(
     source_file: &InternedPath,
     path_location: &SourceLocation,
     string_table: &StringTable,
-) -> Result<InternedPath, CompilerDiagnostic> {
+) -> Result<InternedPath, Box<CompilerDiagnostic>> {
     if import_path
         .as_components()
         .iter()
         .any(|component| string_table.resolve(*component).ends_with(".bst"))
     {
-        return Err(CompilerDiagnostic::explicit_bst_extension(
+        return Err(Box::new(CompilerDiagnostic::explicit_bst_extension(
             import_path.to_owned(),
             path_location.clone(),
-        ));
+        )));
     }
 
     if import_path
@@ -33,11 +31,11 @@ pub(super) fn normalize_import_dependency_path(
         .iter()
         .any(|component| string_table.resolve(*component) == "..")
     {
-        return Err(CompilerDiagnostic::invalid_import_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_import_path(
             import_path.to_owned(),
             InvalidImportPathReason::ParentDirectorySegment,
             path_location.clone(),
-        ));
+        )));
     }
 
     let mut import_components = import_path.as_components().iter().copied();

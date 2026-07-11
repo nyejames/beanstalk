@@ -54,6 +54,7 @@ fn rule_diagnostics_render_receiver_type_names() {
         InvalidFieldAccessReason::UnknownMember,
         None,
         Some(int_type),
+        Vec::new(),
         SourceLocation::default(),
     );
     let field_guidance = format_payload_guidance(&field_access.payload, context);

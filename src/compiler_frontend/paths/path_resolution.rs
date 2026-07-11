@@ -18,17 +18,17 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::import_resolution::{
     ImportPathResolutionError, validate_import_boundary, validate_import_case_sensitivity,
 };
-use crate::compiler_frontend::paths::module_roots::{discover_module_roots, module_root_for_file};
+use crate::compiler_frontend::paths::module_roots::ModuleRootTable;
 use crate::compiler_frontend::paths::path_normalization::{
     ImportCandidate, ImportCandidateSupport, build_public_path,
     candidate_import_files_for_source_kinds, canonicalize_best_effort, import_contains_dotdot,
     is_relative_import_path, join_and_normalize_path,
 };
-use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
+use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -61,12 +61,8 @@ pub(crate) struct ProjectPathResolver {
     source_library_roots: HashMap<String, PathBuf>,
     /// Maps library prefix to the canonical path of its `#mod.bst` facade file, if present.
     facade_files: HashMap<String, PathBuf>,
-    /// Module roots discovered under the entry root (directories containing `#*.bst`).
-    /// Sorted deepest-first so `module_root_for_file` finds the nearest ancestor.
-    module_roots: Vec<PathBuf>,
-    module_roots_set: HashSet<PathBuf>,
-    /// Maps module root path to its `#mod.bst` facade file path, if present.
-    module_root_facades: HashMap<PathBuf, PathBuf>,
+    /// Module roots prepared by Stage 0. Resolver construction never discovers them.
+    module_roots: ModuleRootTable,
     /// Import root policy enforced during import resolution.
     import_root_policy: ImportRootPolicy,
     /// Builder-supported source file kinds available for this project.
@@ -82,6 +78,28 @@ impl ProjectPathResolver {
         source_libraries: &SourceLibraryRegistry,
         source_file_kinds: &SourceFileKindRegistry,
     ) -> Result<Self, CompilerError> {
+        Self::new_with_module_roots(
+            project_root,
+            entry_root,
+            source_libraries,
+            source_file_kinds,
+            ModuleRootTable::empty(),
+        )
+    }
+
+    /// WHAT: creates a resolver from canonical roots and Stage 0 module-root data.
+    /// WHY: path resolution may query prepared module boundaries, but it must not perform
+    /// filesystem discovery during normal directory construction.
+    pub(crate) fn new_with_module_roots(
+        project_root: PathBuf,
+        entry_root: PathBuf,
+        source_libraries: &SourceLibraryRegistry,
+        source_file_kinds: &SourceFileKindRegistry,
+        module_roots: ModuleRootTable,
+    ) -> Result<Self, CompilerError> {
+        let total_start = crate::timing::start_pipeline_timing();
+
+        let source_library_roots_start = crate::timing::start_pipeline_timing();
         let mut source_library_roots = HashMap::new();
         for root in source_libraries.iter() {
             // Currently only filesystem roots are supported; embedded roots will be added later.
@@ -92,8 +110,13 @@ impl ProjectPathResolver {
             let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
             source_library_roots.insert(root.import_prefix.clone(), canonical_root);
         }
+        log_path_resolver_timing(
+            "stage0.path_resolver.source_library_roots",
+            source_library_roots_start,
+        );
 
         // Discover facade files (`#mod.bst`) in each source library root.
+        let source_library_facades_start = crate::timing::start_pipeline_timing();
         let mut facade_files = HashMap::new();
         for (prefix, root) in &source_library_roots {
             let mod_file = root.join(MOD_FILE_NAME);
@@ -103,20 +126,24 @@ impl ProjectPathResolver {
                 facade_files.insert(prefix.clone(), canonical);
             }
         }
+        log_path_resolver_timing(
+            "stage0.path_resolver.source_library_facades",
+            source_library_facades_start,
+        );
 
-        let discovered_module_roots = discover_module_roots(&entry_root);
-
-        Ok(Self {
+        let resolver = Self {
             project_root,
             entry_root,
             source_library_roots,
             facade_files,
-            module_roots: discovered_module_roots.module_roots,
-            module_roots_set: discovered_module_roots.module_roots_set,
-            module_root_facades: discovered_module_roots.module_root_facades,
+            module_roots,
             import_root_policy: ImportRootPolicy::Normal,
             source_file_kinds: source_file_kinds.clone(),
-        })
+        };
+
+        log_path_resolver_timing("stage0.path_resolver.total", total_start);
+
+        Ok(resolver)
     }
 
     /// Set the import root policy for this resolver.
@@ -144,11 +171,11 @@ impl ProjectPathResolver {
     }
 
     pub(crate) fn module_root_facades(&self) -> &HashMap<PathBuf, PathBuf> {
-        &self.module_root_facades
+        self.module_roots.facade_files()
     }
 
-    pub(crate) fn module_roots(&self) -> &[PathBuf] {
-        &self.module_roots
+    pub(crate) fn module_roots(&self) -> impl Iterator<Item = &PathBuf> {
+        self.module_roots.root_directories()
     }
 
     /// WHAT: returns the builder-supported source file kinds for this project.
@@ -160,7 +187,7 @@ impl ProjectPathResolver {
     /// WHAT: returns the module root that contains the given file.
     /// WHY: nearest-ancestor lookup determines which module a file belongs to.
     pub(crate) fn module_root_for_file(&self, file: &Path) -> Option<PathBuf> {
-        module_root_for_file(&self.module_roots, file)
+        self.module_roots.module_root_for_file(file)
     }
 
     /// WHAT: derive a portable logical source path from a canonical filesystem file path.
@@ -313,12 +340,12 @@ impl ProjectPathResolver {
         //      `helper/` itself as a module root before walking to its parents.
         let mut current = normalized.clone();
         loop {
-            // Canonicalize before lookup because module_roots_set stores canonical paths.
+            // Canonicalize before lookup because Stage 0 stores canonical module-root paths.
             // On macOS, temp directories are under /var which symlinks to /private/var,
             // so non-canonical paths won't match canonicalized module roots.
             let lookup_current = fs::canonicalize(&current).unwrap_or_else(|_| current.clone());
 
-            if self.module_roots_set.contains(&lookup_current) {
+            if self.module_roots.contains_directory(&lookup_current) {
                 let canonical_importer =
                     fs::canonicalize(importer_file).unwrap_or_else(|_| importer_file.to_path_buf());
                 let importer_root = self.module_root_for_file(&canonical_importer);
@@ -328,15 +355,15 @@ impl ProjectPathResolver {
                     return Ok(None);
                 }
 
-                if let Some(facade_path) = self.module_root_facades.get(&lookup_current) {
+                if let Some(facade_path) = self.module_root_facades().get(&lookup_current) {
                     return Ok(Some(facade_path.clone()));
                 }
 
                 // Target module root has no facade.
                 let location = SourceLocation::from_path(importer_file, string_table);
-                return Err(ImportPathResolutionError::Diagnostic(
+                return Err(ImportPathResolutionError::Diagnostic(Box::new(
                     CompilerDiagnostic::missing_module_facade(import_path.clone(), location),
-                ));
+                )));
             }
             if !current.pop() {
                 break;
@@ -370,7 +397,7 @@ impl ProjectPathResolver {
                     location,
                 )
             };
-            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
         }
 
         if import_contains_dotdot(import_path, string_table) {
@@ -380,7 +407,7 @@ impl ProjectPathResolver {
                 InvalidImportPathReason::ParentDirectorySegment,
                 location,
             );
-            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
         }
 
         let (base_kind, filesystem_base) =
@@ -393,13 +420,13 @@ impl ProjectPathResolver {
                     if self.importer_is_inside_source_library(importer_file) => {}
                 CompileTimePathBase::RelativeToFile | CompileTimePathBase::EntryRoot => {
                     let location = SourceLocation::from_path(importer_file, string_table);
-                    return Err(ImportPathResolutionError::Diagnostic(
+                    return Err(ImportPathResolutionError::Diagnostic(Box::new(
                         CompilerDiagnostic::invalid_config_reason(
                             None,
                             InvalidConfigReason::ConfigImportRootViolation,
                             location,
                         ),
-                    ));
+                    )));
                 }
                 CompileTimePathBase::SourceLibraryRoot => {}
             }
@@ -431,14 +458,14 @@ impl ProjectPathResolver {
             let location = SourceLocation::from_path(importer_file, string_table);
             let diagnostic =
                 CompilerDiagnostic::ambiguous_import_target(import_path.to_owned(), location);
-            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
         }
 
         let Some(candidate) = existing_candidates.first() else {
             let location = SourceLocation::from_path(importer_file, string_table);
-            return Err(ImportPathResolutionError::Diagnostic(
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(
                 CompilerDiagnostic::missing_import_target(import_path.clone(), location),
-            ));
+            )));
         };
 
         if candidate.support == ImportCandidateSupport::RecognizedButUnsupported {
@@ -449,7 +476,7 @@ impl ProjectPathResolver {
                 extension_id,
                 location,
             );
-            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
         }
 
         let canonical = fs::canonicalize(&candidate.path).map_err(|error| {
@@ -505,7 +532,7 @@ impl ProjectPathResolver {
     }
 
     /// WHAT: checks whether a file already admitted to config parsing belongs to a source library.
-    /// WHY: `#config.bst` cannot use relative imports, but builder/core source-library facades
+    /// WHY: `config.bst` cannot use relative imports, but builder/core source-library facades
     /// often re-export support declarations through relative imports inside the library root.
     fn importer_is_inside_source_library(&self, importer_file: &Path) -> bool {
         let canonical_importer =
@@ -651,7 +678,9 @@ impl ProjectPathResolver {
                 location,
             );
 
-            return Err(CompileTimePathResolutionError::Diagnostic(diagnostic));
+            return Err(CompileTimePathResolutionError::Diagnostic(Box::new(
+                diagnostic,
+            )));
         }
 
         Ok(())
@@ -700,3 +729,15 @@ fn existing_import_candidates(candidates: &[ImportCandidate]) -> Vec<&ImportCand
 #[cfg(test)]
 #[path = "tests/path_resolution_tests.rs"]
 mod tests;
+
+/// Record a path-resolver stage timing through the central `timers` substrate.
+///
+/// WHAT: delegates to `timing::record_started_pipeline_timing`, which stores the
+///      observation in the active collection scope and emits the stable
+///      `BST_BENCH timing` line when the output mode permits.
+/// WHY:  path-resolver construction uses dotted `stage0.path_resolver.*` metric
+///      names. The start token is zero-sized when `timers` is off, so regular
+///      builds do not read clocks for instrumentation-only measurements.
+fn log_path_resolver_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
+    crate::timing::record_started_pipeline_timing(metric, start);
+}

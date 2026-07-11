@@ -96,7 +96,7 @@ fn parser_uses_precise_location_from_setting_locations() {
     let mut string_table = StringTable::new();
     let precise_location = SourceLocation::new(
         InternedPath::from_path_buf(
-            PathBuf::from("project/#config.bst").as_path(),
+            PathBuf::from("project/config.bst").as_path(),
             &mut string_table,
         ),
         Default::default(),
@@ -123,6 +123,6 @@ fn parser_falls_back_to_config_file_location() {
     let diagnostic = error.diagnostic().expect("config error should be typed");
     assert_eq!(
         diagnostic.primary_location.scope.to_path_buf(&string_table),
-        PathBuf::from("project/#config.bst")
+        PathBuf::from("project/config.bst")
     );
 }

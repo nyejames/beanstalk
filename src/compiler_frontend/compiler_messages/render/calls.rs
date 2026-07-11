@@ -3,7 +3,9 @@
 //! WHAT: renders arity, argument-shape, mutability-at-call, and return-shape diagnostics.
 //! WHY: call/return validation is a distinct frontend boundary with its own payload family.
 
-use super::{DiagnosticRenderContext, diagnostic_type_name, named_value_or_default};
+use super::{
+    DiagnosticRenderContext, closest_name_suggestion, diagnostic_type_name, named_value_or_default,
+};
 use crate::compiler_frontend::compiler_messages::{
     InvalidAssignmentTargetReason, InvalidBuiltinCallReason, InvalidCallShapeReason,
     InvalidCastReason, InvalidCopyTargetReason, InvalidFieldAccessReason, InvalidMultiBindReason,
@@ -12,40 +14,122 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
-pub(crate) fn invalid_call_shape_message(reason: InvalidCallShapeReason) -> String {
+/// Build a "call context" prefix that names the function being called when available.
+///
+/// WHAT: many call-shape diagnostics carry the callee name as an optional payload field.
+/// WHY: including the function name makes the message immediately actionable instead of
+/// leaving the user to cross-reference the source location.
+fn call_prefix(callee_name: Option<StringId>, string_table: &StringTable) -> String {
+    callee_name
+        .map(|name| format!("Call to '{}'", string_table.resolve(name)))
+        .unwrap_or_else(|| "Call".to_owned())
+}
+
+/// Resolve the parameter name for display, falling back to a 1-based position label.
+fn parameter_label(
+    parameter_name: Option<StringId>,
+    parameter_index: usize,
+    string_table: &StringTable,
+) -> String {
+    parameter_name
+        .map(|name| format!("parameter '{}'", string_table.resolve(name)))
+        .unwrap_or_else(|| {
+            format!(
+                "parameter {parameter_index} (1-based: #{})",
+                parameter_index + 1
+            )
+        })
+}
+
+pub(crate) fn invalid_call_shape_message(
+    reason: InvalidCallShapeReason,
+    callee_name: Option<StringId>,
+    string_table: &StringTable,
+) -> String {
+    let prefix = call_prefix(callee_name, string_table);
+
     match reason {
-        InvalidCallShapeReason::MissingArgument { .. } => {
-            "Missing argument for a parameter in this call.".to_string()
+        InvalidCallShapeReason::MissingArgument {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} is missing an argument for {label}.")
         }
         InvalidCallShapeReason::ExtraPositionalArgument { expected_count } => {
-            format!("This call provides more than {expected_count} positional argument(s).")
+            format!("{prefix} provides more positional arguments than expected (expected {expected_count}).")
         }
-        InvalidCallShapeReason::DuplicateArgument { .. } => {
-            "An argument was provided more than once for a parameter.".to_string()
+        InvalidCallShapeReason::DuplicateArgument {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} provides an argument for {label} more than once. Each parameter may only be supplied once.")
         }
-        InvalidCallShapeReason::NamedArgumentNotFound { .. } => {
-            "A named argument does not match any parameter of this function.".to_string()
+        InvalidCallShapeReason::NamedArgumentNotFound {
+            name,
+            known_parameters,
+       } => {
+            let arg_name = string_table.resolve(name);
+            let suggestion = closest_name_suggestion(arg_name, &known_parameters, string_table);
+            let known = known_parameters
+               .iter()
+                .map(|p| string_table.resolve(*p))
+                .collect::<Vec<_>>()
+                .join(", ");
+            match suggestion {
+                Some(suggested) => {
+                    format!(
+                        "{prefix} has named argument '{arg_name}' which does not match any parameter. Did you mean '{suggested}'? Known parameters: [{known}]."
+                    )
+                }
+                None => {
+                    format!(
+                        "{prefix} has named argument '{arg_name}' which does not match any parameter. Known parameters: [{known}]."
+                    )
+                }
+            }
         }
         InvalidCallShapeReason::PositionalAfterNamed => {
-            "Positional arguments are not allowed after named arguments in a call.".to_string()
+            "Positional arguments must come before named arguments. Reorder the call so all positional arguments come first.".to_string()
         }
         InvalidCallShapeReason::NamedArgumentsNotSupported => {
-            "Named arguments are not supported for this call.".to_string()
+            "Named arguments are not supported for this call. Use positional arguments only.".to_string()
         }
-        InvalidCallShapeReason::MutableAccessRequired { .. } => {
-            "A parameter requires mutable access (~), but it was not provided.".to_string()
+        InvalidCallShapeReason::MutableAccessRequired {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} requires mutable access (~) for {label}, but it was not provided. Prefix an existing mutable place with ~, for example `~value`.")
         }
-        InvalidCallShapeReason::MutableAccessNotAllowed { .. } => {
-            "A parameter does not allow mutable access (~), but it was provided.".to_string()
+        InvalidCallShapeReason::MutableAccessNotAllowed {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} does not allow mutable access (~) for {label}, but it was provided. Remove the ~ prefix from this argument.")
         }
-        InvalidCallShapeReason::MutableAccessOnNonPlace { .. } => {
-            "Mutable access (~) requires a mutable place (variable or field), but a non-place expression was provided.".to_string()
+        InvalidCallShapeReason::MutableAccessOnNonPlace {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} requires mutable access (~) for {label}, but a non-place expression was provided. Mutable access needs a variable or field, not a literal or computed value.")
         }
-        InvalidCallShapeReason::MutableAccessOnImmutablePlace { .. } => {
-            "Mutable access (~) requires a mutable place, but an immutable place was provided.".to_string()
+        InvalidCallShapeReason::MutableAccessOnImmutablePlace {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} requires mutable access (~) for {label}, but an immutable place was provided. Declare the binding with ~ to allow mutation.")
         }
-        InvalidCallShapeReason::ReactiveSourceRequired { .. } => {
-            "This parameter requires an existing reactive source. Pass a value declared with `$Type` or `$=` instead of an ordinary value.".to_string()
+        InvalidCallShapeReason::ReactiveSourceRequired {
+            parameter_name,
+            parameter_index,
+        } => {
+            let label = parameter_label(parameter_name, parameter_index, string_table);
+            format!("{prefix} requires an existing reactive source for {label}. Pass a value declared with `$Type` or `$=` instead of an ordinary value.")
         }
     }
 }
@@ -75,7 +159,7 @@ pub(crate) fn invalid_return_shape_message(reason: InvalidReturnShapeReason) -> 
             "return! requires an error value.".to_string()
         }
         InvalidReturnShapeReason::FunctionMayFallThrough => {
-            "Function can fall through without returning a value.".to_string()
+            "This function can fall through without returning on every path. Add a return, a terminal else branch, or an `assert(false)` guard to ensure all reachable paths produce a value.".to_string()
         }
     }
 }
@@ -373,13 +457,41 @@ pub(crate) fn invalid_receiver_call_message(
     }
 }
 
+/// Build a "did you mean?" suggestion for a misspelled field name.
+///
+/// WHAT: uses the same edit-distance heuristic as named-argument suggestions.
+/// WHY: typos in field access are one of the most common mistakes; suggesting the
+/// correct field name is immediately actionable.
+fn field_suggestion(
+    field_name: Option<StringId>,
+    known_fields: &[StringId],
+    string_table: &StringTable,
+) -> Option<String> {
+    let name = field_name?;
+    let name_str = string_table.resolve(name);
+    closest_name_suggestion(name_str, known_fields, string_table)
+}
+
+/// Build a hint listing available fields when no close suggestion is found.
+fn available_fields_hint(known_fields: &[StringId], string_table: &StringTable) -> String {
+    if known_fields.is_empty() {
+        return String::new();
+    }
+    let names = known_fields
+        .iter()
+        .map(|f| string_table.resolve(*f))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" Available: [{names}]")
+}
+
 pub(crate) fn invalid_copy_target_message(reason: InvalidCopyTargetReason) -> String {
     match reason {
         InvalidCopyTargetReason::FunctionValue => {
-            "The 'copy' keyword only accepts places, not function values or calls.".to_string()
+            "The 'copy' keyword only accepts places, not function values or calls. Assign the result to a variable first, then copy that variable.".to_string()
         }
         InvalidCopyTargetReason::NonPlace => {
-            "The 'copy' keyword only accepts a place expression.".to_string()
+            "The 'copy' keyword requires a variable or field, not a literal or computed expression. Assign the value to a variable first, then copy it, for example `tmp = value` followed by `copy tmp`.".to_string()
         }
     }
 }
@@ -388,6 +500,7 @@ pub(crate) fn invalid_field_access_message(
     reason: InvalidFieldAccessReason,
     field_name: Option<StringId>,
     receiver_type: Option<TypeId>,
+    known_fields: &[StringId],
     context: DiagnosticRenderContext<'_>,
 ) -> String {
     let string_table = context.string_table;
@@ -416,11 +529,20 @@ pub(crate) fn invalid_field_access_message(
             }
             None => format!("Property or method {field_text} not found for external type."),
         },
-        InvalidFieldAccessReason::UnknownMember => match receiver_text {
-            Some(receiver_text) => {
-                format!("Property or method {field_text} not found for '{receiver_text}'.")
+        InvalidFieldAccessReason::UnknownMember => {
+            let suggestion = field_suggestion(field_name, known_fields, string_table);
+            match receiver_text {
+                Some(receiver_text) => match suggestion {
+                    Some(suggested) => {
+                        format!("Property or method {field_text} not found for '{receiver_text}'. Did you mean '{suggested}'?")
+                    }
+                    None => {
+                        let available = available_fields_hint(known_fields, string_table);
+                        format!("Property or method {field_text} not found for '{receiver_text}'.{available}")
+                    }
+                },
+                None => format!("Property or method {field_text} not found."),
             }
-            None => format!("Property or method {field_text} not found."),
-        },
+        }
     }
 }

@@ -57,6 +57,14 @@ pub(crate) fn render_payload(
                 "Add an explicit type annotation, for example `scores {String = Int} = {}` for an empty map or `items {Int} = {}` for an empty collection.".to_owned(),
             ]
         }
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::UnknownDirective,
+            ..
+        } => {
+            vec![
+                "Known template directives include `$md`, `$raw`, `$children`, `$slot`, `$insert`, `$fresh`, `$html`, `$css`, `$escape_html`, `$code`, `$note`, `$todo`, and `$doc`.".to_owned(),
+            ]
+        }
         _ => Vec::new(),
     };
 
@@ -420,7 +428,14 @@ fn render_payload_message(
             reason,
             field_name,
             receiver_type,
-        } => invalid_field_access_message(*reason, *field_name, *receiver_type, context),
+            known_fields,
+        } => invalid_field_access_message(
+            *reason,
+            *field_name,
+            *receiver_type,
+            known_fields,
+            context,
+        ),
         DiagnosticPayload::InvalidMatchPattern {
             reason,
             variant_name,
@@ -453,9 +468,10 @@ fn render_payload_message(
         DiagnosticPayload::IncompatibleChoiceComparison { reason, lhs, rhs } => {
             incompatible_choice_comparison_message(reason, *lhs, *rhs, context)
         }
-        DiagnosticPayload::InvalidCallShape { reason, .. } => {
-            invalid_call_shape_message(reason.clone())
-        }
+        DiagnosticPayload::InvalidCallShape {
+            reason,
+            callee_name,
+        } => invalid_call_shape_message(reason.clone(), *callee_name, string_table),
         DiagnosticPayload::InvalidReturnShape { reason } => invalid_return_shape_message(*reason),
         DiagnosticPayload::InvalidGenericInstantiation { type_name, reason } => {
             invalid_generic_instantiation_message(*type_name, reason, context)

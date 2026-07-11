@@ -18,7 +18,7 @@ use super::{GroupedPathExpansion, ParseComponentContext, RelativePathExpansions}
 pub(super) fn parse_grouped_block(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<RelativePathExpansions, CompilerDiagnostic> {
+) -> Result<RelativePathExpansions, Box<CompilerDiagnostic>> {
     let mut expanded_suffixes: RelativePathExpansions = Vec::new();
     let mut saw_entry = false;
     let mut expect_entry = true;
@@ -27,10 +27,10 @@ pub(super) fn parse_grouped_block(
         consume_all_whitespace(stream);
 
         let Some(next) = stream.peek().copied() else {
-            return Err(CompilerDiagnostic::invalid_path(
+            return Err(Box::new(CompilerDiagnostic::invalid_path(
                 PathKind::MissingClosingBrace,
                 stream.new_location(),
-            ));
+            )));
         };
 
         if !expect_entry {
@@ -45,20 +45,20 @@ pub(super) fn parse_grouped_block(
                     break;
                 }
                 _ => {
-                    return Err(CompilerDiagnostic::invalid_path(
+                    return Err(Box::new(CompilerDiagnostic::invalid_path(
                         PathKind::EntriesNeedCommas,
                         stream.new_location(),
-                    ));
+                    )));
                 }
             }
         }
 
         if next == '}' {
             if !saw_entry {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::EmptyGroupedBlock,
                     stream.new_location(),
-                ));
+                )));
             }
 
             stream.next();
@@ -66,10 +66,10 @@ pub(super) fn parse_grouped_block(
         }
 
         if next == ',' {
-            return Err(CompilerDiagnostic::invalid_path(
+            return Err(Box::new(CompilerDiagnostic::invalid_path(
                 PathKind::MultipleCommas,
                 stream.new_location(),
-            ));
+            )));
         }
 
         let parsed_entry = parse_grouped_entry(stream, string_table)?;
@@ -78,24 +78,24 @@ pub(super) fn parse_grouped_block(
 
         if stream.peek() == Some(&'{') {
             if parsed_entry.alias.is_some() {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::AliasOnlyOnLeaf,
                     stream.new_location(),
-                ));
+                )));
             }
 
             if parsed_entry.ended_with_separator {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::SlashBeforeGroup,
                     stream.new_location(),
-                ));
+                )));
             }
 
             if parsed_entry.components.is_empty() {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::NestedGroupNeedsPrefix,
                     stream.new_location(),
-                ));
+                )));
             }
 
             stream.next();
@@ -113,17 +113,17 @@ pub(super) fn parse_grouped_block(
             }
         } else {
             if parsed_entry.ended_with_separator {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::GroupedPrefixTrailingSeparator,
                     stream.new_location(),
-                ));
+                )));
             }
 
             if parsed_entry.components.is_empty() {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::GroupedEntryEmpty,
                     stream.new_location(),
-                ));
+                )));
             }
 
             expanded_suffixes.push(GroupedPathExpansion {
@@ -148,21 +148,21 @@ pub(super) fn parse_grouped_block(
 fn validate_import_alias_symbol(
     alias: &str,
     location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     if !is_valid_identifier(alias) {
-        return Err(CompilerDiagnostic::invalid_import_clause(
+        return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
             ImportClauseKind::Alias,
             InvalidImportClauseReason::AliasNotValidIdentifier,
             location,
-        ));
+        )));
     }
 
     if is_keyword(alias) {
-        return Err(CompilerDiagnostic::invalid_import_clause(
+        return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
             ImportClauseKind::Alias,
             InvalidImportClauseReason::AliasIsKeyword,
             location,
-        ));
+        )));
     }
 
     Ok(())
@@ -173,7 +173,7 @@ fn validate_import_alias_symbol(
 fn parse_grouped_entry(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<super::ParsedGroupedEntry, CompilerDiagnostic> {
+) -> Result<super::ParsedGroupedEntry, Box<CompilerDiagnostic>> {
     let entry_start = stream.position;
     let mut components = Vec::new();
     let mut seen_non_relative_component = false;
@@ -194,10 +194,10 @@ fn parse_grouped_entry(
             }
 
             if matches!(next, '/' | '\\') {
-                return Err(CompilerDiagnostic::invalid_path(
+                return Err(Box::new(CompilerDiagnostic::invalid_path(
                     PathKind::EmptyComponent,
                     stream.new_location(),
-                ));
+                )));
             }
 
             let parsed_component = super::components::parse_component(
@@ -237,16 +237,16 @@ fn parse_grouped_entry(
         }
 
         if skipped_whitespace {
-            return Err(CompilerDiagnostic::invalid_path(
+            return Err(Box::new(CompilerDiagnostic::invalid_path(
                 PathKind::WhitespaceMustBeQuoted,
                 stream.new_location(),
-            ));
+            )));
         }
 
-        return Err(CompilerDiagnostic::invalid_path(
+        return Err(Box::new(CompilerDiagnostic::invalid_path(
             PathKind::MissingSeparator,
             stream.new_location(),
-        ));
+        )));
     }
 
     let path_end = stream.position;
@@ -264,11 +264,11 @@ fn parse_grouped_entry(
         if let Some(next) = stream.peek().copied()
             && super::is_grouped_entry_stop_char(stream, next, true)
         {
-            return Err(CompilerDiagnostic::invalid_import_clause(
+            return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
                 ImportClauseKind::Alias,
                 InvalidImportClauseReason::MissingAlias,
                 stream.new_location(),
-            ));
+            )));
         }
 
         let alias_start = stream.position;
@@ -288,11 +288,11 @@ fn parse_grouped_entry(
         // Reject a second `as` keyword inside a grouped entry.
         consume_all_whitespace(stream);
         if stream.peek().copied() == Some('a') && super::peek_keyword_as(stream) {
-            return Err(CompilerDiagnostic::invalid_import_clause(
+            return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
                 ImportClauseKind::Grouped,
                 InvalidImportClauseReason::DoubleAliasInGroupedEntry,
                 stream.new_location(),
-            ));
+            )));
         }
     }
 

@@ -14,7 +14,9 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use saying::say;
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
-    for (diagnostic_index, diagnostic) in messages.diagnostic_slice().iter().enumerate() {
+    let display_order = messages.diagnostic_display_order();
+    for diagnostic_index in display_order {
+        let diagnostic = &messages.diagnostic_slice()[diagnostic_index];
         let render_context = messages.diagnostic_render_context(diagnostic_index);
         crate::compiler_frontend::compiler_messages::render::terminal::print_diagnostic_with_context(
             diagnostic,

@@ -17,6 +17,18 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 
+/// File-local boxed diagnostic result alias.
+///
+/// WHAT: every result-type inference function in this module returns
+/// `Result<T, Box<CompilerDiagnostic>>` through this alias.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err`
+/// when stored directly in a `Result` variant. Boxing the error at this owner boundary
+/// keeps the `Result` envelope small without changing `DiagnosticBag`, `CompilerMessages`,
+/// or any shared error type. The already-boxed callers in `block_if.rs`,
+/// `full_match.rs`, and `inline_then_else.rs` consume these results directly without
+/// unbox/rebox churn; `receiver/mod.rs` unboxes once at the plain accumulation boundary.
+type ResultTypeResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Maps a receiver kind to the diagnostic context used when branch types mismatch.
 pub(super) fn receiver_type_mismatch_context(kind: ValueReceiverKind) -> TypeMismatchContext {
     match kind {
@@ -37,40 +49,40 @@ pub(super) fn infer_inline_result_type(
     type_interner: &mut AstTypeInterner<'_>,
     location: &SourceLocation,
     receiver_kind: ValueReceiverKind,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> ResultTypeResult<TypeId> {
     let context = receiver_type_mismatch_context(receiver_kind);
 
     if let Some(expected) = expected_type_id {
         let env = type_interner.environment();
 
         if !is_declaration_compatible(expected, then_type, env) {
-            return Err(CompilerDiagnostic::type_mismatch(
+            return Err(Box::new(CompilerDiagnostic::type_mismatch(
                 expected,
                 then_type,
                 context,
                 location.clone(),
-            ));
+            )));
         }
 
         if !is_declaration_compatible(expected, else_type, env) {
-            return Err(CompilerDiagnostic::type_mismatch(
+            return Err(Box::new(CompilerDiagnostic::type_mismatch(
                 expected,
                 else_type,
                 context,
                 location.clone(),
-            ));
+            )));
         }
 
         return Ok(expected);
     }
 
     if then_type != else_type {
-        return Err(CompilerDiagnostic::type_mismatch(
+        return Err(Box::new(CompilerDiagnostic::type_mismatch(
             then_type,
             else_type,
             context,
             location.clone(),
-        ));
+        )));
     }
 
     Ok(then_type)
@@ -90,7 +102,7 @@ pub(super) fn infer_block_if_result_type(
     type_interner: &mut AstTypeInterner<'_>,
     location: &SourceLocation,
     receiver_kind: ValueReceiverKind,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> ResultTypeResult<TypeId> {
     if expected_result_type_ids.len() > 1 {
         return Ok(type_interner
             .environment_mut_for_derived_types()
@@ -108,12 +120,12 @@ pub(super) fn infer_block_if_result_type(
     match (then_type, else_type) {
         (Some(then_type_id), Some(else_type_id)) => {
             if then_type_id != else_type_id {
-                return Err(CompilerDiagnostic::type_mismatch(
+                return Err(Box::new(CompilerDiagnostic::type_mismatch(
                     then_type_id,
                     else_type_id,
                     context,
                     location.clone(),
-                ));
+                )));
             }
 
             Ok(then_type_id)
@@ -122,9 +134,11 @@ pub(super) fn infer_block_if_result_type(
         (Some(then_type_id), None) => Ok(then_type_id),
         (None, Some(else_type_id)) => Ok(else_type_id),
 
-        (None, None) => Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        (None, None) => Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         )),
     }
 }
@@ -141,7 +155,7 @@ pub(super) fn infer_value_match_result_type(
     type_interner: &mut AstTypeInterner<'_>,
     location: &SourceLocation,
     receiver_kind: ValueReceiverKind,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> ResultTypeResult<TypeId> {
     if expected_result_type_ids.len() > 1 {
         return Ok(type_interner
             .environment_mut_for_derived_types()
@@ -154,21 +168,23 @@ pub(super) fn infer_value_match_result_type(
 
     let produced_types = collect_value_match_single_produced_types(arms, default);
     let Some(first_type) = produced_types.first().copied() else {
-        return Err(CompilerDiagnostic::invalid_control_flow_statement(
-            InvalidControlFlowStatementReason::ValueIfNoProducingPath,
-            location.clone(),
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+                location.clone(),
+            ),
         ));
     };
 
     let context = receiver_type_mismatch_context(receiver_kind);
     for produced_type in produced_types.iter().copied().skip(1) {
         if produced_type != first_type {
-            return Err(CompilerDiagnostic::type_mismatch(
+            return Err(Box::new(CompilerDiagnostic::type_mismatch(
                 first_type,
                 produced_type,
                 context,
                 location.clone(),
-            ));
+            )));
         }
     }
 

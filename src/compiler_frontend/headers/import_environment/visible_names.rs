@@ -103,30 +103,32 @@ impl VisibleNameRegistry {
     ///
     /// Returns `Ok(())` when the name is registered or already present with the same target.
     /// Returns `Err` with a structured diagnostic when the name collides with a different target.
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
+    ///
+    /// The diagnostic is boxed at this registry boundary because every connected
+    /// import-environment caller already propagates boxed diagnostics. Keeping the same
+    /// error shape lets collisions travel directly to the header accumulation boundary.
     pub(crate) fn register(
         &mut self,
         local_name: StringId,
         binding: VisibleNameBinding,
         location: SourceLocation,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> Result<(), Box<CompilerDiagnostic>> {
         if let Some(entry) = self.names.get(&local_name) {
             if can_coexist(&entry.binding, &binding) {
                 return Ok(());
             }
             if matches!(entry.binding, VisibleNameBinding::ReservedCoreCastTraitName) {
-                return Err(CompilerDiagnostic::reserved_name_collision(
+                return Err(Box::new(CompilerDiagnostic::reserved_name_collision(
                     local_name,
                     ReservedNameOwner::CoreTrait,
                     location,
-                ));
+                )));
             }
-            return Err(diagnostics::import_name_collision(
+            return Err(Box::new(diagnostics::import_name_collision(
                 local_name,
                 location,
                 Some(entry.location.clone()),
-            ));
+            )));
         }
         self.names
             .insert(local_name, VisibleNameEntry { binding, location });

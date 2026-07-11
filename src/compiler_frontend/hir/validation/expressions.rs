@@ -344,6 +344,7 @@ impl<'a> HirValidator<'a> {
                             }
                         }
                     }
+                    #[cfg(test)]
                     HirVariantCarrier::Fallible => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
@@ -518,6 +519,7 @@ impl<'a> HirValidator<'a> {
                             ));
                         }
                     }
+                    #[cfg(test)]
                     HirVariantCarrier::Fallible => {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(

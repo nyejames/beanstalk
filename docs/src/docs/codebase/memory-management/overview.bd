@@ -1,0 +1,107 @@
+# Memory management overview
+
+Beanstalk's memory model combines GC-backed correctness with mandatory borrow validation and optional ownership-aware lowering.
+
+The source language stays small: existing values use shared access by default, mutation requires explicit exclusive access, copies are explicit and moves are inferred by the compiler.
+
+These pages record accepted memory model and target backend architecture. They include design decisions that may not yet be fully implemented, particularly around ownership-aware Wasm lowering.
+
+They are not an implementation-status report. Use `docs/src/docs/progress/#page.bst` for current support and major gaps.
+
+## The model in one paragraph
+
+Beanstalk is semantically GC-safe. Existing values use shared, read-only access by default. Mutation requires explicit exclusive access. Copies are explicit, moves are inferred and ownership-aware destruction is an optimisation layered over mandatory borrow validation.
+
+If ownership cannot be proven or is not useful for a backend, the value remains GC-managed without changing program behaviour.
+
+## Rules every contributor must know
+
+**1. GC is the semantic baseline.** Correctness does not depend on deterministic destruction. GC-only and ownership-aware backends accept and reject the same source programs. Borrow validation is mandatory under GC. Ownership-aware lowering may reduce GC work but cannot change semantics.
+
+**2. Existing values use shared access by default.** Reading or binding an existing value creates a shared, read-only alias. It does not implicitly copy. Shared access is a source-level contract, not a requirement that every scalar be heap-allocated.
+
+**3. Copies are explicit.** `copy` creates an independent value. Ordinary assignment and argument passing do not clone existing values. Fresh aggregates built from shared inputs do not implicitly copy those inputs.
+
+**4. `~` requests exclusive access.** `~place` applies to an existing mutable place. It requests temporary mutation-capable access and excludes conflicting access. It is not a move marker or a type identity. Fresh rvalues satisfy mutable parameters without source `~`.
+
+**5. Moves are inferred.** There is no explicit move syntax. The compiler identifies legal consumption points where no later valid use is lost. Runtime ownership metadata selects between already-safe lowering behaviours. It does not decide source legality.
+
+**6. Borrow facts remain beside HIR.** Borrow validation reads validated HIR and writes read-only side-table facts. It does not rewrite HIR. Backends may consume those facts. GC-only backends may ignore ownership-specific facts but must not skip validation.
+
+## Compiler and backend layers
+
+[codeblock, $code("text"):
+    source access rules
+        -> AST access-mode and copy validation
+        -> HIR places, hidden locals and explicit control flow
+        -> borrow validation and ownership facts
+        -> GC or ownership-aware backend lowering
+]
+
+- AST validates source access syntax, mutable call requirements and explicit copies.
+- HIR represents places and control flow explicitly and materialises fresh mutable call arguments where necessary.
+- Borrow validation enforces exclusivity, alias safety and inferred-move safety.
+- Backend lowering applies GC, ownership metadata, conditional destruction or specialisation without changing semantics.
+
+## Task-reading guide
+
+[table:
+    [th:
+        [: **Task**]
+        [: **Read first**]
+        [: **Detailed reference**]
+    ]
+
+    [td:
+        [: AST calls, mutability, copies, collections or maps]
+        [: `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`]
+        [: `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`]
+    ]
+
+    [td:
+        [: HIR, borrow checker, alias diagnostics or reactivity facts]
+        [: `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`]
+        [: `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`]
+    ]
+
+    [td:
+        [: Moves, last use, control-flow exits or drop placement]
+        [:
+            - `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`
+            - `docs/src/docs/codebase/memory-management/borrow-validation/overview.bd`
+        ]
+        [:
+            - `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+            - `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd`
+        ]
+    ]
+
+    [td:
+        [: JS, Wasm, runtime handles, ABI or memory lowering]
+        [:
+            - `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/overview.bd`
+            - `docs/src/docs/codebase/memory-management/ownership-and-drops/overview.bd`
+        ]
+        [:
+            - `docs/src/docs/codebase/memory-management/runtime-and-backend-lowering/runtime-and-backend-lowering.bd`
+            - `docs/src/docs/codebase/memory-management/ownership-and-drops/ownership-and-drops.bd`
+        ]
+    ]
+
+    [td:
+        [: Changing the memory model]
+        [:
+            - `docs/src/docs/codebase/memory-management/overview.bd`
+            - `docs/src/docs/codebase/memory-management/<relevant-leaf>/overview.bd`
+        ]
+        [:
+            - `docs/src/docs/codebase/memory-management/<relevant-leaf>/<relevant-leaf>.bd`
+        ]
+    ]
+]
+
+## Hard invariants
+
+- GC-only and ownership-aware lowering preserve the same source semantics.
+- Borrow validation reads HIR and writes side tables. It does not rewrite HIR or perform backend lowering.
+- No compiler or backend path may rely on unchecked aliasing or undefined behaviour to make the ownership model work.

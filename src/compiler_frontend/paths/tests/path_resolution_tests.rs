@@ -11,6 +11,7 @@ use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePathBase, CompileTimePathKind, CompileTimePathResolutionError,
 };
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
+use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -95,7 +96,7 @@ impl TestHarness {
 fn rendered_error_msg(error: &ImportPathResolutionError, string_table: &StringTable) -> String {
     match error {
         ImportPathResolutionError::Diagnostic(diagnostic) => format_terse_diagnostic_with_context(
-            diagnostic,
+            diagnostic.as_ref(),
             DiagnosticRenderContext::new(string_table),
         ),
         ImportPathResolutionError::Infrastructure(error) => error.msg.clone(),
@@ -122,7 +123,7 @@ fn typed_import_diagnostic(
         panic!("expected typed import diagnostic, got infrastructure error");
     };
 
-    diagnostic
+    diagnostic.as_ref()
 }
 
 fn compile_time_path_diagnostic_payload(
@@ -140,6 +141,24 @@ fn compile_time_path_diagnostic_payload(
     );
 
     &diagnostic.payload
+}
+
+fn prepared_module_root_table(root_file: &std::path::Path) -> ModuleRootTable {
+    let canonical_root_file = fs::canonicalize(root_file).expect("root file should canonicalize");
+    let root_directory = canonical_root_file
+        .parent()
+        .expect("root file should have a parent")
+        .to_path_buf();
+    let facade_file = canonical_root_file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| *name == "#mod.bst")
+        .map(|_| canonical_root_file.clone());
+    ModuleRootTable::from_records(vec![ModuleRootRecord::with_facade(
+        root_directory,
+        canonical_root_file,
+        facade_file,
+    )])
 }
 
 // -----------------------------------------------------------------------
@@ -997,11 +1016,12 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver = ProjectPathResolver::new(
+    let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
         &source_libraries,
         &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_module_root_table(&entry_root.join("helper/#mod.bst")),
     )
     .expect("resolver creation should succeed");
 
@@ -1027,6 +1047,48 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
 }
 
 #[test]
+fn disabled_module_root_discovery_does_not_register_plain_folder_facades() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(entry_root.join("helper")).unwrap();
+    fs::write(entry_root.join("helper/#mod.bst"), b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
+
+    assert!(
+        resolver.module_roots().next().is_none(),
+        "disabled discovery should not traverse and register sibling module roots"
+    );
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("helper", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+        &path,
+        &importer,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "single-file resolver policy should not use directory-project facade fallback"
+    );
+}
+
+#[test]
 fn plain_folder_import_to_module_root_without_facade_is_rejected() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
@@ -1038,11 +1100,12 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver = ProjectPathResolver::new(
+    let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
         &source_libraries,
         &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_module_root_table(&entry_root.join("helper/#page.bst")),
     )
     .expect("resolver creation should succeed");
 

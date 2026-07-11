@@ -1,20 +1,23 @@
 //! Runtime-template lowering entry points for HIR expression construction.
 //!
 //! WHAT: routes finalized AST runtime templates through the inline accumulator path.
-//! WHY: AST owns template composition, foldability, and render-plan preparation. HIR only lowers
-//! the runtime surface that remains after those decisions are complete.
+//! WHY: AST owns template composition, foldability, and runtime handoff preparation. HIR only
+//! lowers the owned runtime surface that remains after those decisions are complete.
 //!
 //! Submodule map:
 //! - `append_context`: shared append target and runtime slot source/site context.
-//! - `linear`: ordinary render-plan appending for runtime templates without control flow.
+//! - `linear`: ordinary owned-node appending for runtime templates without control flow.
 //! - `control_flow`: structured `if` / `loop` dispatch that mutates the enclosing CFG lazily.
-//! - `render_append`: render-plan chunk appending and string coercion shared by runtime paths.
+//! - `render_append`: owned-node appending and string coercion shared by runtime paths.
 //! - `option_capture`: option-present template `if` capture lowering.
 //! - `aggregate`: shared aggregate wrapping after a loop or child emitted output.
 //! - `slot_application`: AST-planned runtime slots lowered through slot accumulators.
 
-use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::{
+    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
+    OwnedRuntimeTemplateNode,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -35,55 +38,89 @@ impl<'a> HirBuilder<'a> {
     // WHY: AST must already have folded any compile-time template value before HIR sees it.
     pub(crate) fn lower_runtime_template_expression(
         &mut self,
-        template: &Template,
+        _template: &Template,
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        self.validate_runtime_template_lowering_input(template, location)?;
+        return_hir_transformation_error!(
+            "Raw template reached HIR runtime-template lowering after AST finalization.",
+            self.hir_error_location(location)
+        );
+    }
 
-        if let Some(plan) = &template.runtime_slot_application {
-            self.lower_runtime_slot_application_template_expression(plan, location)
-        } else if template.control_flow.is_some() {
-            self.lower_runtime_control_flow_template_expression(template, location)
-        } else {
-            self.lower_runtime_linear_template_expression(template, location)
+    // WHAT: Dispatches a runtime template that has already been materialized
+    // into the neutral AST-owned handoff shape.
+    // WHY: ordinary runtime templates now cross the AST/HIR boundary as owned
+    // TIR-derived data rather than legacy template-planning state.
+    pub(crate) fn lower_runtime_template_expression_from_owned_handoff(
+        &mut self,
+        handoff: &OwnedRuntimeTemplateHandoff,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        self.validate_runtime_template_handoff_lowering_input(handoff, location)?;
+
+        match &handoff.body {
+            OwnedRuntimeTemplateBody::RuntimeSlotApplication(handoff) => {
+                self.lower_runtime_slot_application_template_expression(handoff, location)
+            }
+
+            OwnedRuntimeTemplateBody::Render(node) => {
+                if is_owned_runtime_template_node_control_flow(node) {
+                    self.lower_runtime_control_flow_template_expression(node, location)
+                } else if self.owned_runtime_template_node_has_runtime_dependency(node) {
+                    self.lower_runtime_reactive_linear_template_expression_from_owned_node(
+                        node, location,
+                    )
+                } else {
+                    self.lower_runtime_linear_template_expression(node, location)
+                }
+            }
         }
     }
 
-    fn validate_runtime_template_lowering_input(
+    // WHAT: Lowers a runtime slot application after AST has already routed the
+    // wrapper, contribution sources, and slot-site render plan into owned data.
+    // WHY: this is the direct HIR entry point for the final expression variant;
+    // it keeps slot lowering on the same accumulator path as the legacy
+    // owned runtime-slot expression variant without exposing TIR identities.
+    pub(crate) fn lower_runtime_slot_application_expression_from_owned_handoff(
         &mut self,
-        template: &Template,
+        handoff: &OwnedRuntimeSlotApplicationHandoff,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        self.lower_runtime_slot_application_template_expression(handoff, location)
+    }
+
+    fn validate_runtime_template_handoff_lowering_input(
+        &mut self,
+        handoff: &OwnedRuntimeTemplateHandoff,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        if !self.currently_lowering_constants.is_empty() {
+        if runtime_template_handoff_has_top_level_loop_control(handoff) {
             return_hir_transformation_error!(
-                "Template reached HIR constant lowering before AST materialized the compile-time value.",
+                "Template loop-control signal reached HIR outside an owned template loop body.",
                 self.hir_error_location(location)
             );
-        }
-
-        if matches!(template.kind, TemplateType::SlotInsert(_)) {
-            return_hir_transformation_error!(
-                "Template helper reached HIR runtime-template lowering before AST wrapper-slot resolution.",
-                self.hir_error_location(location)
-            );
-        }
-
-        match template.const_value_kind() {
-            TemplateConstValueKind::RenderableString => {
-                return_hir_transformation_error!(
-                    "Compile-time template reached HIR runtime-template lowering before AST folding.",
-                    self.hir_error_location(location)
-                );
-            }
-            TemplateConstValueKind::SlotInsertHelper => {
-                return_hir_transformation_error!(
-                    "Template helper reached HIR runtime-template lowering before AST wrapper-slot resolution.",
-                    self.hir_error_location(location)
-                );
-            }
-            TemplateConstValueKind::WrapperTemplate | TemplateConstValueKind::NonConst => {}
         }
 
         Ok(())
     }
+}
+
+fn is_owned_runtime_template_node_control_flow(node: &OwnedRuntimeTemplateNode) -> bool {
+    matches!(
+        node,
+        OwnedRuntimeTemplateNode::BranchChain { .. }
+            | OwnedRuntimeTemplateNode::Loop { .. }
+            | OwnedRuntimeTemplateNode::ConditionalWrapper { .. }
+            | OwnedRuntimeTemplateNode::LoopControl { .. }
+    )
+}
+
+fn runtime_template_handoff_has_top_level_loop_control(
+    handoff: &OwnedRuntimeTemplateHandoff,
+) -> bool {
+    matches!(
+        &handoff.body,
+        OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::LoopControl { .. })
+    )
 }

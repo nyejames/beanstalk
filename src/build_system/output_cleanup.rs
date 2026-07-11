@@ -296,7 +296,7 @@ pub(crate) fn validate_output_root_is_safe(
             output_root,
             format!(
                 "Refusing to use '{}' as the build output root because it is a protected system path. \
-                 Configure a project-relative output folder in #config.bst.",
+                 Configure a project-relative output folder in config.bst.",
                 output_root.display()
             ),
             string_table,

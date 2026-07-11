@@ -1,4 +1,4 @@
-#[$markdown:
+#[$md:
     Inline `alpha` and `beta`
 
     Escaped `<tag> & "quote"`

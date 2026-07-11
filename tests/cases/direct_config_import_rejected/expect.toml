@@ -4,3 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-IMPORT-0008"]
+message_contains = ["Cannot import directly from 'config.bst'"]

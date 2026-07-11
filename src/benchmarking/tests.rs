@@ -14,6 +14,11 @@ static BENCHMARK_TEST_MUTEX: Mutex<()> = Mutex::new(());
 #[test]
 fn frontend_benchmark_runs_for_simple_file() {
     let _guard = BENCHMARK_TEST_MUTEX.lock().expect("test mutex should lock");
+    #[cfg(all(feature = "timers", feature = "benchmark_counters"))]
+    let _counter_guard = crate::compiler_frontend::instrumentation::lock_counter_test();
+    #[cfg(all(feature = "timers", feature = "benchmark_counters"))]
+    let _counter_capture =
+        crate::compiler_frontend::instrumentation::capture_frontend_counters_for_test();
 
     let temp_dir = tempfile::tempdir().expect("should create temp dir");
     let file_path = temp_dir.path().join("test.bst");
@@ -32,18 +37,18 @@ fn frontend_benchmark_runs_for_simple_file() {
 
     assert!(report.total_ms > 0.0, "total time should be positive");
 
-    // Stage timings may be empty when detailed_timers is not enabled.
-    // When it is enabled, we expect at least the canonical stages.
-    #[cfg(feature = "detailed_timers")]
+    // Stage timings are collected when `timers` is enabled.
+    #[cfg(feature = "timers")]
     assert!(
         !report.stages.is_empty(),
-        "stage timings should be collected when detailed_timers is enabled"
+        "stage timings should be collected when timers is enabled"
     );
 
-    #[cfg(feature = "detailed_timers")]
+    // Counters additionally require `benchmark_counters`.
+    #[cfg(all(feature = "timers", feature = "benchmark_counters"))]
     assert!(
         !report.counters.is_empty(),
-        "counters should be collected when detailed_timers is enabled"
+        "counters should be collected when timers and benchmark_counters are enabled"
     );
 }
 

@@ -10,8 +10,8 @@ use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::ids::{
-    BuiltinTypeKey, FunctionTypeId, GenericInstanceKey, GenericParameterId, GenericParameterListId,
-    NominalTypeId, TypeConstructor, TypeId,
+    BuiltinTypeKey, GenericInstanceKey, GenericParameterId, GenericParameterListId, NominalTypeId,
+    TypeConstructor, TypeId,
 };
 
 // -----------------------------------------------------------
@@ -90,7 +90,6 @@ pub struct ConstructedTypeDefinition {
 /// Function type definition.
 #[derive(Debug, Clone)]
 pub struct FunctionTypeDefinition {
-    pub id: FunctionTypeId,
     pub parameters: Box<[FunctionParameterDefinition]>,
     pub returns: Box<[TypeId]>,
     pub error_return: Option<TypeId>,

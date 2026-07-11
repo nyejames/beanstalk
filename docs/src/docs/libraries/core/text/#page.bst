@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE TEXT]
 
-#[section, $markdown:
+#[section, $md:
     `@core/text` provides helper functions for `String` values.
 
     Current helpers:

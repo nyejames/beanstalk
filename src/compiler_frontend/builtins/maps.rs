@@ -45,18 +45,6 @@ impl MapBuiltinOp {
         }
     }
 
-    /// Returns the expected positional argument count.
-    pub fn arity(self) -> usize {
-        match self {
-            // Single-argument key accessors.
-            MapBuiltinOp::Get | MapBuiltinOp::Contains | MapBuiltinOp::Remove => 1,
-            // Two arguments: key and value.
-            MapBuiltinOp::Set => 2,
-            // No-argument operations.
-            MapBuiltinOp::Clear | MapBuiltinOp::Length => 0,
-        }
-    }
-
     /// Whether the receiver must be accessed mutably.
     pub fn requires_mutable_receiver(self) -> bool {
         // Operations that modify map contents.

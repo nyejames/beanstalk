@@ -25,6 +25,73 @@ just bench-frontend
 
 Each suite uses one warmup iteration and ten measured iterations per case.
 
+## Timing And Counter Controls
+
+Normal benchmark commands build the compiler with the concise `timers` feature.
+End-to-end CLI benchmarks run subprocesses with `BST_TIMERS=bench` and
+`BST_COUNTERS=off` so stdout contains stable timing observations without verbose
+human prose or counter floods. Focused frontend benchmarks run in-process and
+read the same timing collector directly.
+
+Feature roles:
+
+- `timers`: enables command, build-system, Stage 0, frontend, backend, and output
+  timing collection. Timers-only builds default to a concise human summary.
+- `detailed_timers`: implies `timers` and adds verbose developer timing prose
+  plus detailed AST substage timings. It does not enable counters by itself.
+- `benchmark_counters`: enables high-volume local diagnostic counters when used
+  with `timers`. Normal benchmark runs leave counter stdout off.
+
+Environment controls:
+
+```text
+BST_TIMERS=summary   # concise human summary
+BST_TIMERS=bench     # stable BST_BENCH timing lines for benchmark tooling
+BST_TIMERS=verbose   # human prose plus stable timing lines
+BST_TIMERS=off       # collect for in-process consumers, suppress stdout
+
+BST_COUNTERS=off     # default
+BST_COUNTERS=summary # stable counter lines plus grouped summary
+BST_COUNTERS=full    # stable counter lines plus full legacy counter dump
+```
+
+Counter lines are emitted only when the compiler is built with
+`timers,benchmark_counters` and `BST_COUNTERS=summary` or `BST_COUNTERS=full`.
+Do not turn counters on for normal before/after benchmark runs unless the active
+investigation specifically needs counter evidence.
+
+### Frontend parallelism matrix
+
+For frontend scheduling and parallelism work, run the focused frontend suite with the default
+thread count and the fixed Rayon thread counts used by the roadmap plan:
+
+```bash
+just bench-frontend-check
+RAYON_NUM_THREADS=1 just bench-frontend-check
+RAYON_NUM_THREADS=2 just bench-frontend-check
+RAYON_NUM_THREADS=4 just bench-frontend-check
+just bench-frontend-check
+```
+
+The `parallelism` frontend group contains tiny serial-threshold cases, many-file preparation
+cases, markdown-heavy source-loading coverage, and multi-module directory projects. Use these with
+stage timings and optional counters to tune scheduling policy without changing the suite's normal
+warmup/measured iteration model.
+
+The current frontend parallelism cases are:
+
+- `tiny-one-file`, `tiny-two-files`, `tiny-seven-files`, and `tiny-eight-files` for serial,
+  byte-threshold, and parallel strategy boundaries.
+- `many-tiny-files` and `many-medium-files` for per-file versus chunked file preparation.
+- `many-markdown-assets` for Stage 0 missing-source loading.
+- `many-modules-one-file-each` and `few-modules-many-files-each` for module inventory and
+  per-module frontend scheduling.
+
+Use `just bench-frontend-check` for before/after validation because it does not write local
+history or tracked summaries. Use `just bench-frontend` only when you intentionally want a recorded
+run; it appends raw local data under `benchmarks/local-data/` and updates the concise tracked
+monthly summary. Raw local data, expanded counter tables, and profile artifacts stay untracked.
+
 ### Profiling commands
 
 ```bash
@@ -42,13 +109,27 @@ Run `just bench-report` first to identify which case and stage are worth profili
 
 CLI wall-clock time is the public rough regression signal. It measures the built `bean` binary as a subprocess, so it includes command startup, project loading, frontend compilation, backend work where relevant, and output handling.
 
-Compiler stage timings are attribution and debugging evidence. They help explain whether obvious movement likely came from file preparation, dependency sorting, AST, HIR, borrow validation, or another instrumented stage.
+Compiler stage timings are attribution and debugging evidence. They help explain whether obvious movement likely came from command/bootstrap setup, Stage 0 project structure, path resolution, reachable-file discovery, file preparation, dependency sorting, AST, HIR, borrow validation, backend lowering, output writing, or another instrumented stage.
 
-Stage observations are emitted as stable `BST_BENCH timing <metric>=<ms>ms` lines when the compiler is built with `detailed_timers`. Human timer prose is kept for developer readability, but benchmark parsing should prefer the stable metric lines.
+Stage observations are emitted as stable `BST_BENCH timing <metric>=<ms>ms`
+lines when the compiler is built with `timers` and run with
+`BST_TIMERS=bench` or `BST_TIMERS=verbose`. Human timer prose is developer
+output only; benchmark parsing should prefer the stable metric lines.
 
-Counter observations are local diagnostic evidence, not public benchmark results. Stable counter metric names use snake_case and are emitted as `BST_BENCH counter <metric>=<value>` lines. Counters are stored in local JSONL and used by local report tooling; raw counter tables must not be added to tracked summaries.
+Stage 0/bootstrap/path-resolution timings are first-class attribution metrics. A CLI benchmark whose wall time is much larger than the sum of relevant top-level command phases should be treated as an instrumentation gap, not as harmless subprocess noise.
 
-The current `file_prepare_ms` metric is the combined parallel file-preparation aggregate: per-file tokenization, header parsing, local string-table work, and deterministic merge/remap into the module table. Older local records may still contain separate legacy `tokenize_ms` or `headers_ms` observations.
+Counter observations are local diagnostic evidence, not public benchmark
+results. Stable counter metric names use snake_case or dotted subsystem names
+and are emitted as `BST_BENCH counter <metric>=<value>` lines only when
+counter output is explicitly requested. Counters are stored in local JSONL and
+used by local report tooling; raw counter tables must not be added to tracked
+summaries.
+
+The current `frontend.file_prepare` metric is the combined parallel
+file-preparation aggregate: per-file tokenization, header parsing, local
+string-table work, and deterministic merge/remap into the module table. Older
+local records may still contain legacy `file_prepare_ms`, `tokenize_ms`, or
+`headers_ms` observations.
 
 In-process frontend timings call production compiler paths directly and stop at the documented frontend/backend boundary after HIR and borrow validation. They are useful for compiler refactors, but they are still rough development signals rather than precise measurements.
 
@@ -80,6 +161,7 @@ Groups are public summary labels, not compiler architecture boundaries:
 - `docs`: documentation project checking.
 - `stress`: targeted template, type, fold, pattern, collection, and environment stress fixtures.
 - `module`: module/import/dependency graph and import fanout coverage.
+- `parallelism`: frontend scheduling threshold, source-loading, and module/file fanout coverage.
 - `borrow`: valid borrow and exclusivity coverage.
 
 ## Summary Interpretation
@@ -126,24 +208,41 @@ The tracked Markdown summaries under `benchmarks/summaries/` are the public reco
 
 `just bench-report` reads local JSONL only. It does not update tracked summaries or append local history.
 
-Use it for compact per-case, stage, counter, and ratio detail during active optimization work.
+Use it for compact per-case, stage, counter, ratio, and unattributed wall-time
+detail during active optimization work. The unattributed wall-time section
+compares CLI wall time with the sum of non-nested top-level command phase
+timers, such as `command.check.*`, `build_project.*`, and
+`command.build.output_write`, and flags cases whose visible phase timings no
+longer explain the command cost.
 
 ## Local Profiling
 
-Use `just bench-report` to choose a case and stage before profiling. Then run `just profile` or `just profile-case <case-name>` to collect Samply-backed stack samples alongside `detailed_timers` stage and counter observations.
+Use `just bench-report` to choose a case and stage before profiling. Then run
+`just profile` or `just profile-case <case-name>` to collect Samply-backed stack
+samples alongside detailed timing observations.
 
 ### Two-run model
 
 Each profiling case runs twice:
 
-1. **Observation pass** — a non-profiled run that collects `detailed_timers` stage timings and counter data.
+1. **Observation pass** — a non-profiled run that collects detailed stage timings.
 2. **Samply pass** — records stack samples into a raw profile.
 
-The observation pass provides reliable stage/counter attribution without profiler overhead. The Samply pass provides call-stack evidence.
+The observation pass provides reliable stage attribution without profiler
+overhead. Counter fields may still appear in older local records or explicit
+counter-enabled investigations, but the normal profiling path is timing-first.
+The Samply pass provides call-stack evidence.
 
 ### Profiling binary
 
-The profiling binary is built to `target/profiling/bean` using `just profile-build`. It uses release settings with full debug info and `detailed_timers`. Profile runs prepare symbol directories for the profiling binary where available; on macOS the xtask path also tries to materialize `target/profiling/bean.dSYM` with `dsymutil` and reports whether its UUID matches the binary when `dwarfdump` is available. Do not commit the binary or `.dSYM` bundle.
+The profiling binary is built to `target/profiling/bean` using
+`just profile-build`. It uses release settings with full debug info and
+`detailed_timers` for verbose timing evidence. `detailed_timers` no longer
+enables high-volume counters by itself. Profile runs prepare symbol directories
+for the profiling binary where available; on macOS the xtask path also tries to
+materialize `target/profiling/bean.dSYM` with `dsymutil` and reports whether its
+UUID matches the binary when `dwarfdump` is available. Do not commit the binary
+or `.dSYM` bundle.
 
 `--presymbolicate` remains an explicit profiling option. Use `just profile-symbolicated` or `just profile-case-symbolicated <case-name>` when a normal profile reports raw-address function names. xtask maps that request to the Samply flag supported by the installed CLI (`--presymbolicate` or `--unstable-presymbolicate`) and warns when neither flag is available.
 
@@ -178,7 +277,7 @@ benchmarks/local-data/
                 └── profile.json.gz
 ```
 
-Profile summaries include symbolication health. If most hot function names are raw `0x...` addresses, the summary marks symbolication as failed and function hotspots should not be treated as actionable. A failed-symbolication case also writes `profile-shape.txt`, which records the profile table shape, first function names, libraries, and native-symbol metadata for parser/debug-info investigation. Stage timings and counters from the observation pass are still useful in that state.
+Profile summaries include symbolication health. If most hot function names are raw `0x...` addresses, the summary marks symbolication as failed and function hotspots should not be treated as actionable. A failed-symbolication case also writes `profile-shape.txt`, which records the profile table shape, first function names, libraries, and native-symbol metadata for parser/debug-info investigation. Stage timings, plus any present counters, from the observation pass are still useful in that state.
 
 ### Drift thresholds
 
@@ -216,6 +315,8 @@ allocation, lookup, folding, import, and lowering pressure.
 ## Fixture List
 
 - `speed-test.bst`: broad baseline language and compiler exercise covering constant folding, templates, structs, receivers, collections, and control flow.
+- `benchmark-root-single-file.bst`: root-level single-file check case that
+  exercises the non-project single-file path.
 - `template-stress.bst`: deeply nested template composition, slot usage, `$children` wrappers, and formatter directive stress.
 - `type-stress.bst`: type and method-heavy source with structs, choices, aliases, receivers, and constructor patterns.
 - `fold-stress.bst`: constant folding coverage with large arithmetic trees, chained dependencies, and const record creation.
@@ -224,6 +325,9 @@ allocation, lookup, folding, import, and lowering pressure.
 - `environment-stress.bst`: AST environment building, type alias expansion, nominal structs and choices, receiver catalog construction, generic declarations and instantiations, and body validation/type resolution.
 - `module-graph/`: small multi-file project with imports, facade exports, cross-file constants, and templates.
 - `import-fanout/`: multi-file project with repeated imports, aliases, facade wrapper declarations, and cross-file constants for string-table interning and module-graph resolution.
+- `module-root-stress/`: directory project with config parsing, multiple
+  reachable module directories, and irrelevant non-Beanstalk trees for Stage 0
+  module-root/path-resolution attribution.
 - `external-js-imports/`: HTML project with annotated JavaScript imports, runtime helper imports, opaque external types, namespace imports, and external free functions.
 - `borrow-stress.bst`: valid mutable/exclusive access and borrow-validation coverage.
 - `adversarial/one-module-kitchen-sink.bst`: dense single-module churn across imports, constants,

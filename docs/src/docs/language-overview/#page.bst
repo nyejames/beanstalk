@@ -8,14 +8,14 @@ page_head #= theme_head
 #[navbar]
 #[title, center: LANGUAGE BASICS]
 
-#[section, $markdown:
+#[section, $md:
     Beanstalk is designed to be simple, readable and safe by default.
     The language is very explicit about what can / cannot change and how values are passed around in the program.
 
     The syntax can be a bit unusual due to it being designed from first principles and make sure that each symbol or keyword signifies a single concept.
     
     ## What a Beanstalk project looks like
-    Every project has a `#config.bst` file that defines the entry points and dependencies of the project.
+    Project config lives in `config.bst` and defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
     it will create a single module from that entry point and pull in all the file's dependencies.
@@ -78,7 +78,7 @@ page_head #= theme_head
 
 ]
 
-[section, $markdown:
+[section, $md:
     # Variables
 
     Equals means assign. Tilde ` ~` means this is a mutable and can change.
@@ -196,7 +196,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Explicit Casts
 
     `cast` converts one value to an explicit builtin target type supplied by the immediate
@@ -249,7 +249,7 @@ page_head #= theme_head
     `Float(...)`, `Bool(...)`, `String(...)`, and `Char(...)` are rejected. Use `cast` instead.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Data Types
     Beanstalk data type keywords use UpperCamelCase.
     Mutibility can change the underlaying data type but is not actually part of the type.
@@ -276,7 +276,7 @@ page_head #= theme_head
     
     `"Double quotes for a UTF-8 string slice"`
 
-    Backticks create raw string slices in expression position. Inside template bodies, backticks are ordinary text available to formatters such as `$markdown`.
+    Backticks create raw string slices in expression position. Inside template bodies, backticks are ordinary text available to formatters such as `$md`.
 
     Scenes are used instead of format strings.
 

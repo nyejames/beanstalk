@@ -299,48 +299,95 @@ pub fn build_project(
     entry_path: &str,
     flags: &[Flag],
 ) -> Result<BuildResult, CompilerMessages> {
+    let total_start = crate::timing::start_pipeline_timing();
     let mut path_string_table = StringTable::new();
-    let valid_path = check_if_valid_path(entry_path, &mut path_string_table)
-        .map_err(|error| CompilerMessages::from_error(error, path_string_table))?;
+    let path_validation_start = crate::timing::start_pipeline_timing();
+    let valid_path = match check_if_valid_path(entry_path, &mut path_string_table) {
+        Ok(path) => {
+            log_stage_timing("build_project.path_validation", path_validation_start);
+            path
+        }
+        Err(error) => {
+            log_stage_timing("build_project.path_validation", path_validation_start);
+            log_stage_timing("build_project.total", total_start);
+            return Err(CompilerMessages::from_error(error, path_string_table));
+        }
+    };
 
     // --------------------------------------------
     //   PERFORM THE CORE COMPILER FRONTEND BUILD
     // --------------------------------------------
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
+    let bootstrap_start = crate::timing::start_pipeline_timing();
     let BuildBootstrap {
         mut config,
         style_directives,
         mut string_table,
         mut libraries,
-    } = bootstrap_project_build(project_builder, valid_path)?;
+    } = match bootstrap_project_build(project_builder, valid_path) {
+        Ok(bootstrap) => {
+            log_stage_timing("build_project.bootstrap", bootstrap_start);
+            bootstrap
+        }
+        Err(messages) => {
+            log_stage_timing("build_project.bootstrap", bootstrap_start);
+            log_stage_timing("build_project.total", total_start);
+            return Err(messages);
+        }
+    };
 
-    let modules = compile_project_frontend(
+    let compile_frontend_start = crate::timing::start_pipeline_timing();
+    let modules = match compile_project_frontend(
         &mut config,
         flags,
         &style_directives,
         &mut libraries,
         &mut string_table,
-    )?;
+    ) {
+        Ok(modules) => {
+            log_stage_timing(
+                "build_project.compile_project_frontend",
+                compile_frontend_start,
+            );
+            modules
+        }
+        Err(messages) => {
+            log_stage_timing(
+                "build_project.compile_project_frontend",
+                compile_frontend_start,
+            );
+            log_stage_timing("build_project.total", total_start);
+            return Err(messages);
+        }
+    };
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
 
+    let backend_start = crate::timing::start_pipeline_timing();
     let project =
         match project_builder
             .backend
             .build_backend(modules, &config, flags, &mut string_table)
         {
-            Ok(project) => project,
+            Ok(project) => {
+                log_stage_timing("build_project.backend", backend_start);
+                project
+            }
             Err(mut compiler_messages) => {
+                log_stage_timing("build_project.backend", backend_start);
+                log_stage_timing("build_project.total", total_start);
                 compiler_messages.string_table = string_table;
                 return Err(compiler_messages);
             }
         };
 
     warnings.extend(project.warnings.iter().cloned());
+
+    log_stage_timing("build_project.total", total_start);
 
     Ok(BuildResult {
         project,
@@ -352,7 +399,7 @@ pub fn build_project(
 
 /// Build the shared Stage 0/bootstrap state used by both CLI builds and the dev server.
 ///
-/// WHAT: merges frontend/project directives, loads `#config.bst`, and runs backend-specific
+/// WHAT: merges frontend/project directives, loads `config.bst`, and runs backend-specific
 /// config validation into one reusable setup step.
 /// WHY: directory builds and the dev server must share one bootstrap path so config/output
 /// behavior does not drift between "build" and "serve" flows.
@@ -360,23 +407,39 @@ pub(crate) fn bootstrap_project_build(
     project_builder: &ProjectBuilder,
     entry_path: PathBuf,
 ) -> Result<BuildBootstrap, CompilerMessages> {
+    let bootstrap_total_start = crate::timing::start_pipeline_timing();
+
+    let config_init_start = crate::timing::start_pipeline_timing();
     let mut config = Config::new(entry_path);
+    log_stage_timing("bootstrap.config_init", config_init_start);
 
     // Seed the build table with the compiler-owned symbols that per-file frontend tables will
     // also need as a stable prefix once file preparation becomes independent.
+    let symbol_preseed_start = crate::timing::start_pipeline_timing();
     let preseeded = CompilerSymbolSet::preseeded_table(FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
     let mut string_table = preseeded.string_table;
     // The bootstrap path only needs the preseeded table today. File-local preparation will keep
     // these typed IDs alongside its local outputs once fixed-symbol IDs are consumed directly.
     let _compiler_symbol_ids = preseeded.compiler_symbol_ids;
+    log_stage_timing("bootstrap.symbol_preseed", symbol_preseed_start);
 
     // Compute the builder's library surface once so config loading and frontend compilation
     // see the same set of allowed config keys, external packages, and source libraries.
+    let backend_libraries_start = crate::timing::start_pipeline_timing();
     let libraries = project_builder.backend.libraries();
+    log_stage_timing("bootstrap.backend_libraries", backend_libraries_start);
 
+    let style_directives_start = crate::timing::start_pipeline_timing();
     let frontend_style_directives = project_builder.backend.frontend_style_directives();
-    let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
-        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let style_directives = match StyleDirectiveRegistry::merged(&frontend_style_directives) {
+        Ok(style_directives) => style_directives,
+        Err(error) => {
+            log_stage_timing("bootstrap.style_directives", style_directives_start);
+            log_stage_timing("bootstrap.total", bootstrap_total_start);
+            return Err(CompilerMessages::from_error(error, string_table.clone()));
+        }
+    };
+    log_stage_timing("bootstrap.style_directives", style_directives_start);
 
     // WHAT: Load and validate project config before compilation begins (Stage 0).
     // WHY: Backends and serving code both depend on the same validated config surface.
@@ -384,14 +447,34 @@ pub(crate) fn bootstrap_project_build(
         style_directives: &style_directives,
         libraries: &libraries,
     };
-    load_project_config(&mut config, &config_services, &mut string_table)?;
+    let load_project_config_start = crate::timing::start_pipeline_timing();
+    if let Err(messages) = load_project_config(&mut config, &config_services, &mut string_table) {
+        log_stage_timing("bootstrap.load_project_config", load_project_config_start);
+        log_stage_timing("bootstrap.total", bootstrap_total_start);
+        return Err(messages);
+    }
+    log_stage_timing("bootstrap.load_project_config", load_project_config_start);
 
     // WHAT: Validate backend-specific config requirements before compilation.
     // WHY: Backends should reject unsupported settings before frontend compilation does work.
-    project_builder
+    let backend_config_validate_start = crate::timing::start_pipeline_timing();
+    if let Err(error) = project_builder
         .backend
         .validate_project_config(&config, &mut string_table)
-        .map_err(|error| error.into_messages(string_table.clone()))?;
+    {
+        log_stage_timing(
+            "bootstrap.backend_config_validate",
+            backend_config_validate_start,
+        );
+        log_stage_timing("bootstrap.total", bootstrap_total_start);
+        return Err(error.into_messages(string_table.clone()));
+    }
+    log_stage_timing(
+        "bootstrap.backend_config_validate",
+        backend_config_validate_start,
+    );
+
+    log_stage_timing("bootstrap.total", bootstrap_total_start);
 
     Ok(BuildBootstrap {
         config,
@@ -399,6 +482,19 @@ pub(crate) fn bootstrap_project_build(
         string_table,
         libraries,
     })
+}
+
+/// Record a build-system stage timing through the central `timers` substrate.
+///
+/// WHAT: delegates to `timing::record_started_pipeline_timing`, which stores the
+///      observation in the active collection scope and emits the stable
+///      `BST_BENCH timing` line when the output mode permits.
+/// WHY:  `build_project` and `write_project_outputs` use dotted `build_project.*`
+///      and `output.*` metric names through the concise `timers` substrate.
+///      The start token is zero-sized when `timers` is off, so regular builds
+///      do not read clocks for these instrumentation-only measurements.
+fn log_stage_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
+    crate::timing::record_started_pipeline_timing(metric, start);
 }
 
 // -------------------------
@@ -415,27 +511,51 @@ pub fn write_project_outputs(
     options: &WriteOptions,
     string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
+    let write_total_start = crate::timing::start_pipeline_timing();
+
+    // Keep the aggregate output timing visible even when filesystem validation or writes fail.
+    let result = write_project_outputs_inner(project, options, string_table);
+    log_stage_timing("output.write_total", write_total_start);
+
+    result
+}
+
+fn write_project_outputs_inner(
+    project: &Project,
+    options: &WriteOptions,
+    string_table: &StringTable,
+) -> Result<(), CompilerMessages> {
     // ---------------------------------------
     //  Prepare cleanup and create output root
     // ---------------------------------------
 
-    let cleanup_state = prepare_output_cleanup(
-        &options.output_root,
-        options.project_entry_dir.as_deref(),
-        &project.cleanup_policy,
-        string_table,
-    )?;
-
-    fs::create_dir_all(&options.output_root).map_err(|error| {
-        file_error_messages(
+    let cleanup_state = {
+        let prepare_start = crate::timing::start_pipeline_timing();
+        let result = prepare_output_cleanup(
             &options.output_root,
-            format!(
-                "Failed to create output root '{}': {error}",
-                options.output_root.display()
-            ),
+            options.project_entry_dir.as_deref(),
+            &project.cleanup_policy,
             string_table,
-        )
-    })?;
+        );
+        log_stage_timing("output.prepare_cleanup", prepare_start);
+        result?
+    };
+
+    {
+        let create_root_start = crate::timing::start_pipeline_timing();
+        let result = fs::create_dir_all(&options.output_root).map_err(|error| {
+            file_error_messages(
+                &options.output_root,
+                format!(
+                    "Failed to create output root '{}': {error}",
+                    options.output_root.display()
+                ),
+                string_table,
+            )
+        });
+        log_stage_timing("output.create_root", create_root_start);
+        result?;
+    }
 
     let mut current_managed_artifact_paths: HashSet<PathBuf> = HashSet::new();
 
@@ -443,6 +563,46 @@ pub fn write_project_outputs(
     //  Emit individual output files
     // ---------------------------------------
 
+    {
+        let emit_files_start = crate::timing::start_pipeline_timing();
+        let result = emit_project_output_files(
+            project,
+            options,
+            string_table,
+            &mut current_managed_artifact_paths,
+        );
+        log_stage_timing("output.emit_files_total", emit_files_start);
+        result?;
+    }
+
+    // ---------------------------------------
+    //  Finalize cleanup and write manifest
+    // ---------------------------------------
+    // WHAT: Clean up stale artifacts and write updated manifest when cleanup is enabled
+    // WHY: Artifacts from removed pages must not persist in the output folder between builds
+    {
+        let finalize_start = crate::timing::start_pipeline_timing();
+        let result = finalize_output_cleanup(
+            &cleanup_state,
+            &options.output_root,
+            &current_managed_artifact_paths,
+            &project.cleanup_policy,
+            options.write_mode,
+            string_table,
+        );
+        log_stage_timing("output.finalize_cleanup", finalize_start);
+        result?;
+    }
+
+    Ok(())
+}
+
+fn emit_project_output_files(
+    project: &Project,
+    options: &WriteOptions,
+    string_table: &StringTable,
+    current_managed_artifact_paths: &mut HashSet<PathBuf>,
+) -> Result<(), CompilerMessages> {
     for output_file in &project.output_files {
         if matches!(output_file.file_kind(), FileKind::NotBuilt) {
             continue;
@@ -461,45 +621,32 @@ pub fn write_project_outputs(
 
         let destination = options.output_root.join(relative_output_path);
 
-        match output_file.file_kind() {
-            FileKind::NotBuilt => {}
+        let emit_file_start = crate::timing::start_pipeline_timing();
+        let emit_file_result = match output_file.file_kind() {
+            FileKind::NotBuilt => Ok(()),
 
-            FileKind::Directory => {
-                fs::create_dir_all(&destination).map_err(|error| {
-                    file_error_messages(
-                        &destination,
-                        format!(
-                            "Failed to create output directory '{}': {error}",
-                            destination.display()
-                        ),
-                        string_table,
-                    )
-                })?;
-            }
+            FileKind::Directory => fs::create_dir_all(&destination).map_err(|error| {
+                file_error_messages(
+                    &destination,
+                    format!(
+                        "Failed to create output directory '{}': {error}",
+                        destination.display()
+                    ),
+                    string_table,
+                )
+            }),
 
             FileKind::Js(content) | FileKind::Html(content) => {
-                write_string_output(&destination, content, options.write_mode, string_table)?;
+                write_string_output(&destination, content, options.write_mode, string_table)
             }
 
             FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => {
-                write_bytes_output(&destination, bytes, options.write_mode, string_table)?;
+                write_bytes_output(&destination, bytes, options.write_mode, string_table)
             }
-        }
+        };
+        log_stage_timing("output.emit_file", emit_file_start);
+        emit_file_result?;
     }
-
-    // ---------------------------------------
-    //  Finalize cleanup and write manifest
-    // ---------------------------------------
-    // WHAT: Clean up stale artifacts and write updated manifest when cleanup is enabled
-    // WHY: Artifacts from removed pages must not persist in the output folder between builds
-    finalize_output_cleanup(
-        &cleanup_state,
-        &options.output_root,
-        &current_managed_artifact_paths,
-        &project.cleanup_policy,
-        options.write_mode,
-        string_table,
-    )?;
 
     Ok(())
 }

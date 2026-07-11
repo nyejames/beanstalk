@@ -3,13 +3,18 @@
 //! WHAT: owns member token parsing and field access node construction.
 //! WHY: field reads and inlined const-field reads should not be mixed with builtin or method policy.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use super::MemberStepContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, expression_value_shape_for_type_id,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidFieldAccessReason};
@@ -30,6 +35,9 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashMap;
 
+#[cfg(test)]
+mod tests;
+
 // --------------------------
 //  Types
 // --------------------------
@@ -41,6 +49,17 @@ struct ResolvedFieldMember {
     value_mode: ValueMode,
     const_record_state: ConstRecordState,
     const_inline_value: Option<Expression>,
+}
+
+struct FieldMemberResolution<'a> {
+    receiver_node: &'a AstNode,
+    receiver_type_id: TypeId,
+    field_name: StringId,
+    type_environment: &'a TypeEnvironment,
+    resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
+    receiver_is_const_record: bool,
+    template_ir_registry: Option<&'a Rc<RefCell<TemplateIrRegistry>>>,
+    string_table: &'a StringTable,
 }
 
 // --------------------------
@@ -69,15 +88,34 @@ fn const_field_value<'a>(
     Some(&field.value)
 }
 
+fn expression_is_compile_time_constant(
+    expression: &Expression,
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<bool, ExpressionParseError> {
+    Ok(expression
+        .const_value_kind_with_template_classifier(&mut |template| {
+            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+        })?
+        .is_compile_time_value())
+}
+
 fn const_inline_field_value(
     receiver_node: &AstNode,
     receiver_type_id: TypeId,
     field_name: StringId,
     type_environment: &TypeEnvironment,
     resolved_struct_fields_by_path: Option<&FxHashMap<InternedPath, Vec<Declaration>>>,
-) -> Option<Expression> {
-    if let Some(field_value) = const_inline_field_value_from_receiver(receiver_node, field_name) {
-        return Some(field_value);
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<Option<Expression>, ExpressionParseError> {
+    if let Some(field_value) = const_inline_field_value_from_receiver(
+        receiver_node,
+        field_name,
+        template_ir_registry,
+        string_table,
+    )? {
+        return Ok(Some(field_value));
     }
 
     let field_value = const_field_value(
@@ -85,60 +123,73 @@ fn const_inline_field_value(
         field_name,
         type_environment,
         resolved_struct_fields_by_path,
-    )?;
+    );
 
-    if field_value.is_compile_time_constant() {
-        let mut inlined_expression = field_value.to_owned();
-        inlined_expression.value_mode = ValueMode::ImmutableOwned;
-        Some(inlined_expression)
-    } else {
-        None
+    let Some(field_value) = field_value else {
+        return Ok(None);
+    };
+
+    if !expression_is_compile_time_constant(field_value, template_ir_registry, string_table)? {
+        return Ok(None);
     }
+
+    let mut inlined_expression = field_value.to_owned();
+    inlined_expression.value_mode = ValueMode::ImmutableOwned;
+    Ok(Some(inlined_expression))
 }
 
 fn const_inline_field_value_from_receiver(
     receiver_node: &AstNode,
     field_name: StringId,
-) -> Option<Expression> {
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<Option<Expression>, ExpressionParseError> {
     let receiver_value = match &receiver_node.kind {
         NodeKind::ExpressionStatement(expression) => expression,
         NodeKind::VariableDeclaration(declaration) => &declaration.value,
-        _ => return None,
+        _ => return Ok(None),
     };
 
     let ExpressionKind::StructInstance(fields) = &receiver_value.kind else {
-        return None;
+        return Ok(None);
     };
 
-    let field_value = fields
+    let Some(field) = fields
         .iter()
-        .find(|field| field.id.name() == Some(field_name))?
-        .value
-        .to_owned();
+        .find(|field| field.id.name() == Some(field_name))
+    else {
+        return Ok(None);
+    };
+    let field_value = field.value.to_owned();
 
-    if !field_value.is_compile_time_constant() {
-        return None;
+    if !expression_is_compile_time_constant(&field_value, template_ir_registry, string_table)? {
+        return Ok(None);
     }
 
     let mut inlined_expression = field_value;
     inlined_expression.value_mode = ValueMode::ImmutableOwned;
-    Some(inlined_expression)
+    Ok(Some(inlined_expression))
 }
 
 fn resolve_field_member(
-    receiver_node: &AstNode,
-    receiver_type_id: TypeId,
-    field_name: StringId,
-    type_environment: &TypeEnvironment,
-    resolved_struct_fields_by_path: Option<&FxHashMap<InternedPath, Vec<Declaration>>>,
-    receiver_is_const_record: bool,
-    should_try_const_inline: bool,
-) -> Option<ResolvedFieldMember> {
+    input: FieldMemberResolution<'_>,
+) -> Result<Option<ResolvedFieldMember>, ExpressionParseError> {
+    let FieldMemberResolution {
+        receiver_node,
+        receiver_type_id,
+        field_name,
+        type_environment,
+        resolved_struct_fields_by_path,
+        receiver_is_const_record,
+        template_ir_registry,
+        string_table,
+    } = input;
+
     // Try canonical TypeEnvironment first; fall back to AST-owned struct shells
     // when the struct was registered with an empty field list during early
     // identity-only registration (e.g. during constant resolution before final
     // field types are resolved).
-    let field_type_id = type_environment
+    let Some(field_type_id) = type_environment
         .field_for(receiver_type_id, field_name)
         .map(|field| field.type_id)
         .or_else(|| {
@@ -146,7 +197,10 @@ fn resolve_field_member(
             let fields = resolved_struct_fields_by_path?.get(nominal_path)?;
             let declaration = fields.iter().find(|f| f.id.name() == Some(field_name))?;
             Some(declaration.value.type_id)
-        })?;
+        })
+    else {
+        return Ok(None);
+    };
 
     let const_field_value = const_field_value(
         receiver_type_id,
@@ -155,7 +209,7 @@ fn resolve_field_member(
         resolved_struct_fields_by_path,
     );
 
-    let const_inline_value = if should_try_const_inline {
+    let const_inline_value = if let Some(template_ir_registry) = template_ir_registry {
         // Const records need full declaration values for field inlining. The
         // TypeEnvironment owns semantic field types, while the resolved struct
         // field side table owns foldable default expressions. Prefer the
@@ -167,7 +221,9 @@ fn resolve_field_member(
             field_name,
             type_environment,
             resolved_struct_fields_by_path,
-        )
+            template_ir_registry,
+            string_table,
+        )?
     } else {
         None
     };
@@ -188,14 +244,14 @@ fn resolve_field_member(
             ConstRecordState::RuntimeValue
         };
 
-    Some(ResolvedFieldMember {
+    Ok(Some(ResolvedFieldMember {
         field_name,
         type_id: field_type_id,
         diagnostic_type: diagnostic_type_spelling(field_type_id, type_environment),
         value_mode: ValueMode::ImmutableOwned,
         const_record_state,
         const_inline_value,
-    })
+    }))
 }
 
 pub(super) fn parse_member_name_typed(
@@ -222,6 +278,7 @@ pub(super) fn parse_member_name_typed(
             InvalidFieldAccessReason::ExpectedNameAfterDot,
             None,
             None,
+            Vec::new(),
             token_stream.current_location(),
         )
         .into()),
@@ -236,7 +293,7 @@ pub(super) fn parse_field_member_access_typed(
     token_stream: &mut FileTokens,
     context: MemberStepContext<'_>,
     type_interner: &mut AstTypeInterner<'_>,
-    _string_table: &StringTable,
+    string_table: &StringTable,
 ) -> Result<Option<AstNode>, ExpressionParseError> {
     let MemberStepContext {
         receiver_node,
@@ -247,16 +304,26 @@ pub(super) fn parse_field_member_access_typed(
         ..
     } = context;
     let receiver_is_const_record = receiver_node.expression_is_const_record_value()?;
+    let field = {
+        let template_ir_registry = if scope_context.kind.is_constant_context() {
+            Some(&scope_context.template_ir_registry)
+        } else {
+            None
+        };
 
-    let Some(field) = resolve_field_member(
-        receiver_node,
-        receiver_type_id,
-        member_name,
-        type_interner.environment(),
-        scope_context.resolved_struct_fields_by_path.as_deref(),
-        receiver_is_const_record,
-        scope_context.kind.is_constant_context(),
-    ) else {
+        resolve_field_member(FieldMemberResolution {
+            receiver_node,
+            receiver_type_id,
+            field_name: member_name,
+            type_environment: type_interner.environment(),
+            resolved_struct_fields_by_path: scope_context.resolved_struct_fields_by_path.as_deref(),
+            receiver_is_const_record,
+            template_ir_registry,
+            string_table,
+        })?
+    };
+
+    let Some(field) = field else {
         return Ok(None);
     };
 
@@ -267,6 +334,7 @@ pub(super) fn parse_field_member_access_typed(
             InvalidFieldAccessReason::FieldNotMethod,
             Some(member_name),
             Some(receiver_type_id),
+            Vec::new(),
             member_location,
         )
         .into());

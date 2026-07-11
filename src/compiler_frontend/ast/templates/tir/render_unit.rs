@@ -1,0 +1,889 @@
+//! TIR render-unit construction helpers.
+//!
+//! WHAT: owns TIR aggregate-wrapper subtree construction.
+//!
+//! WHY: localizes the link between AST aggregate placeholders and TIR-native
+//! loop aggregate wrappers. Aggregate-wrapper construction consumes parser TIR
+//! and store-qualified child references directly so render-unit preparation
+//! does not reconstruct child templates from compatibility content.
+
+use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::runtime_template_expression;
+use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
+use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
+use crate::compiler_frontend::ast::templates::tir::foreign_slot_insert_proxy::build_foreign_slot_insert_proxy;
+use crate::compiler_frontend::ast::templates::tir::formatter_view::{
+    TirFormatterResult, format_tir_template,
+};
+use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateIrNodeId};
+use crate::compiler_frontend::ast::templates::tir::node::{
+    TemplateIr, TemplateIrNode, TemplateIrNodeKind,
+};
+use crate::compiler_frontend::ast::templates::tir::overlays::{
+    TemplateOverlaySet, TemplateOverlaySetId,
+};
+use crate::compiler_frontend::ast::templates::tir::refs::{
+    TemplateRef, TemplateTirChildReference, TemplateWrapperReference,
+};
+use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
+use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
+use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
+use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
+
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
+use crate::compiler_frontend::instrumentation::{
+    AstCounter, add_ast_counter, increment_ast_counter,
+};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use std::sync::Arc;
+
+// ------------------------------
+//  Aggregate-wrapper candidates
+// ------------------------------
+
+/// Builds a temporary TIR template for loop aggregate-wrapper composition.
+///
+/// WHAT: reuses the owning template's already-materialized head-prefix TIR
+///       nodes, converting cross-store child templates recorded as dynamic
+///       expressions into same-store `ChildTemplate` references, and appends a
+///       compiler-internal `AggregateOutput` node as the body fill.
+/// WHY: loop aggregate wrapping should consume TIR-native nodes that the
+///      parser already emitted, removing the dependency on `shared_head_prefix`
+///      atoms for aggregate-wrapper preparation. Cross-store child templates
+///      that the parser could only record as opaque dynamic expressions are
+///      materialized into the current store so head-chain composition can
+///      resolve their slots around the aggregate fill.
+pub(in crate::compiler_frontend::ast::templates) fn build_aggregate_wrapper_candidate_from_tir_nodes(
+    head_prefix_nodes: &[TemplateIrNodeId],
+    store: &mut TemplateIrStore,
+    registry: &TemplateIrRegistry,
+) -> Result<TemplateIrId, TemplateError> {
+    let mut summary = TemplateIrSummary::default();
+    let mut children = Vec::with_capacity(head_prefix_nodes.len() + 1);
+    let root_location = head_prefix_node_location(store, head_prefix_nodes);
+
+    for &node_id in head_prefix_nodes {
+        let candidate_node =
+            convert_head_node_for_aggregate_wrapper(node_id, store, &mut summary, registry)?;
+        children.push(candidate_node);
+    }
+
+    children.push(store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::AggregateOutput,
+        root_location.to_owned(),
+    )));
+
+    summary.max_depth = u16::from(!children.is_empty());
+
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence { children },
+        root_location.to_owned(),
+    ));
+
+    Ok(store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        summary,
+        root_location,
+    )))
+}
+
+/// Builds a temporary TIR template for branch/fallback body-root composition.
+///
+/// WHAT: reuses the owning template's parser-emitted head-prefix TIR nodes
+///       (converting cross-store child templates into same-store references)
+///       and appends the already-materialized body-only children as the body
+///       fill, so head-chain composition can wrap the body exactly as the
+///       atom-level path did.
+/// WHY: branch and fallback bodies carry the shared head prefix plus their own
+///      body content. Deriving the head-prefix portion from parser-emitted TIR
+///      nodes — instead of re-materializing it from the prefixed
+///      `TemplateContent` atom stream — moves the body root toward TIR
+///      authority while `compose_tir_head_chain` preserves wrapper semantics.
+pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_from_tir_nodes(
+    head_prefix_nodes: &[TemplateIrNodeId],
+    body_children: &[TemplateIrNodeId],
+    store: &mut TemplateIrStore,
+    registry: &TemplateIrRegistry,
+) -> Result<TemplateIrId, TemplateError> {
+    let mut summary = TemplateIrSummary::default();
+    let mut children = Vec::with_capacity(head_prefix_nodes.len() + body_children.len());
+    let root_location = head_prefix_node_location(store, head_prefix_nodes);
+
+    // Convert each head-prefix node so same-store children are reused and
+    // cross-store child templates (recorded by the parser as opaque
+    // DynamicExpression nodes) are materialized into this store. This mirrors
+    // the loop aggregate-wrapper conversion so head-chain composition sees
+    // resolvable ChildTemplate references.
+    for &node_id in head_prefix_nodes {
+        let candidate_node =
+            convert_head_node_for_aggregate_wrapper(node_id, store, &mut summary, registry)?;
+        children.push(candidate_node);
+    }
+
+    // The body children are already materialized in this store, so append them
+    // directly. They carry Body-origin metadata so `compose_tir_head_chain`
+    // partitions them into the body partition and applies head-prefix wrappers
+    // around them.
+    children.extend_from_slice(body_children);
+
+    summary.max_depth = u16::from(!children.is_empty());
+
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence { children },
+        root_location.to_owned(),
+    ));
+
+    Ok(store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        summary,
+        root_location,
+    )))
+}
+
+/// Returns the source location for an aggregate-wrapper candidate root.
+///
+/// WHAT: uses the first head-prefix node's location so the temporary
+///       aggregate wrapper template carries a meaningful source span.
+fn head_prefix_node_location(
+    store: &TemplateIrStore,
+    head_prefix_nodes: &[TemplateIrNodeId],
+) -> SourceLocation {
+    head_prefix_nodes
+        .first()
+        .copied()
+        .and_then(|node_id| store.get_node(node_id))
+        .map(|node| node.location.to_owned())
+        .unwrap_or_default()
+}
+
+/// Converts a head-prefix TIR node for reuse in an aggregate-wrapper candidate.
+///
+/// WHAT: reuses the existing node when it is already a structural TIR node
+///       (`Text`, `ChildTemplate`, `InsertContribution`, or a non-template
+///       `DynamicExpression`). When the parser could only record a cross-store
+///       child template as a `DynamicExpression` carrying a `Template`
+///       expression, materializes it into the current store as a
+///       `ChildTemplate` (or `InsertContribution` for slot-insert helpers) so
+///       head-chain composition can resolve its slots around the aggregate fill.
+/// WHY: the parser records same-store head child templates as `ChildTemplate`
+///      nodes, but cross-store templates fall back to opaque `DynamicExpression`
+///      nodes. The old content-materialization path converted both to
+///      `ChildTemplate` nodes; this conversion preserves that behavior while
+///      reusing already-materialized nodes for the common case.
+fn convert_head_node_for_aggregate_wrapper(
+    node_id: TemplateIrNodeId,
+    store: &mut TemplateIrStore,
+    summary: &mut TemplateIrSummary,
+    registry: &TemplateIrRegistry,
+) -> Result<TemplateIrNodeId, TemplateError> {
+    let Some(node) = store.get_node(node_id) else {
+        return Err(CompilerError::compiler_error(
+            "TIR aggregate-wrapper preparation: head-prefix node ID was not present in the store.",
+        )
+        .into());
+    };
+    let node_kind = node.kind.to_owned();
+
+    match node_kind {
+        TemplateIrNodeKind::Text { byte_len, .. } => {
+            let byte_len = byte_len as usize;
+            summary.text_node_count += 1;
+            summary.text_byte_count += byte_len;
+            summary.estimated_output_bytes += byte_len;
+            Ok(node_id)
+        }
+
+        TemplateIrNodeKind::ChildTemplate { .. } => {
+            summary.child_template_count += 1;
+            Ok(node_id)
+        }
+
+        TemplateIrNodeKind::InsertContribution { .. } => {
+            summary.insert_contribution_count += 1;
+            summary.has_insert_contributions = true;
+            summary.is_const_evaluable_shape = false;
+            Ok(node_id)
+        }
+
+        TemplateIrNodeKind::DynamicExpression {
+            expression,
+            reactive_subscription,
+            ..
+        } => {
+            // Cross-store child templates are recorded by the parser as
+            // DynamicExpression nodes carrying a Template expression. Convert
+            // them to same-store ChildTemplate (or InsertContribution) nodes
+            // so head-chain composition can resolve their slots around the
+            // aggregate fill, mirroring the old content-materialization path.
+            if let Some(child_template) = runtime_template_expression(&expression) {
+                let store_owner = store.owner();
+
+                // For cross-store children that carry a registry-valid
+                // tir_reference, preserve the foreign store-qualified identity
+                // instead of rebuilding the template into the current store
+                // via finalized_template_tir_id. This keeps phase, overlay-set
+                // identity, and third-store descendants resolvable through
+                // their own qualified refs.
+                //
+                // SlotInsert heads use a local proxy template that carries
+                // the target slot key and mirrors the foreign SlotInsert body
+                // as a Sequence of local routing nodes: nested $insert helpers
+                // become local InsertContribution nodes, and non-insert content
+                // becomes ChildTemplate references to narrow derived foreign
+                // templates. This lets InsertContribution route by target key
+                // and discover nested inserts recursively — like the same-store
+                // contract — without deep-copying the foreign tree or reading
+                // TemplateContent.
+                if let Some(foreign_reference) = child_template.tir_reference.as_ref()
+                    && foreign_reference.root.store_id != store.store_id()
+                    && !child_template
+                        .tir_store_owner()
+                        .is_some_and(|owner| Arc::ptr_eq(&owner, &store_owner))
+                    && registry
+                        .store_handle(foreign_reference.root.store_id)
+                        .is_some_and(|handle| {
+                            Arc::ptr_eq(&handle.borrow().owner(), &foreign_reference.store_owner)
+                        })
+                {
+                    let reference = TemplateTirChildReference::new(
+                        foreign_reference.root,
+                        foreign_reference.phase,
+                        foreign_reference.overlay_set_id,
+                    );
+
+                    if matches!(child_template.kind, TemplateType::SlotInsert(_)) {
+                        summary.insert_contribution_count += 1;
+                        summary.has_insert_contributions = true;
+                        summary.is_const_evaluable_shape = false;
+
+                        let proxy_id = build_foreign_slot_insert_proxy(
+                            store,
+                            registry,
+                            &reference,
+                            &child_template.kind,
+                            &expression.location,
+                        )?;
+                        return Ok(store.push_node(TemplateIrNode::new(
+                            TemplateIrNodeKind::InsertContribution { template: proxy_id },
+                            expression.location.to_owned(),
+                        )));
+                    }
+
+                    summary.child_template_count += 1;
+                    let occurrence_id = store.next_child_template_occurrence_id();
+                    return Ok(store.push_node(TemplateIrNode::new(
+                        TemplateIrNodeKind::ChildTemplate {
+                            reference,
+                            occurrence_id,
+                        },
+                        expression.location.to_owned(),
+                    )));
+                }
+
+                // Same-store parser children already carry their complete TIR
+                // identity. Preserve it exactly instead of reducing it to a
+                // local ID and inventing Parsed/empty overlay metadata.
+                let child_reference = child_template
+                    .tir_reference
+                    .as_ref()
+                    .filter(|reference| Arc::ptr_eq(&reference.store_owner, &store_owner))
+                    .filter(|reference| reference.root.store_id == store.store_id())
+                    .filter(|reference| {
+                        store.get_template(reference.root.template_id).is_some()
+                    })
+                    .ok_or_else(|| {
+                        TemplateError::from(CompilerError::compiler_error(
+                            "TIR render-unit child was missing its parser-emitted store-qualified reference.",
+                        ))
+                    })?;
+                let child_reference = TemplateTirChildReference::new(
+                    child_reference.root,
+                    child_reference.phase,
+                    child_reference.overlay_set_id,
+                );
+
+                if matches!(child_template.kind, TemplateType::SlotInsert(_)) {
+                    summary.insert_contribution_count += 1;
+                    summary.has_insert_contributions = true;
+                    summary.is_const_evaluable_shape = false;
+
+                    return Ok(store.push_node(TemplateIrNode::new(
+                        TemplateIrNodeKind::InsertContribution {
+                            template: child_reference.root.template_id,
+                        },
+                        expression.location.to_owned(),
+                    )));
+                }
+
+                summary.child_template_count += 1;
+
+                let occurrence_id = store.next_child_template_occurrence_id();
+                return Ok(store.push_node(TemplateIrNode::new(
+                    TemplateIrNodeKind::ChildTemplate {
+                        reference: child_reference,
+                        occurrence_id,
+                    },
+                    expression.location.to_owned(),
+                )));
+            }
+
+            // Non-template dynamic expressions (scalar/reference/reactive head
+            // values) are reused as-is.
+            summary.dynamic_expression_count += 1;
+            summary.has_reactivity |= reactive_subscription.is_some();
+            summary.is_const_evaluable_shape = false;
+            Ok(node_id)
+        }
+
+        _ => Ok(node_id),
+    }
+}
+
+// ------------------------------
+//  Composed aggregate-wrapper output
+// ------------------------------
+
+/// Composed aggregate-wrapper output for TIR consumption.
+pub(in crate::compiler_frontend::ast::templates) struct PreparedLoopAggregateWrapper {
+    /// TIR root of the composed aggregate-wrapper subtree.
+    ///
+    /// WHAT: carries the internal `AggregateOutput` marker at its composed
+    ///       position inside the wrapper tree.
+    /// WHY: render-unit preparation installs this authoritative root directly
+    ///      onto the owning `Loop` node for finalization and runtime handoff.
+    pub(in crate::compiler_frontend::ast::templates) tir_root: TemplateIrNodeId,
+}
+
+// ------------------------------
+//  Formatter helpers
+// ------------------------------
+
+/// Converts TIR formatter diagnostic messages into a single `TemplateError`.
+///
+/// WHAT: scans the formatter output for hard errors and returns the first one
+///       as a `TemplateError`; when no error exists, fabricates a generic
+///       compiler-error so the caller never receives an unexplained failure.
+/// WHY: the formatter emits structured diagnostics; this helper provides the
+///      narrow bridge from formatter messages back to template-stage errors.
+fn tir_formatter_messages_to_template_error(messages: CompilerMessages) -> TemplateError {
+    for diagnostic in messages.into_diagnostics() {
+        if diagnostic.severity == DiagnosticSeverity::Error {
+            return diagnostic.into();
+        }
+    }
+
+    CompilerError::compiler_error("TIR formatter failed without returning a compiler error.").into()
+}
+
+/// Runs the TIR formatter and forwards any warnings to the active diagnostic
+/// context.
+///
+/// WHAT: thin wrapper around `format_tir_template` that preserves formatter
+///       warnings the old `TemplateContent` formatter path used to emit.
+/// WHY: warnings are part of user-visible formatter behavior and must survive
+///      the migration to TIR-authoritative formatting.
+pub(in crate::compiler_frontend::ast::templates) fn run_tir_formatter_with_warnings(
+    view: &TirView<'_>,
+    style: &Style,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<TirFormatterResult, TemplateError> {
+    let result = format_tir_template(view, style, string_table)
+        .map_err(tir_formatter_messages_to_template_error)?;
+
+    for warning in &result.warnings {
+        context.emit_warning(warning.clone());
+    }
+
+    Ok(result)
+}
+
+/// Formats a control-flow body TIR root using the template's style formatter.
+///
+/// WHAT: wraps the body root in a short-lived temporary template so the
+///       TIR-native formatter can recursively format body text and nested
+///       child templates, then returns the formatted root node ID.
+/// WHY: control-flow body roots are nodes, not top-level templates, but they
+///      still need the same formatter treatment as linear template bodies.
+pub(in crate::compiler_frontend::ast::templates) fn format_tir_body_root(
+    body_root: TemplateIrNodeId,
+    style: &Style,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<TemplateIrNodeId, TemplateError> {
+    let store_id = context.template_ir_store_id;
+
+    let temp_template_id = {
+        let mut store = context.template_ir_store.borrow_mut();
+        let location = store
+            .get_node(body_root)
+            .map(|node| node.location.clone())
+            .unwrap_or_default();
+
+        store.push_template(TemplateIr::new(
+            body_root,
+            style.clone(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            location,
+        ))
+    };
+
+    let empty_overlay_set_id = {
+        let mut registry = context.template_ir_registry.borrow_mut();
+        registry.allocate_overlay_set(TemplateOverlaySet::empty())
+    };
+
+    let registry = context.template_ir_registry.borrow();
+    let temp_ref = TemplateRef::new(store_id, temp_template_id);
+    let view = TirView::new(
+        &registry,
+        temp_ref,
+        TemplateTirPhase::Parsed,
+        empty_overlay_set_id,
+    )
+    .map_err(TemplateError::from)?;
+
+    let result = run_tir_formatter_with_warnings(&view, style, context, string_table)?;
+
+    Ok(result.root)
+}
+
+// ------------------------------
+//  Sequence and whitespace helpers
+// ------------------------------
+
+/// Returns the children of a `Sequence` node, or `None` when the node is not a
+/// sequence.
+///
+/// WHAT: extracts the flat child list so it can be appended after head-prefix
+///       nodes in a branch/fallback body candidate.
+/// WHY: parser-emitted body roots are sealed under a `Sequence` node; flattening
+///      that wrapper keeps the body nodes at the same level as the head-prefix
+///      nodes so head-chain composition can partition them correctly.
+pub(in crate::compiler_frontend::ast::templates) fn sequence_children(
+    store: &TemplateIrStore,
+    node_id: TemplateIrNodeId,
+) -> Option<Vec<TemplateIrNodeId>> {
+    store.get_node(node_id).and_then(|node| match &node.kind {
+        TemplateIrNodeKind::Sequence { children } => Some(children.clone()),
+        _ => None,
+    })
+}
+
+/// Returns true when a TIR node is whitespace-only literal text.
+///
+/// WHAT: checks the interned text of a Text node and reports whether it
+///       contains only whitespace.
+/// WHY: loop-control boundary trimming needs the same whitespace test used by
+///      the parser TIR builder state without depending on that module's
+///      private helpers.
+fn tir_node_is_whitespace_only_text(
+    node_id: TemplateIrNodeId,
+    store: &TemplateIrStore,
+    string_table: &StringTable,
+) -> bool {
+    let node = match store.get_node(node_id) {
+        Some(node) => node,
+        None => return false,
+    };
+
+    let TemplateIrNodeKind::Text { text, .. } = &node.kind else {
+        return false;
+    };
+
+    string_table.resolve(*text).trim().is_empty()
+}
+
+/// Trims whitespace-only text nodes that sit immediately before a top-level
+/// LoopControl node in a loop body root sequence.
+///
+/// WHAT: applies the parser-level cleanup that strips trailing whitespace
+///       before `[break]`/`[continue]` markers directly to the TIR body root.
+/// WHY: loop-control boundary whitespace trimming is now a TIR-local transform;
+///      the loop body root owns the behavior natively without a content mirror.
+pub(in crate::compiler_frontend::ast::templates) fn trim_whitespace_before_loop_control_boundary(
+    body_root: TemplateIrNodeId,
+    store: &mut TemplateIrStore,
+    string_table: &StringTable,
+) -> TemplateIrNodeId {
+    let node = match store.get_node(body_root) {
+        Some(node) => node.clone(),
+        None => return body_root,
+    };
+
+    let TemplateIrNodeKind::Sequence { children } = node.kind else {
+        return body_root;
+    };
+
+    let mut new_children = Vec::with_capacity(children.len());
+
+    let original_children_count = children.len();
+    for child_id in &children {
+        let child_id = *child_id;
+        let is_loop_control = store
+            .get_node(child_id)
+            .is_some_and(|child| matches!(child.kind, TemplateIrNodeKind::LoopControl { .. }));
+
+        if is_loop_control {
+            // Drop whitespace-only text nodes that immediately precede this
+            // loop-control marker, preserving any preceding non-whitespace output.
+            while let Some(last) = new_children.last().copied() {
+                if tir_node_is_whitespace_only_text(last, store, string_table) {
+                    new_children.pop();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        new_children.push(child_id);
+    }
+
+    if new_children.len() == original_children_count {
+        return body_root;
+    }
+
+    let location = node.location.clone();
+    let mut builder = TemplateIrBuilder::new(store);
+    builder.push_sequence_node(new_children, location)
+}
+
+// ------------------------------
+//  Inherited child-wrapper application
+// ------------------------------
+
+/// Store-independent facts needed to classify a direct child before mutating
+/// the current composition store.
+struct ChildWrapperClassification {
+    skip_parent_child_wrappers: bool,
+    has_unresolved_slots: bool,
+    has_control_flow: bool,
+}
+
+/// Reads only the foreign facts needed by the body walker, releasing the
+/// owning-store borrow before the caller creates local derived nodes.
+fn resolve_foreign_child_classification(
+    registry: &TemplateIrRegistry,
+    reference: &TemplateTirChildReference,
+) -> Result<ChildWrapperClassification, TemplateError> {
+    let foreign_store_rc = registry.store_handle(reference.root.store_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "Inherited-wrapper child referenced store {} which is not in the module-local TIR registry.",
+            reference.root.store_id
+        ))
+    })?;
+
+    let foreign_store = foreign_store_rc.borrow();
+    let child_template = foreign_store
+        .get_template(reference.root.template_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Inherited-wrapper child referenced template {} which is missing in store {}.",
+                reference.root.template_id, reference.root.store_id
+            ))
+        })?;
+
+    Ok(ChildWrapperClassification {
+        skip_parent_child_wrappers: child_template.style.skip_parent_child_wrappers,
+        has_unresolved_slots: child_template.summary.has_slots
+            || child_template.summary.slot_count > 0,
+        has_control_flow: child_template.summary.has_control_flow,
+    })
+}
+
+/// Applies inherited `$children(..)` wrapper templates to direct child-template
+/// occurrences in a control-flow body root.
+///
+/// WHAT: TIR-native equivalent of `apply_inherited_child_templates_to_atoms` for
+///       body-only TIR roots. Walks the top-level children of the body sequence,
+///       skipping `$fresh` children and not recursing into grandchildren.
+///       Non-control-flow direct children are wrapped through
+///       `wrap_tir_node_in_wrappers`; control-flow direct children receive the
+///       inherited wrappers through a derived wrapper template whose
+///       `conditional_child_wrapper_set` carries the inherited wrappers, matching
+///       the atom-level `attach_conditional_child_wrappers` behavior.
+/// Same-store children are resolved from the current mutable store as a fast
+/// path. Foreign children have their style/summary facts resolved through the
+/// module-local registry without holding a borrow across local mutation, so
+/// derived output stays local and the original child reference is preserved.
+/// WHY: lets `try_sync_control_flow_body_tir_from_tir` cover bodies with inherited
+///      `$children(...)` wrappers without falling back to the content mirror,
+///      including bodies whose direct children were finalized into a different
+///      TIR store.
+pub(in crate::compiler_frontend::ast::templates) fn apply_inherited_child_wrappers_to_body_root(
+    body_root: TemplateIrNodeId,
+    wrapper_refs: &[TemplateWrapperReference],
+    registry: &TemplateIrRegistry,
+    store: &mut TemplateIrStore,
+    string_table: &StringTable,
+) -> Result<TemplateIrNodeId, TemplateError> {
+    if wrapper_refs.is_empty() {
+        return Ok(body_root);
+    }
+
+    increment_ast_counter(AstCounter::TemplateTirChildWrapperCalls);
+
+    let body_location = store
+        .get_node(body_root)
+        .map(|node| node.location.to_owned())
+        .unwrap_or_default();
+
+    let children = match store.get_node(body_root) {
+        Some(node) => match &node.kind {
+            TemplateIrNodeKind::Sequence { children } => children.clone(),
+            // Parser-emitted body roots are always Sequence nodes. A non-sequence
+            // root is treated as unchanged so the caller can fall back safely
+            // rather than panicking.
+            _ => return Ok(body_root),
+        },
+        None => {
+            return Err(CompilerError::compiler_error(
+                "Control-flow body root referenced a missing TIR node.",
+            )
+            .into());
+        }
+    };
+
+    let mut new_children = Vec::with_capacity(children.len());
+    let mut any_changed = false;
+    let mut wrapped_count: usize = 0;
+
+    for child_id in children {
+        let child_node = match store.get_node(child_id) {
+            Some(node) => node.clone(),
+            None => {
+                return Err(CompilerError::compiler_error(
+                    "Control-flow body root referenced a missing child TIR node.",
+                )
+                .into());
+            }
+        };
+
+        let TemplateIrNodeKind::ChildTemplate { reference, .. } = child_node.kind else {
+            new_children.push(child_id);
+            continue;
+        };
+
+        // Same-store children are resolved directly from the current mutable
+        // store as a fast path; foreign children have their style/summary
+        // facts resolved through the registry so the borrow on the owning
+        // store is released before any derived output is written locally.
+        let classification = match reference.template_id_in_store(store.store_id()) {
+            Some(child_template_id) => {
+                let child_template = match store.get_template(child_template_id) {
+                    Some(template) => template,
+                    None => {
+                        return Err(CompilerError::compiler_error(
+                            "ChildTemplate node referenced a missing TIR template.",
+                        )
+                        .into());
+                    }
+                };
+
+                ChildWrapperClassification {
+                    skip_parent_child_wrappers: child_template.style.skip_parent_child_wrappers,
+                    has_unresolved_slots: child_template.summary.has_slots
+                        || child_template.summary.slot_count > 0,
+                    has_control_flow: child_template.summary.has_control_flow,
+                }
+            }
+            None => resolve_foreign_child_classification(registry, &reference)?,
+        };
+
+        if classification.skip_parent_child_wrappers {
+            new_children.push(child_id);
+            continue;
+        }
+
+        if classification.has_unresolved_slots {
+            // Slot-bearing children are wrapper receivers; leave them for
+            // head-chain composition.
+            new_children.push(child_id);
+            continue;
+        }
+
+        let wrapped_child_id = if classification.has_control_flow {
+            wrap_control_flow_child_in_inherited_wrappers(
+                store,
+                &reference,
+                wrapper_refs,
+                &child_node.location,
+            )?
+        } else {
+            let wrapper_ids: Vec<TemplateIrId> = wrapper_refs
+                .iter()
+                .map(|wrapper_ref| wrapper_ref.root.template_id)
+                .collect();
+            super::wrap_tir_node_in_wrappers(store, child_id, &wrapper_ids, string_table)?
+        };
+
+        new_children.push(wrapped_child_id);
+        any_changed = true;
+        wrapped_count += 1;
+    }
+
+    add_ast_counter(AstCounter::TemplateTirChildWrapperHits, wrapped_count);
+
+    if !any_changed {
+        return Ok(body_root);
+    }
+
+    Ok(store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: new_children,
+        },
+        body_location,
+    )))
+}
+
+/// Wraps a control-flow direct child by creating a derived template that carries
+/// the inherited wrappers as conditional child wrappers.
+///
+/// WHAT: the derived template root is a single `ChildTemplate` reference to the
+///       effective child identity, and its `conditional_child_wrapper_set`
+///       stores the inherited wrappers. When folded, the child produces its
+///       (possibly conditional) output and the derived template applies the
+///       inherited wrappers around that output, matching the atom-level
+///       `attach_conditional_child_wrappers` behavior without mutating the
+///       shared child template.
+/// WHY: control-flow output is conditional, so inherited wrappers must apply
+///      around the emission rather than being baked into the child structure.
+///      Threading the effective child reference (root, phase, overlay set)
+///      instead of reconstructing a same-store reference from a local ID
+///      preserves the exact identity of cross-store children inside the
+///      derived node.
+fn wrap_control_flow_child_in_inherited_wrappers(
+    store: &mut TemplateIrStore,
+    child_reference: &TemplateTirChildReference,
+    wrapper_refs: &[TemplateWrapperReference],
+    location: &SourceLocation,
+) -> Result<TemplateIrNodeId, TemplateError> {
+    let wrapper_set_id = store.push_or_reuse_wrapper_set(wrapper_refs.to_vec());
+
+    let child_occurrence_id = store.next_child_template_occurrence_id();
+    // Preserve the original child reference exact root, phase, and overlay
+    // set instead of reconstructing a same-store reference from a local ID, so
+    // cross-store children keep their owning-store identity inside the derived
+    // wrapper node.
+    let child_node_id = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: *child_reference,
+            occurrence_id: child_occurrence_id,
+        },
+        location.to_owned(),
+    ));
+
+    let summary = TemplateIrSummary {
+        child_template_count: 1,
+        has_control_flow: true,
+        is_const_evaluable_shape: false,
+        ..TemplateIrSummary::default()
+    };
+
+    let wrapper_template = TemplateIr {
+        root: child_node_id,
+        style: Style::default(),
+        kind: TemplateType::String,
+        summary,
+        location: location.to_owned(),
+        conditional_child_wrapper_set: Some(wrapper_set_id),
+        runtime_slot_plan: None,
+    };
+
+    let wrapper_template_id = store.push_template(wrapper_template);
+    let wrapper_occurrence_id = store.next_child_template_occurrence_id();
+    let wrapper_reference = TemplateTirChildReference::same_store(
+        wrapper_template_id,
+        store.store_id(),
+        TemplateTirPhase::Parsed,
+        TemplateOverlaySetId::empty(),
+    );
+
+    Ok(store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: wrapper_reference,
+            occurrence_id: wrapper_occurrence_id,
+        },
+        location.to_owned(),
+    )))
+}
+
+// ------------------------------
+//  Loop aggregate-wrapper preparation
+// ------------------------------
+
+/// Prepares the composed aggregate-wrapper for a template `loop`.
+///
+/// WHAT: derives the head-prefix TIR nodes from the owning template's
+///       parser-emitted root children, builds a temporary aggregate-wrapper
+///       candidate, composes it through `compose_tir_head_chain`, and
+///       returns its authoritative composed root.
+/// WHY: loop aggregate wrapping should consume TIR-native nodes that the
+///      parser already emitted, removing the dependency on `shared_head_prefix`
+///      atoms for aggregate-wrapper preparation.
+pub(in crate::compiler_frontend::ast::templates) fn prepare_loop_aggregate_wrapper(
+    root_children: &[TemplateIrNodeId],
+    string_table: &StringTable,
+    registry: &TemplateIrRegistry,
+    template_ir_store: &mut TemplateIrStore,
+) -> Result<PreparedLoopAggregateWrapper, TemplateError> {
+    // Derive the head-prefix TIR nodes from the owning template's parser-emitted
+    // root children. These are the same nodes the parser materialized from the
+    // shared head-prefix atoms, so reusing them avoids rebuilding TIR from
+    // `TemplateContent` and removes the loop aggregate wrapper's dependency on
+    // `shared_head_prefix` atoms.
+    let head_prefix_nodes = head_prefix_tir_nodes(template_ir_store, root_children);
+
+    let aggregate_template_id = build_aggregate_wrapper_candidate_from_tir_nodes(
+        &head_prefix_nodes,
+        template_ir_store,
+        registry,
+    )?;
+    let composed_root = super::compose_tir_head_chain(
+        template_ir_store,
+        aggregate_template_id,
+        string_table,
+        true,
+    )?;
+    Ok(PreparedLoopAggregateWrapper {
+        tir_root: composed_root,
+    })
+}
+
+/// Extracts the head-prefix TIR nodes from the owning template's parser-emitted
+/// root children.
+///
+/// WHAT: returns all root children before the first control-flow node (`Loop`
+///       or `BranchChain`). These are the same TIR nodes the parser
+///       materialized from the shared head-prefix atoms, so reusing them
+///       avoids rebuilding TIR from content.
+/// WHY: loop aggregate wrappers and branch/fallback body roots both wrap the
+///      shared head prefix around their respective body output. The
+///      head-prefix nodes are structurally everything before the control-flow
+///      node in the owning template's root sequence, so one extractor serves
+///      both control-flow kinds.
+pub(in crate::compiler_frontend::ast::templates) fn head_prefix_tir_nodes(
+    store: &TemplateIrStore,
+    root_children: &[TemplateIrNodeId],
+) -> Vec<TemplateIrNodeId> {
+    root_children
+        .iter()
+        .copied()
+        .take_while(|&node_id| {
+            store.get_node(node_id).is_some_and(|node| {
+                !matches!(
+                    node.kind,
+                    TemplateIrNodeKind::Loop { .. } | TemplateIrNodeKind::BranchChain { .. }
+                )
+            })
+        })
+        .collect()
+}

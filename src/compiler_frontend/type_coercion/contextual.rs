@@ -19,6 +19,16 @@ use crate::compiler_frontend::type_coercion::compatibility::{
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// Boxed diagnostic result for the contextual coercion boundary.
+///
+/// WHAT: keeps `coerce_expression_to_explicit_type_boundary` on a small error
+///       boundary so the large `CompilerDiagnostic` value does not inflate
+///       every successful coercion `Result`.
+/// WHY: every direct caller already returns `Box<CompilerDiagnostic>` (or a
+///      type that converts from it), so boxing here propagates directly
+///      without adapter changes.
+type ContextualCoercionResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Validates and applies the contextual coercion policy for an explicit typed boundary.
 ///
 /// WHAT: accepts exact matches and ordinary contextual coercions such as `Int -> Float` and
@@ -31,7 +41,7 @@ pub(crate) fn coerce_expression_to_explicit_type_boundary(
     type_environment: &TypeEnvironment,
     _scope_context: &ScopeContext,
     mismatch_context: TypeMismatchContext,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> ContextualCoercionResult<Expression> {
     if expression.type_id == expected_type_id {
         return Ok(expression);
     }
@@ -44,12 +54,12 @@ pub(crate) fn coerce_expression_to_explicit_type_boundary(
         ));
     }
 
-    Err(CompilerDiagnostic::type_mismatch(
+    Err(Box::new(CompilerDiagnostic::type_mismatch(
         expected_type_id,
         expression.type_id,
         mismatch_context,
         expression.location.clone(),
-    ))
+    )))
 }
 
 /// Applies contextual coercion to `expr` if the target type requires it.

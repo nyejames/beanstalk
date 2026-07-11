@@ -1,6 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_messages::{DiagnosticKind, SyntaxDiagnosticKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -59,8 +59,7 @@ fn css_directive_sets_style_and_formatter_identity() {
 #[test]
 fn markdown_directive_sets_style_and_formatter_identity() {
     let mut string_table = StringTable::new();
-    let mut token_stream =
-        template_tokens_from_source("[$markdown:\n# Hello\n]", &mut string_table);
+    let mut token_stream = template_tokens_from_source("[$md:\n# Hello\n]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -171,25 +170,28 @@ fn runtime_html_templates_emit_warnings_for_static_body_segments() {
 fn runtime_templates_format_static_body_strings_only() {
     let mut string_table = StringTable::new();
     let mut token_stream =
-        template_tokens_from_source("[value, $markdown:\n# Hello\n]", &mut string_table);
+        template_tokens_from_source("[value, $md:\n# Hello\n]", &mut string_table);
     let context = runtime_template_context(&token_stream.src_path, &mut string_table);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
-    // Head references remain in template.content — check there.
-    assert!(template_segments(&template).iter().any(|segment| {
-        segment.origin == TemplateSegmentOrigin::Head
-            && matches!(segment.expression.kind, ExpressionKind::Reference(_))
-    }));
+    assert!(template.content.is_empty());
 
-    // Formatted body text (after $markdown pass) lives in render_plan, not template.content.
-    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
+    let store = context.template_ir_store.borrow();
+    assert!(tir_root_has_head_dynamic_expression(
+        &template,
+        &store,
+        |expression| matches!(expression.kind, ExpressionKind::Reference(_))
+    ));
+
+    // Formatted body text is authoritative in the TIR root.
+    let body_texts = collect_body_text_from_tir(&template, &store, &string_table);
     assert!(
         body_texts
             .iter()
             .any(|text| text.contains("<h1>Hello</h1>")),
-        "expected formatted body text to contain markdown-rendered heading in render_plan"
+        "expected formatted body text to contain markdown-rendered heading"
     );
 }

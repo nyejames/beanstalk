@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -319,12 +322,15 @@ body {
      <h1 style="font-size: 2em;text-align: center;"> COROUTINES AND ASYNC IN BEANSTALK</h1>
     <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>Beanstalk approaches async and concurrency by making <strong>control flow explicit</strong> and <strong>communication safe by default</strong>.</p><p>Instead of hiding async behind keywords like <code>async</code> / <code>await</code> or complex runtime abstractions, Beanstalk uses a small set of primitives that make data flow, suspension, and concurrency visible in the syntax.</p><p>At a high level:</p><ul><li>Coroutines are lightweight, cooperative tasks</li><li>Coroutines communicate using typed channels</li><li>Concurrency is structured and scoped</li><li>Suspension points are visible in code</li><li>The compiler can enforce safety rules around shared data, references, and task lifetimes</li></ul><p>The goal is async code that remains readable, predictable, and analyzable.</p></section>
     <section class="container"><h1>Core idea</h1><p>Async in Beanstalk is built around three concepts:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Concept</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Concept</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Channels </td>
@@ -361,7 +367,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> <code>async:</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Bound the lifetime of spawned coroutines </td>
         </tr>
-        
+            
+
     </table><p>The intended model is:</p><p>&gt; Async is structured control flow plus safe message passing.</p></section>
     <section class="container"><h1>Channels</h1><p>Coroutines should not share mutable state by default.</p><p>Instead, they communicate by sending values through typed channels.</p><p>A channel is created with <code>Channel</code>, which takes a carried value type and returns two endpoints:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

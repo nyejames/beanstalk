@@ -4,8 +4,6 @@
 //! WHY: dependency sorting compares exact header graph keys, so header dependencies must use the
 //! same canonical paths that import preparation exposes through file visibility.
 
-#![allow(clippy::result_large_err)]
-
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;

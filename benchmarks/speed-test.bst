@@ -555,7 +555,7 @@ compile_e_foot #= [$insert("foot"):
 ]
 
 compile_card_a #= [card, compile_a_head, compile_a_foot:
-    [$markdown:
+    [$md:
         ### Fold cluster expansion
 
         This block is fully compile-time and deliberately dense.
@@ -587,7 +587,7 @@ compile_card_a #= [card, compile_a_head, compile_a_foot:
 ]
 
 compile_card_b #= [card, compile_b_head, compile_b_foot:
-    [$markdown:
+    [$md:
         ### Slots and wrapper edge cases
 
         This block keeps template composition busy with:
@@ -612,7 +612,7 @@ compile_card_b #= [card, compile_b_head, compile_b_foot:
 ]
 
 compile_card_c #= [card, compile_c_head, compile_c_foot:
-    [$markdown:
+    [$md:
         ### Formatter paths
 
         This block mixes formatter-like directives in one compile-time card.
@@ -630,7 +630,7 @@ function benchmark(seed) {
 ]
 
 compile_card_d #= [card, compile_d_head, compile_d_foot:
-    [$markdown:
+    [$md:
         ### Nested direct-child wrappers
 
         The table below uses one `$children(..)` wrapper for rows and another nested one for cells.
@@ -646,7 +646,7 @@ compile_card_d #= [card, compile_d_head, compile_d_foot:
 ]
 
 compile_card_e #= [card, compile_e_head, compile_e_foot:
-    [$markdown:
+    [$md:
         ### Digest pressure
 
         Additional values keep constant resolution and interpolation noisy:

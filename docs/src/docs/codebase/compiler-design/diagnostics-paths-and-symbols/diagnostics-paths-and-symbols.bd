@@ -1,0 +1,119 @@
+Diagnostics are part of the compiler architecture, not a final pretty-printing step.
+
+A build uses `StringTable` identity across config loading, frontend compilation, backend validation, output writing and diagnostic rendering.
+Source locations store interned identity.
+Renderers turn that identity into user-facing paths and names at the boundary.
+
+## Core owners
+
+- `src/compiler_frontend/compiler_messages/` owns typed diagnostics, labels, source locations, stable diagnostic descriptors, render-boundary aggregation and terminal/terse/dev-server renderers.
+- `src/compiler_frontend/symbols/` owns canonical symbol identity used across diagnostics, imports and lowering.
+- `src/compiler_frontend/symbols/interned_path.rs` owns interned source path identity.
+- `src/compiler_frontend/paths/` owns path formatting and resolution helpers.
+
+`CompilerDiagnostic` is the user-facing lane.
+`CompilerError` is the internal and infrastructure lane.
+Keep them separate.
+
+## Diagnostic lanes
+
+[table:
+    [th:
+        [: **Lane**]
+        [: **Use it for**]
+    ]
+
+    [td:
+        [: `CompilerDiagnostic`]
+        [: Source, syntax, import, type, rule, borrow, config and deferred-feature failures that should be reported to the user.]
+    ]
+
+    [td:
+        [: `CompilerError`]
+        [: Internal compiler failures, filesystem failures, backend failures, dev-server failures and tooling infrastructure errors.]
+    ]
+]
+
+User-facing diagnostics should carry structured facts.
+Don't bake rendered prose into payloads when a reason enum, token, `TypeId`, symbol, path or source location can carry the real information.
+
+`DiagnosticBag` is for stage-local accumulation.
+`CompilerMessages` is for build/render boundaries.
+That lets stages collect multiple useful diagnostics without pretending every validation helper needs to be an infrastructure failure.
+
+## Source locations
+
+`SourceLocation` stores interned path and scope identity.
+It should not carry owned display paths.
+
+Rendering and filesystem-adjacent code resolve interned paths through the active `StringTable`.
+Boundary types such as `BuildResult` and failed `CompilerMessages` carry the string table so later output writing, terminal rendering and dev-server reporting can resolve paths consistently.
+
+This makes diagnostics durable across the whole build.
+A diagnostic produced during config loading can still render accurately after backend validation fails.
+A module warning can survive project assembly without losing its path context.
+
+## Type diagnostics
+
+Type diagnostics should carry semantic `TypeId`s and render through `DiagnosticRenderContext` when the relevant module `TypeEnvironment` is available.
+
+Do this:
+
+- carry canonical `TypeId`s
+- carry context enums and structured reasons
+- resolve source-level names at the render boundary
+
+Don't do this:
+
+- clone `DataType` values for semantic diagnostics
+- store formatted type names early
+- compare types by syntax spelling
+
+The active `TypeEnvironment` decides type identity.
+The renderer decides how to explain that identity.
+
+## StringTable fork and merge rules
+
+Parallel work can fork string tables only when deltas are merged and remapped in deterministic order before later stages consume tokens, headers, diagnostics or type-rendering context.
+
+Directory project compilation creates one shared string-table fork source for the module batch.
+Each module compiles with a local delta over that immutable base.
+The build system then merges local suffixes in deterministic entry-path order and remaps module payloads, diagnostics and render type environments only when the returned remap is non-identity.
+
+Inside a module, source files can be prepared in parallel.
+Each file tokenizes and header-parses against a local string-table fork.
+The module frontend merges file deltas back into the module table in deterministic input order and remaps tokens, headers, warnings and diagnostics before module-wide header aggregation, dependency sorting and AST construction.
+
+Full `StringTable` cloning and full-table merging remain available for true independent table boundaries.
+They should not be used for ordinary parallel module compilation.
+
+## Style directives
+
+Project builders can register style directives through `frontend_style_directives`.
+
+- Frontend-owned directives are always available.
+- Builder directives cannot override frontend-owned names.
+- Tokenizer and template parsing use the same merged registry.
+- Unknown directives are rejected strictly.
+
+Directive syntax belongs to the language/template docs.
+The compiler-design concern is ownership: the registry is merged before tokenizer/template parsing, and every consumer sees the same directive availability.
+
+## Deferred and outside-scope diagnostics
+
+Design-scope and deferred-feature diagnostics should be centralised through typed `CompilerDiagnostic` constructors.
+
+Deferred features and outside-design-scope rejections must stay distinct.
+A deferred feature says, "this fits the design, but not this surface yet".
+An outside-scope feature says, "this would change the language philosophy".
+
+That distinction matters for implementation work.
+Deferred features can become roadmap items.
+Outside-scope features need an explicit design change before code tries to support them.
+
+## Related reading
+
+- @../stages/tokenization (Stage 1: Tokenization): style directive token recognition
+- @../stages/ast-construction (Stage 4: AST construction): where `DiagnosticBag` accumulates user-facing diagnostics
+- @../type-identity-and-coercion (Type identity and coercion): type diagnostics through `DiagnosticRenderContext`
+- @../parallelism-and-determinism (Parallelism and determinism): string-table merge rules

@@ -89,11 +89,20 @@ struct LoopHeaderParser<'a, 'types> {
     string_table: &'a mut StringTable,
 }
 
+/// Stage-local result for loop-header parsing and all local helper functions.
+///
+/// WHY: `CompilerDiagnostic` is large enough that returning it directly inside a
+/// `Result` triggers `clippy::result_large_err`. Boxing at this boundary keeps the
+/// loop-header owner and its helpers uniform without changing diagnostic semantics.
+type LoopHeaderResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 fn loop_header_error<T>(
     reason: InvalidLoopHeaderReason,
     location: SourceLocation,
-) -> Result<T, CompilerDiagnostic> {
-    Err(CompilerDiagnostic::invalid_loop_header(reason, location))
+) -> LoopHeaderResult<T> {
+    Err(Box::new(CompilerDiagnostic::invalid_loop_header(
+        reason, location,
+    )))
 }
 
 pub(crate) fn parse_loop_header_tokens(
@@ -102,7 +111,7 @@ pub(crate) fn parse_loop_header_tokens(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<(ParsedLoopHeader, ScopeContext), CompilerDiagnostic> {
+) -> LoopHeaderResult<(ParsedLoopHeader, ScopeContext)> {
     let mut header_tokens = header_tokens.to_vec();
     trim_edge_newlines(&mut header_tokens);
     reject_removed_in_loop_syntax(&header_tokens, string_table)?;
@@ -130,7 +139,7 @@ pub(crate) fn parse_loop_header_tokens(
 fn parse_range_loop_header(
     header_tokens: &[Token],
     parser: &mut LoopHeaderParser<'_, '_>,
-) -> Result<ParsedLoopHeader, CompilerDiagnostic> {
+) -> LoopHeaderResult<ParsedLoopHeader> {
     // Parse explicit `|...|` bindings first, then reject bare binding tails with a targeted
     // diagnostic before falling back to no-binding range parsing.
     if let Some(pipe_binding_split) = parse_pipe_binding_suffix(header_tokens, parser.string_table)?
@@ -174,7 +183,7 @@ fn parse_range_loop_header(
 fn parse_non_range_loop_header(
     header_tokens: &[Token],
     parser: &mut LoopHeaderParser<'_, '_>,
-) -> Result<ParsedLoopHeader, CompilerDiagnostic> {
+) -> LoopHeaderResult<ParsedLoopHeader> {
     // Conditional loops are distinguished by a full-header boolean expression with no binding
     // suffix. Parse explicit `|...|` bindings first, then reject bare binding tails with a
     // targeted diagnostic before evaluating conditional/collection fallback.
@@ -233,7 +242,7 @@ fn parse_non_range_loop_header(
 fn reject_removed_in_loop_syntax(
     header_tokens: &[Token],
     string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> LoopHeaderResult<()> {
     if header_tokens.len() < 3 {
         return Ok(());
     }
@@ -259,7 +268,7 @@ fn reject_removed_in_loop_syntax(
 fn parse_pipe_binding_suffix(
     header_tokens: &[Token],
     string_table: &StringTable,
-) -> Result<Option<BindingSuffixSplit>, CompilerDiagnostic> {
+) -> LoopHeaderResult<Option<BindingSuffixSplit>> {
     let pipe_indices = collect_top_level_token_indexes(header_tokens, |token| {
         matches!(token, TokenKind::TypeParameterBracket)
     });
@@ -316,7 +325,7 @@ fn parse_pipe_binding_suffix(
 fn parse_binding_tokens(
     binding_tokens: &[Token],
     _string_table: &StringTable,
-) -> Result<ParsedBindingNames, CompilerDiagnostic> {
+) -> LoopHeaderResult<ParsedBindingNames> {
     let filtered_tokens = binding_tokens
         .iter()
         .filter(|token| !matches!(token.kind, TokenKind::Newline))
@@ -457,7 +466,7 @@ fn parses_as_collection_iterable(
 
 fn bare_loop_binding_syntax_error<T>(
     binding_suffix: &BareLoopBindingSuffix,
-) -> Result<T, CompilerDiagnostic> {
+) -> LoopHeaderResult<T> {
     match binding_suffix.kind {
         BareLoopBindingKind::Single => loop_header_error(
             InvalidLoopHeaderReason::BareSingleBinding,
@@ -472,7 +481,7 @@ fn bare_loop_binding_syntax_error<T>(
 
 fn build_binding_name_pair(
     binding_names: Vec<ParsedBindingName>,
-) -> Result<ParsedBindingNames, CompilerDiagnostic> {
+) -> LoopHeaderResult<ParsedBindingNames> {
     if binding_names.len() > 2 {
         return loop_header_error(
             InvalidLoopHeaderReason::TooManyBindings,
@@ -509,7 +518,7 @@ fn parse_collection_iterable_from_tokens(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<(Expression, TypeId), CompilerDiagnostic> {
+) -> LoopHeaderResult<(Expression, TypeId)> {
     let collection_expression = parse_expression_from_tokens(
         iterable_tokens,
         context,
@@ -537,7 +546,7 @@ fn parse_range_loop_spec_from_tokens(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<RangeLoopSpec, CompilerDiagnostic> {
+) -> LoopHeaderResult<RangeLoopSpec> {
     let mut stream = token_stream_with_eof(range_tokens)?;
 
     // Omitted-start sugar: `loop to 5:` desugars to `loop 0 to 5:`.
@@ -565,7 +574,8 @@ fn parse_range_loop_spec_from_tokens(
             },
             false,
         );
-        create_expression_until(input, &[TokenKind::ExclusiveRange, TokenKind::Eof])?
+        create_expression_until(input, &[TokenKind::ExclusiveRange, TokenKind::Eof])
+            .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?
     };
 
     // ------------------------
@@ -618,7 +628,8 @@ fn parse_range_loop_spec_from_tokens(
         },
         false,
     );
-    let end = create_expression_until(input, &[TokenKind::By, TokenKind::Eof])?;
+    let end = create_expression_until(input, &[TokenKind::By, TokenKind::Eof])
+        .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
 
     // ------------------------
     //  Parse optional step
@@ -646,7 +657,10 @@ fn parse_range_loop_spec_from_tokens(
             },
             false,
         );
-        Some(create_expression_until(input, &[TokenKind::Eof])?)
+        Some(
+            create_expression_until(input, &[TokenKind::Eof])
+                .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?,
+        )
     } else {
         None
     };
@@ -663,25 +677,25 @@ fn parse_range_loop_spec_from_tokens(
         .map(|s| is_numeric_type_id(s.type_id, type_environment));
 
     if !is_start_numeric {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::Start,
             start.type_id,
             start.location.clone(),
-        ));
+        )));
     }
     if !is_end_numeric {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::End,
             end.type_id,
             end.location.clone(),
-        ));
+        )));
     }
     if let Some(step_expression) = step.as_ref().filter(|_| is_step_numeric == Some(false)) {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::Step,
             step_expression.type_id,
             step_expression.location.clone(),
-        ));
+        )));
     }
 
     // ------------------------
@@ -722,7 +736,7 @@ fn parse_range_loop_spec_from_tokens(
 fn range_binding_type(
     range: &RangeLoopSpec,
     type_environment: &TypeEnvironment,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> LoopHeaderResult<TypeId> {
     let is_start_numeric = is_numeric_type_id(range.start.type_id, type_environment);
     let is_end_numeric = is_numeric_type_id(range.end.type_id, type_environment);
     let is_step_numeric = range
@@ -731,29 +745,29 @@ fn range_binding_type(
         .map(|s| is_numeric_type_id(s.type_id, type_environment));
 
     if !is_start_numeric {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::Start,
             range.start.type_id,
             range.start.location.clone(),
-        ));
+        )));
     }
     if !is_end_numeric {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::End,
             range.end.type_id,
             range.end.location.clone(),
-        ));
+        )));
     }
     if let Some(step_expression) = range
         .step
         .as_ref()
         .filter(|_| is_step_numeric == Some(false))
     {
-        return Err(CompilerDiagnostic::invalid_range_operand(
+        return Err(Box::new(CompilerDiagnostic::invalid_range_operand(
             RangeOperandKind::Step,
             step_expression.type_id,
             step_expression.location.clone(),
-        ));
+        )));
     }
 
     // Determine whether the loop variable should be `Float` or `Int`.
@@ -775,7 +789,7 @@ fn declare_loop_bindings(
     binding_names: Option<ParsedBindingNames>,
     item_type_id: TypeId,
     parser: &mut LoopHeaderParser<'_, '_>,
-) -> Result<LoopBindings, CompilerDiagnostic> {
+) -> LoopHeaderResult<LoopBindings> {
     let Some(binding_names) = binding_names else {
         return Ok(LoopBindings {
             item: None,
@@ -805,7 +819,7 @@ fn declare_loop_binding(
     binding_name: &ParsedBindingName,
     type_id: TypeId,
     parser: &mut LoopHeaderParser<'_, '_>,
-) -> Result<Declaration, CompilerDiagnostic> {
+) -> LoopHeaderResult<Declaration> {
     ensure_not_keyword_shadow_identifier(
         binding_name.id,
         binding_name.location.clone(),
@@ -854,11 +868,11 @@ fn parse_expression_from_tokens(
     type_interner: &mut AstTypeInterner<'_>,
     value_mode: &ValueMode,
     string_table: &mut StringTable,
-) -> Result<Expression, CompilerDiagnostic> {
+) -> LoopHeaderResult<Expression> {
     let mut expression_stream = token_stream_with_eof(expression_tokens)?;
     let mut inferred_type = ExpectedType::Infer;
 
-    Ok(create_expression_without_boundary_catch(
+    let expression = create_expression_without_boundary_catch(
         &mut expression_stream,
         context,
         type_interner,
@@ -866,10 +880,13 @@ fn parse_expression_from_tokens(
         value_mode,
         false,
         string_table,
-    )?)
+    )
+    .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
+
+    Ok(expression)
 }
 
-fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerDiagnostic> {
+fn token_stream_with_eof(tokens: &[Token]) -> LoopHeaderResult<FileTokens> {
     if tokens.is_empty() {
         return loop_header_error(
             InvalidLoopHeaderReason::ExpectedHeaderExpression,

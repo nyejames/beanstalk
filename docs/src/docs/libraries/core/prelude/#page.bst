@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE PRELUDE]
 
-#[section, $markdown:
+#[section, $md:
     The prelude is the tiny set of names available without an explicit import.
     It keeps common output and builtin error handling convenient without making every core library global.
 

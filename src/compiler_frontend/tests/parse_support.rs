@@ -57,8 +57,7 @@ pub(crate) fn parse_single_file_ast_result(
         &style_directives,
         &mut string_table,
         None,
-    )
-    .map_err(Box::new)?;
+    )?;
 
     let output = prepare_file_from_tokens(
         file_tokens,
@@ -156,7 +155,7 @@ pub(crate) fn tokenize_source_for_test(
     source_code: &str,
     module_path: &std::path::PathBuf,
     tokenizer_entry_mode: TokenizerEntryMode,
-) -> Result<FileTokens, CompilerDiagnostic> {
+) -> Result<FileTokens, Box<CompilerDiagnostic>> {
     CompilerFrontend::tokenize_source(
         &frontend.source_files,
         &frontend.style_directives,

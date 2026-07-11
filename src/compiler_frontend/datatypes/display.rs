@@ -175,25 +175,6 @@ fn display_constructed(
                 .collect();
             format!("({})", fields.join(", "))
         }
-        TypeConstructor::Nominal(nominal_id) => {
-            let base_name = env
-                .nominal_path_by_id(*nominal_id)
-                .and_then(|path| path.name_str(table))
-                .unwrap_or("<generic>");
-            let args: Vec<String> = constructed
-                .arguments
-                .iter()
-                .map(|arg| display_type(*arg, env, table))
-                .collect();
-            if args.is_empty() {
-                base_name.to_owned()
-            } else {
-                format!("{base_name} of {}", args.join(", "))
-            }
-        }
-        TypeConstructor::External(external_id) => {
-            format!("External({})", external_id.0)
-        }
     }
 }
 

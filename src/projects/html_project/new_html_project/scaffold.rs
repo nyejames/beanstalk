@@ -9,15 +9,16 @@ use std::path::{Path, PathBuf};
 use crate::projects::html_project::new_html_project::{
     CreateProjectReport, prompt::Prompt, start_page_scaffolding, target::ResolvedProjectTarget,
 };
+use crate::projects::settings::CONFIG_FILE_NAME;
 
-const CONFIG_FILE: &str = "#config.bst";
 const PAGE_FILE: &str = "src/#page.bst";
 const DEV_MANIFEST: &str = "dev/.beanstalk_manifest";
 const RELEASE_MANIFEST: &str = "release/.beanstalk_manifest";
 const GITIGNORE_FILE: &str = ".gitignore";
 
 /// Relative paths of all scaffold-owned files.
-const SCAFFOLD_OWNED_FILES: &[&str] = &[CONFIG_FILE, PAGE_FILE, DEV_MANIFEST, RELEASE_MANIFEST];
+const SCAFFOLD_OWNED_FILES: &[&str] =
+    &[CONFIG_FILE_NAME, PAGE_FILE, DEV_MANIFEST, RELEASE_MANIFEST];
 
 /// Relative paths of all scaffold-owned directories.
 pub const SCAFFOLD_DIRECTORIES: &[&str] = &["src", "lib", "dev", "release"];
@@ -149,7 +150,7 @@ pub(crate) fn write_scaffold(
 
     // 2. Config file.
     write_scaffold_file(
-        CONFIG_FILE,
+        CONFIG_FILE_NAME,
         &start_page_scaffolding::config_template(&target.project_name),
     )?;
 

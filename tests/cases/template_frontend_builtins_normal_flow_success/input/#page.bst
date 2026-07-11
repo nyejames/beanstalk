@@ -4,7 +4,7 @@ wrapper #= [$children([:<li>W[$slot]Z</li>]):
 </ul>
 ]
 
-md #= [$markdown:
+md #= [$md:
 # Docs
 ]
 

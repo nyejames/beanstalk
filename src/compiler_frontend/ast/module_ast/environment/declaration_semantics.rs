@@ -6,13 +6,19 @@
 //! constructible, or value-like without inspecting diagnostic-only `DataType` spelling.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Source-level role assigned to a resolved top-level declaration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,12 +43,24 @@ impl DeclarationSemanticTable {
         }
     }
 
+    /// Build the semantic table from the resolved environment.
+    ///
+    /// WHAT: classifies every top-level declaration by inspecting resolved
+    ///       function signatures, nominal type identity, and compile-time
+    ///       constness of the initializer expression.
+    /// WHY: the table is built after constant resolution and nominal type
+    ///      registration, so only the remaining Constant-vs-Value distinction
+    ///      needs expression constness classification. Template-valued
+    ///      declarations use their registry-qualified effective TIR views so
+    ///      store, phase, and overlay identity remain authoritative.
     pub(crate) fn from_environment(
         declaration_table: &TopLevelDeclarationTable,
         resolved_function_signatures_by_path: &FxHashMap<InternedPath, ResolvedFunctionSignature>,
         nominal_type_ids_by_path: &FxHashMap<InternedPath, TypeId>,
         type_environment: &TypeEnvironment,
-    ) -> Self {
+        template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+        string_table: &StringTable,
+    ) -> Result<Self, TemplateError> {
         let mut by_path = FxHashMap::default();
 
         for declaration in declaration_table.iter() {
@@ -51,11 +69,13 @@ impl DeclarationSemanticTable {
                 resolved_function_signatures_by_path,
                 nominal_type_ids_by_path,
                 type_environment,
-            );
+                template_ir_registry,
+                string_table,
+            )?;
             by_path.insert(declaration.id.clone(), kind);
         }
 
-        Self { by_path }
+        Ok(Self { by_path })
     }
 
     pub(crate) fn kind_for_path(&self, path: &InternedPath) -> Option<DeclarationSemanticKind> {
@@ -68,22 +88,31 @@ fn classify_declaration(
     resolved_function_signatures_by_path: &FxHashMap<InternedPath, ResolvedFunctionSignature>,
     nominal_type_ids_by_path: &FxHashMap<InternedPath, TypeId>,
     type_environment: &TypeEnvironment,
-) -> DeclarationSemanticKind {
+    template_ir_registry: &Rc<RefCell<TemplateIrRegistry>>,
+    string_table: &StringTable,
+) -> Result<DeclarationSemanticKind, TemplateError> {
     if resolved_function_signatures_by_path.contains_key(&declaration.id) {
-        return DeclarationSemanticKind::Function;
+        return Ok(DeclarationSemanticKind::Function);
     }
 
     if let Some(type_id) = nominal_type_ids_by_path.get(&declaration.id) {
-        return match type_environment.get(*type_id) {
+        return Ok(match type_environment.get(*type_id) {
             Some(TypeDefinition::Struct(..)) => DeclarationSemanticKind::Struct,
             Some(TypeDefinition::Choice(..)) => DeclarationSemanticKind::Choice,
             _ => DeclarationSemanticKind::Value,
-        };
+        });
     }
 
-    if declaration.value.is_compile_time_constant() {
-        DeclarationSemanticKind::Constant
+    let value_is_compile_time_constant = declaration
+        .value
+        .const_value_kind_with_template_classifier(&mut |template| {
+            classify_template_from_effective_tir(template, template_ir_registry, string_table)
+        })?
+        .is_compile_time_value();
+
+    if value_is_compile_time_constant {
+        Ok(DeclarationSemanticKind::Constant)
     } else {
-        DeclarationSemanticKind::Value
+        Ok(DeclarationSemanticKind::Value)
     }
 }

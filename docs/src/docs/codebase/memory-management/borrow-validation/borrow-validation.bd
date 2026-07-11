@@ -1,0 +1,197 @@
+
+## Design contract
+
+Borrow validation runs after HIR generation. It reads coherent, validated HIR,
+enforces source-language access and move safety and writes analysis facts
+beside HIR.
+
+It doesn't rewrite HIR, choose the final allocation strategy or perform
+backend ownership lowering.
+
+## Main compiler paths
+
+- `src/compiler_frontend/analysis/borrow_checker/mod.rs`
+- `src/compiler_frontend/analysis/borrow_checker/engine.rs`
+- `src/compiler_frontend/analysis/borrow_checker/state.rs`
+- `src/compiler_frontend/analysis/borrow_checker/transfer.rs`
+- `src/compiler_frontend/analysis/borrow_checker/transfer/`
+- `src/compiler_frontend/analysis/borrow_checker/types.rs`
+- `src/compiler_frontend/analysis/borrow_checker/diagnostics.rs`
+
+## Inputs
+
+- Validated `HirModule`.
+- Explicit functions, blocks, regions, locals, places and terminators.
+- External package registry.
+- External call parameter access rules.
+- Return-alias metadata.
+- Source locations and string table for diagnostics.
+
+Borrow validation doesn't reparse source syntax, solve generics or traits, or
+see AST-only generic or trait state.
+
+## Analysis model
+
+Accepted abstract states:
+
+- **uninitialized:** local has no valid value.
+- **slot:** local may own independent storage.
+- **alias:** local observes roots owned elsewhere.
+- **slot + alias:** conservative control-flow result where either shape may arrive.
+
+These are analysis lattice states. They are not Beanstalk source types and do
+not directly prescribe one backend runtime representation.
+
+## Access roots and aliases
+
+Every analysed place resolves to one or more storage roots. Fields and indexes
+currently resolve conservatively through their base roots. Alias bindings carry
+root sets. Merged control flow can union root sets. Shared and mutable
+conflicts are checked against overlapping roots.
+
+Root tracking is analysis metadata, not source-visible reference identity.
+
+## Exclusivity validation
+
+- Many shared accesses can coexist.
+- Exclusive access conflicts with overlapping active shared access.
+- Exclusive access conflicts with another overlapping exclusive access.
+- Mutation of an alias writes through to the referent where source semantics
+  permit it.
+- Invalid immutable mutation is rejected before backend lowering.
+- GC doesn't relax exclusivity rules.
+- Map alias rules use the same conflict machinery.
+
+## Future-use and move safety
+
+Future-use analysis answers whether a root is required again after the current
+program point. It's a sufficient basis for safe consumption, not a
+source-visible lifetime system.
+
+Semantic classification:
+
+- **no future use:** an operation may consume ownership.
+- **future use on all relevant paths:** operation remains a borrow.
+- **path-dependent future use:** move-sensitive handling must remain
+  conservative or reject inconsistency.
+
+The current checker precomputes per-block may/must future-use facts and runs a
+forward fixed-point transfer over reachable HIR blocks.
+
+## Control flow and joins
+
+- Branches are analysed independently.
+- Loops participate in fixed-point analysis.
+- Joins conservatively combine possible states and roots.
+- Branch-local aliases are removed when they leave visibility.
+- Inconsistent move behaviour across paths is rejected where necessary.
+- Returns, breaks and region exits inform advisory destruction planning.
+- Infinite paths without exits don't require an exit drop merely because they
+  loop.
+
+## Function and external-call summaries
+
+Borrow validation consumes and produces:
+
+- function parameter mutability.
+- function return-alias summaries.
+- fresh result.
+- alias of one or more parameters.
+- unknown or imprecise alias result.
+- external function access rules.
+- external return-alias metadata.
+
+Call transfer uses resolved metadata, not source imports or runtime names.
+
+## Side-table outputs
+
+- function summaries.
+- block-entry states.
+- block-exit states.
+- statement-entry states.
+- statement access facts.
+- terminator access facts.
+- value access facts.
+- return-alias summaries.
+- reactive invalidation facts.
+- advisory drop sites.
+- aggregate statistics where useful for tooling.
+
+These facts are read-only outputs keyed by HIR identity. They don't become a
+second semantic IR and must not mutate HIR.
+
+## Reactive subscriptions and invalidation
+
+- A subscription is a read-only dependency.
+- A subscription isn't an active borrow.
+- A subscription doesn't grant mutation.
+- A subscription doesn't extend a source-language lifetime category.
+- Writes, place mutations, map mutations and mutable arguments can create
+  invalidation facts.
+- Ordinary alias and exclusivity checks still apply.
+- Ownership-aware lowering must not destroy an observable source or mounted
+  state too early.
+
+## Conservative precision and extension points
+
+Borrow validation may be conservative. Stronger field-, projection-, region-
+or path-level analysis may accept more programs or unlock more optimisation,
+but it must not change the semantics of already-valid programs.
+
+The accepted design permits conservative analysis. The current analysis shape
+includes:
+
+- Projections may share their base root conservatively.
+- Map lookup aliases the map conservatively.
+- Joined control flow may retain mixed slot/alias state.
+- Advisory drop sites are candidates, not exact source lifetimes.
+- Exact region destruction may be refined later.
+
+These are precision choices, not permanent source-language restrictions.
+Stronger field-, projection-, region- or path-level analysis may accept more
+programs or unlock more optimisation while preserving existing semantics.
+
+## Diagnostics
+
+- Invalid access is a user-facing `CompilerDiagnostic`.
+- Diagnostics carry source locations and structured reasons.
+- Internal malformed-HIR or impossible-analysis state uses `CompilerError`.
+- Use-after-move, conflicting mutable/shared access, duplicate exclusive
+  access and invalid place access need distinct reasons.
+- Diagnostics must not be stored as analysis state.
+
+## What borrow validation must not do
+
+- Mutate HIR.
+- Repair malformed HIR.
+- Choose GC versus ownership allocation.
+- Emit runtime drops or frees.
+- Decide pointer tagging.
+- Solve generics or traits.
+- Parse source syntax.
+- Introduce source lifetimes.
+- Treat reactive subscriptions as active borrow lifetimes.
+- Skip validation because the target uses GC.
+
+## Common mistakes
+
+- Equating analysis slot state with guaranteed runtime ownership.
+- Treating aliases as independent copies.
+- Allowing GC to bypass invalid aliasing.
+- Using diagnostics as transfer state.
+- Mutating HIR to insert drops.
+- Deciding runtime ABI inside the checker.
+- Assuming `May` future use is always safe to consume.
+- Treating advisory drop sites as exact lifetimes.
+
+## Related reading
+
+- @../ (Memory management): core memory contract
+- @../access-and-aliasing (Access and aliasing): source access semantics
+- @../ownership-and-drops (Ownership and drops): consumers of move and drop facts
+- @../../compiler-design/stages/borrow-validation
+  (Compiler Stage 6: Borrow validation): pipeline ownership
+- @../../compiler-design/stages/hir-generation
+  (Compiler Stage 5: HIR generation): validated HIR input
+- @../../compiler-design/ast/templates-tir-and-reactivity
+  (Templates, TIR and reactivity): reactive source metadata

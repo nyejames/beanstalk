@@ -25,8 +25,20 @@ frontend benchmarks/adversarial/collection-map-borrow-churn.bst
 # group: module
 frontend benchmarks/module-graph
 frontend benchmarks/import-fanout
+frontend benchmarks/module-root-stress
 frontend benchmarks/external-js-imports
 frontend benchmarks/adversarial/import-external-churn
+
+# group: parallelism
+frontend benchmarks/parallelism/tiny-one-file
+frontend benchmarks/parallelism/tiny-two-files
+frontend benchmarks/parallelism/tiny-seven-files
+frontend benchmarks/parallelism/tiny-eight-files
+frontend benchmarks/parallelism/many-tiny-files
+frontend benchmarks/parallelism/many-medium-files
+frontend benchmarks/parallelism/many-markdown-assets
+frontend benchmarks/parallelism/many-modules-one-file-each
+frontend benchmarks/parallelism/few-modules-many-files-each
 
 # group: borrow
 frontend benchmarks/borrow-stress.bst

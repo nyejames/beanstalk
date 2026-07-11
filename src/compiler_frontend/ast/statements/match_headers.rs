@@ -63,11 +63,19 @@ struct ParsedMatchPatternHeader {
     arm_scope: ScopeContext,
 }
 
+/// Boxed diagnostic result for all match-header parsing functions.
+///
+/// WHAT: every function in this module returns errors as `Box<CompilerDiagnostic>`.
+/// WHY: `CompilerDiagnostic` is large enough to trigger `clippy::result_large_err`;
+/// boxing the error variant keeps the success path cheap and matches the
+/// already-boxed `IfHeaderResult` and `BranchingResult` conventions used by the
+/// surrounding AST statement parsers.
+type MatchHeaderResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parse one reusable match-arm header.
 ///
 /// The caller supplies the tokens that terminate a guard expression so the
 /// pattern parser stays independent from the body grammar that follows it.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_match_arm_header(
     scrutinee: &Expression,
     token_stream: &mut FileTokens,
@@ -75,7 +83,7 @@ pub(crate) fn parse_match_arm_header(
     type_interner: &mut AstTypeInterner<'_>,
     guard_end_tokens: &[TokenKind],
     string_table: &mut StringTable,
-) -> Result<ParsedMatchArmHeader, CompilerDiagnostic> {
+) -> MatchHeaderResult<ParsedMatchArmHeader> {
     let ParsedMatchPatternHeader {
         pattern,
         matched_choice_variant,
@@ -114,14 +122,13 @@ pub(crate) fn parse_match_arm_header(
 /// variant qualification and capture scope construction.
 /// WHY: inline single-predicate value `if` must not resolve variant names as
 /// ordinary values; full match parsing is the owner of that semantics.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_single_predicate_match_pattern(
     scrutinee: &Expression,
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ParsedSinglePredicatePattern, CompilerDiagnostic> {
+) -> MatchHeaderResult<ParsedSinglePredicatePattern> {
     let parsed = parse_match_pattern_header(
         scrutinee,
         token_stream,
@@ -142,14 +149,13 @@ pub(crate) fn parse_single_predicate_match_pattern(
 ///
 /// WHY: guard parsing is self-contained (token check, expression parse, validation)
 /// and extracting it keeps arm body parsers focused on their own body grammar.
-#[allow(clippy::result_large_err)]
 fn parse_match_guard(
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     guard_end_tokens: &[TokenKind],
     string_table: &mut StringTable,
-) -> Result<Option<Expression>, CompilerDiagnostic> {
+) -> MatchHeaderResult<Option<Expression>> {
     if token_stream.current_token_kind() != &TokenKind::If {
         return Ok(None);
     }
@@ -169,21 +175,21 @@ fn parse_match_guard(
         value_mode: &ValueMode::ImmutableOwned,
         string_table,
     });
-    let guard_expression = create_expression_until(input, guard_end_tokens)?;
+    let guard_expression = create_expression_until(input, guard_end_tokens)
+        .map_err(|expression_error| Box::new(CompilerDiagnostic::from(expression_error)))?;
     let type_environment = type_interner.environment();
     ensure_match_guard_condition(&guard_expression, type_environment)?;
 
     Ok(Some(guard_expression))
 }
 
-#[allow(clippy::result_large_err)]
 fn parse_match_pattern_header(
     scrutinee: &Expression,
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<ParsedMatchPatternHeader, CompilerDiagnostic> {
+) -> MatchHeaderResult<ParsedMatchPatternHeader> {
     // Choice scrutinees resolve symbols to variants; all other scrutinees stay literal-only.
     let type_environment = type_interner.environment();
     let is_choice = matches!(
@@ -255,12 +261,12 @@ fn parse_match_pattern_header(
             if let TokenKind::Symbol(_) = token_stream.current_token_kind()
                 && !option_pattern_constructor_like(token_stream)
             {
-                return Err(CompilerDiagnostic::invalid_match_pattern(
+                return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                     InvalidMatchPatternReason::BareCaptureOnOptionalScrutinee,
                     None,
                     None,
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             let pattern =
@@ -324,36 +330,35 @@ fn parse_match_pattern_header(
     })
 }
 
-#[allow(clippy::result_large_err)]
-fn reject_invalid_pattern_suffix(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+fn reject_invalid_pattern_suffix(token_stream: &FileTokens) -> MatchHeaderResult<()> {
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return Err(deferred_feature_reason_diagnostic(
+        return Err(Box::new(deferred_feature_reason_diagnostic(
             DeferredFeatureReason::CaptureTaggedPattern,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     if token_stream.current_token_kind() == &TokenKind::As {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::AsNotValid,
             None,
             None,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     if token_stream.current_token_kind() == &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_match_arm(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_arm(
             InvalidMatchArmReason::LegacyColonSyntax,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     if token_stream.current_token_kind() == &TokenKind::Arrow {
-        return Err(CompilerDiagnostic::invalid_match_arm(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_arm(
             InvalidMatchArmReason::InvalidArrow,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     Ok(())
@@ -383,13 +388,12 @@ fn option_pattern_constructor_like(token_stream: &FileTokens) -> bool {
 ///
 /// Validates:
 /// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
-#[allow(clippy::result_large_err)]
 fn build_arm_scope_with_choice_captures(
     match_context: &ScopeContext,
     parsed_pattern: ParsedChoicePattern,
     type_environment: &TypeEnvironment,
     string_table: &mut StringTable,
-) -> Result<(ScopeContext, MatchPattern), CompilerDiagnostic> {
+) -> MatchHeaderResult<(ScopeContext, MatchPattern)> {
     let mut arm_scope = match_context.clone();
     let mut captures = Vec::with_capacity(parsed_pattern.captures.len());
 
@@ -398,12 +402,12 @@ fn build_arm_scope_with_choice_captures(
 
         // Enforce no-shadowing: the local binding name must not collide with any visible local.
         if let Some(_existing) = arm_scope.get_reference(&binding_name) {
-            return Err(CompilerDiagnostic::invalid_match_pattern(
+            return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
                 InvalidMatchPatternReason::CaptureBindingShadowsVariable,
                 None,
                 None,
                 capture.binding_location.clone(),
-            ));
+            )));
         }
 
         let binding_name_str = string_table.resolve(binding_name).to_owned();
@@ -453,7 +457,6 @@ fn build_arm_scope_with_choice_captures(
 ///
 /// Validates:
 /// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
-#[allow(clippy::result_large_err)]
 fn build_arm_scope_with_capture(
     match_context: &ScopeContext,
     capture_name: StringId,
@@ -461,16 +464,16 @@ fn build_arm_scope_with_capture(
     capture_type_id: TypeId,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<(ScopeContext, MatchPattern), CompilerDiagnostic> {
+) -> MatchHeaderResult<(ScopeContext, MatchPattern)> {
     let mut arm_scope = match_context.clone();
 
     if let Some(_existing) = arm_scope.get_reference(&capture_name) {
-        return Err(CompilerDiagnostic::invalid_match_pattern(
+        return Err(Box::new(CompilerDiagnostic::invalid_match_pattern(
             InvalidMatchPatternReason::CaptureBindingShadowsVariable,
             None,
             None,
             capture_location.clone(),
-        ));
+        )));
     }
 
     let binding_name_str = string_table.resolve(capture_name).to_owned();

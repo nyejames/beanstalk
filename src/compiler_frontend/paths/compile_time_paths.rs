@@ -11,7 +11,9 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCompileTimePathReason,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
+#[cfg(test)]
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::{Path, PathBuf};
 
 /// Whether a resolved compile-time path points at a file or a directory.
@@ -63,8 +65,8 @@ pub struct CompileTimePath {
 }
 
 impl CompileTimePath {
-    /// Remap source and public paths into the merged string table.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
+    /// Remap source and public paths for isolated AST remap fixtures.
+    #[cfg(test)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.source_path.remap_string_ids(remap);
         self.public_path.remap_string_ids(remap);
@@ -72,8 +74,8 @@ impl CompileTimePath {
 }
 
 impl CompileTimePaths {
-    /// Remap every compile-time path in this collection.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
+    /// Remap every compile-time path for isolated AST remap fixtures.
+    #[cfg(test)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for path in &mut self.paths {
             path.remap_string_ids(remap);
@@ -98,16 +100,20 @@ pub struct CompileTimePaths {
 /// failures as infrastructure.
 /// WHY: path literals are user-facing language surface, so missing targets and semantic escapes
 /// must not travel through `CompilerError`.
+///
+/// The `Diagnostic` variant boxes `CompilerDiagnostic` because it is large enough to trigger
+/// `clippy::result_large_err` when stored inline in the `Result` enum. Boxing keeps the error
+/// variant small; callers unbox at existing plain-diagnostic accumulation boundaries.
 #[derive(Clone, Debug)]
 pub(crate) enum CompileTimePathResolutionError {
-    Diagnostic(CompilerDiagnostic),
+    Diagnostic(Box<CompilerDiagnostic>),
     Infrastructure(CompilerError),
 }
 
 impl CompileTimePathResolutionError {
     pub(crate) fn into_diagnostic(self) -> CompilerDiagnostic {
         match self {
-            CompileTimePathResolutionError::Diagnostic(diagnostic) => diagnostic,
+            CompileTimePathResolutionError::Diagnostic(diagnostic) => *diagnostic,
             CompileTimePathResolutionError::Infrastructure(error) => {
                 compiler_error_to_diagnostic(&error)
             }
@@ -149,6 +155,8 @@ pub(crate) fn classify_existing_target(
             location,
         );
 
-        Err(CompileTimePathResolutionError::Diagnostic(diagnostic))
+        Err(CompileTimePathResolutionError::Diagnostic(Box::new(
+            diagnostic,
+        )))
     }
 }

@@ -24,23 +24,29 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 
+/// Boxed diagnostic result for the connected control-flow-suffix family.
+///
+/// `if` / `loop` suffix parsing and their local helpers propagate diagnostics
+/// through one small boxed boundary, then unbox once at the genuine
+/// plain-diagnostic head-parser caller.
+type ControlFlowSuffixResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parse a template `if` suffix after the `if` token has been seen.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_if_suffix(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     validation_mode: TemplateControlFlowValidationMode,
     string_table: &mut StringTable,
-) -> Result<TemplateBodyParseMode, CompilerDiagnostic> {
+) -> ControlFlowSuffixResult<TemplateBodyParseMode> {
     let location = token_stream.current_location();
     token_stream.advance(); // consume `if`
 
     if next_meaningful_token_is_body_boundary(token_stream) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::MissingTemplateIfCondition,
             location,
-        ));
+        )));
     }
 
     let parsed_header = parse_if_header(token_stream, context, type_interner, string_table)?;
@@ -71,10 +77,10 @@ pub(crate) fn parse_if_suffix(
         }
 
         ParsedIfHeader::MatchStyle { scrutinee } => {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported,
                 scrutinee.location,
-            ));
+            )));
         }
     };
 
@@ -96,32 +102,31 @@ pub(crate) fn parse_if_suffix(
 }
 
 /// Parse a template `loop` suffix after the `loop` token has been seen.
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_loop_suffix(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     validation_mode: TemplateControlFlowValidationMode,
     string_table: &mut StringTable,
-) -> Result<TemplateBodyParseMode, CompilerDiagnostic> {
+) -> ControlFlowSuffixResult<TemplateBodyParseMode> {
     let location = token_stream.current_location();
     token_stream.advance(); // consume `loop`
 
     if next_meaningful_token_is_body_boundary(token_stream) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::MissingTemplateLoopHeader,
             location,
-        ));
+        )));
     }
 
     let body_start_index = find_template_body_start(token_stream)?;
     let suffix_tokens = &token_stream.tokens[token_stream.index..body_start_index];
 
     if has_top_level_suffix_separator(suffix_tokens) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
+        return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::ControlFlowSuffixNotFinal,
             location,
-        ));
+        )));
     }
 
     let mut warnings = Vec::new();
@@ -189,23 +194,21 @@ fn next_meaningful_token_is_body_boundary(token_stream: &FileTokens) -> bool {
     true
 }
 
-#[allow(clippy::result_large_err)]
-fn ensure_suffix_ends_at_body_start(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+fn ensure_suffix_ends_at_body_start(token_stream: &FileTokens) -> ControlFlowSuffixResult<()> {
     match token_stream.current_token_kind() {
         TokenKind::StartTemplateBody => Ok(()),
-        TokenKind::Comma => Err(CompilerDiagnostic::invalid_template_structure(
+        TokenKind::Comma => Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::ControlFlowSuffixNotFinal,
             token_stream.current_location(),
-        )),
-        _ => Err(CompilerDiagnostic::invalid_template_structure(
+        ))),
+        _ => Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::UnexpectedTokenAfterControlFlowSuffix,
             token_stream.current_location(),
-        )),
+        ))),
     }
 }
 
-#[allow(clippy::result_large_err)]
-fn find_template_body_start(token_stream: &FileTokens) -> Result<usize, CompilerDiagnostic> {
+fn find_template_body_start(token_stream: &FileTokens) -> ControlFlowSuffixResult<usize> {
     let mut nesting_depth = NestingDepth::default();
     let mut index = token_stream.index;
 
@@ -218,20 +221,20 @@ fn find_template_body_start(token_stream: &FileTokens) -> Result<usize, Compiler
         if nesting_depth.is_top_level()
             && matches!(token.kind, TokenKind::TemplateClose | TokenKind::Eof)
         {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::UnexpectedTokenAfterControlFlowSuffix,
                 token.location.clone(),
-            ));
+            )));
         }
 
         nesting_depth.step(&token.kind);
         index += 1;
     }
 
-    Err(CompilerDiagnostic::invalid_template_structure(
+    Err(Box::new(CompilerDiagnostic::invalid_template_structure(
         InvalidTemplateStructureReason::UnexpectedTokenAfterControlFlowSuffix,
         token_stream.current_location(),
-    ))
+    )))
 }
 
 fn has_top_level_suffix_separator(tokens: &[Token]) -> bool {

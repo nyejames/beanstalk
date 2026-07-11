@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-IMPORT-0008"]
+message_contains = ["Cannot import directly from '#home.bst'"]

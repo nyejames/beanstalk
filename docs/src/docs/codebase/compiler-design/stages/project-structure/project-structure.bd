@@ -1,0 +1,106 @@
+
+Stage 0 is build-system-owned input preparation.
+It builds the module inputs consumed by the frontend.
+
+It isn't semantic frontend compilation.
+It shouldn't type-check executable code, fold ordinary module constants for language use or decide HIR shape.
+It finds the files, config and builder surfaces that the frontend needs.
+
+## Main path
+
+`src/build_system/create_project_modules/`
+
+Important owners:
+
+- `src/build_system/project_config.rs` and `src/build_system/project_config/` own `config.bst` parsing, AST-backed value extraction and shape validation.
+- `compilation.rs`, `project_roots.rs` and `frontend_orchestration.rs` own single-file/directory dispatch, root interpretation, path-resolver setup and per-module frontend orchestration.
+- `entry_discovery.rs`, `module_inventory.rs`, `reachable_file_discovery.rs`, `import_scanning.rs` and `source_loading.rs` own entry discovery, import-graph traversal and source loading.
+- `source_library_discovery.rs`, `facade_validation.rs`, `collision_detection.rs`, `project_structure_diagnostics.rs` and `source_discovery_error.rs` own source-library scanning, facade preflight, import-name collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
+
+## What Stage 0 owns
+
+Stage 0 owns:
+
+- parsing `config.bst` and reachable core/builder source-library support files through the frontend up to AST
+- extracting only authored known top-level `#` config-key constants from shared AST const facts
+- enforcing each config key's registered value shape before core fields are applied or backend settings are stored
+- allowing config imports only from core/builder libraries
+- rejecting project-local and relative config imports by design
+- stopping config compilation at AST because config doesn't need HIR
+- discovering module roots from build-system entry files
+- expanding each module to reachable `.bst` files and builder-supported source assets through imports
+- detecting source-library roots visible to imports
+- recognising external package prefixes so virtual imports aren't treated as filesystem paths
+- resolving source-kind candidates through the builder-provided registry
+- resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
+- rejecting sibling `.bst` file/folder import-name collisions and special-file imports before semantic compilation
+- recording source file identities for later diagnostics and path rendering
+
+Private inferred const facts are collected after dependency sorting and AST construction.
+They don't participate in header dependency sorting and don't become importable declarations.
+
+## Config boundary
+
+`config.bst` is a special frontend client, not a normal module.
+
+It can use compile-time constants, folded templates, core/builder support imports and typed diagnostics.
+It can't produce HIR, runtime `start` code or language-visible exports.
+
+This is why Stage 0 stops config compilation at AST.
+The build system needs folded config values and typed errors, not backend-facing runtime code.
+
+## Source discovery
+
+Stage 0 expands each module to reachable `.bst` files and builder-supported source assets through imports.
+It also detects source-library roots and recognises external package prefixes so virtual imports don't become filesystem lookups.
+
+Plain Markdown `.md` and Beandown `.bd` files are builder-supported source assets.
+They are discovered through the same extensionless source import candidate path as `.bst` files when the builder declares support.
+
+## Parallel inventory work
+
+Multi-entry directory builds may run module inventory discovery in parallel only after a serial provider-free classification proves that no reachable import needs an external import provider or unsupported external-extension diagnostic.
+
+That classification also carries scanned Beanstalk source text forward so provider-free workers don't re-read the same files.
+Provider-capable discovery remains serial because it mutates the external package registry, provider cache, resolution table and shared diagnostic string table.
+
+Parallel provider-backed discovery needs deterministic provider deltas and ID remapping first.
+Without that, IDs and diagnostics can drift by thread scheduling.
+
+## Reusing loaded source
+
+Reachable-file discovery reuses Beanstalk source text read during import scanning when assembling `InputFile` values.
+Files not scanned for imports, such as plain Markdown and Beandown assets, are loaded through a threshold-gated missing-source path.
+
+Small miss sets stay serial.
+Larger miss sets use Rayon, then rejoin in deterministic inventory order before header preparation sees them.
+
+## String-table boundary
+
+For directory builds, Stage 0 owns the build-boundary string-table fork/merge lifecycle.
+Module frontend jobs receive local string-table deltas.
+The build system merges those deltas back into the shared build table after compilation has completed.
+
+The module frontend owns its own internal per-file fork/merge lifecycle before dependency sorting.
+Don't mix these two layers.
+
+## What Stage 0 should not do
+
+Stage 0 should not:
+
+- perform semantic frontend compilation for normal modules
+- create HIR
+- run borrow validation
+- infer language semantics from executable bodies
+- treat provider-backed external files as source modules
+- let config imports reach project-local or relative paths
+- bypass typed diagnostics for project-structure mistakes
+
+If Stage 0 starts needing semantic type facts from a normal module, something is probably crossing the build-system/frontend boundary.
+
+## Related reading
+
+- @../../build-system-and-frontend-boundary (Build-system and frontend boundary): the `BackendBuilder` and `LibrarySet` contract
+- @../header-parsing (Stage 2: Header parsing): source-kind headers and import preparation
+- @../tokenization (Stage 1: Tokenization): tokenization entry modes for discovered source kinds
+- @../../parallelism-and-determinism (Parallelism and determinism): string-table fork/merge rules for directory builds

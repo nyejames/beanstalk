@@ -6,9 +6,7 @@
 //! nesting, while this support module keeps marker policy, boundary trimming,
 //! and marker diagnostics together.
 
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent};
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::TemplateConstructionContext;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
@@ -119,6 +117,22 @@ pub(super) enum DirectLoopControlMarker {
     },
 }
 
+pub(super) struct BodySentinelTarget<'a> {
+    pub(super) construction_context: &'a mut TemplateConstructionContext,
+    pub(super) suppress_child_templates: bool,
+}
+
+impl BodySentinelTarget<'_> {
+    fn suppress_child_templates(&self) -> bool {
+        self.suppress_child_templates
+    }
+
+    fn trim_trailing_whitespace(&mut self, string_table: &StringTable) {
+        self.construction_context
+            .trim_trailing_whitespace(string_table);
+    }
+}
+
 pub(super) fn classify_direct_else_marker(token_stream: &FileTokens) -> Option<DirectElseMarker> {
     let mut index = token_stream.index + 1;
 
@@ -185,15 +199,15 @@ pub(super) fn classify_direct_else_marker(token_stream: &FileTokens) -> Option<D
 
 pub(super) fn handle_direct_else_marker(
     token_stream: &mut FileTokens,
-    template: &mut Template,
     else_marker: DirectElseMarker,
     policy: ElseSentinelPolicy,
+    mut target: BodySentinelTarget<'_>,
     string_table: &StringTable,
 ) -> Result<TemplateBodyBoundary, CompilerDiagnostic> {
     // Literal-body directives keep bracketed body content opaque. A standalone
     // `[else]` inside such a template `if` would otherwise be split before the
     // literal bracket consumer sees it, so reject the conflicting form directly.
-    if template.style.suppress_child_templates
+    if target.suppress_child_templates()
         && matches!(
             policy,
             ElseSentinelPolicy::SplitIf | ElseSentinelPolicy::Duplicate
@@ -219,11 +233,11 @@ pub(super) fn handle_direct_else_marker(
         } => {
             return handle_direct_else_if_marker(
                 token_stream,
-                template,
                 if_index,
                 close_index,
                 location,
                 policy,
+                target,
                 string_table,
             );
         }
@@ -251,7 +265,7 @@ pub(super) fn handle_direct_else_marker(
                 string_table,
                 InvalidTemplateStructureReason::InlineTemplateElse,
             )?;
-            trim_trailing_whitespace_atoms(&mut template.content, string_table);
+            target.trim_trailing_whitespace(string_table);
             token_stream.index = close_index;
             token_stream.advance();
             Ok(TemplateBodyBoundary::Else { location })
@@ -276,14 +290,14 @@ pub(super) fn handle_direct_else_marker(
 
 pub(super) fn handle_direct_else_if_marker(
     token_stream: &mut FileTokens,
-    template: &mut Template,
     if_index: usize,
     close_index: usize,
     location: SourceLocation,
     policy: ElseSentinelPolicy,
+    mut target: BodySentinelTarget<'_>,
     string_table: &StringTable,
 ) -> Result<TemplateBodyBoundary, CompilerDiagnostic> {
-    if template.style.suppress_child_templates
+    if target.suppress_child_templates()
         && matches!(
             policy,
             ElseSentinelPolicy::SplitIf | ElseSentinelPolicy::Duplicate
@@ -304,7 +318,7 @@ pub(super) fn handle_direct_else_if_marker(
                 InvalidTemplateStructureReason::InlineTemplateElse,
             )
             .map_err(|diagnostic| remap_else_if_inline_diagnostic(diagnostic, &location))?;
-            trim_trailing_whitespace_atoms(&mut template.content, string_table);
+            target.trim_trailing_whitespace(string_table);
 
             Ok(TemplateBodyBoundary::ElseIf {
                 if_index,
@@ -519,57 +533,6 @@ pub(super) fn ensure_else_boundary_after_sentinel(
     Ok(())
 }
 
-pub(super) fn ensure_else_content_starts_on_new_boundary(
-    content: &TemplateContent,
-    sentinel_location: &SourceLocation,
-    string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
-    let Some(first_atom) = content.atoms.first() else {
-        return Ok(());
-    };
-
-    match first_atom {
-        TemplateAtom::Content(segment) => {
-            if let ExpressionKind::StringSlice(text) = &segment.expression.kind {
-                if first_line_has_meaningful_text(string_table.resolve(*text)) {
-                    return Err(inline_else_diagnostic(sentinel_location));
-                }
-
-                return Ok(());
-            }
-
-            if segment.expression.location.start_pos.line_number
-                == sentinel_location.start_pos.line_number
-            {
-                return Err(inline_else_diagnostic(sentinel_location));
-            }
-        }
-
-        // Same-line slot children after `[else]` are caught directly from the
-        // token stream before the else branch is parsed. Slot placeholders do
-        // not carry source locations after structural conversion, so accepting
-        // them here avoids rejecting valid next-line slot bodies.
-        TemplateAtom::Slot(_) => {}
-    }
-
-    Ok(())
-}
-
-pub(super) fn trim_leading_whitespace_atoms(
-    content: &mut TemplateContent,
-    string_table: &StringTable,
-) {
-    let first_meaningful_index = content
-        .atoms
-        .iter()
-        .position(|atom| !atom_is_whitespace_only_text(atom, string_table))
-        .unwrap_or(content.atoms.len());
-
-    if first_meaningful_index > 0 {
-        content.atoms.drain(0..first_meaningful_index);
-    }
-}
-
 fn ensure_body_boundary_before_sentinel(
     token_stream: &FileTokens,
     sentinel_location: &SourceLocation,
@@ -607,32 +570,7 @@ fn ensure_body_boundary_before_sentinel(
     }
 }
 
-pub(super) fn trim_trailing_whitespace_atoms(
-    content: &mut TemplateContent,
-    string_table: &StringTable,
-) {
-    while content
-        .atoms
-        .last()
-        .is_some_and(|atom| atom_is_whitespace_only_text(atom, string_table))
-    {
-        content.atoms.pop();
-    }
-}
-
-fn atom_is_whitespace_only_text(atom: &TemplateAtom, string_table: &StringTable) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-
-    let ExpressionKind::StringSlice(text) = &segment.expression.kind else {
-        return false;
-    };
-
-    string_table.resolve(*text).trim().is_empty()
-}
-
-fn first_line_has_meaningful_text(text: &str) -> bool {
+pub(super) fn first_line_has_meaningful_text(text: &str) -> bool {
     let first_line = text.split('\n').next().unwrap_or(text);
     !first_line.trim().is_empty()
 }
@@ -642,7 +580,7 @@ fn last_line_has_meaningful_text(text: &str) -> bool {
     !last_line.trim().is_empty()
 }
 
-fn inline_else_diagnostic(location: &SourceLocation) -> CompilerDiagnostic {
+pub(super) fn inline_else_diagnostic(location: &SourceLocation) -> CompilerDiagnostic {
     inline_sentinel_diagnostic(location, InvalidTemplateStructureReason::InlineTemplateElse)
 }
 

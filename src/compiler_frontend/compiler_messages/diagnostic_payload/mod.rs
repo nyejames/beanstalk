@@ -428,6 +428,7 @@ pub enum DiagnosticPayload {
         reason: InvalidFieldAccessReason,
         field_name: Option<StringId>,
         receiver_type: Option<TypeId>,
+        known_fields: Vec<StringId>,
     },
 
     InvalidMatchPattern {

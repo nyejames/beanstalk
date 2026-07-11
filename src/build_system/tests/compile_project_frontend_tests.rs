@@ -347,7 +347,7 @@ fn library_set_with_dummy_js_provider_with_lowering(calls: Arc<AtomicUsize>) -> 
 fn provider_created_package_registry_survives_into_module() {
     let dir = temp_dir("provider_registry_survives");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw }\nvalue = draw()\n",
@@ -398,7 +398,7 @@ fn provider_created_package_registry_survives_into_module() {
 fn provider_runtime_assets_deduped_for_repeated_imports() {
     let dir = temp_dir("provider_runtime_assets_deduped");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw }\nimport @./other { run }\nvalue = draw()\nother_value = run()\n",
@@ -450,7 +450,7 @@ fn provider_runtime_assets_deduped_for_repeated_imports() {
 fn provider_runtime_metadata_ignores_unreachable_external_calls() {
     let dir = temp_dir("provider_runtime_metadata_unreachable");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./other { run }\nvalue = 1\n",
@@ -498,7 +498,7 @@ fn provider_runtime_metadata_ignores_unreachable_external_calls() {
 fn builder_runtime_metadata_ignores_unreachable_source_library_wrappers() {
     let dir = temp_dir("builder_runtime_metadata_unreachable");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @html { CANVAS_ID }\npage_canvas_id #= CANVAS_ID\nvalue = 1\n",
@@ -548,7 +548,7 @@ fn builder_runtime_metadata_ignores_unreachable_source_library_wrappers() {
 fn provider_backed_import_with_js_lowering_passes_html_build() {
     let dir = temp_dir("provider_js_lowering_html");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw }\nvalue = draw()\n",
@@ -749,7 +749,7 @@ fn single_file_rejects_optional_core_package_not_exposed_by_builder() {
 fn directory_project_discovers_multiple_entry_modules() {
     let dir = temp_dir("dir_multi_module");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(dir.join("#page.bst"), "x ~= 10\n").expect("should write page");
     fs::write(dir.join("#layout.bst"), "y ~= 20\n").expect("should write layout");
 
@@ -782,7 +782,7 @@ fn directory_project_discovers_multiple_entry_modules() {
 fn directory_project_remaps_delta_collisions_across_modules() {
     let dir = temp_dir("dir_delta_remap_collision");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#a.bst"),
         "Item = |\n    shared Int,\n    first_only String,\n|\nitem = Item(1, \"first\")\n",
@@ -849,7 +849,7 @@ fn directory_project_remaps_delta_collisions_across_modules() {
 fn provider_backed_grouped_import_compiles_and_reuses_cache() {
     let dir = temp_dir("provider_grouped_import_cache");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw as render }\nimport @./other { run }\nvalue = render()\nother_value = run()\n",
@@ -894,7 +894,7 @@ fn provider_backed_grouped_import_compiles_and_reuses_cache() {
 fn provider_backed_namespace_import_exposes_function_and_type_members() {
     let dir = temp_dir("provider_namespace_import");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js\nwidget drawing.Widget = drawing.make_widget()\nvalue = drawing.draw()\n",
@@ -934,7 +934,7 @@ fn provider_backed_namespace_import_exposes_function_and_type_members() {
 fn provider_backed_import_participates_in_visible_name_collisions() {
     let dir = temp_dir("provider_import_name_collision");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "draw #= 1\nimport @./drawing.js { draw }\nvalue = draw()\n",
@@ -977,7 +977,7 @@ fn provider_backed_same_bare_name_from_different_directories_gets_distinct_packa
     let dir = temp_dir("provider_same_bare_name_distinct_dirs");
     fs::create_dir_all(dir.join("a")).expect("should create a dir");
     fs::create_dir_all(dir.join("b")).expect("should create b dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./a/use { run_a }\nimport @./b/use { run_b }\nvalue_a = run_a()\nvalue_b = run_b()\n",
@@ -1028,7 +1028,7 @@ fn provider_backed_same_bare_name_from_different_directories_gets_distinct_packa
 fn provider_backed_opaque_type_passes_to_same_package_function() {
     let dir = temp_dir("provider_opaque_same_package");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { make_widget, use_widget }\nwidget = make_widget()\nvalue = use_widget(widget)\n",
@@ -1064,7 +1064,7 @@ fn provider_backed_opaque_type_from_different_package_is_rejected() {
     let dir = temp_dir("provider_opaque_cross_package_rejected");
     fs::create_dir_all(dir.join("a")).expect("should create a dir");
     fs::create_dir_all(dir.join("b")).expect("should create b dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./a/drawing.js { make_widget }\nimport @./b/drawing.js { use_widget }\nwidget = make_widget()\nvalue = use_widget(widget)\n",
@@ -1105,7 +1105,7 @@ fn directory_project_rejects_missing_entry_root() {
     let dir = temp_dir("dir_missing_entry_root");
     fs::create_dir_all(&dir).expect("should create temp dir");
     // Config declares an entry_root that does not exist.
-    fs::write(dir.join("#config.bst"), "entry_root #= \"nonexistent\"\n")
+    fs::write(dir.join("config.bst"), "entry_root #= \"nonexistent\"\n")
         .expect("should write config");
 
     let mut config = Config::new(dir.clone());
@@ -1113,7 +1113,7 @@ fn directory_project_rejects_missing_entry_root() {
     let mut string_table = StringTable::new();
 
     // Parse config so entry_root is applied to Config.
-    let config_path = dir.join("#config.bst");
+    let config_path = dir.join("config.bst");
     let libraries = crate::libraries::LibrarySet::with_mandatory_core();
     let services = crate::build_system::project_config::ProjectConfigParseServices {
         style_directives: &style_directives,
@@ -1160,7 +1160,7 @@ fn library_set_with_html_js_provider() -> LibrarySet {
 fn html_js_provider_namespace_import_resolves() {
     let dir = temp_dir("html_js_provider_namespace");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js\nvalue = drawing.draw()\n",
@@ -1200,7 +1200,7 @@ fn html_js_provider_namespace_import_resolves() {
 fn html_js_provider_grouped_import_resolves() {
     let dir = temp_dir("html_js_provider_grouped");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw as render }\nvalue = render()\n",
@@ -1240,7 +1240,7 @@ fn html_js_provider_grouped_import_resolves() {
 fn html_js_provider_grouped_alias_for_function_and_opaque_type_resolves() {
     let dir = temp_dir("html_js_provider_grouped_alias");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { Widget as Canvas, draw as render }\nvalue = render()\n",
@@ -1280,7 +1280,7 @@ fn html_js_provider_grouped_alias_for_function_and_opaque_type_resolves() {
 fn html_js_provider_receiver_method_in_project_local_js_rejected() {
     let dir = temp_dir("html_js_provider_receiver_method_rejected");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { make_canvas, fill_rect }\ncanvas ~= make_canvas()\n~canvas.fill_rect(0.0, 0.0, 1.0, 1.0)\n",
@@ -1321,7 +1321,7 @@ fn html_js_provider_receiver_method_in_project_local_js_rejected() {
 fn html_js_provider_repeated_imports_reuse_cache() {
     let dir = temp_dir("html_js_provider_cache_reuse");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw }\nimport @./other { run }\nvalue = draw()\nother_value = run()\n",
@@ -1367,7 +1367,7 @@ fn html_js_provider_repeated_imports_reuse_cache() {
 fn html_js_provider_js_import_from_source_library_resolves() {
     let dir = temp_dir("html_js_provider_source_library");
     fs::create_dir_all(dir.join("lib").join("ui")).expect("should create lib/ui dir");
-    fs::write(dir.join("#config.bst"), "library_folders #= {\"lib\"}\n")
+    fs::write(dir.join("config.bst"), "library_folders #= {\"lib\"}\n")
         .expect("should write config");
     fs::write(dir.join("#page.bst"), "import @ui { run }\nvalue = run()\n")
         .expect("should write page");
@@ -1410,7 +1410,7 @@ fn html_js_provider_js_import_from_source_library_resolves() {
 fn html_js_provider_invalid_js_file_surfaces_diagnostics() {
     let dir = temp_dir("html_js_provider_invalid_js");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { draw }\nvalue = draw()\n",
@@ -1450,7 +1450,7 @@ fn html_js_provider_invalid_js_file_surfaces_diagnostics() {
 fn html_js_provider_malformed_receiver_signature_surfaces_diagnostics() {
     let dir = temp_dir("html_js_provider_bad_receiver_signature");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { Canvas, bad }\n",
@@ -1490,7 +1490,7 @@ fn html_js_provider_malformed_receiver_signature_surfaces_diagnostics() {
 fn html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js() {
     let dir = temp_dir("html_js_provider_rejects_receiver_methods");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { Canvas, fill_rect }\n",
@@ -1533,7 +1533,7 @@ fn html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js() {
 fn html_js_provider_fallible_function_with_error_return_compiles() {
     let dir = temp_dir("html_js_provider_fallible");
     fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
         "import @./drawing.js { Canvas, get_canvas }\nrun || -> Canvas, Error!:\n    return get_canvas(\"game\")!\n;\n",

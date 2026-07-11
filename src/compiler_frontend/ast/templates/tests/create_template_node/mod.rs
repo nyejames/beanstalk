@@ -1,8 +1,11 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegment};
-use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
+use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::install_same_store_control_flow_body_refs;
+use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegmentOrigin};
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateOverlaySet, TemplateRef, TemplateTirReference, finalized_template_tir_id,
+};
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal, terse,
@@ -154,6 +157,39 @@ fn fold_template_in_context(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> StringId {
+    // Manual test fixtures built directly from `Template` values do not carry
+    // parser-emitted TIR references. Materialize one in the fold context's store
+    // so these fixtures fold through the same module-scoped store as parsed
+    // templates, keeping test diagnostics consistent with production paths.
+    let mut template = template.clone();
+    {
+        let store = context.template_ir_store();
+        let mut store_borrow = store.borrow_mut();
+        install_same_store_control_flow_body_refs(&mut template, &mut store_borrow, string_table)
+            .expect("test template should install same-store body roots");
+    }
+
+    if template.tir_reference.is_none() {
+        let store = context.template_ir_store();
+        let mut store_borrow = store.borrow_mut();
+        let template_id = finalized_template_tir_id(&template, &mut store_borrow, string_table)
+            .expect("test template should convert to TIR");
+        let store_owner = Arc::clone(&store_borrow.owner());
+        let store_id = store_borrow.store_id();
+        drop(store_borrow);
+        let overlay_set_id = context
+            .template_ir_registry
+            .borrow_mut()
+            .allocate_overlay_set(TemplateOverlaySet::empty());
+        template.tir_reference = Some(TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
+            overlay_set_id,
+        });
+    }
+
     let mut fold_context = context
         .new_template_fold_context(string_table, "template tests fold")
         .expect("test context should include fold dependencies");
@@ -228,66 +264,6 @@ fn constant_template_context_with_style_directives(
         scope,
         style_directives,
     )
-}
-
-fn docs_style_wrapper_declarations(string_table: &mut StringTable) -> Vec<Declaration> {
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
-
-    let mut table_tokens = template_tokens_from_source(
-        "[:
-      <table style=\"[$slot(\"style\")]\">
-        [$slot]
-      </table>
-    ]",
-        string_table,
-    );
-    let table_context = new_constant_context(table_tokens.src_path.to_owned());
-    let table = Template::new(&mut table_tokens, &table_context, vec![], string_table)
-        .expect("table wrapper should parse");
-
-    let mut row_tokens = template_tokens_from_source(
-        "[:
-    <tr>[$fresh, $children([:<td>[$slot]</td>]):[$slot]]</tr>
-]",
-        string_table,
-    );
-    let row_context = new_constant_context(row_tokens.src_path.to_owned());
-    let row = Template::new(&mut row_tokens, &row_context, vec![], string_table)
-        .expect("row wrapper should parse");
-
-    let mut header_row_tokens = template_tokens_from_source(
-        "[:
-    <tr>
-        [$fresh, $children([:
-            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>
-        ]):[$slot]]
-    </tr>
-]",
-        string_table,
-    );
-    let header_row_context = new_constant_context(header_row_tokens.src_path.to_owned());
-    let header_row = Template::new(
-        &mut header_row_tokens,
-        &header_row_context,
-        vec![],
-        string_table,
-    )
-    .expect("header row wrapper should parse");
-
-    vec![
-        Declaration {
-            id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table, ValueMode::ImmutableOwned),
-        },
-        Declaration {
-            id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row, ValueMode::ImmutableOwned),
-        },
-        Declaration {
-            id: wrapper_scope.append(string_table.intern("header_row")),
-            value: Expression::template(header_row, ValueMode::ImmutableOwned),
-        },
-    ]
 }
 
 fn folded_template_output(source: &str) -> String {
@@ -409,53 +385,82 @@ fn template_warnings_with_style_directives(
     context.take_emitted_warnings()
 }
 
-fn template_segments(template: &Template) -> Vec<&TemplateSegment> {
-    template
-        .content
-        .atoms
-        .iter()
-        .filter_map(|atom| match atom {
-            TemplateAtom::Content(segment) => Some(segment),
-            TemplateAtom::Slot(_) => None,
-        })
-        .collect()
-}
-
-/// Collects the resolved text strings from all body-origin text pieces in the
-/// template's render plan. This is the correct way to inspect formatted body
-/// content after parsing, since formatting is applied to the render plan rather
-/// than rewritten back into `template.content`.
-fn collect_body_text_from_render_plan(
+fn collect_body_text_from_tir(
     template: &Template,
+    store: &TemplateIrStore,
     string_table: &StringTable,
 ) -> Vec<String> {
-    let plan = template
-        .render_plan
-        .as_ref()
-        .expect("parsed templates should carry a render plan");
-
-    plan.pieces
+    let Some(reference) = template.tir_reference.as_ref() else {
+        return Vec::new();
+    };
+    let template_ir = match store.get_template(reference.root.template_id) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+    let root_node = match store.get_node(template_ir.root) {
+        Some(n) => n,
+        None => return Vec::new(),
+    };
+    let children: Vec<TemplateIrNodeId> = match &root_node.kind {
+        TemplateIrNodeKind::Sequence { children } => children.clone(),
+        TemplateIrNodeKind::Text { text, origin, .. } if *origin == TemplateSegmentOrigin::Body => {
+            return vec![string_table.resolve(*text).to_owned()];
+        }
+        _ => return Vec::new(),
+    };
+    children
         .iter()
-        .filter_map(|piece| match piece {
-            RenderPiece::Text(p) => Some(string_table.resolve(p.text).to_owned()),
-            _ => None,
+        .filter_map(|&child_id| {
+            let child = store.get_node(child_id)?;
+            match &child.kind {
+                TemplateIrNodeKind::Text { text, origin, .. }
+                    if *origin == TemplateSegmentOrigin::Body =>
+                {
+                    Some(string_table.resolve(*text).to_owned())
+                }
+                _ => None,
+            }
         })
         .collect()
 }
 
-fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<SourceLocation> {
-    let plan = template
-        .render_plan
-        .as_ref()
-        .expect("parsed templates should carry a render plan");
+fn tir_root_has_head_dynamic_expression(
+    template: &Template,
+    store: &TemplateIrStore,
+    predicate: impl Fn(&Expression) -> bool,
+) -> bool {
+    let Some(reference) = template.tir_reference.as_ref() else {
+        return false;
+    };
+    let Some(template_ir) = store.get_template(reference.root.template_id) else {
+        return false;
+    };
+    let Some(root) = store.get_node(template_ir.root) else {
+        return false;
+    };
 
-    plan.pieces
-        .iter()
-        .filter_map(|piece| match piece {
-            RenderPiece::Text(p) => Some(p.location.to_owned()),
-            _ => None,
+    let matches_node = |node_id| {
+        store.get_node(node_id).is_some_and(|node| {
+            matches!(
+                &node.kind,
+                TemplateIrNodeKind::DynamicExpression {
+                    expression,
+                    origin: TemplateSegmentOrigin::Head,
+                    ..
+                } if predicate(expression)
+            )
         })
-        .collect()
+    };
+
+    match &root.kind {
+        TemplateIrNodeKind::Sequence { children } => children.iter().copied().any(matches_node),
+        TemplateIrNodeKind::DynamicExpression {
+            expression,
+            origin: TemplateSegmentOrigin::Head,
+            ..
+        } => predicate(expression),
+        _ => false,
+    }
 }
 
 fn is_default_text_location(location: &SourceLocation) -> bool {
@@ -476,9 +481,7 @@ fn collect_static_template_fragments(
     output: &mut String,
 ) {
     for atom in atoms {
-        let TemplateAtom::Content(segment) = atom else {
-            continue;
-        };
+        let TemplateAtom::Content(segment) = atom;
 
         match &segment.expression.kind {
             ExpressionKind::StringSlice(value) => output.push_str(string_table.resolve(*value)),
@@ -490,20 +493,15 @@ fn collect_static_template_fragments(
     }
 }
 
-fn render_static_template_fragments(template: &Template, string_table: &StringTable) -> String {
-    let mut rendered = String::new();
-    collect_static_template_fragments(&template.content.atoms, string_table, &mut rendered);
-    rendered
-}
-
 mod builder_tests;
 mod children_tests;
 mod directive_built_in_tests;
 mod directive_style_tests;
 mod head_tests;
 mod markdown_tests;
+mod parser_tir_malformed_tests;
+mod parser_tir_tests;
 mod render_tests;
 mod slot_constant_tests;
-mod slot_insert_tests;
 mod whitespace_tests;
 mod wrapper_tests;

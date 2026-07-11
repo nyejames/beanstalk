@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Progress Matrix | Beanstalk</title>
-    <meta name="description" content="Current implementation status, coverage, and feature progress for the Beanstalk compiler.">
+    <meta name="description" content="Current implementation status, coverage and feature progress for the Beanstalk compiler.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -317,14 +320,17 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> PROGRESS MATRIX</h1>
-    <section class="container"><p>This page tracks Beanstalk&#39;s current implementation progress.</p><p>It is the source of truth for what the compiler currently supports, partially supports, cleanly rejects, keeps experimental, defers, or treats as outside scope. It is not a full language reference, roadmap, or test manifest.</p><p>Use this together with <code>tests/cases/manifest.toml</code> when changing language features.</p><h2>How to read and edit this page</h2><ul><li>Keep rows focused on current compiler behavior.</li><li>Put user-facing explanations and examples in docs pages under <code>docs/src/docs/**</code>.</li><li>Put future design plans and unimplemented ideas in <code>docs/roadmap/roadmap.md</code>.</li><li>Put compiler architecture and stage ownership in <code>docs/compiler-design-overview.md</code>.</li><li>Put contributor workflow, benchmarking, and tooling details in <code>CONTRIBUTING.md</code>.</li><li>Prefer short coverage summaries over long fixture lists unless fixture names identify a fragile surface.</li><li>Use the status labels from this page&#39;s legend. Put nuance such as removed, reserved, not Alpha, or backend-specific in the notes column instead of inventing new status labels.</li></ul><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>All tests should pass before each commit, so tests can be assumed green for the current state of the compiler unless this page explicitly says otherwise.</p></section>
+    <section class="container"><p>This page tracks Beanstalk&#39;s current implementation progress.</p><p>It is the source of truth for what the compiler currently supports, partially supports, cleanly rejects, keeps experimental, defers, or treats as outside scope. It is not a full language reference, roadmap, or test manifest.</p><p>The compiler and memory design references may describe accepted end-state architecture that has not fully landed. This matrix determines what the compiler supports today.</p><p>Use this together with <code>tests/cases/manifest.toml</code> when changing language features.</p><h2>How to read and edit this page</h2><ul><li>Keep rows focused on current compiler behavior.</li><li>Put user-facing explanations and examples in docs pages under <code>docs/src/docs/**</code>.</li><li>Put implementation sequencing, active project plans and proposals that have not been accepted as design in <code>docs/roadmap/roadmap.md</code>.</li><li>Put accepted end-state architecture in the relevant compiler, memory or language design reference even when the implementation is incomplete.</li><li>Put compiler architecture and stage ownership in the narrowest relevant page under <code>docs/src/docs/codebase/compiler-design/**</code>.</li><li>Put contributor workflow, benchmarking and tooling details in <code>CONTRIBUTING.md</code>.</li><li>Prefer short coverage summaries over long fixture lists unless fixture names identify a fragile surface.</li><li>Use the status labels from this page&#39;s legend. Put nuance such as removed, reserved, not Alpha, or backend-specific in the notes column instead of inventing new status labels.</li></ul><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul></section>
     <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              background-color: rgb(109, 232, 138) <td style="padding: 0.2em 0.5em;  "> Supported</td>
@@ -355,14 +361,18 @@ body {
              background-color: rgb(232, 109, 171) <td style="padding: 0.2em 0.5em;  "> Outside Scope</td>
      <td style="padding: 0.2em 0.5em;  "> Intentionally not planned for Beanstalk's language design. Syntax should be rejected with structured diagnostics when encountered.</td>
         </tr>
-        
+            
+
     </table><h1>Coverage legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Broad</td>
@@ -383,15 +393,19 @@ body {
              <td style="padding: 0.2em 0.5em;  "> None</td>
      <td style="padding: 0.2em 0.5em;  "> No clear canonical coverage found.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Core Alpha surface</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Entry files and implicit start</td>
@@ -454,7 +468,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad template parsing, directive, slot, const/runtime fragment, template control-flow, markdown inline-code, diagnostics, and JS/HTML integration coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> Main Alpha surface. Supported shapes include const and runtime templates, slots/inserts, <code>$children</code> / <code>$fresh</code> routing, markdown/code/raw/html/css/escape directives, template Bool and option branching, template loops, runtime slot applications, and const expansion guards. Full match-style template heads and full CommonMark remain outside the current surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Main Alpha surface. Supported shapes include const and runtime templates, slots/inserts, <code>$children</code> / <code>$fresh</code> routing, markdown/code/raw/html/css/escape directives, template Bool and option branching, template loops, runtime slot applications, import namespace member access in template heads (e.g. namespace-dot-member expressions), and const expansion guards. Full match-style template heads and full CommonMark remain outside the current surface. Templates are represented in an AST-local Template IR (TIR) during parsing, composition, folding, formatting, and HIR handoff preparation; TIR is internal, behaviour-preserving, and does not change template language semantics. Post-TIR performance follow-ups are deferred and tracked in the roadmap.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -462,7 +476,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted compiler-integrated import, synthetic content constant, markdown folding, facade re-export, direct API, diagnostics, and integration coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML builder / frontend</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>.bd</code> files are builder-supported source assets that synthesize one private compile-time <code>content #String</code> constant from an implicit <code>$markdown</code> template body. They import extensionlessly into <code>.bst</code>, can be re-exported by <code>#mod.bst</code>, and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>.bd</code> files are builder-supported source assets that synthesize one private compile-time <code>content #String</code> constant from an implicit <code>$md</code> template body. Nested templates with no explicit directive also default to <code>$md</code>, and any explicit nested directive overrides that default. They import extensionlessly into <code>.bst</code>, can be re-exported by <code>#mod.bst</code>, and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -648,15 +662,19 @@ body {
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;  "> Fresh rvalues can satisfy mutable parameters without <code>~</code>. Existing places still require explicit <code>~</code>.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Core and builder packages</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Core prelude</td>
@@ -737,15 +755,19 @@ body {
      <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
      <td style="padding: 0.2em 0.5em;  "> Builder-owned runtime packages such as <code>@web/canvas</code> share the external package registry and HTML external JS asset/glue pipeline with provider-created imports.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Compiler-owned builtin surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Collection methods</td>
@@ -786,15 +808,19 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
      <td style="padding: 0.2em 0.5em;  "> Public fields are <code>message</code> and <code>code</code>. Hidden location/trace metadata remains backend-internal.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Reactivity V1</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current surface</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current surface</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Reactive declarations and parameters</td>
@@ -823,20 +849,24 @@ body {
      <td style="padding: 0.2em 0.5em;  "> No accepted syntax beyond V1 source subscriptions.</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred surfaces include reactive-aware template control flow, field/path subscriptions, collection item subscriptions, expression dependency tracking, derived reactive values, live IO sinks, template-owned event/action/effect syntax, <code>$bind</code>, typed component messages, and HTML-Wasm reactive runtime support.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Experimental backend surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current role</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Alpha rule</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current role</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Alpha rule</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> HTML-Wasm</td>
      <td style="padding: 0.2em 0.5em;  "> Experimental</td>
-     <td style="padding: 0.2em 0.5em;  "> Backend experiment and integration path for future Wasm output.</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend experiment and integration path for future Wasm output. Ordinary entry `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.</td>
      <td style="padding: 0.2em 0.5em;  "> Keep behind <code>--html-wasm</code>. Tests may pin current behavior, but Alpha support is JS / HTML.</td>
         </tr>
 
@@ -853,15 +883,19 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Covered paths validate or lower selected payload, assert, generic, map, collection, numeric, cast, reactive, and external-call cases.</td>
      <td style="padding: 0.2em 0.5em;  "> Backend parity progress belongs here, not repeated in every feature row.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Compiler implementation and tooling</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current status</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current status</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Frontend Arena + Semantic Invariant Optimisation</td>
@@ -869,21 +903,32 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Broad benchmark, profiling, adversarial-fixture, scope-frame, capacity-estimate, and validation coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Implemented pieces include frontend token/header stats, conservative capacity estimates, AST-owned scope-frame arenas, production scope-arena seeding, external package registry clone reduction, and adversarial benchmark fixtures. Broader expression, template/render-plan, HIR, bump-allocation, and persistent-cache migrations remain deferred until profiling justifies them.</td>
         </tr>
-        
+            
+
     </table></section>
     <section class="container"><h1>Deferred, rejected, and outside-scope surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage / diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage / diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
 
-            
+
+
+                
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait ecosystem extensions</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
      <td style="padding: 0.2em 0.5em;  "> Current implemented trait diagnostics are tracked in the core Traits row.</td>
      <td style="padding: 0.2em 0.5em;  "> Default methods, associated items, inheritance/composition, generic traits, specialized conformance, deriving, operator traits, formatting/display coercion, hashing, ordering, iteration, serialization, downcasting/reflection, and broad standard trait taxonomy remain outside the Alpha trait slice.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Post-TIR template performance follow-ups</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Not part of the current Alpha surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred items are source-span-backed template body text, a per-template parse cache, a formatter-output cache, dev-mode source-hash keyed template reuse, dependency-aware invalidation for imported consts/directives, formatter algorithm rewrites if profiling justifies them, incremental module/template compilation after module-boundary incremental builds exist, and parallel nested-template folding after a separate profiling-backed plan.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1074,9 +1119,10 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Current numeric coverage is tracked in the core arithmetic and Float rows.</td>
      <td style="padding: 0.2em 0.5em;  "> Numeric check elision, explicit unchecked numeric modes, narrower numeric types, BigInt, Decimal, and broader numeric tower work remain deferred.</td>
         </tr>
-        
+            
+
     </table></section>
-    <section class="container"><h1>Maintenance rule</h1><p>This matrix should stay concise and current.</p><ul><li>Move workflow and benchmark details to <code>CONTRIBUTING.md</code>.</li><li>Move future sequencing and design plans to <code>docs/roadmap/roadmap.md</code>.</li><li>Move syntax examples and beginner explanations to docs pages under <code>docs/src/docs/**</code>.</li><li>Move compiler architecture details to <code>docs/compiler-design-overview.md</code>.</li><li>Keep this page focused on support status, coverage level, clean rejection, target-gating, and experimental status.</li></ul></section>
+    <section class="container"><h1>Maintenance rule</h1><p>This matrix should stay concise and current.</p><ul><li>Move workflow and benchmark details to <code>CONTRIBUTING.md</code>.</li><li>Move implementation sequencing, active project plans and proposals that have not been accepted as design to <code>docs/roadmap/roadmap.md</code>.</li><li>Move accepted end-state architecture to the narrowest relevant compiler, memory or language design reference, even when implementation is incomplete.</li><li>Move syntax examples and beginner explanations to docs pages under <code>docs/src/docs/**</code>.</li><li>Move compiler architecture details to the narrowest relevant page under <code>docs/src/docs/codebase/compiler-design/**</code>.</li><li>Keep this page focused on support status, coverage level, clean rejection, target-gating, and experimental status.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

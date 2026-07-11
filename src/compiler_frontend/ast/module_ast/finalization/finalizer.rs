@@ -19,6 +19,7 @@ use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::timer_log;
+use std::rc::Rc;
 use std::time::Instant;
 
 #[cfg(debug_assertions)]
@@ -81,6 +82,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             &self.context.path_format_config,
             string_table,
             self.context.template_const_loop_iteration_limit,
+            Some(Rc::clone(&self.context.template_ir_registry)),
         )
         .map_err(TemplateNormalizationError::from)
         .map_err(|error| {
@@ -167,11 +169,19 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             .context
             .entry_dir
             .join_str(IMPLICIT_START_FUNC_NAME, string_table);
-        let const_facts = ConstFactCollector::new(string_table).collect(
-            &module_constants,
-            &emitted.ast,
-            &start_function_path,
-        );
+        // Const-fact collection reads template values through their exact
+        // registry-qualified effective views, including foreign stores and
+        // finalization overlays.
+        let const_facts =
+            ConstFactCollector::new(string_table, Rc::clone(&self.context.template_ir_registry))
+                .collect(&module_constants, &emitted.ast, &start_function_path)
+                .map_err(|error| {
+                    self.template_normalization_error_messages(
+                        error,
+                        &emitted.warnings,
+                        string_table,
+                    )
+                })?;
         timer_log!(
             const_fact_collection_start,
             "AST/finalize/const facts collected in: "
@@ -198,12 +208,22 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         } = self.environment;
 
         #[cfg(debug_assertions)]
-        debug_validate_type_ids_for_hir(
-            &emitted.ast,
-            &module_constants,
-            &choice_definitions,
-            &type_environment,
-        );
+        {
+            // Borrow the module TIR store for the debug TypeId walk. The borrow
+            // guard must be dropped before the owned clone below.
+            let template_ir_store = self.context.template_ir_store.borrow();
+            // Borrow the registry as well so debug validation can construct
+            // finalized `TirView`s from template references.
+            let template_ir_registry = self.context.template_ir_registry.borrow();
+            debug_validate_type_ids_for_hir(
+                &emitted.ast,
+                &module_constants,
+                &choice_definitions,
+                &type_environment,
+                &template_ir_store,
+                &template_ir_registry,
+            );
+        }
 
         Ok(Ast {
             nodes: emitted.ast,
@@ -242,14 +262,14 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         match error {
             TemplateNormalizationError::Diagnostic(diagnostic) => {
                 CompilerMessages::from_diagnostic_with_warnings(
-                    diagnostic,
+                    *diagnostic,
                     warnings.to_owned(),
                     string_table,
                 )
                 .with_type_context_for_all_diagnostics(self.environment.type_environment.clone())
             }
             TemplateNormalizationError::Infrastructure(error) => {
-                self.error_messages(error, warnings, string_table)
+                self.error_messages(*error, warnings, string_table)
             }
         }
     }

@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "<img",
+    "test-card.webp",
+    "Runtime wrapper slot child survived",
+    "object-fit: cover",
+    "Runtime parent template survived"
+]

@@ -81,6 +81,7 @@ pub(super) fn parse_namespace_access(
                 InvalidFieldAccessReason::ExpectedNameAfterDot,
                 None,
                 None,
+                Vec::new(),
                 member_location,
             )
             .into());
@@ -145,8 +146,7 @@ pub(super) fn parse_namespace_access(
                     member_name,
                     member_location,
                     expected_result_evidence_allowed,
-                )
-                .map_err(|diagnostic| diagnostic.into());
+                );
             }
 
             NamespaceMemberLookup::Type => {

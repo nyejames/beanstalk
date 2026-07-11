@@ -53,10 +53,6 @@ pub struct GenericParameterId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GenericParameterListId(pub u32);
 
-/// Dense identifier for a function type definition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FunctionTypeId(pub u32);
-
 // -----------------------------------------------------------
 //  Canonical Keys
 // -----------------------------------------------------------
@@ -99,8 +95,6 @@ pub enum BuiltinTypeKey {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeConstructor {
     Builtin(BuiltinTypeConstructor),
-    Nominal(NominalTypeId),
-    External(ExternalTypeId),
 }
 
 /// Builtin type constructors.

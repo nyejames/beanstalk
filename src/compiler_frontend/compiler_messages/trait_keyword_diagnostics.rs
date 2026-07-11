@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Reserved trait syntax helpers for the frontend.
 //!
 //! WHAT: centralized diagnostics for `must` and `This` in contexts where trait syntax is not valid

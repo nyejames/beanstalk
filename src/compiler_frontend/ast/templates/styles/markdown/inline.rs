@@ -5,7 +5,7 @@
 //!      extracting it into its own module keeps the block orchestration readable.
 
 use super::{MarkdownInlineAtom, MarkdownOutputBuilder};
-use crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutputPiece;
+use crate::compiler_frontend::ast::templates::formatter_contract::FormatterOutputPiece;
 
 /// Renders inline markdown atoms into escaped HTML and preserved opaque anchors.
 ///

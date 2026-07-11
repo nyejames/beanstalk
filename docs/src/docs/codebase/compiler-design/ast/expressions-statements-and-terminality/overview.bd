@@ -1,0 +1,25 @@
+# Expressions, statements and terminality
+
+Natural typing, receiving boundaries, access modes and terminality.
+
+## Contract
+
+- Input: completed AST environment and source bodies
+- Output: typed AST expressions, statements and terminality diagnostics
+- Decides: expression typing, contextual coercion, access modes, value-producing blocks, terminality
+- Must not decide: type identity, HIR lowering, borrow facts
+- Invariant: non-unit success returns must be statically terminal before HIR lowering
+
+## Main paths
+
+- `src/compiler_frontend/ast/module_ast/emission/`
+- `src/compiler_frontend/ast/expressions/`
+- `src/compiler_frontend/ast/statements/`
+- `src/compiler_frontend/type_coercion/`
+- `src/compiler_frontend/value_mode.rs`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/ast/expressions-statements-and-terminality/expressions-statements-and-terminality.bd`
+- `docs/src/docs/codebase/compiler-design/ast/generics-traits-and-casts/overview.bd`
+- `docs/src/docs/codebase/memory-management/access-and-aliasing/overview.bd`

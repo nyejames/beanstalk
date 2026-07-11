@@ -21,6 +21,8 @@ use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::traits::ids::TraitId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+type GenericBoundValidationResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(crate) struct GenericBoundEvidenceContext<'a> {
     pub(crate) type_environment: &'a TypeEnvironment,
     pub(crate) trait_environment: Option<&'a TraitEnvironment>,
@@ -49,7 +51,7 @@ pub(crate) fn validate_nominal_generic_bound_evidence(
     type_id: TypeId,
     location: SourceLocation,
     context: &GenericBoundEvidenceContext<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> GenericBoundValidationResult<()> {
     let mut visited = FxHashSet::default();
     validate_type_recursive(type_id, &location, context, &mut visited)
 }
@@ -59,7 +61,7 @@ fn validate_type_recursive(
     location: &SourceLocation,
     context: &GenericBoundEvidenceContext<'_>,
     visited: &mut FxHashSet<TypeId>,
-) -> Result<(), CompilerDiagnostic> {
+) -> GenericBoundValidationResult<()> {
     if !visited.insert(type_id) {
         return Ok(());
     }
@@ -110,7 +112,7 @@ fn validate_instance_bounds(
     instance_type_id: TypeId,
     location: &SourceLocation,
     context: &GenericBoundEvidenceContext<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> GenericBoundValidationResult<()> {
     let Some(TypeDefinition::GenericInstance(instance)) =
         context.type_environment.get(instance_type_id)
     else {
@@ -153,7 +155,7 @@ fn validate_single_bound(
     trait_id: TraitId,
     location: &SourceLocation,
     context: &GenericBoundEvidenceContext<'_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> GenericBoundValidationResult<()> {
     let Some(trait_environment) = context.trait_environment else {
         return Ok(());
     };
@@ -190,7 +192,7 @@ fn validate_single_bound(
         .nominal_path(instance_type_id)
         .and_then(|path| path.name());
 
-    Err(CompilerDiagnostic::invalid_generic_instantiation(
+    Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
         instance_name,
         InvalidGenericInstantiationReason::MissingNominalTraitEvidence {
             parameter_name,
@@ -198,7 +200,7 @@ fn validate_single_bound(
             concrete_type_id,
         },
         location.clone(),
-    ))
+    )))
 }
 
 fn generic_parameter_declares_bound(

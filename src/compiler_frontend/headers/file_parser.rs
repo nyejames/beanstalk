@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Per-file header splitting.
 //!
 //! WHAT: orchestrates one tokenized Beanstalk file into top-level declaration headers, import
@@ -30,6 +28,13 @@ use crate::compiler_frontend::headers::types::{
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
+/// Boxed diagnostic result for file-local header-item orchestration.
+///
+/// WHAT: gives the connected helper family one small error boundary.
+/// WHY: the header loop passes structured diagnostics through several item handlers
+///      without carrying the large value inline at every return.
+type FileParserResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 // Top-level declarations are module-visible; non-declaration statements are collected into the
 // implicit start-function header for that file.
 pub(super) fn parse_headers_in_file(
@@ -42,7 +47,7 @@ pub(super) fn parse_headers_in_file(
 
     match result {
         Ok(()) => finish_file_output(token_stream, context, state),
-        Err(diagnostic) => Err(state.into_error(diagnostic)),
+        Err(boxed_diagnostic) => Err(state.into_error(*boxed_diagnostic)),
     }
 }
 
@@ -50,7 +55,7 @@ fn parse_headers_in_file_inner(
     token_stream: &mut FileTokens,
     context: &mut HeaderParseContext<'_>,
     state: &mut HeaderFileParseState,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     loop {
         let current_token = token_stream.current_token();
         let current_location = token_stream.current_location();
@@ -141,12 +146,12 @@ fn handle_export_item(
     context: &mut HeaderParseContext<'_>,
     _export_token: Token,
     export_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     // `export` is a facade-only keyword; ordinary files cannot use it.
     if context.file_role != FileRole::ModuleFacade {
-        return Err(CompilerDiagnostic::export_outside_module_facade(
+        return Err(Box::new(CompilerDiagnostic::export_outside_module_facade(
             export_location,
-        ));
+        )));
     }
 
     // `export` must have a target on the same logical line.
@@ -154,7 +159,9 @@ fn handle_export_item(
         token_stream.current_token_kind(),
         TokenKind::Newline | TokenKind::End | TokenKind::Eof
     ) {
-        return Err(CompilerDiagnostic::missing_export_target(export_location));
+        return Err(Box::new(CompilerDiagnostic::missing_export_target(
+            export_location,
+        )));
     }
 
     match token_stream.current_token_kind() {
@@ -178,9 +185,9 @@ fn handle_export_item(
             };
 
             if !has_grouped {
-                return Err(CompilerDiagnostic::deferred_namespace_export(
+                return Err(Box::new(CompilerDiagnostic::deferred_namespace_export(
                     export_location,
-                ));
+                )));
             }
 
             parse_and_record_export_path_clause(
@@ -200,11 +207,15 @@ fn handle_export_item(
             token_stream.advance();
 
             if starts_exported_trait_conformance(token_stream) {
-                return Err(CompilerDiagnostic::invalid_export_target(export_location));
+                return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                    export_location,
+                )));
             }
 
             if !starts_duplicate_top_level_header_declaration(token_stream) {
-                return Err(CompilerDiagnostic::invalid_export_target(export_location));
+                return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                    export_location,
+                )));
             }
 
             handle_symbol_item_with_export_mode(
@@ -220,22 +231,29 @@ fn handle_export_item(
 
         // `export` before a runtime template is invalid in a facade.
         TokenKind::TemplateHead => {
-            return Err(CompilerDiagnostic::runtime_template_in_module_facade(
-                export_location,
+            return Err(Box::new(
+                CompilerDiagnostic::runtime_template_in_module_facade(export_location),
             ));
         }
 
         // `export` before reserved trait syntax.
         TokenKind::Must | TokenKind::TraitThis => {
             if let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) {
-                return Err(reserved_trait_keyword_error(keyword, export_location));
+                return Err(Box::new(reserved_trait_keyword_error(
+                    keyword,
+                    export_location,
+                )));
             }
-            return Err(CompilerDiagnostic::invalid_export_target(export_location));
+            return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                export_location,
+            )));
         }
 
         // `export` before any other token is unsupported.
         _ => {
-            return Err(CompilerDiagnostic::invalid_export_target(export_location));
+            return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                export_location,
+            )));
         }
     }
 
@@ -256,7 +274,7 @@ fn handle_symbol_item(
     current_token: Token,
     name_id: StringId,
     current_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     handle_symbol_item_with_export_mode(
         token_stream,
         state,
@@ -276,7 +294,7 @@ fn handle_symbol_item_with_export_mode(
     name_id: StringId,
     current_location: SourceLocation,
     export_mode: HeaderExportMode,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     // Only prelude-visible external symbols block local declarations; package-scoped symbols that
     // are not imported should not prevent a file from declaring its own symbol with the same name.
     if context
@@ -297,11 +315,11 @@ fn handle_symbol_item_with_export_mode(
         if !is_conformance_declaration
             && starts_duplicate_top_level_header_declaration(token_stream)
         {
-            return Err(CompilerDiagnostic::duplicate_declaration(
+            return Err(Box::new(CompilerDiagnostic::duplicate_declaration(
                 name_id,
                 first_location.clone(),
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         if !is_conformance_declaration {
@@ -366,12 +384,12 @@ fn handle_prelude_symbol_item(
     state: &mut HeaderFileParseState,
     current_token: Token,
     name_id: StringId,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     if starts_duplicate_top_level_header_declaration(token_stream) {
-        return Err(CompilerDiagnostic::reserved_builtin_name(
+        return Err(Box::new(CompilerDiagnostic::reserved_builtin_name(
             name_id,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     state.push_start_body_token(current_token);
@@ -382,9 +400,12 @@ fn handle_prelude_symbol_item(
 fn handle_trait_keyword_header_item(
     current_token: &Token,
     current_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     if let Some(keyword) = reserved_trait_keyword(&current_token.kind) {
-        return Err(reserved_trait_keyword_error(keyword, current_location));
+        return Err(Box::new(reserved_trait_keyword_error(
+            keyword,
+            current_location,
+        )));
     }
 
     Ok(())
@@ -396,13 +417,13 @@ fn handle_runtime_template_item(
     context: &mut HeaderParseContext<'_>,
     current_token: Token,
     current_location: SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> FileParserResult<()> {
     // Runtime top-level templates stay in the start-function body and are evaluated in source
     // order by entry start(). The runtime fragment count lets later const fragments record their
     // insertion point relative to already-seen runtime fragments.
     if context.file_role == FileRole::ModuleFacade {
-        return Err(CompilerDiagnostic::runtime_template_in_module_facade(
-            current_location,
+        return Err(Box::new(
+            CompilerDiagnostic::runtime_template_in_module_facade(current_location),
         ));
     }
 

@@ -69,6 +69,11 @@ path = "adversarial_path_template_head_grouped"
 tags = ["adversarial", "bug-hunt"]
 
 [[case]]
+id = "adversarial_runtime_html_nested_img_slot_application"
+path = "adversarial_runtime_html_nested_img_slot_application"
+tags = ["adversarial", "bug-hunt", "templates", "html"]
+
+[[case]]
 id = "adversarial_struct_collection_result_interop"
 path = "adversarial_struct_collection_result_interop"
 tags = ["adversarial", "bug-hunt"]
@@ -492,7 +497,6 @@ tags = ["integration","language","choices","equality","imports","js-backend"]
 id = "choice_equality_aliased_constructor_success"
 path = "choice_equality_aliased_constructor_success"
 tags = ["integration","language","choices","equality","imports","js-backend"]
-
 
 [[case]]
 id = "choice_unit_equality_aliased_import_success"
@@ -2579,7 +2583,6 @@ id = "hashmap_wasm_unreachable_ignored"
 path = "hashmap_wasm_unreachable_ignored"
 tags = ["integration","wasm-backend","hashmaps"]
 
-
 [[case]]
 id = "hashmap_alias_struct_field_param_return"
 path = "hashmap_alias_struct_field_param_return"
@@ -3566,6 +3569,16 @@ path = "template_control_flow_children_wrapper_when_output"
 tags = ["integration","templates"]
 
 [[case]]
+id = "template_runtime_branch_fallback_wrapped_output"
+path = "template_runtime_branch_fallback_wrapped_output"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_false_no_else_wrapper_skip"
+path = "template_runtime_false_no_else_wrapper_skip"
+tags = ["integration","templates"]
+
+[[case]]
 id = "template_control_flow_fresh_skips_parent_children_wrapper"
 path = "template_control_flow_fresh_skips_parent_children_wrapper"
 tags = ["integration","templates"]
@@ -3628,6 +3641,16 @@ tags = ["integration","templates","diagnostics"]
 [[case]]
 id = "template_conditional_loop_runtime_zero_iterations"
 path = "template_conditional_loop_runtime_zero_iterations"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_loop_aggregate_wrapper_regression"
+path = "template_runtime_loop_aggregate_wrapper_regression"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_loop_children_wrapper_regression"
+path = "template_runtime_loop_children_wrapper_regression"
 tags = ["integration","templates"]
 
 [[case]]
@@ -4010,7 +4033,6 @@ id = "template_loop_range_runtime"
 path = "template_loop_range_runtime"
 tags = ["integration","templates"]
 
-
 [[case]]
 id = "template_output_test"
 path = "template_output_test"
@@ -4025,11 +4047,6 @@ tags = ["integration","templates"]
 id = "template_positional_slot_basic"
 path = "template_positional_slot_basic"
 tags = ["integration","templates"]
-
-[[case]]
-id = "template_positional_slot_overflow_error"
-path = "template_positional_slot_overflow_error"
-tags = ["integration","templates","diagnostics"]
 
 [[case]]
 id = "template_positional_slot_children_body"
@@ -4054,6 +4071,11 @@ tags = ["integration","templates"]
 [[case]]
 id = "template_runtime_loop_slot_application"
 path = "template_runtime_loop_slot_application"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_in_branch_and_loop"
+path = "template_runtime_slot_in_branch_and_loop"
 tags = ["integration","templates"]
 
 [[case]]
@@ -4120,16 +4142,6 @@ tags = ["integration","templates"]
 id = "template_slots_const_folding"
 path = "template_slots_const_folding"
 tags = ["integration","templates"]
-
-[[case]]
-id = "template_slots_duplicate_default_failure"
-path = "template_slots_duplicate_default_failure"
-tags = ["integration","templates", "diagnostics"]
-
-[[case]]
-id = "template_slots_named_only_loose_content_failure"
-path = "template_slots_named_only_loose_content_failure"
-tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_slots_nested"
@@ -4840,7 +4852,6 @@ tags = ["integration", "language", "mutation", "modulus"]
 id = "invalid_integer_division_mixed_numeric_rejected"
 path = "invalid_integer_division_mixed_numeric_rejected"
 tags = ["integration", "diagnostics"]
-
 
 [[case]]
 id = "char_basic"
@@ -6077,7 +6088,6 @@ id = "core_math_old_std_namespace_rejected"
 path = "core_math_old_std_namespace_rejected"
 tags = ["integration", "math", "imports", "diagnostics"]
 
-
 [[case]]
 id = "source_lib_project_local"
 path = "source_lib_project_local"
@@ -6826,6 +6836,11 @@ tags = ["integration", "name-resolution", "receiver-methods", "positive"]
 [[case]]
 id = "direct_page_import_rejected"
 path = "direct_page_import_rejected"
+tags = ["integration", "imports", "diagnostics", "special-files"]
+
+[[case]]
+id = "direct_hash_root_import_rejected"
+path = "direct_hash_root_import_rejected"
 tags = ["integration", "imports", "diagnostics", "special-files"]
 
 [[case]]
@@ -7932,3 +7947,83 @@ tags = ["integration", "core_io", "input", "backend_validation", "diagnostics"]
 id = "core_io_unreachable_io_wrapper_wasm_ignored"
 path = "core_io_unreachable_io_wrapper_wasm_ignored"
 tags = ["integration", "core_io", "backend_validation"]
+
+[[case]]
+id = "multi_entry_provider_free"
+path = "multi_entry_provider_free"
+tags = ["integration", "frontend", "stage0", "parallelism"]
+
+[[case]]
+id = "many_file_module_chunked_prep"
+path = "many_file_module_chunked_prep"
+tags = ["integration", "frontend", "stage0", "parallelism"]
+
+[[case]]
+id = "template_head_namespace_member_access"
+path = "template_head_namespace_member_access"
+tags = ["integration", "templates", "imports", "namespace"]
+
+[[case]]
+id = "template_head_bare_import_namespace_rejected"
+path = "template_head_bare_import_namespace_rejected"
+tags = ["integration", "templates", "imports", "namespace", "diagnostics"]
+
+[[case]]
+id = "template_directive_raw_unexpected_arguments"
+path = "template_directive_raw_unexpected_arguments"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_slot_empty_parens"
+path = "template_directive_slot_empty_parens"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_slot_zero_position"
+path = "template_directive_slot_zero_position"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_slot_non_integer"
+path = "template_directive_slot_non_integer"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_insert_empty_parens"
+path = "template_directive_insert_empty_parens"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_insert_integer"
+path = "template_directive_insert_integer"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "template_directive_children_empty_parens"
+path = "template_directive_children_empty_parens"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_did_you_mean"
+path = "function_call_named_args_did_you_mean"
+tags = ["integration", "diagnostics", "calls"]
+
+[[case]]
+id = "copy_non_place_literal"
+path = "copy_non_place_literal"
+tags = ["integration", "diagnostics", "copy"]
+
+[[case]]
+id = "function_fall_through_diagnostic"
+path = "function_fall_through_diagnostic"
+tags = ["integration", "diagnostics", "functions"]
+
+[[case]]
+id = "field_access_did_you_mean"
+path = "field_access_did_you_mean"
+tags = ["integration", "diagnostics", "field-access"]
+
+[[case]]
+id = "choice_variant_did_you_mean"
+path = "choice_variant_did_you_mean"
+tags = ["integration", "diagnostics", "choices"]

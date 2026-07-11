@@ -13,7 +13,9 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::FileRole;
-use crate::compiler_frontend::source_libraries::mod_file::import_path_references_special_file;
+use crate::compiler_frontend::source_libraries::root_file::{
+    import_path_references_config_file, import_path_references_hash_root_file,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -31,6 +33,13 @@ use super::{
     resolve_facade_import, resolve_import_target, resolve_namespace_target,
 };
 
+/// Boxed diagnostic result for the import-environment builder family.
+///
+/// WHAT: gives visibility construction and its local resolution helpers one small error boundary.
+/// WHY: import resolution passes structured diagnostics through several recursive helpers
+///      without carrying the large value inline at every return.
+type BuilderResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(crate) struct ImportEnvironmentBuilder<'a> {
     pub(super) module_symbols: &'a ModuleSymbols,
     pub(super) external_package_registry: &'a ExternalPackageRegistry,
@@ -46,17 +55,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     // ------------------------------
 
     /// Derive the local binding name for an import.
-    pub(super) fn derive_import_local_name(
-        &self,
-        import: &FileImport,
-    ) -> Result<StringId, CompilerDiagnostic> {
+    pub(super) fn derive_import_local_name(&self, import: &FileImport) -> BuilderResult<StringId> {
         match import.alias {
             Some(alias) => Ok(alias),
             None => match import.header_path.name() {
                 Some(name) => Ok(name),
-                None => Err(super::diagnostics::missing_import_target_no_path(
+                None => Err(Box::new(super::diagnostics::missing_import_target_no_path(
                     import.location.clone(),
-                )),
+                ))),
             },
         }
     }
@@ -116,13 +122,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         !importer_has_explicit_module && !target_has_explicit_module
     }
 
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     pub(super) fn build_file_visibility(
         &mut self,
         source_file: &InternedPath,
         importable_symbol_paths: &FxHashSet<InternedPath>,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> BuilderResult<()> {
         let mut file_visibility = FileVisibility::default();
         let mut registry = VisibleNameRegistry::new();
 
@@ -238,12 +242,20 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // 5. Resolve and register explicit imports.
         if let Some(imports) = self.module_symbols.file_imports_by_source.get(source_file) {
             for import in imports {
-                // Reject direct imports of special files (#mod, #page, #config).
-                if import_path_references_special_file(&import.header_path, self.string_table) {
-                    return Err(super::diagnostics::direct_special_file_import(
+                // Reject direct imports of hash roots and canonical config files.
+                if import_path_references_hash_root_file(
+                    &import.header_path,
+                    import.from_grouped,
+                    self.string_table,
+                ) || import_path_references_config_file(
+                    &import.header_path,
+                    import.from_grouped,
+                    self.string_table,
+                ) {
+                    return Err(Box::new(super::diagnostics::direct_special_file_import(
                         &import.header_path,
                         import.location.clone(),
-                    ));
+                    )));
                 }
 
                 if import.from_grouped {
@@ -570,8 +582,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .get(module_root)
     }
 
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     fn resolve_and_register_grouped_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -579,7 +589,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         source_file: &InternedPath,
         importable_symbol_paths: &FxHashSet<InternedPath>,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> BuilderResult<()> {
         // Check for provider-backed grouped import first.
         if let Some(resolved) = self.resolve_provider_backed_grouped_import(
             file_visibility,
@@ -645,12 +655,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                             ImportFacadeType::ModuleRoot
                         }
                     };
-                    return Err(super::diagnostics::not_exported_by_facade(
+                    return Err(Box::new(super::diagnostics::not_exported_by_facade(
                         &import.header_path,
                         facade_name_id,
                         diagnostic_facade_type,
                         import.location.clone(),
-                    ));
+                    )));
                 }
                 FacadeLookupResult::NotAFacadeImport => {
                     // Fall through to normal target resolution.
@@ -726,14 +736,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// module-root facade import if the project has a `web/canvas/#mod.bst` shape. Checking
     /// external metadata here keeps virtual packages out of source facade privacy rules while
     /// leaving all source imports on the normal facade-first path.
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     fn resolve_and_register_external_package_grouped_import(
         &mut self,
         file_visibility: &mut FileVisibility,
         registry: &mut VisibleNameRegistry,
         import: &FileImport,
-    ) -> Result<Option<()>, CompilerDiagnostic> {
+    ) -> BuilderResult<Option<()>> {
         if !import.from_grouped {
             return Ok(None);
         }
@@ -750,17 +758,15 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             ExternalPackageSymbolLookup::PackageFoundSymbolMissing {
                 package_path,
                 symbol_name,
-            } => Err(super::diagnostics::missing_package_symbol(
+            } => Err(Box::new(super::diagnostics::missing_package_symbol(
                 symbol_name,
                 package_path,
                 import.location.clone(),
-            )),
+            ))),
             ExternalPackageSymbolLookup::NoMatch => Ok(None),
         }
     }
 
-    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
-    #[allow(clippy::result_large_err)]
     fn resolve_and_register_bare_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -768,13 +774,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         source_file: &InternedPath,
         importable_symbol_paths: &FxHashSet<InternedPath>,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> BuilderResult<()> {
         // Reject explicit `.bst` extension in import paths.
         if has_explicit_bst_extension(&import.header_path, self.string_table) {
-            return Err(CompilerDiagnostic::explicit_bst_extension(
+            return Err(Box::new(CompilerDiagnostic::explicit_bst_extension(
                 import.header_path.clone(),
                 import.location.clone(),
-            ));
+            )));
         }
 
         // Check for provider-backed bare import.
@@ -824,14 +830,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         // If normal resolution succeeds for a bare import, it's a direct symbol-path import.
         match target {
-            ResolvedImportTarget::Source { symbol_path, .. } => Err(
+            ResolvedImportTarget::Source { symbol_path, .. } => Err(Box::new(
                 CompilerDiagnostic::direct_symbol_path_import(symbol_path, import.location.clone()),
-            ),
+            )),
             ResolvedImportTarget::External { .. } => {
-                Err(CompilerDiagnostic::direct_symbol_path_import(
+                Err(Box::new(CompilerDiagnostic::direct_symbol_path_import(
                     import.header_path.clone(),
                     import.location.clone(),
-                ))
+                )))
             }
         }
     }

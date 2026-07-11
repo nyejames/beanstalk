@@ -1,8 +1,8 @@
 //! Tests for build-loop state transitions and queued rebuild behavior.
 
 use super::{
-    DevBuildExecutor, ProjectBuildExecutor, dev_server_error_messages, run_builds_until_stable,
-    run_single_build_cycle,
+    DevBuildExecutor, ProjectBuildExecutor, build_once, dev_server_error_messages,
+    run_builds_until_stable, run_single_build_cycle,
 };
 use crate::build_system::build::{
     self, BackendBuilder, BuildResult, CleanupPolicy, FileKind, OutputFile, Project,
@@ -101,6 +101,29 @@ fn html_build_result_without_entry_page() -> BuildResult {
         config: Config::new(PathBuf::from("main.bst")),
         warnings: vec![],
         string_table: StringTable::new(),
+    }
+}
+
+fn html_build_result_with_warning() -> BuildResult {
+    let mut string_table = StringTable::new();
+    let warning = unused_variable_warning(
+        string_table.get_or_intern("dev_warning".to_string()),
+        SourceLocation::default(),
+    );
+
+    BuildResult {
+        project: Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html><body>Hello</body></html>")),
+            )],
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::html(),
+            warnings: vec![],
+        },
+        config: Config::new(PathBuf::from("main.bst")),
+        warnings: vec![warning],
+        string_table,
     }
 }
 
@@ -416,6 +439,97 @@ fn dev_server_error_messages_use_dev_server_error_type() {
         .first_infrastructure_error_for_tests()
         .expect("dev-server failure should be wrapped for rendering");
     assert_eq!(error_type, &ErrorType::DevServer);
+}
+
+#[test]
+fn successful_build_with_warnings_preserves_structured_success_messages() {
+    let root = temp_dir("success_warnings");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let output_dir = root.join("dev");
+    let mut executor = FakeExecutor::new(vec![Ok(html_build_result_with_warning())]);
+
+    let outcome = build_once(
+        &mut executor,
+        &root.join("main.bst"),
+        &Vec::new(),
+        &output_dir,
+    );
+
+    assert!(outcome.build_succeeded);
+    let messages = outcome
+        .success_messages
+        .expect("successful build with warnings should carry structured warnings");
+    assert_eq!(messages.warning_count(), 1);
+    assert_eq!(messages.error_count(), 0);
+    assert!(
+        outcome.diagnostics_summary.contains("Unused variable"),
+        "summary should name the warning, got: {}",
+        outcome.diagnostics_summary
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn successful_build_without_warnings_has_no_success_messages() {
+    let root = temp_dir("success_no_warnings");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let output_dir = root.join("dev");
+    let mut executor = FakeExecutor::new(vec![Ok(html_build_result())]);
+
+    let outcome = build_once(
+        &mut executor,
+        &root.join("main.bst"),
+        &Vec::new(),
+        &output_dir,
+    );
+
+    assert!(outcome.build_succeeded);
+    assert!(
+        outcome.success_messages.is_none(),
+        "clean successful builds should not allocate an empty warning container"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn rebuild_loop_success_with_warnings_updates_summary() {
+    let root = temp_dir("rebuild_warnings");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("main.bst"), "start").expect("should write initial source file");
+    let output_dir = root.join("dev");
+    let state = Arc::new(DevServerState::new(output_dir.clone()));
+    let (watch_session, _watch_trigger) =
+        watch::WatchSession::manual(watch_scope(&root, &output_dir));
+
+    let mut executor = FakeExecutor::new(vec![Ok(html_build_result_with_warning())]);
+
+    let report = run_builds_until_stable(
+        &state,
+        &mut executor,
+        &root.join("main.bst"),
+        &Vec::new(),
+        &watch_session,
+    )
+    .expect("build loop should complete");
+
+    assert!(report.watch_scope.is_some());
+
+    let build_state = state
+        .build_state
+        .lock()
+        .expect("build state should not be poisoned");
+    assert!(build_state.last_build_ok);
+    assert!(
+        build_state
+            .last_build_messages_summary
+            .contains("Unused variable"),
+        "state summary should surface warning titles to SSE/state consumers, got: {}",
+        build_state.last_build_messages_summary
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]

@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -325,7 +328,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+    content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         ...entire .bd file body...
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>The generated <code>content</code> constant is the only public surface of a Beandown file.</p></section>
@@ -344,7 +347,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>p<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>This</span> paragraph is styled <span class='bst-code-keyword'>by</span> the <span class='bst-code-struct'>HTML</span> builder<span class='bst-code-string'>&#39;s @html constants.
     ]
-    </span></code></pre><p>Beandown starts inside a template body, so <code>--</code>, backticks, and backslashes are normal text. It also uses the same <code>$markdown</code> inline-code rules as <code>.bst</code> markdown templates.</p><p>Literal template delimiters use normal string insertion:</p><pre style="
+    </span></code></pre><p>Beandown starts inside a template body, so <code>--</code>, backticks, and backslashes are normal text. It also uses the same <code>$md</code> inline-code rules as <code>.bst</code> markdown templates.</p><p>Nested templates with no explicit directive default to <code>$md</code> too. Add any explicit directive, such as <code>$raw</code>, <code>$fresh</code>, <code>$html</code>, <code>$code</code>, <code>$css</code>, or <code>$escape_html</code>, to override that Beandown default for the nested template.</p><p>Literal template delimiters use normal string insertion:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

@@ -1,14 +1,16 @@
 //! Compiler binary builder - Builds the release and profiling Beanstalk compiler
 //!
-//! This module owns building compiler binaries with the `detailed_timers` feature
-//! enabled. It supports two build profiles:
+//! This module owns building compiler binaries with timing features enabled.
+//! Normal benchmark builds use the concise `timers` feature; profiling builds
+//! use `detailed_timers` for verbose human-readable substage prose. It supports
+//! two build profiles:
 //!
 //! - **Release** (`target/release/bean`): standard benchmark build.
 //! - **Profiling** (`target/profiling/bean`): dedicated profiling build with
 //!   full debug info and frame pointers for Samply symbolication/unwinding.
 //!
 //! # What this module owns
-//! - Executing `cargo build --release --features detailed_timers`
+//! - Executing `cargo build --release --features timers` for normal benchmarks
 //! - Executing `cargo build --profile profiling --features detailed_timers` with
 //!   `RUSTFLAGS="-C force-frame-pointers=yes"`
 //! - Locating built binaries in `target/release/` and `target/profiling/`
@@ -73,9 +75,15 @@ impl CompilerBinary {
     }
 }
 
-/// Build the compiler with release profile and detailed timers
+/// Build the compiler with release profile and concise timers
 ///
-/// Executes `cargo build --release --features detailed_timers`, then
+/// WHAT: builds with the `timers` feature so the benchmark subprocess emits
+/// stable BST_BENCH timing lines under BST_TIMERS=bench without the verbose
+/// human prose and AST substage timings that detailed_timers adds.
+/// WHY:  keeps benchmark output low-noise while still capturing all top-level
+/// pipeline-stage metrics for attribution and regression detection.
+///
+/// Executes `cargo build --release --features timers`, then
 /// verifies and returns the path to the built binary.
 ///
 /// # Returns
@@ -83,7 +91,7 @@ impl CompilerBinary {
 /// A `CompilerBinary` pointing to the built artifact, or an error message.
 pub fn build_release_compiler_with_timers() -> Result<CompilerBinary, String> {
     let status = Command::new("cargo")
-        .args(["build", "--release", "--features", "detailed_timers"])
+        .args(["build", "--release", "--features", "timers"])
         .status()
         .map_err(|e| format!("Failed to execute cargo build: {}", e))?;
 

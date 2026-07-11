@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: ERRORS, OPTIONS, AND ASSERTIONS IN BEANSTALK]
 
-#[section, $markdown:
+#[section, $md:
     This page tracks Beanstalk's current error-handling surface.
     The public `Error` value shape and `catch` forms shown here are current.
 
@@ -25,7 +25,7 @@ page_head #= theme_head
     > If a function can return an error, the caller must either catch the error or bubble it upward.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Core syntax
 
     Error-returning functions mark one return slot with `!`.
@@ -58,7 +58,7 @@ page_head #= theme_head
     Public first-class `Result` values and raw fallible carrier storage remain deferred; use `!` return slots and call-site handling instead.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # The Error type
 
     `Error` is a builtin language type.
@@ -93,7 +93,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Returning errors
 
     Use `return!` to return through the error slot.
@@ -116,7 +116,7 @@ page_head #= theme_head
     This keeps success and failure paths explicit.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Bubbling errors
 
     Use a trailing `!` to bubble an error to the surrounding function.
@@ -135,7 +135,7 @@ page_head #= theme_head
     The surrounding function must declare a compatible `Error!` return slot.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Catching errors
 
     Use `catch` to inspect or recover from an error.
@@ -172,7 +172,7 @@ page_head #= theme_head
     handled expression would have no success value to assign.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Recovering with fallback values
 
     Use `catch:` with `then` to recover from an error with fallback success values.
@@ -194,7 +194,7 @@ page_head #= theme_head
     The `then` value must match the expected success type.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Recovering with a handler block
 
     Use `catch |err|:` when recovery needs to inspect or log the error.
@@ -222,7 +222,7 @@ page_head #= theme_head
     The `then` fallback value is used after the handler body completes.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Overriding catch behavior
 
     A success-producing `catch` block can omit `then` only when the
@@ -244,7 +244,7 @@ page_head #= theme_head
     This is useful when the surrounding function does not return `Error!`, but the recovery path needs more control than a fallback expression.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Multiple success values
 
     Beanstalk supports multiple return values.
@@ -271,7 +271,7 @@ page_head #= theme_head
     If the success path returns two values, the recovery path must provide two fallback values.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Error handling forms
 
     [styled_table:
@@ -304,7 +304,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Collection errors
 
     Collection operations use structured errors for invalid runtime cases.
@@ -331,7 +331,7 @@ page_head #= theme_head
     They should produce structured errors that can be caught, bubbled, or recovered from.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Strict runtime validation
 
     Collection methods should enforce strict runtime validation.
@@ -354,7 +354,7 @@ page_head #= theme_head
     - bubble the error
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Options
 
     Optional values use `?`.
@@ -406,7 +406,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Errors, options, and assertions
 
     Errors, options, and assertions solve different problems.
@@ -440,7 +440,7 @@ page_head #= theme_head
     Use `assert` for broken assumptions, not regular failures.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Assertions
 
     Assertions are different from recoverable errors.
@@ -478,7 +478,7 @@ page_head #= theme_head
     Most expected failures should use `Error!` instead.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Assertion diagnostics
 
     [styled_table:
@@ -511,7 +511,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Full example
 
     [codeblock, $code("bst"):
@@ -559,7 +559,7 @@ page_head #= theme_head
     - catch, inspect, and recover with `catch |err|: ... then 0 ;`
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Diagnostics
 
     Error handling should produce clear diagnostics.
@@ -581,7 +581,7 @@ page_head #= theme_head
     It should not be treated as a backend-only runtime behavior.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Summary
 
     Beanstalk separates three kinds of failure or absence:

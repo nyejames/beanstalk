@@ -17,9 +17,13 @@ use std::path::Path;
 /// WHAT: keeps user-facing import diagnostics separate from filesystem/internal failures.
 /// WHY: Stage 0 source discovery needs to preserve typed import diagnostics without routing them
 /// through the older internal-error transport.
+///
+/// The `Diagnostic` variant boxes `CompilerDiagnostic` because it is large enough to trigger
+/// `clippy::result_large_err` when stored inline in the `Result` enum. Boxing keeps the error
+/// variant small; callers unbox at existing plain-diagnostic accumulation boundaries.
 #[derive(Clone, Debug)]
 pub(crate) enum ImportPathResolutionError {
-    Diagnostic(CompilerDiagnostic),
+    Diagnostic(Box<CompilerDiagnostic>),
     Infrastructure(CompilerError),
 }
 
@@ -55,7 +59,7 @@ pub(crate) fn validate_import_boundary(
         let location = SourceLocation::from_path(importer_file, string_table);
         let diagnostic =
             CompilerDiagnostic::invalid_import_path(import_path.clone(), reason, location);
-        return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+        return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
     }
 
     Ok(())
@@ -136,7 +140,7 @@ pub(crate) fn validate_import_case_sensitivity(
             };
             let diagnostic =
                 CompilerDiagnostic::invalid_import_path(import_path.clone(), reason, location);
-            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+            return Err(ImportPathResolutionError::Diagnostic(Box::new(diagnostic)));
         }
     }
 

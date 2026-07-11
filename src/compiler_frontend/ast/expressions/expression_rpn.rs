@@ -27,24 +27,8 @@ pub struct ExpressionRpn {
 }
 
 impl ExpressionRpn {
-    /// Source span covering the first and last item locations.
-    pub fn source_location(&self) -> SourceLocation {
-        let Some(first) = self.items.first() else {
-            return SourceLocation::default();
-        };
-        let Some(last) = self.items.last() else {
-            return first.source_location();
-        };
-        let first_location = first.source_location();
-        let last_location = last.source_location();
-        SourceLocation::new(
-            first_location.scope,
-            first_location.start_pos,
-            last_location.end_pos,
-        )
-    }
-
-    /// Returns an empty expression-owned RPN stack.
+    /// Returns an empty expression-owned RPN stack for coercion fixtures.
+    #[cfg(test)]
     pub fn empty() -> Self {
         Self { items: Vec::new() }
     }
@@ -137,11 +121,6 @@ impl PlaceExpression {
     /// Returns true when this place resolves to a mutable local or field.
     pub fn is_mutable(&self) -> bool {
         self.value_mode.is_mutable()
-    }
-
-    /// Source location of this place expression.
-    pub fn source_location(&self) -> SourceLocation {
-        self.location.clone()
     }
 
     /// Remap all interned string IDs inside this place recursively.

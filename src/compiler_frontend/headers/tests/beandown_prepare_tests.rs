@@ -1,7 +1,7 @@
 //! Beandown synthetic-header preparation tests.
 //!
 //! WHAT: verifies that `.bd` files enter the frontend as one normal private
-//! `content #String` constant with a structurally generated `$markdown` template initializer.
+//! `content #String` constant with a structurally generated `$md` template initializer.
 
 use super::prepare_beandown_file;
 use crate::compiler_frontend::FrontendBuildProfile;
@@ -21,6 +21,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 };
 use crate::compiler_frontend::headers::types::{FileRole, HeaderExportMode};
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
+use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::pipeline::{
@@ -35,6 +36,7 @@ use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizerEntryMode}
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -219,11 +221,13 @@ export render_html || -> String:
         let mut source_file_kinds = SourceFileKindRegistry::new();
         source_file_kinds.register("bd", SourceFileKind::Beandown);
 
-        let project_path_resolver = ProjectPathResolver::new(
+        let module_roots = prepared_module_roots(&entry_root, &canonical_files);
+        let project_path_resolver = ProjectPathResolver::new_with_module_roots(
             project_root.clone(),
             entry_root.clone(),
             &source_libraries,
             &source_file_kinds,
+            module_roots,
         )
         .expect("test project path resolver should build");
 
@@ -416,6 +420,51 @@ export render_html || -> String:
     }
 }
 
+fn prepared_module_roots(entry_root: &Path, files: &[PathBuf]) -> ModuleRootTable {
+    let mut roots_by_directory = BTreeMap::<PathBuf, (Option<PathBuf>, Option<PathBuf>)>::new();
+
+    for file in files {
+        if !file.starts_with(entry_root) {
+            continue;
+        }
+
+        let Some(file_name) = file.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !file_name.starts_with('#')
+            || file.extension().and_then(|ext| ext.to_str()) != Some("bst")
+        {
+            continue;
+        }
+
+        let directory = file
+            .parent()
+            .expect("fixture source file should have a parent")
+            .to_path_buf();
+        let (root_file, facade_file) = roots_by_directory.entry(directory).or_default();
+
+        if file_name == "#mod.bst" {
+            *facade_file = Some(file.clone());
+        } else {
+            *root_file = Some(file.clone());
+        }
+    }
+
+    let records = roots_by_directory
+        .into_iter()
+        .filter_map(|(directory, (root_file, facade_file))| {
+            let root_file = root_file.or_else(|| facade_file.clone())?;
+            Some(ModuleRootRecord::with_facade(
+                directory,
+                root_file,
+                facade_file,
+            ))
+        })
+        .collect();
+
+    ModuleRootTable::from_records(records)
+}
+
 fn first_diagnostic_from_bag(bag: DiagnosticBag) -> Box<CompilerDiagnostic> {
     Box::new(
         bag.into_diagnostics()
@@ -563,6 +612,27 @@ fn simple_markdown_body_folds_like_markdown_template() {
 }
 
 #[test]
+fn nested_beandown_template_defaults_to_markdown_formatting() {
+    let (ast, string_table) = ast_from_beandown_source("[:# Nested]");
+
+    assert_eq!(folded_content_value(&ast, &string_table), "<h1>Nested</h1>");
+}
+
+#[test]
+fn explicit_nested_raw_directive_overrides_beandown_markdown_default() {
+    let (ast, string_table) = ast_from_beandown_source("[$raw:# Nested]");
+
+    assert_eq!(folded_content_value(&ast, &string_table), "# Nested");
+}
+
+#[test]
+fn explicit_nested_non_formatter_directive_overrides_beandown_markdown_default() {
+    let (ast, string_table) = ast_from_beandown_source("[$fresh:# Nested]");
+
+    assert_eq!(folded_content_value(&ast, &string_table), "# Nested");
+}
+
+#[test]
 fn beandown_compile_time_if_folds_inside_content_constant() {
     let (ast, string_table) = ast_from_beandown_source("[if true: visible]");
 
@@ -589,7 +659,7 @@ fn empty_beandown_body_generates_markdown_template_initializer() {
     assert!(matches!(kinds[0], TokenKind::TemplateHead));
     assert!(matches!(
         kinds[1],
-        TokenKind::StyleDirective(id) if string_table.resolve(*id) == "markdown"
+        TokenKind::StyleDirective(id) if string_table.resolve(*id) == "md"
     ));
     assert!(matches!(kinds[2], TokenKind::StartTemplateBody));
     assert!(matches!(kinds[3], TokenKind::TemplateClose));
@@ -1114,5 +1184,170 @@ fn beandown_external_prelude_call_rejected_by_const_folding() {
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnescapedImplicitTemplateClose)
         ),
         "external prelude calls should fail through semantic const-template rules, got {diagnostic:?}"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// TIR-backed construction alignment tests
+// -----------------------------------------------------------------------------
+//
+// WHAT: prove that `.bd` files reach the same normal template parsing and TIR
+// construction path as authored `$md` templates, rather than a
+// Beandown-specific old-authority object.
+
+/// Extracts the body tokens from a synthetic markdown-template initializer,
+/// i.e. everything between `StartTemplateBody` and `TemplateClose`.
+fn synthetic_template_body_tokens(
+    output: &FileFrontendPrepareOutput,
+) -> &[crate::compiler_frontend::tokenizer::tokens::Token] {
+    let declaration = content_constant(output);
+    let start_index = declaration
+        .initializer_tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::StartTemplateBody))
+        .expect("md template initializer should have StartTemplateBody");
+    let close_index = declaration
+        .initializer_tokens
+        .iter()
+        .rposition(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .expect("md template initializer should have TemplateClose");
+
+    &declaration.initializer_tokens[start_index + 1..close_index]
+}
+
+#[test]
+fn beandown_synthetic_initializer_has_normal_markdown_template_shape() {
+    let (output, string_table) = prepare_directly("# Heading\n\nParagraph.");
+    let declaration = content_constant(&output);
+    let kinds = initializer_kinds(&output);
+
+    assert!(
+        kinds.len() >= 4,
+        "md template initializer should have wrapper tokens plus body tokens, got {kinds:?}"
+    );
+    assert!(
+        matches!(kinds[0], TokenKind::TemplateHead),
+        "first token should be TemplateHead, got {:?}",
+        kinds[0]
+    );
+    assert!(
+        matches!(
+            kinds[1],
+            TokenKind::StyleDirective(id) if string_table.resolve(*id) == "md"
+        ),
+        "second token should be $md style directive, got {:?}",
+        kinds[1]
+    );
+    assert!(
+        matches!(kinds[2], TokenKind::StartTemplateBody),
+        "third token should be StartTemplateBody, got {:?}",
+        kinds[2]
+    );
+    assert!(
+        matches!(kinds[kinds.len() - 1], TokenKind::TemplateClose),
+        "last token should be TemplateClose, got {:?}",
+        kinds[kinds.len() - 1]
+    );
+
+    let body_tokens = synthetic_template_body_tokens(&output);
+    assert!(
+        !body_tokens.is_empty(),
+        "body should contain the original markdown tokens"
+    );
+    assert!(
+        declaration.initializer_references.is_empty(),
+        "pure markdown body should not introduce symbol references"
+    );
+}
+
+#[test]
+fn beandown_body_tokens_are_literal_template_body_text() {
+    let source = "# Heading\n\nParagraph.";
+    let (output, string_table) = prepare_directly(source);
+    let body_tokens = synthetic_template_body_tokens(&output);
+
+    assert!(
+        !body_tokens.is_empty(),
+        ".bd body should tokenize into at least one body token"
+    );
+
+    let concatenated: String = body_tokens
+        .iter()
+        .map(|token| match &token.kind {
+            TokenKind::StringSliceLiteral(id) => string_table.resolve(*id),
+            other => panic!(".bd body token should be literal text, got {other:?}"),
+        })
+        .collect();
+
+    assert_eq!(
+        concatenated, source,
+        ".bd body tokens should preserve the original source text as template body literals"
+    );
+}
+
+#[test]
+fn beandown_folded_output_matches_authored_markdown_template() {
+    let source = "# Heading";
+    let (bd_ast, bd_string_table) = ast_from_beandown_source(source);
+    let bd_folded = folded_content_value(&bd_ast, &bd_string_table);
+
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/content.bst");
+    let entry_file_path = PathBuf::from("src/#page.bst");
+    let prepared_file = prepare_beanstalk_source(
+        &format!("content #= [$md: {source}]"),
+        &file_path,
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    let external_package_registry = Arc::new(ExternalPackageRegistry::new());
+    let project_path = std::env::temp_dir();
+    let project_path_resolver = ProjectPathResolver::new(
+        project_path.clone(),
+        project_path,
+        &SourceLibraryRegistry::default(),
+        &SourceFileKindRegistry::default(),
+    )
+    .expect("test project path resolver should build");
+
+    let headers = parse_headers(
+        vec![prepared_file],
+        &external_package_registry,
+        &ExternalImportResolutionTable::default(),
+        Some(&project_path_resolver),
+        &mut string_table,
+    )
+    .expect("authored md headers should parse");
+    let sorted_headers =
+        resolve_module_dependencies(headers, &mut string_table).expect("headers should sort");
+    let entry_dir = InternedPath::from_single_str("src/#page.bst", &mut string_table);
+
+    let authored_ast = Ast::new(
+        AstBuildInput {
+            headers: sorted_headers.headers,
+            module_symbols: sorted_headers.module_symbols,
+            import_environment: sorted_headers.import_environment,
+            top_level_const_fragments: sorted_headers.top_level_const_fragments,
+        },
+        AstBuildContext {
+            external_package_registry,
+            style_directives: &StyleDirectiveRegistry::built_ins(),
+            string_table: &mut string_table,
+            entry_dir,
+            build_profile: FrontendBuildProfile::Dev,
+            project_path_resolver: Some(project_path_resolver),
+            path_format_config: PathStringFormatConfig::default(),
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            capacity_estimate: Default::default(),
+        },
+    )
+    .expect("authored md template constant should build through AST");
+
+    let authored_folded = folded_constant_value(&authored_ast, &string_table, "content");
+
+    assert_eq!(
+        bd_folded, authored_folded,
+        "Beandown folded output should match authored $md template folded output"
     );
 }

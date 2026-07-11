@@ -17,6 +17,7 @@ use super::parse_expression_dispatch::{
 };
 use super::source_function_calls::{SourceCallableMemberInput, parse_source_callable_member};
 use super::struct_instance::{StructConstructorParseInput, parse_struct_constructor_expression};
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::field_access::reference_expression_from_declaration;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
@@ -108,8 +109,11 @@ pub(super) fn parse_identifier_or_call(
         // record coercion can validate field values instead of rejecting the
         // struct symbol itself as a non-constant reference.
         if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-            && let Some(struct_constructor) = context
-                .source_struct_constructor(binding.as_declaration(), type_interner.environment())
+            && let Some(struct_constructor) = context.source_struct_constructor(
+                binding.as_declaration(),
+                type_interner.environment(),
+                string_table,
+            )?
         {
             let struct_instance = parse_struct_constructor_expression(
                 token_stream,
@@ -140,9 +144,11 @@ pub(super) fn parse_identifier_or_call(
 
         // Choice constructors are routed through their own parser.
         if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
-            if context
-                .is_source_choice_declaration(binding.as_declaration(), type_interner.environment())
-            {
+            if context.is_source_choice_declaration(
+                binding.as_declaration(),
+                type_interner.environment(),
+                string_table,
+            )? {
                 let choice_value = parse_choice_construct(
                     token_stream,
                     binding.as_declaration(),
@@ -186,17 +192,31 @@ pub(super) fn parse_identifier_or_call(
             .into());
         }
 
-        // Constant contexts reject non-constant local references.
-        if context.kind.is_constant_context()
-            && !binding.value.is_compile_time_constant()
-            && !binding.is_unresolved_constant_placeholder()
-        {
-            return Err(CompilerDiagnostic::compile_time_evaluation_error(
-                CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
-                Some(identifier),
-                token_stream.current_location(),
-            )
-            .into());
+        // Constant contexts reject non-constant local references. The unresolved
+        // constant placeholder exemption is checked before TIR classification so
+        // placeholders that have not been folded yet are not rejected prematurely.
+        // Template constness comes from the registry-qualified effective view so
+        // imported and composed templates retain their exact store and overlays.
+        if context.kind.is_constant_context() && !binding.is_unresolved_constant_placeholder() {
+            let is_compile_time_constant = binding
+                .value
+                .const_value_kind_with_template_classifier(&mut |template| {
+                    classify_template_from_effective_tir(
+                        template,
+                        &context.template_ir_registry,
+                        string_table,
+                    )
+                })?
+                .is_compile_time_value();
+
+            if !is_compile_time_constant {
+                return Err(CompilerDiagnostic::compile_time_evaluation_error(
+                    CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
+                    Some(identifier),
+                    token_stream.current_location(),
+                )
+                .into());
+            }
         }
 
         match context.source_callable_signature(binding.as_declaration()) {

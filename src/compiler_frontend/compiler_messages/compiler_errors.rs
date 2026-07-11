@@ -89,9 +89,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::path::Path;
 
-// -----------------------
+// -------------------------
 //  Compiler Message Set
-// -----------------------
+// -------------------------
 
 #[derive(Debug, Clone)]
 pub struct CompilerMessages {
@@ -182,6 +182,32 @@ impl CompilerMessages {
     /// Borrow the ordered diagnostic stream for render helpers that need a slice.
     pub(crate) fn diagnostic_slice(&self) -> &[CompilerDiagnostic] {
         &self.diagnostics
+    }
+
+    /// Return the original diagnostic indexes in display order.
+    ///
+    /// WHAT: sorts diagnostics by severity bucket (`Error`, then `Warning`, then `Note`) while
+    /// keeping the original compiler production order within each bucket.
+    /// WHY: some aggregation paths prepend warnings before errors, but users expect to see errors
+    /// first. This is a render-time policy, not a mutation of `diagnostics`.
+    ///
+    /// Renderers must keep using the returned original index with
+    /// `diagnostic_render_context(index)` so that type-context lookups stay aligned with the
+    /// stored diagnostic positions.
+    pub(crate) fn diagnostic_display_order(&self) -> Vec<usize> {
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+        let mut notes = Vec::new();
+
+        for (index, diagnostic) in self.diagnostics.iter().enumerate() {
+            match diagnostic.severity {
+                DiagnosticSeverity::Error => errors.push(index),
+                DiagnosticSeverity::Warning => warnings.push(index),
+                DiagnosticSeverity::Note => notes.push(index),
+            }
+        }
+
+        errors.into_iter().chain(warnings).chain(notes).collect()
     }
 
     /// Append already-structured diagnostics while preserving current order.

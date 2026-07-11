@@ -17,8 +17,8 @@
 //! method lookup) so body parsing is self-contained without referencing the mutable environment
 //! builder directly.
 //! Semantic lookups are immutable after environment construction. Interior-mutable shared state is
-//! limited to emission side channels: diagnostics/warnings, rendered path usages, and generic
-//! function instantiation requests consumed by `AstEmitter`.
+//! limited to emission side channels plus the AST-local current-state TIR cache tied to the shared
+//! module TIR store.
 //!
 //! ## External symbol visibility
 //!
@@ -31,7 +31,6 @@
 //! they must never re-resolve names globally through the registry.
 
 use crate::compiler_frontend::FrontendBuildProfile;
-use crate::compiler_frontend::arena::TemplateCapacityPolicy;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionInstanceKey, GenericFunctionInstantiationRequest,
@@ -41,6 +40,9 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrRegistry, TemplateIrStore, TemplateStoreId, TirFoldCache,
+};
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -96,7 +98,7 @@ use scope_frame::{ScopeArena, ScopeFrameId};
 /// Global counter for generating unique synthetic scope paths in child control-flow contexts.
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// Immutable shared state common to a scope and all its cloned children.
+/// Shared state common to a scope and all its cloned children.
 ///
 /// WHAT: bundles all state that is identical across child scopes so cloning a
 /// `ScopeContext` only copies per-scope mutable fields and one `Rc` pointer.
@@ -129,7 +131,6 @@ pub struct ScopeShared {
     pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(crate) generic_function_instantiation_requests:
         Rc<RefCell<Vec<GenericFunctionInstantiationRequest>>>,
-
     // Path resolution and source identity.
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) source_file_scope: Option<InternedPath>,
@@ -161,6 +162,29 @@ pub struct ScopeContext {
     // WHY: replaces per-frame `Rc<ScopeFrame>` allocations with stable IDs and
     //      index-based parent chains.
     pub(crate) arena: Rc<RefCell<ScopeArena>>,
+
+    /// Module-local TIR registry shared by all scope contexts in this module AST build.
+    ///
+    /// WHAT: owns every `TemplateIrStore` for the module, allocates stores, tracks freeze
+    ///       state, and validates cross-store references.
+    /// WHY: the final TIR system allows multiple stores per module; the registry keeps
+    ///      store identity explicit so child scope constructors pass the same owner.
+    pub(crate) template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+
+    /// Registry-level ID of the primary TIR store shared by this scope tree.
+    ///
+    /// WHAT: identifies which store in `template_ir_registry` the `template_ir_store`
+    ///       handle refers to.
+    /// WHY: lets the registry resolve store-qualified refs without pointer comparisons.
+    pub(crate) template_ir_store_id: TemplateStoreId,
+
+    /// AST-local TIR store shared by template parsing contexts for this module AST build.
+    ///
+    /// WHAT: a shared handle to the registry-owned primary store. Parser-emitted template
+    ///       nodes are written here; existing direct-store consumers keep using this handle.
+    /// WHY: `TemplateIrId`s are meaningful only inside their originating store, so nested
+    ///      template emission needs one owner that all cloned/child parser contexts share.
+    pub(crate) template_ir_store: Rc<RefCell<TemplateIrStore>>,
 
     // Stable ID of the frame that owns this scope layer's local declarations.
     //
@@ -209,14 +233,6 @@ pub struct ScopeContext {
 
     // Control flow state.
     pub loop_depth: usize,
-
-    /// Per-template initial capacity policy inherited from the module estimate.
-    ///
-    /// WHAT: pre-sizes template content atom vectors during parsing without passing the
-    ///       whole `FrontendArenaCapacityEstimate` through every parser call.
-    /// WHY: keeps capacity policy narrow and stage-local while still reaching nested
-    ///      template construction boundaries through the existing scope context flow.
-    pub(crate) template_capacity_policy: TemplateCapacityPolicy,
 }
 
 impl Clone for ScopeContext {
@@ -236,6 +252,9 @@ impl Clone for ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
+            template_ir_registry: Rc::clone(&self.template_ir_registry),
+            template_ir_store_id: self.template_ir_store_id,
+            template_ir_store: Rc::clone(&self.template_ir_store),
             current_frame_id: new_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -248,7 +267,6 @@ impl Clone for ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
-            template_capacity_policy: self.template_capacity_policy,
         }
     }
 }
@@ -431,11 +449,20 @@ impl ScopeContext {
         let root_frame_id = arena.borrow_mut().alloc_root_frame_with_capacity(0);
         record_scope_frame_depth(0);
 
+        let mut registry = TemplateIrRegistry::new();
+        let template_ir_store_id = registry.allocate_store();
+        let template_ir_store = registry
+            .store_handle(template_ir_store_id)
+            .expect("primary store should exist immediately after allocation");
+
         ScopeContext {
             kind,
             scope,
             shared,
             arena,
+            template_ir_registry: Rc::new(RefCell::new(registry)),
+            template_ir_store_id,
+            template_ir_store,
             current_frame_id: root_frame_id,
             unavailable_assignment_targets: FxHashSet::default(),
             pending_catch_assignment_targets: FxHashSet::default(),
@@ -448,7 +475,6 @@ impl ScopeContext {
             generic_template_validation: false,
             generic_function_instantiation_stack: Vec::new(),
             loop_depth: 0,
-            template_capacity_policy: TemplateCapacityPolicy::default(),
         }
     }
 
@@ -494,6 +520,9 @@ impl ScopeContext {
             scope,
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
+            template_ir_registry: Rc::clone(&self.template_ir_registry),
+            template_ir_store_id: self.template_ir_store_id,
+            template_ir_store: Rc::clone(&self.template_ir_store),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -510,7 +539,6 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth,
-            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -539,6 +567,9 @@ impl ScopeContext {
             scope: self.scope.append(function_name),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
+            template_ir_registry: Rc::clone(&self.template_ir_registry),
+            template_ir_store_id: self.template_ir_store_id,
+            template_ir_store: Rc::clone(&self.template_ir_store),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -551,7 +582,6 @@ impl ScopeContext {
             generic_template_validation: false,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: 0,
-            template_capacity_policy: self.template_capacity_policy,
         };
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
@@ -574,6 +604,9 @@ impl ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
+            template_ir_registry: Rc::clone(&self.template_ir_registry),
+            template_ir_store_id: self.template_ir_store_id,
+            template_ir_store: Rc::clone(&self.template_ir_store),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -586,7 +619,6 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
-            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -614,6 +646,9 @@ impl ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
+            template_ir_registry: Rc::clone(&self.template_ir_registry),
+            template_ir_store_id: self.template_ir_store_id,
+            template_ir_store: Rc::clone(&self.template_ir_store),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -626,7 +661,6 @@ impl ScopeContext {
             generic_template_validation: self.generic_template_validation,
             generic_function_instantiation_stack: self.generic_function_instantiation_stack.clone(),
             loop_depth: self.loop_depth,
-            template_capacity_policy: self.template_capacity_policy,
         }
     }
 
@@ -650,6 +684,9 @@ impl ScopeContext {
             scope,
             shared: Rc::clone(&parent.shared),
             arena: Rc::clone(&parent.arena),
+            template_ir_registry: Rc::clone(&parent.template_ir_registry),
+            template_ir_store_id: parent.template_ir_store_id,
+            template_ir_store: Rc::clone(&parent.template_ir_store),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: parent.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: parent.pending_catch_assignment_targets.clone(),
@@ -664,7 +701,6 @@ impl ScopeContext {
                 .generic_function_instantiation_stack
                 .clone(),
             loop_depth: parent.loop_depth,
-            template_capacity_policy: parent.template_capacity_policy,
         }
     }
 }

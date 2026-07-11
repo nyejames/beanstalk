@@ -44,7 +44,7 @@ pub(super) fn validate_and_apply_config_ast(
     let mut errors = Vec::new();
     let mut seen_config_keys = HashSet::new();
 
-    // Only top-level `#` constant declarations authored in `#config.bst` are config keys.
+    // Only top-level `#` constant declarations authored in `config.bst` are config keys.
     // Imported library constants and types are support surface, not entries.
     let authored_scope = parsed_config.authored_config_path.as_path();
 
@@ -88,7 +88,7 @@ pub(super) fn validate_and_apply_config_ast(
         }
     }
 
-    // 2. Reject authored start-body statements in `#config.bst`.
+    // 2. Reject authored start-body statements in `config.bst`.
     // Only top-level `#` constants are config entries; plain bindings and runtime statements are not.
     for node in &parsed_config.ast.nodes {
         let NodeKind::Function(path, _, body) = &node.kind else {
@@ -280,10 +280,6 @@ fn extract_config_value_for_shape(
     shape: ConfigValueShape,
     string_table: &mut StringTable,
 ) -> Result<ValidatedConfigValue, InvalidConfigReason> {
-    if !expression.is_compile_time_constant() {
-        return Err(InvalidConfigReason::ValueCouldNotFold);
-    }
-
     match shape {
         ConfigValueShape::String => extract_string_value(expression, string_table)
             .map(ValidatedConfigValue::String)

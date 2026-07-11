@@ -13,15 +13,20 @@ pub use crate::compiler_frontend::ast::expressions::expression_kind::{
 pub use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, PlaceExpression,
 };
+#[cfg(test)]
+pub use crate::compiler_frontend::ast::expressions::expression_types::FallibleCarrierVariant;
 pub use crate::compiler_frontend::ast::expressions::expression_types::{
-    ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleExpressionHandling,
-    FallibleHandling,
+    ConstRecordState, ConstValueKind, FallibleExpressionHandling, FallibleHandling,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, TemplateConstValueKind,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::{
+    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff,
+};
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -30,7 +35,9 @@ use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey, diagnostic_type_spelling};
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+#[cfg(test)]
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -393,7 +400,9 @@ pub(crate) fn expression_value_shape_for_diagnostic_type(
 ) -> ExpressionValueShape {
     match data_type {
         DataType::StringSlice => ExpressionValueShape::PlainStringSlice,
-        DataType::Template | DataType::TemplateWrapper => ExpressionValueShape::TemplateString,
+        DataType::Template => ExpressionValueShape::TemplateString,
+        #[cfg(test)]
+        DataType::TemplateWrapper => ExpressionValueShape::TemplateString,
         DataType::Path(_) => ExpressionValueShape::CompileTimePath,
         _ => ExpressionValueShape::Ordinary,
     }
@@ -433,10 +442,9 @@ pub(crate) fn type_id_hint_for_diagnostic_type(data_type: &DataType) -> TypeId {
         // Decimal is intentionally inactive in the Alpha surface. The hint is
         // preserved only for diagnostic round-tripping of the inactive builtin.
         DataType::Decimal => builtin_type_ids::DECIMAL,
-        DataType::StringSlice
-        | DataType::Template
-        | DataType::TemplateWrapper
-        | DataType::Path(_) => builtin_type_ids::STRING,
+        DataType::StringSlice | DataType::Template | DataType::Path(_) => builtin_type_ids::STRING,
+        #[cfg(test)]
+        DataType::TemplateWrapper => builtin_type_ids::STRING,
         DataType::Char => builtin_type_ids::CHAR,
         DataType::Range => builtin_type_ids::RANGE,
         DataType::None | DataType::Inferred => builtin_type_ids::NONE,
@@ -458,12 +466,13 @@ pub struct ChoiceConstructInput {
 }
 
 impl Expression {
-    /// Returns the narrow string projection used by compile-time folding/debug paths.
+    /// Returns the narrow string projection used by constant-expression fixtures.
     ///
     /// WHAT: converts literal-like expression shapes into their folded text representation and
     /// returns an empty string for non-renderable runtime constructs.
     /// WHY: this is not a user-facing renderer. Runtime output and public path strings have
     /// stronger formatting contracts owned by template lowering and path formatting.
+    #[cfg(test)]
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
             // Scalar literals
@@ -496,6 +505,8 @@ impl Expression {
             // Opaque / non-renderable
             ExpressionKind::Copy(..) => String::new(),
             ExpressionKind::Template(..) => String::new(),
+            ExpressionKind::RuntimeTemplateHandoff(..) => String::new(),
+            ExpressionKind::RuntimeSlotApplicationHandoff(..) => String::new(),
 
             // Aggregates
             ExpressionKind::Collection(items, ..) => {
@@ -1017,7 +1028,8 @@ impl Expression {
         expression
     }
 
-    /// Constructs a fallible carrier (result) expression.
+    /// Constructs a fallible carrier expression for lowering fixtures.
+    #[cfg(test)]
     pub fn result_construct_with_type_id(
         variant: FallibleCarrierVariant,
         value: Expression,
@@ -1192,10 +1204,14 @@ impl Expression {
         )
     }
 
-    /// Constructs a template expression.
+    /// Constructs a template expression without provisional reactive metadata.
+    ///
+    /// WHAT: records the template value and its source shape while leaving
+    /// `reactive_template` unset.
+    /// WHY: AST finalization owns the module store and recomputes authoritative
+    /// metadata through TIR before normalization and HIR lowering.
     pub fn template(template: Template, value_mode: ValueMode) -> Self {
         let location = template.location.to_owned();
-        let reactive_template = template.reactive_template_metadata();
         let mut expression = Self::new(
             ExpressionKind::Template(Box::new(template)),
             location,
@@ -1203,7 +1219,59 @@ impl Expression {
             DataType::Template,
             value_mode,
         );
-        expression.reactive_template = reactive_template;
+        expression.value_shape = ExpressionValueShape::TemplateString;
+        expression
+    }
+
+    /// Constructs the final AST-owned payload for an ordinary runtime template.
+    ///
+    /// WHAT: records the neutral owned handoff shape directly on the expression while preserving
+    /// the existing `String`/template value metadata used by callers.
+    /// WHY: Phase 11 introduces the final AST shape before consumer cutover, so construction is
+    /// explicit and testable without changing HIR lowering behavior.
+    #[allow(
+        dead_code,
+        reason = "Phase 11 introduces the final expression shape before finalization cutover wires production callers"
+    )]
+    pub(crate) fn runtime_template_handoff(
+        handoff: OwnedRuntimeTemplateHandoff,
+        value_mode: ValueMode,
+    ) -> Self {
+        let location = handoff.location.to_owned();
+        let mut expression = Self::new(
+            ExpressionKind::RuntimeTemplateHandoff(Box::new(handoff)),
+            location,
+            builtin_type_ids::STRING,
+            DataType::Template,
+            value_mode,
+        );
+        expression.reactive_template = Some(ReactiveTemplateMetadata::template_backed());
+        expression.value_shape = ExpressionValueShape::TemplateString;
+        expression
+    }
+
+    /// Constructs the final AST-owned payload for a runtime slot application.
+    ///
+    /// WHAT: stores routed slot application data as neutral owned AST payload.
+    /// WHY: later HIR cutover can lower slot applications from this variant without reaching
+    /// through `Template::runtime_slot_handoff` or any TIR registry/store reference.
+    #[allow(
+        dead_code,
+        reason = "Phase 11 introduces the final expression shape before finalization cutover wires production callers"
+    )]
+    pub(crate) fn runtime_slot_application_handoff(
+        handoff: OwnedRuntimeSlotApplicationHandoff,
+        value_mode: ValueMode,
+    ) -> Self {
+        let location = handoff.location.to_owned();
+        let mut expression = Self::new(
+            ExpressionKind::RuntimeSlotApplicationHandoff(Box::new(handoff)),
+            location,
+            builtin_type_ids::STRING,
+            DataType::Template,
+            value_mode,
+        );
+        expression.reactive_template = Some(ReactiveTemplateMetadata::template_backed());
         expression.value_shape = ExpressionValueShape::TemplateString;
         expression
     }
@@ -1294,45 +1362,44 @@ impl Expression {
         .with_regular_division_provenance(contains_regular_division)
     }
 
-    /// Returns true if this expression is a compile-time constant.
-    pub fn is_compile_time_constant(&self) -> bool {
-        self.const_value_kind().is_compile_time_value()
-    }
-
     /// Returns true if this expression represents a function declaration that has
     /// a receiver parameter (`this` or `This`).
     pub(crate) fn is_receiver_function(&self) -> bool {
         self.function_receiver.is_some()
     }
 
-    /// Checks whether every expression in a slice is a compile-time constant.
-    fn expressions_are_constant(expressions: &[Expression]) -> bool {
-        expressions.iter().all(Expression::is_compile_time_constant)
-    }
-
-    /// Checks whether every declaration's value in a slice is a compile-time constant.
-    fn declarations_are_constant(declarations: &[Declaration]) -> bool {
-        declarations
-            .iter()
-            .all(|declaration| declaration.value.is_compile_time_constant())
-    }
-
-    /// Classifies the compile-time const-ness of this expression.
-    pub fn const_value_kind(&self) -> ConstValueKind {
-        match &self.kind {
+    /// Classifies expression constness through a caller-owned template authority.
+    ///
+    /// WHAT: keeps ordinary expression-shape recursion in one owner while the
+    ///       caller supplies the stage-appropriate classification for template
+    ///       payloads.
+    /// WHY: finalization already owns registry-qualified effective TIR views,
+    ///      while earlier parser callers still materialize current TIR. Both
+    ///      paths must preserve identical non-template const semantics without
+    ///      duplicating the expression walk.
+    pub(crate) fn const_value_kind_with_template_classifier(
+        &self,
+        classify_template: &mut impl FnMut(&Template) -> Result<TemplateConstValueKind, TemplateError>,
+    ) -> Result<ConstValueKind, TemplateError> {
+        let kind = match &self.kind {
             // Literal scalars are always compile-time constants.
             ExpressionKind::Int(_)
             | ExpressionKind::Float(_)
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
-            | ExpressionKind::Char(_)
-            | ExpressionKind::Path(_) => ConstValueKind::Literal,
+            | ExpressionKind::Char(_) => ConstValueKind::Literal,
+
+            #[cfg(test)]
+            ExpressionKind::Path(_) => ConstValueKind::Literal,
 
             // Composite values are constant only when every sub-field is constant.
             ExpressionKind::ChoiceConstruct { fields, .. } => {
                 if fields.is_empty() {
                     ConstValueKind::Literal
-                } else if Self::declarations_are_constant(fields) {
+                } else if Self::declarations_are_constant_with_template_classifier(
+                    fields,
+                    classify_template,
+                )? {
                     ConstValueKind::Composite
                 } else {
                     ConstValueKind::NonConst
@@ -1340,7 +1407,10 @@ impl Expression {
             }
 
             ExpressionKind::Collection(items) => {
-                if Self::expressions_are_constant(items) {
+                if Self::expressions_are_constant_with_template_classifier(
+                    items,
+                    classify_template,
+                )? {
                     ConstValueKind::Composite
                 } else {
                     ConstValueKind::NonConst
@@ -1353,7 +1423,10 @@ impl Expression {
             }
 
             ExpressionKind::StructInstance(fields) => {
-                if Self::declarations_are_constant(fields) {
+                if Self::declarations_are_constant_with_template_classifier(
+                    fields,
+                    classify_template,
+                )? {
                     ConstValueKind::Composite
                 } else {
                     ConstValueKind::NonConst
@@ -1361,24 +1434,32 @@ impl Expression {
             }
 
             ExpressionKind::Range(start, end) => {
-                if start.is_compile_time_constant() && end.is_compile_time_constant() {
+                if start
+                    .const_value_kind_with_template_classifier(classify_template)?
+                    .is_compile_time_value()
+                    && end
+                        .const_value_kind_with_template_classifier(classify_template)?
+                        .is_compile_time_value()
+                {
                     ConstValueKind::Composite
                 } else {
                     ConstValueKind::NonConst
                 }
             }
 
-            // Template const classification is delegated to the template.
-            ExpressionKind::Template(template) => match template.const_value_kind() {
-                TemplateConstValueKind::RenderableString => ConstValueKind::RenderableTemplate,
-                TemplateConstValueKind::WrapperTemplate => ConstValueKind::TemplateWrapper,
-                TemplateConstValueKind::SlotInsertHelper => ConstValueKind::SlotInsertTemplate,
-                TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
-            },
+            // The caller supplies the template authority for its compiler stage.
+            ExpressionKind::Template(template) => {
+                let template_kind = classify_template(template)?;
+                Self::const_value_kind_from_template_kind(template_kind)
+            }
 
             // Fallible carriers preserve const-ness of the wrapped value.
+            #[cfg(test)]
             ExpressionKind::FallibleCarrierConstruct { value, .. } => {
-                if value.is_compile_time_constant() {
+                if value
+                    .const_value_kind_with_template_classifier(classify_template)?
+                    .is_compile_time_value()
+                {
                     ConstValueKind::Composite
                 } else {
                     ConstValueKind::NonConst
@@ -1389,6 +1470,8 @@ impl Expression {
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
+            | ExpressionKind::RuntimeTemplateHandoff(_)
+            | ExpressionKind::RuntimeSlotApplicationHandoff(_)
             | ExpressionKind::Function(..)
             | ExpressionKind::FunctionCall { .. }
             | ExpressionKind::Cast { .. }
@@ -1408,8 +1491,56 @@ impl Expression {
 
             // Delegate const classification to the wrapped value — the coercion
             // does not change whether an expression is compile-time foldable.
-            ExpressionKind::Coerced { value, .. } => value.const_value_kind(),
-            // Dynamic trait wrappers are runtime-only; they cannot appear in const contexts
+            ExpressionKind::Coerced { value, .. } => {
+                value.const_value_kind_with_template_classifier(classify_template)?
+            }
+        };
+
+        Ok(kind)
+    }
+
+    fn expressions_are_constant_with_template_classifier(
+        expressions: &[Expression],
+        classify_template: &mut impl FnMut(&Template) -> Result<TemplateConstValueKind, TemplateError>,
+    ) -> Result<bool, TemplateError> {
+        for expression in expressions {
+            if !expression
+                .const_value_kind_with_template_classifier(classify_template)?
+                .is_compile_time_value()
+            {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn declarations_are_constant_with_template_classifier(
+        declarations: &[Declaration],
+        classify_template: &mut impl FnMut(&Template) -> Result<TemplateConstValueKind, TemplateError>,
+    ) -> Result<bool, TemplateError> {
+        for declaration in declarations {
+            if !declaration
+                .value
+                .const_value_kind_with_template_classifier(classify_template)?
+                .is_compile_time_value()
+            {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    fn const_value_kind_from_template_kind(
+        template_kind: TemplateConstValueKind,
+    ) -> ConstValueKind {
+        match template_kind {
+            TemplateConstValueKind::RenderableString => ConstValueKind::RenderableTemplate,
+            TemplateConstValueKind::LoopControlSignal => ConstValueKind::Composite,
+            TemplateConstValueKind::WrapperTemplate => ConstValueKind::TemplateWrapper,
+            TemplateConstValueKind::SlotInsertHelper => ConstValueKind::SlotInsertTemplate,
+            TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
         }
     }
 

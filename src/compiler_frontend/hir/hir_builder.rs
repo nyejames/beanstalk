@@ -84,6 +84,7 @@ pub struct HirBuilder<'a> {
     pub(super) string_table: &'a mut StringTable,
 
     // === Path formatting config (origin, output style) ===
+    #[cfg(test)]
     pub(super) path_format_config: PathStringFormatConfig,
 
     // === ID Counters ===
@@ -193,10 +194,14 @@ impl<'a> HirBuilder<'a> {
         path_format_config: PathStringFormatConfig,
         type_environment: TypeEnvironment,
     ) -> HirBuilder<'a> {
+        #[cfg(not(test))]
+        let _ = path_format_config;
+
         HirBuilder {
             module: HirModule::new(),
 
             string_table,
+            #[cfg(test)]
             path_format_config,
             type_environment,
 

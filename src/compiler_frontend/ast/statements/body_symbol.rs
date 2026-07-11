@@ -36,7 +36,6 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 //  Accessed-symbol statement helper
 // --------------------------
 
-#[allow(clippy::result_large_err)]
 fn push_accessed_symbol_statement(
     accessed_expression: Expression,
     ast: &mut Vec<AstNode>,
@@ -44,7 +43,7 @@ fn push_accessed_symbol_statement(
     token_stream: &FileTokens,
     _symbol_id: StringId,
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     if is_expression_statement(&accessed_expression) {
         let location = accessed_expression.location.clone();
         ast.push(AstNode {
@@ -57,57 +56,56 @@ fn push_accessed_symbol_statement(
 
     // A bare field read (e.g., `obj.field`) does nothing, so it is rejected.
     if matches!(accessed_expression.kind, ExpressionKind::FieldAccess { .. }) {
-        return Err(CompilerDiagnostic::invalid_standalone_statement(
+        return Err(Box::new(CompilerDiagnostic::invalid_standalone_statement(
             InvalidStandaloneStatementReason::FieldRead,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     // Any other accessed expression is also not a valid standalone statement.
-    Err(CompilerDiagnostic::invalid_standalone_statement(
+    Err(Box::new(CompilerDiagnostic::invalid_standalone_statement(
         InvalidStandaloneStatementReason::Expression,
         token_stream.current_location(),
-    ))
+    )))
 }
 
 // --------------------------
 //  `this` statement parsing
 // --------------------------
 
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_this_statement(
     token_stream: &mut FileTokens,
     ast: &mut Vec<AstNode>,
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     let this_id = string_table.intern("this");
 
     // `this` cannot be assigned when we are recovering inside a catch block.
     if context.is_assignment_target_unavailable(this_id) {
-        return Err(CompilerDiagnostic::invalid_assignment_target(
+        return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(this_id),
             None,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     let Some(this_reference) = context.get_reference(&this_id) else {
-        return Err(CompilerDiagnostic::invalid_this_usage(
+        return Err(Box::new(CompilerDiagnostic::invalid_this_usage(
             InvalidThisUsageReason::NotInReceiverMethod,
             token_stream.current_location(),
-        ));
+        )));
     };
 
     match token_stream.peek_next_token() {
         // Direct reassignment of `this` is never allowed.
         Some(next_token) if next_token.is_assignment_operator() => {
-            Err(CompilerDiagnostic::invalid_this_usage(
+            Err(Box::new(CompilerDiagnostic::invalid_this_usage(
                 InvalidThisUsageReason::Reassignment,
                 token_stream.current_location(),
-            ))
+            )))
         }
 
         // Field access on `this`: may be a mutation (`this.x = ...`) or a
@@ -121,26 +119,29 @@ pub(crate) fn parse_this_statement(
                 type_interner,
                 string_table,
             )
-            .map_err(CompilerDiagnostic::from)?;
+            .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
 
             if token_stream.current_token_kind().is_assignment_operator() {
                 let Some(target) = place_expression_from_expression(&accessed_node) else {
-                    return Err(CompilerDiagnostic::invalid_assignment_target(
+                    return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
                         InvalidAssignmentTargetReason::NotMutablePlace,
                         None,
                         Some(accessed_node.type_id),
                         token_stream.current_location(),
-                    ));
+                    )));
                 };
 
-                ast.push(handle_mutation_target(
+                let mutation_node = handle_mutation_target(
                     token_stream,
                     this_reference.as_declaration(),
                     target,
                     context,
                     type_interner,
                     string_table,
-                )?);
+                )
+                .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
+
+                ast.push(mutation_node);
                 return Ok(());
             }
 
@@ -179,7 +180,6 @@ pub(crate) fn parse_this_statement(
 //  Symbol-led statement parsing
 // --------------------------
 
-#[allow(clippy::result_large_err)]
 pub(crate) fn parse_symbol_statement(
     token_stream: &mut FileTokens,
     ast: &mut Vec<AstNode>,
@@ -187,35 +187,35 @@ pub(crate) fn parse_symbol_statement(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Result<(), Box<CompilerDiagnostic>> {
     let TokenKind::Symbol(symbol_id) = token_stream.current_token_kind().to_owned() else {
-        return Err(CompilerDiagnostic::expected_symbol_statement(
+        return Err(Box::new(CompilerDiagnostic::expected_symbol_statement(
             token_stream.current_location(),
-        ));
+        )));
     };
 
     // Reject symbols that look like keywords in statement position.
     if let Some(error) = check_mistaken_keyword_symbol(symbol_id, token_stream, string_table) {
-        return Err(error);
+        return Err(Box::new(error));
     }
 
     // Built-in type names cannot be used as value-level symbols.
     if is_reserved_builtin_symbol(string_table.resolve(symbol_id)) {
-        return Err(CompilerDiagnostic::reserved_name_collision(
+        return Err(Box::new(CompilerDiagnostic::reserved_name_collision(
             symbol_id,
             ReservedNameOwner::BuiltinType,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     // Assignment targets are forbidden while recovering inside a catch block.
     if context.is_assignment_target_unavailable(symbol_id) {
-        return Err(CompilerDiagnostic::invalid_assignment_target(
+        return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
             InvalidAssignmentTargetReason::UnavailableInCatchRecovery,
             Some(symbol_id),
             None,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     // Multi-bind syntax (`a, b = ...`) takes priority over single-symbol dispatch.
@@ -233,13 +233,16 @@ pub(crate) fn parse_symbol_statement(
             // Direct reassignment of an existing local variable.
             Some(next_token) if next_token.is_assignment_operator() => {
                 token_stream.advance();
-                ast.push(handle_mutation(
+                let mutation_node = handle_mutation(
                     token_stream,
                     existing_reference.as_declaration(),
                     context,
                     type_interner,
                     string_table,
-                )?);
+                )
+                .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
+
+                ast.push(mutation_node);
                 return Ok(());
             }
 
@@ -253,26 +256,29 @@ pub(crate) fn parse_symbol_statement(
                     type_interner,
                     string_table,
                 )
-                .map_err(CompilerDiagnostic::from)?;
+                .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
 
                 if token_stream.current_token_kind().is_assignment_operator() {
                     let Some(target) = place_expression_from_expression(&accessed_node) else {
-                        return Err(CompilerDiagnostic::invalid_assignment_target(
+                        return Err(Box::new(CompilerDiagnostic::invalid_assignment_target(
                             InvalidAssignmentTargetReason::NotMutablePlace,
                             None,
                             Some(accessed_node.type_id),
                             token_stream.current_location(),
-                        ));
+                        )));
                     };
 
-                    ast.push(handle_mutation_target(
+                    let mutation_node = handle_mutation_target(
                         token_stream,
                         existing_reference.as_declaration(),
                         target,
                         context,
                         type_interner,
                         string_table,
-                    )?);
+                    )
+                    .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
+
+                    ast.push(mutation_node);
                     return Ok(());
                 }
 
@@ -295,11 +301,11 @@ pub(crate) fn parse_symbol_statement(
             | Some(TokenKind::DatatypeString)
             | Some(TokenKind::DatatypeChar)
             | Some(TokenKind::Mutable) => {
-                return Err(CompilerDiagnostic::shadowed_name(
+                return Err(Box::new(CompilerDiagnostic::shadowed_name(
                     symbol_id,
                     existing_reference.value.location.clone(),
                     token_stream.current_location(),
-                ));
+                )));
             }
 
             // Otherwise, parse the symbol as the start of a general expression statement.
@@ -330,11 +336,11 @@ pub(crate) fn parse_symbol_statement(
             let previous_location = context
                 .lookup_visible_external_function_location(symbol_id)
                 .unwrap_or_default();
-            return Err(CompilerDiagnostic::duplicate_declaration(
+            return Err(Box::new(CompilerDiagnostic::duplicate_declaration(
                 symbol_id,
                 previous_location,
                 token_stream.current_location(),
-            ));
+            )));
         }
 
         token_stream.advance();
@@ -350,7 +356,7 @@ pub(crate) fn parse_symbol_statement(
                 type_interner,
                 string_table,
             })
-            .map_err(CompilerDiagnostic::from)?;
+            .map_err(|error| Box::new(CompilerDiagnostic::from(error)))?;
         ast.push(AstNode {
             kind: NodeKind::ExpressionStatement(external_call_expression),
             location: token_stream.current_location(),
@@ -365,26 +371,26 @@ pub(crate) fn parse_symbol_statement(
         if let Some(receiver_method_entry) =
             context.lookup_visible_receiver_method_by_name(symbol_id)
         {
-            return Err(free_function_receiver_method_call_error(
+            return Err(Box::new(free_function_receiver_method_call_error(
                 symbol_id,
                 receiver_method_entry,
                 token_stream.current_location(),
                 string_table,
-            ));
+            )));
         }
 
         if context.lookup_visible_external_type(symbol_id).is_some() {
-            return Err(CompilerDiagnostic::invalid_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                 InvalidDeclarationReason::ExternalTypeLiteralConstruction,
                 Some(symbol_id),
                 token_stream.current_location(),
-            ));
+            )));
         }
 
-        return Err(CompilerDiagnostic::unknown_value_name(
+        return Err(Box::new(CompilerDiagnostic::unknown_value_name(
             symbol_id,
             token_stream.current_location(),
-        ));
+        )));
     }
 
     // Namespace-record calls such as `canvas.fill_rect(...)` have no local binding for the

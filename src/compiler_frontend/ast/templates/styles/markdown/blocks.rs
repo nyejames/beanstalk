@@ -9,7 +9,7 @@ use super::{
     LeadingChildTemplateLine, MarkdownInlineAtom, MarkdownLine, MarkdownListItemBlock,
     MarkdownListItemFragment, MarkdownListKind, ParsedMarkdownHeadingLine,
 };
-use crate::compiler_frontend::ast::templates::template_render_plan::{
+use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterOpaqueKind, FormatterOutputPiece,
 };
 
@@ -21,7 +21,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 /// - A child-template anchor followed by same-line content starts a fresh paragraph.
 ///
 /// WHY:
-/// - `$markdown` needs to keep child templates opaque while still letting a single
+/// - `$md` needs to keep child templates opaque while still letting a single
 ///   newline before a child break paragraph context without splitting inline helpers
 ///   from their same-line text.
 pub(super) fn render_plain_region(

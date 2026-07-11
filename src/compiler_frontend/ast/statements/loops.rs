@@ -18,6 +18,14 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 
+/// Stage-local result for loop statement AST construction.
+///
+/// WHY: `CompilerDiagnostic` is large enough that returning it directly inside a
+/// `Result` triggers `clippy::result_large_err`. Boxing at this boundary keeps
+/// the loop-statement owner uniform with `loop_headers` without changing
+/// diagnostic semantics.
+type LoopResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Parse a complete `loop` statement after the `loop` keyword has been consumed.
 pub fn create_loop(
     token_stream: &mut FileTokens,
@@ -25,7 +33,7 @@ pub fn create_loop(
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompilerDiagnostic> {
+) -> LoopResult<AstNode> {
     ast_log!("Creating a Loop");
 
     let location = token_stream.current_location();
@@ -37,10 +45,10 @@ pub fn create_loop(
         .iter()
         .all(|token| matches!(token.kind, TokenKind::Newline))
     {
-        return Err(CompilerDiagnostic::invalid_loop_header(
+        return Err(Box::new(CompilerDiagnostic::invalid_loop_header(
             InvalidLoopHeaderReason::EmptyHeader,
             location.clone(),
-        ));
+        )));
     }
 
     let (parsed_loop_header, body_context) = parse_loop_header_tokens(
@@ -81,7 +89,7 @@ pub fn create_loop(
     })
 }
 
-fn find_loop_header_colon_index(token_stream: &FileTokens) -> Result<usize, CompilerDiagnostic> {
+fn find_loop_header_colon_index(token_stream: &FileTokens) -> LoopResult<usize> {
     let mut nesting_depth = NestingDepth::default();
     let mut search_index = token_stream.index;
 
@@ -94,20 +102,20 @@ fn find_loop_header_colon_index(token_stream: &FileTokens) -> Result<usize, Comp
         }
 
         if is_top_level && matches!(token.kind, TokenKind::End | TokenKind::Eof) {
-            return Err(CompilerDiagnostic::invalid_loop_header(
+            return Err(Box::new(CompilerDiagnostic::invalid_loop_header(
                 InvalidLoopHeaderReason::MissingColon,
                 token.location.clone(),
-            ));
+            )));
         }
 
         nesting_depth.step(&token.kind);
         search_index += 1;
     }
 
-    Err(CompilerDiagnostic::invalid_loop_header(
+    Err(Box::new(CompilerDiagnostic::invalid_loop_header(
         InvalidLoopHeaderReason::MissingColon,
         token_stream.current_location(),
-    ))
+    )))
 }
 
 #[cfg(test)]

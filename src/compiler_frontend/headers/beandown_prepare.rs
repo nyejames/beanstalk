@@ -18,7 +18,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, To
 use crate::compiler_frontend::utilities::token_scan::collect_symbol_references;
 use std::path::PathBuf;
 
-const BEANDOWN_MARKDOWN_DIRECTIVE: &str = "markdown";
+const BEANDOWN_MARKDOWN_DIRECTIVE: &str = "md";
 
 /// Build the header-stage output for one `.bd` source file.
 ///

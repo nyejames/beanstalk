@@ -102,6 +102,7 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
+            crate::timing::start_command_timing();
             let start = Instant::now();
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
             match build::build_project(&project_builder, &path, &flags) {
@@ -112,17 +113,20 @@ pub fn start_cli() {
                         match env::current_dir() {
                             Ok(path) => path,
                             Err(error) => {
+                                log_cli_total("command.build.total", start);
                                 print_formatted_error(
                                     CompilerError::compiler_error(format!(
                                         "Could not resolve current directory for build outputs: {error}"
                                     )),
                                     &build_result.string_table,
                                 );
+                                crate::timing::print_command_timing_summary();
                                 return;
                             }
                         }
                     };
 
+                    let output_write_start = crate::timing::start_pipeline_timing();
                     let write_result = build::write_project_outputs(
                         &build_result.project,
                         &build::WriteOptions {
@@ -132,20 +136,27 @@ pub fn start_cli() {
                         },
                         &build_result.string_table,
                     );
+                    log_cli_timing("command.build.output_write", output_write_start);
 
                     match write_result {
                         Ok(()) => {
                             let duration = start.elapsed();
+                            log_cli_total("command.build.total", start);
                             print_build_message(build_result, duration);
                         }
                         Err(mut messages) => {
+                            log_cli_total("command.build.total", start);
                             messages.extend_diagnostics(build_result.warnings);
                             print_compiler_messages(messages);
                         }
                     }
                 }
-                Err(messages) => print_compiler_messages(messages),
+                Err(messages) => {
+                    log_cli_total("command.build.total", start);
+                    print_compiler_messages(messages);
+                }
             }
+            crate::timing::print_command_timing_summary();
         }
 
         Command::Check { path, terse } => {
@@ -183,6 +194,30 @@ pub fn start_cli() {
             }
         }
     }
+}
+
+/// Record a CLI command stage timing through the central `timers` substrate.
+#[cfg(feature = "timers")]
+fn log_cli_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
+    crate::timing::record_started_pipeline_timing(metric, start);
+}
+
+/// No-op timing recorder when `timers` is off.
+#[cfg(not(feature = "timers"))]
+fn log_cli_timing(_metric: &str, _start: crate::timing::PipelineTimingStart) {
+    let _ = (_metric, _start);
+}
+
+/// Record the total CLI build duration from the user-visible command start.
+#[cfg(feature = "timers")]
+fn log_cli_total(metric: &str, start: Instant) {
+    crate::timing::record_pipeline_timing(metric, start.elapsed());
+}
+
+/// No-op total recorder when `timers` is off.
+#[cfg(not(feature = "timers"))]
+fn log_cli_total(_metric: &str, _start: Instant) {
+    let _ = (_metric, _start);
 }
 
 fn integration_tests_exit_code(summary: IntegrationRunSummary) -> i32 {
@@ -495,7 +530,29 @@ fn print_build_message(build_result: BuildResult, duration: std::time::Duration)
         Green Bold #duration,
     );
 
-    print_compiler_messages(CompilerMessages::empty(build_result.string_table));
+    if !build_result.warnings.is_empty() {
+        let messages =
+            CompilerMessages::from_diagnostics(build_result.warnings, build_result.string_table);
+        print_compiler_messages(messages);
+    }
+}
+
+/// Build a `CompilerMessages` container for the warnings produced during a successful build.
+///
+/// WHAT: centralises the conversion so tests can verify exactly which warnings a successful build
+/// would print without relying on stdout capture.
+/// WHY: `print_build_message` delegates to `print_compiler_messages`, which writes to the terminal.
+/// This helper is the decision boundary for whether any output is produced at all.
+#[cfg(test)]
+fn build_warnings_messages(build_result: &BuildResult) -> Option<CompilerMessages> {
+    if build_result.warnings.is_empty() {
+        return None;
+    }
+
+    Some(CompilerMessages::from_diagnostics(
+        build_result.warnings.clone(),
+        build_result.string_table.clone(),
+    ))
 }
 
 #[cfg(test)]

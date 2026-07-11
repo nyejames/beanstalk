@@ -1,6 +1,6 @@
 //! Shared HTML page-routing policy parsing and defaults.
 //!
-//! WHAT: parses routing-related `#config.bst` settings into typed values.
+//! WHAT: parses routing-related `config.bst` settings into typed values.
 //! WHY: keeping one parser avoids drift between builder validation and dev-server runtime behavior.
 
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
@@ -38,7 +38,7 @@ impl Default for HtmlSiteConfig {
 
 /// Parse and validate HTML site config keys from the project config map.
 ///
-/// WHAT: resolves defaults plus optional overrides from `#config.bst`.
+/// WHAT: resolves defaults plus optional overrides from `config.bst`.
 /// WHY: site configuration must be explicit and strict so all runtime/build tooling stays aligned.
 pub fn parse_html_site_config(
     config: &Config,

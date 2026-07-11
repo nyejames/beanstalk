@@ -12,15 +12,28 @@
 //!
 //! The entry point creates one `AstBuildContext`, then each phase narrows to `AstPhaseContext`
 //! and re-borrows the `StringTable` as needed.
+//!
+//! ## TIR registry ownership
+//!
+//! `AstPhaseContext` owns the module-local `TemplateIrRegistry` that allocates and tracks
+//! every `TemplateIrStore` used during AST template construction. The registry allocates a
+//! capacity-sized primary store; the context carries a shared `Rc<RefCell<TemplateIrStore>>`
+//! handle to that primary store so existing direct-store consumers continue working while
+//! later phases migrate to registry-qualified refs.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrRegistry, TemplateIrStore, TemplateStoreId,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Shared dependencies and configuration required to build one module AST.
@@ -73,6 +86,30 @@ pub(crate) struct AstPhaseContext<'a> {
     pub(crate) path_format_config: PathStringFormatConfig,
     pub(crate) template_const_loop_iteration_limit: usize,
     pub(crate) capacity_estimate: FrontendArenaCapacityEstimate,
+
+    /// Module-local TIR registry that owns every `TemplateIrStore` for this AST phase.
+    ///
+    /// WHAT: allocates stores, tracks freeze state, and validates cross-store references.
+    /// WHY: the final TIR system allows multiple stores per module; the registry keeps
+    ///      store identity explicit and centralizes cross-store invariants.
+    pub(crate) template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
+
+    /// Registry-level ID of the primary store that parser contexts share.
+    ///
+    /// WHAT: identifies the capacity-sized store allocated by the registry for this
+    ///       module's primary template parsing.
+    /// WHY: child scope constructors pass the store ID alongside the store handle so the
+    ///      registry can resolve store-qualified refs without pointer comparisons.
+    pub(crate) template_ir_store_id: TemplateStoreId,
+
+    /// AST-local template IR store shared by all parser contexts in this module phase.
+    ///
+    /// WHAT: a shared handle to the registry-owned primary store. Existing direct-store
+    ///       consumers keep using this handle; later phases migrate to registry-qualified
+    ///       refs via `template_ir_registry` + `template_ir_store_id`.
+    /// WHY: `TemplateIrId` values are store-local, so root and nested template parses must
+    ///      share the same owner until B7 makes TIR authoritative.
+    pub(crate) template_ir_store: Rc<RefCell<TemplateIrStore>>,
 }
 
 impl<'a> AstPhaseContext<'a> {
@@ -95,6 +132,12 @@ impl<'a> AstPhaseContext<'a> {
             capacity_estimate,
         } = context;
 
+        let mut registry = TemplateIrRegistry::new();
+        let template_ir_store_id = registry.allocate_primary_store_with_capacity(capacity_estimate);
+        let template_ir_store = registry
+            .store_handle(template_ir_store_id)
+            .expect("primary store should exist immediately after allocation");
+
         (
             Self {
                 external_package_registry,
@@ -105,6 +148,9 @@ impl<'a> AstPhaseContext<'a> {
                 path_format_config,
                 template_const_loop_iteration_limit,
                 capacity_estimate,
+                template_ir_registry: Rc::new(RefCell::new(registry)),
+                template_ir_store_id,
+                template_ir_store,
             },
             string_table,
         )

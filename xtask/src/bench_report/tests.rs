@@ -94,12 +94,31 @@ fn report_handles_missing_counters_from_old_records() {
     let suite = &report.suites[0];
 
     assert_eq!(suite.stage_movements[0].stage_name, "ast_ms");
-    assert!(
-        suite
-            .ratios
-            .iter()
-            .any(|ratio| { ratio.name == "ast_ms/ast_header_count" && ratio.case_name == "docs" })
-    );
+    assert!(suite.ratios.iter().any(|ratio| {
+        ratio.name == "frontend.ast/ast_header_count" && ratio.case_name == "docs"
+    }));
+}
+
+#[test]
+fn report_calculates_ratios_from_dotted_stage_metrics() {
+    let system = test_system("SYSTEM-A");
+    let runs = vec![run_record(
+        "2026-05-01T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record(
+            "docs",
+            20.0,
+            vec![metric("frontend.file_prepare", 8.0)],
+            vec![metric("source_file_count", 4.0)],
+        )],
+    )];
+
+    let report = calculate_benchmark_report(&runs, Some(&system));
+
+    assert!(report.suites[0].ratios.iter().any(|ratio| {
+        ratio.name == "frontend.file_prepare/source_file_count" && ratio.case_name == "docs"
+    }));
 }
 
 #[test]
@@ -167,6 +186,81 @@ fn report_skips_zero_denominator_ratios() {
     let report = calculate_benchmark_report(&runs, Some(&system));
 
     assert!(report.suites[0].ratios.is_empty());
+}
+
+#[test]
+fn report_flags_unattributed_cli_wall_time() {
+    let system = test_system("SYSTEM-A");
+    let runs = vec![run_record(
+        "2026-05-01T12:00",
+        BenchmarkSuiteKind::EndToEndCli,
+        "SYSTEM-A",
+        vec![case_record(
+            "check_root_file",
+            1_000.0,
+            vec![
+                metric("command.check.path_validation", 10.0),
+                metric("command.check.builder_construction", 5.0),
+                metric("command.check.bootstrap", 20.0),
+                metric("command.check.compile_project_frontend", 15.0),
+                metric("command.check.message_rendering", 2.0),
+            ],
+            vec![],
+        )],
+    )];
+
+    let report = calculate_benchmark_report(&runs, Some(&system));
+    let rendered = format_benchmark_report(&report);
+
+    assert_eq!(report.suites[0].unattributed_cases.len(), 1);
+    assert_eq!(
+        report.suites[0].unattributed_cases[0].name,
+        "check_root_file"
+    );
+    assert!(rendered.contains("Unattributed wall time:"));
+    assert!(rendered.contains("check_root_file"));
+}
+
+#[test]
+fn report_flags_unattributed_build_wall_time() {
+    let system = test_system("SYSTEM-A");
+    let runs = vec![run_record(
+        "2026-05-01T12:00",
+        BenchmarkSuiteKind::EndToEndCli,
+        "SYSTEM-A",
+        vec![case_record(
+            "build_module_root",
+            1_000.0,
+            vec![
+                metric("build_project.path_validation", 5.0),
+                metric("build_project.bootstrap", 30.0),
+                metric("build_project.compile_project_frontend", 200.0),
+                metric("build_project.backend", 150.0),
+                metric("command.build.output_write", 20.0),
+                // Nested totals that must NOT be summed to avoid double-counting.
+                metric("build_project.total", 405.0),
+                metric("command.build.total", 425.0),
+                metric("output.write_total", 19.5),
+            ],
+            vec![],
+        )],
+    )];
+
+    let report = calculate_benchmark_report(&runs, Some(&system));
+    let rendered = format_benchmark_report(&report);
+
+    // Attributed sum = 5 + 30 + 200 + 150 + 20 = 405ms; wall = 1000ms;
+    // unattributed = 595ms which exceeds the 100ms threshold.
+    assert_eq!(report.suites[0].unattributed_cases.len(), 1);
+    assert_eq!(
+        report.suites[0].unattributed_cases[0].name,
+        "build_module_root"
+    );
+    let unattributed = &report.suites[0].unattributed_cases[0];
+    assert!((unattributed.unattributed_ms - 595.0).abs() < 0.01);
+    assert!((unattributed.unattributed_ratio - 0.595).abs() < 0.001);
+    assert!(rendered.contains("Unattributed wall time:"));
+    assert!(rendered.contains("build_module_root"));
 }
 
 #[test]

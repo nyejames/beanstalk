@@ -6,6 +6,7 @@
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallArgumentResolutionContext, CallDiagnosticContext, expectations_from_constructor_fields,
     resolve_call_arguments,
@@ -345,7 +346,21 @@ pub(super) fn parse_choice_construct(
                             false
                         };
 
-                    if !value.is_compile_time_constant() && !is_placeholder_reference {
+                    let value_is_compile_time_constant = if is_placeholder_reference {
+                        true
+                    } else {
+                        value
+                            .const_value_kind_with_template_classifier(&mut |template| {
+                                classify_template_from_effective_tir(
+                                    template,
+                                    &context.template_ir_registry,
+                                    string_table,
+                                )
+                            })?
+                            .is_compile_time_value()
+                    };
+
+                    if !value_is_compile_time_constant {
                         let field_name = field
                             .name
                             .name()

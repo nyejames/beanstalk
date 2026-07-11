@@ -204,6 +204,7 @@ impl<'a> HirValidator<'a> {
                 self.validate_module_const_value(start)?;
                 self.validate_module_const_value(end)?;
             }
+            #[cfg(test)]
             HirConstValue::Result { value, .. } => {
                 self.validate_module_const_value(value)?;
             }

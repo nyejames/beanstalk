@@ -110,7 +110,10 @@ body {
   color: #222222;
   color: light-dark(#222222, #ddd);
   font-family: var(--bst-font-family-monospace);
-  white-space: break-spaces;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
   tab-size: 4;
 }
 .bs-code-comment,
@@ -388,12 +391,15 @@ body {
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>cast value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     </code></pre><p><code>Error(...)</code> remains a constructor. Scalar constructor-style conversions such as <code>Int(...)</code>, <code>Float(...)</code>, <code>Bool(...)</code>, <code>String(...)</code>, and <code>Char(...)</code> are rejected. Use <code>cast</code> instead.</p></section>
     <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase. Mutibility can change the underlaying data type but is not actually part of the type.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th> 
     </tr>
 
-             
+
+
+                 
 
     <tr style="border-bottom: 1px dotted grey;">
               <td style="padding: 0.2em 0.5em;  "> Float </td>  <td style="padding: 0.2em 0.5em;  "> 64-bit floating point number</td> 
@@ -406,14 +412,18 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
               <td style="padding: 0.2em 0.5em;  "> String </td>  <td style="padding: 0.2em 0.5em;  "> UTF-8 string slice or string template</td> 
         </tr>
+            
+
+    </table><h2>Numerical Types</h2><p>These may be extended to smaller sized and unsigned variants in the future. By default, <code>&quot;Float&quot;</code> is a finite 64-bit floating point type and <code>&quot;Int&quot;</code> is a signed 32-bit integer type.</p><p>The language currently supports a small set of core types but may be extended in the future.</p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices. </p><p><code>&quot;Double quotes for a UTF-8 string slice&quot;</code></p><p>Backticks create raw string slices in expression position. Inside template bodies, backticks are ordinary text available to formatters such as <code>$md</code>.</p><p>Scenes are used instead of format strings.</p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa.</p><h2>Mathematical Operators</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+
         
-    </table><h2>Numerical Types</h2><p>These may be extended to smaller sized and unsigned variants in the future. By default, <code>&quot;Float&quot;</code> is a finite 64-bit floating point type and <code>&quot;Int&quot;</code> is a signed 32-bit integer type.</p><p>The language currently supports a small set of core types but may be extended in the future.</p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices. </p><p><code>&quot;Double quotes for a UTF-8 string slice&quot;</code></p><p>Backticks create raw string slices in expression position. Inside template bodies, backticks are ordinary text available to formatters such as <code>$markdown</code>.</p><p>Scenes are used instead of format strings.</p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa.</p><h2>Mathematical Operators</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-        
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Operator</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Precedence</th> 
+        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Operator</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Precedence</th> 
     </tr>
 
-            
+
+
+                
     <tr style="border-bottom: 1px dotted grey;">
               <td style="padding: 0.2em 0.5em;  "> ^</td>         <td style="padding: 0.2em 0.5em;  "> Exponent</td>             <td style="padding: 0.2em 0.5em;  "> 4</td> 
         </tr>
@@ -435,7 +445,8 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
               <td style="padding: 0.2em 0.5em;  "> -</td>         <td style="padding: 0.2em 0.5em;  "> Subtraction</td>           <td style="padding: 0.2em 0.5em;  "> 2</td> 
         </tr>
-        
+            
+
     </table></section>
     <script>
     function __bs_is_ref(value) {

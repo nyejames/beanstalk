@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE RANDOM]
 
-#[section, $markdown:
+#[section, $md:
     `@core/random` provides basic random number helpers for the HTML JavaScript path.
 
     `random_float()` returns a `Float`.

@@ -88,13 +88,16 @@ impl ScopeContext {
     ) -> Result<TemplateFoldContext<'b>, CompilerError> {
         let resolver = self.required_project_path_resolver(operation)?;
         let source_file_scope = self.required_source_file_scope(operation)?;
+
         Ok(TemplateFoldContext {
             string_table,
             project_path_resolver: resolver,
             path_format_config: &self.path_format_config,
             source_file_scope,
             template_const_loop_iteration_limit: self.shared.template_const_loop_iteration_limit,
+            template_ir_registry: Some(Rc::clone(&self.template_ir_registry)),
             bindings: Vec::new(),
+            fold_cache: TirFoldCache::new(),
         })
     }
 }

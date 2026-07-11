@@ -24,6 +24,14 @@ use crate::compiler_frontend::traits::definitions::{
     ResolvedTraitDefinition, ResolvedTraitRequirement, TraitReceiverRequirement,
 };
 
+/// Boxed diagnostic result for the connected trait-requirement matching family.
+///
+/// Requirement lookup and signature validation recurse through one owner and
+/// propagate directly into the already boxed evidence-validation boundary.
+/// Boxing here keeps each local `Result` small without changing accumulation
+/// or rendered diagnostic ownership.
+type RequirementValidationResult<T = ()> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(super) struct ImplementationMethod<'a> {
     pub(super) entry: &'a ReceiverMethodEntry,
     pub(super) receiver_type_id: TypeId,
@@ -43,7 +51,7 @@ pub(super) fn validate_requirements(
     target: &ConformanceTarget,
     conformance_source_file: &InternedPath,
     context: &mut RequirementValidationContext<'_, '_>,
-) -> Result<Vec<TraitRequirementEvidence>, CompilerDiagnostic> {
+) -> RequirementValidationResult<Vec<TraitRequirementEvidence>> {
     let mut requirement_methods = Vec::with_capacity(trait_definition.requirements.len());
 
     for requirement in &trait_definition.requirements {
@@ -135,7 +143,7 @@ fn validate_requirement_signature(
     trait_this_type: TypeId,
     method: &ImplementationMethod<'_>,
     context: &mut RequirementValidationContext<'_, '_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> RequirementValidationResult {
     let required_receiver_mutable = match requirement.receiver {
         TraitReceiverRequirement::Immutable { .. } => false,
         TraitReceiverRequirement::Mutable { .. } => true,
@@ -150,7 +158,8 @@ fn validate_requirement_signature(
             },
             context.conformance_location.clone(),
             requirement_and_method_labels(requirement, method.entry, context.string_table),
-        ));
+        )
+        .into());
     }
 
     validate_parameters(requirement, trait_this_type, method, context)?;
@@ -163,7 +172,7 @@ fn validate_parameters(
     trait_this_type: TypeId,
     method: &ImplementationMethod<'_>,
     context: &mut RequirementValidationContext<'_, '_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> RequirementValidationResult {
     let method_parameters = method
         .entry
         .signature
@@ -182,7 +191,8 @@ fn validate_parameters(
             },
             context.conformance_location.clone(),
             requirement_and_method_labels(requirement, method.entry, context.string_table),
-        ));
+        )
+        .into());
     }
 
     for (index, (required, actual)) in requirement
@@ -201,7 +211,8 @@ fn validate_parameters(
                 },
                 context.conformance_location.clone(),
                 requirement_and_method_labels(requirement, method.entry, context.string_table),
-            ));
+            )
+            .into());
         }
 
         let expected_type =
@@ -218,7 +229,8 @@ fn validate_parameters(
                 },
                 context.conformance_location.clone(),
                 requirement_and_method_labels(requirement, method.entry, context.string_table),
-            ));
+            )
+            .into());
         }
     }
 
@@ -230,7 +242,7 @@ fn validate_returns(
     trait_this_type: TypeId,
     method: &ImplementationMethod<'_>,
     context: &mut RequirementValidationContext<'_, '_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> RequirementValidationResult {
     let method_returns = &method.entry.signature.returns;
     if requirement.returns.len() != method_returns.len() {
         return Err(invalid_conformance(
@@ -243,7 +255,8 @@ fn validate_returns(
             },
             context.conformance_location.clone(),
             requirement_and_method_labels(requirement, method.entry, context.string_table),
-        ));
+        )
+        .into());
     }
 
     for (index, (required, actual)) in requirement.returns.iter().zip(method_returns).enumerate() {
@@ -257,7 +270,8 @@ fn validate_returns(
                 },
                 context.conformance_location.clone(),
                 requirement_and_method_labels(requirement, method.entry, context.string_table),
-            ));
+            )
+            .into());
         }
 
         let Some(actual_type) = return_type_id(actual) else {
@@ -276,7 +290,8 @@ fn validate_returns(
                 },
                 context.conformance_location.clone(),
                 requirement_and_method_labels(requirement, method.entry, context.string_table),
-            ));
+            )
+            .into());
         };
 
         let expected_type =
@@ -293,7 +308,8 @@ fn validate_returns(
                 },
                 context.conformance_location.clone(),
                 requirement_and_method_labels(requirement, method.entry, context.string_table),
-            ));
+            )
+            .into());
         }
     }
 

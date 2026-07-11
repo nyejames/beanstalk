@@ -26,4 +26,4 @@ mod reactive_subscriptions;
 // -------------------------
 
 pub(crate) use core_directives::apply_doc_comment_defaults;
-pub use head_parser::parse_template_head;
+pub(crate) use head_parser::{ParsedTemplateHead, TemplateHeadParseRequest, parse_template_head};

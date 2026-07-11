@@ -30,6 +30,12 @@ impl From<CompilerDiagnostic> for TemplateError {
     }
 }
 
+impl From<Box<CompilerDiagnostic>> for TemplateError {
+    fn from(diagnostic: Box<CompilerDiagnostic>) -> Self {
+        TemplateError::Diagnostic(diagnostic)
+    }
+}
+
 impl From<CompilerError> for TemplateError {
     fn from(error: CompilerError) -> Self {
         TemplateError::Infrastructure(Box::new(error))

@@ -6,33 +6,37 @@
 //! WHY: Separates body token consumption from head parsing and composition,
 //! keeping each parsing phase focused and testable.
 
-#![allow(clippy::result_large_err)]
+use std::rc::Rc;
+
 use crate::ast_log;
-use crate::compiler_frontend::arena::TemplateCapacityPolicy;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::if_headers::{ParsedIfHeader, parse_if_header};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateAtom, TemplateParsingMode, TemplateSegment,
-    TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, SlotPlaceholder, Style, TemplateParsingMode, TemplateSegmentOrigin,
+    TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_body_sentinels::{
-    DirectLoopControlMarker, ElseSentinelPolicy, TemplateBodyBoundary, TemplateBodyControlContext,
-    classify_direct_else_marker, classify_direct_loop_control_marker,
-    ensure_else_boundary_after_sentinel, ensure_else_content_starts_on_new_boundary,
-    ensure_loop_control_boundary_after_sentinel, ensure_loop_control_boundary_before_sentinel,
-    handle_direct_else_marker, loop_control_marker_close_index, loop_control_marker_location,
-    malformed_loop_control_reason, orphan_loop_control_diagnostic, remap_else_if_inline_diagnostic,
-    trim_leading_whitespace_atoms, trim_trailing_whitespace_atoms,
+    BodySentinelTarget, DirectLoopControlMarker, ElseSentinelPolicy, TemplateBodyBoundary,
+    TemplateBodyControlContext, classify_direct_else_marker, classify_direct_loop_control_marker,
+    ensure_else_boundary_after_sentinel, ensure_loop_control_boundary_after_sentinel,
+    ensure_loop_control_boundary_before_sentinel, first_line_has_meaningful_text,
+    handle_direct_else_marker, inline_else_diagnostic, loop_control_marker_close_index,
+    loop_control_marker_location, malformed_loop_control_reason, orphan_loop_control_diagnostic,
+    remap_else_if_inline_diagnostic,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBodyParseMode, TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch,
-    TemplateControlFlow, TemplateControlFlowValidationMode, TemplateFallbackBranch,
-    TemplateIfBodyParseInput, TemplateLoopBodyParseInput, TemplateLoopControlFlow,
-    TemplateLoopControlKind, TemplateLoopControlSignal,
-    inline_source_consts_for_const_required_if_condition,
+    TemplateBodyParseMode, TemplateBranchChain, TemplateBranchChainBodyScratch,
+    TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
+    TemplateControlFlowBodyScratch, TemplateControlFlowTirReference,
+    TemplateControlFlowValidationMode, TemplateFallbackBranch, TemplateIfBodyParseInput,
+    TemplateLoopBodyParseInput, TemplateLoopBodyScratch, TemplateLoopControlFlow,
+    TemplateLoopControlKind, inline_source_consts_for_const_required_if_condition,
 };
-use crate::compiler_frontend::ast::templates::template_types::{Template, TemplateInheritance};
+use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateConstructionContext, TemplateIrBranch, TemplateIrNodeId, TemplateIrNodeKind,
+    TemplateTirBodyReference, TemplateWrapperReference,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
@@ -42,7 +46,12 @@ use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::consume_balanced_template_region;
-use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Boxed diagnostic result for the template body-parser family.
+///
+/// Nested body operations share this boundary so large structured diagnostics propagate without
+/// repeated boxing between parser and sentinel helpers.
+type BodyParseResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 // -------------------------
 //  Body Parser Entry
@@ -56,8 +65,9 @@ use crate::compiler_frontend::value_mode::ValueMode;
 pub(crate) fn parse_template_body(
     token_stream: &mut FileTokens,
     template: &mut Template,
+    construction_context: &mut TemplateConstructionContext,
     input: TemplateBodyParseRequest<'_, '_>,
-) -> Result<(), CompilerDiagnostic> {
+) -> BodyParseResult<TemplateControlFlowBodyScratch> {
     let TemplateBodyParseRequest {
         context,
         type_interner,
@@ -67,7 +77,7 @@ pub(crate) fn parse_template_body(
         control_context,
         foldable,
         string_table,
-        capacity_policy,
+        default_style,
     } = input;
 
     // Pre-intern common single-character literals used on every newline and
@@ -84,26 +94,32 @@ pub(crate) fn parse_template_body(
         control_flow_validation,
         foldable,
         string_table,
-        capacity_policy,
         newline_id,
         open_bracket_id,
         close_bracket_id,
+        default_style,
     };
 
     match body_mode {
-        TemplateBodyParseMode::Normal => parser
-            .parse_content(
+        TemplateBodyParseMode::Normal => {
+            let owner = BodyOwnerSnapshot::from_template(template);
+            let parse_input = BodyParseInput {
                 context,
-                template,
-                control_context.with_else_policy(ElseSentinelPolicy::Orphan),
-                InheritedChildWrapperPolicy::Apply,
-            )
-            .map(|_| ()),
+                owner: &owner,
+                control_context: control_context.with_else_policy(ElseSentinelPolicy::Orphan),
+                inherited_wrappers: InheritedChildWrapperPolicy::Apply,
+            };
+            parser
+                .parse_content(parse_input, construction_context)
+                .map(|_| TemplateControlFlowBodyScratch::None)
+        }
 
-        TemplateBodyParseMode::If(input) => parser.parse_if_body(template, *input, control_context),
+        TemplateBodyParseMode::If(input) => {
+            parser.parse_if_body(template, construction_context, *input, control_context)
+        }
 
         TemplateBodyParseMode::Loop(input) => {
-            parser.parse_loop_body(template, *input, control_context)
+            parser.parse_loop_body(template, construction_context, *input, control_context)
         }
     }
 }
@@ -118,16 +134,13 @@ pub(crate) struct TemplateBodyParseRequest<'a, 'types> {
     pub(crate) context: &'a ScopeContext,
     pub(crate) type_interner: &'a mut AstTypeInterner<'types>,
     pub(crate) body_mode: TemplateBodyParseMode,
-    pub(crate) direct_child_wrappers: &'a [Template],
+    pub(crate) direct_child_wrappers: &'a [TemplateWrapperReference],
     pub(crate) control_flow_validation: TemplateControlFlowValidationMode,
     pub(crate) control_context: TemplateBodyControlContext,
     pub(crate) foldable: &'a mut bool,
     pub(crate) string_table: &'a mut StringTable,
-    /// Per-template capacity policy inherited from the parsing context.
-    ///
-    /// WHAT: lets branch/loop body templates pre-size their atom vectors without
-    ///       threading the whole module estimate through recursive body parsing.
-    pub(crate) capacity_policy: TemplateCapacityPolicy,
+    /// Source-kind policy applied to child templates without an explicit formatter.
+    pub(crate) default_style: Option<Style>,
 }
 
 /// Options that stay stable for one template node while its head and body are parsed.
@@ -136,11 +149,12 @@ pub(crate) struct TemplateBodyParseRequest<'a, 'types> {
 /// body-control state for recursive template construction.
 /// WHY: nested template parsing needs these three values together, and grouping
 /// them keeps `Template::new_nested_template` from becoming a long argument list.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct NestedTemplateParseOptions {
     pub(crate) parsing_mode: TemplateParsingMode,
     pub(crate) control_flow_validation: TemplateControlFlowValidationMode,
     pub(crate) control_context: TemplateBodyControlContext,
+    pub(crate) default_style: Option<Style>,
 }
 
 impl NestedTemplateParseOptions {
@@ -149,6 +163,7 @@ impl NestedTemplateParseOptions {
             parsing_mode: TemplateParsingMode::Standard,
             control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
             control_context: TemplateBodyControlContext::normal(),
+            default_style: None,
         }
     }
 
@@ -157,35 +172,52 @@ impl NestedTemplateParseOptions {
             parsing_mode: TemplateParsingMode::Standard,
             control_flow_validation: TemplateControlFlowValidationMode::ConstRequired,
             control_context: TemplateBodyControlContext::normal(),
+            default_style: None,
         }
     }
+
+    pub(crate) fn with_default_style(mut self, default_style: Option<Style>) -> Self {
+        self.default_style = default_style;
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BodyParseInput<'context, 'owner> {
+    context: &'context ScopeContext,
+    owner: &'owner BodyOwnerSnapshot,
+    control_context: TemplateBodyControlContext,
+    inherited_wrappers: InheritedChildWrapperPolicy,
 }
 
 struct TemplateBodyParser<'a, 'types> {
     token_stream: &'a mut FileTokens,
     type_interner: &'a mut AstTypeInterner<'types>,
-    direct_child_wrappers: &'a [Template],
+    direct_child_wrappers: &'a [TemplateWrapperReference],
     control_flow_validation: TemplateControlFlowValidationMode,
     foldable: &'a mut bool,
     string_table: &'a mut StringTable,
-    capacity_policy: TemplateCapacityPolicy,
-
     // Cached interned IDs for common single-character literals that appear on
     // every newline and bracket token. Interning once per body parse avoids
     // repeated hash lookups in the hot parsing loop.
     newline_id: StringId,
     open_bracket_id: StringId,
     close_bracket_id: StringId,
+    default_style: Option<Style>,
 }
 
 impl<'a, 'types> TemplateBodyParser<'a, 'types> {
+    /// Parses body tokens into parser TIR.
+    ///
+    /// All body content — literal text, newlines, nested templates, and slot
+    /// definitions — is emitted exclusively into parser TIR through
+    /// `TemplateConstructionContext`. `$doc` suppresses nested template parsing,
+    /// so balanced brackets in documentation bodies remain literal text.
     fn parse_content(
         &mut self,
-        context: &ScopeContext,
-        template: &mut Template,
-        control_context: TemplateBodyControlContext,
-        inherited_wrappers: InheritedChildWrapperPolicy,
-    ) -> Result<TemplateBodyBoundary, CompilerDiagnostic> {
+        input: BodyParseInput<'_, '_>,
+        construction_context: &mut TemplateConstructionContext,
+    ) -> BodyParseResult<TemplateBodyBoundary> {
         // The tokenizer only allows for strings, templates or slots inside the template body.
         let mut last_known_location = self.token_stream.current_location();
         while self.token_stream.index < self.token_stream.tokens.len() {
@@ -196,134 +228,164 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             // Only the error fallback arm needs an owned clone for the diagnostic payload.
             match self.token_stream.current_token_kind() {
                 TokenKind::Eof => {
-                    return Err(CompilerDiagnostic::unexpected_end_of_file(
+                    return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
                         Some(self.close_bracket_id),
                         self.token_stream.current_location(),
-                    ));
+                    )));
                 }
 
                 TokenKind::TemplateClose => {
                     ast_log!("Breaking out of template body. Found a template close.");
-                    // Need to skip the closer
+                    // Consume the closing bracket so the caller resumes after the template body.
                     self.token_stream.advance();
                     return Ok(TemplateBodyBoundary::TemplateClose);
                 }
 
                 TokenKind::TemplateHead => {
                     if let Some(else_marker) = classify_direct_else_marker(self.token_stream) {
+                        let sentinel_target = body_sentinel_target(
+                            construction_context,
+                            input.owner.style.suppress_child_templates,
+                        );
                         return handle_direct_else_marker(
                             self.token_stream,
-                            template,
                             else_marker,
-                            control_context.else_policy,
+                            input.control_context.else_policy,
+                            sentinel_target,
                             self.string_table,
-                        );
+                        )
+                        .map_err(Box::new);
                     }
 
                     if let Some(loop_marker) =
                         classify_direct_loop_control_marker(self.token_stream)
                     {
-                        self.handle_loop_control_marker(template, &loop_marker, control_context)?;
+                        self.handle_loop_control_marker(input, construction_context, &loop_marker)?;
                         continue;
                     }
 
                     // When child templates are suppressed (e.g. `$doc`), brackets are
                     // treated as balanced literal text rather than parsed as nested templates.
-                    if template.style.suppress_child_templates {
+                    if input.owner.style.suppress_child_templates {
                         consume_balanced_brackets_as_literal_text(
                             self.token_stream,
-                            template,
+                            construction_context,
                             self.string_table,
-                            self.newline_id,
-                            self.open_bracket_id,
-                            self.close_bracket_id,
+                            LiteralTemplateTextIds {
+                                newline_id: self.newline_id,
+                                open_bracket_id: self.open_bracket_id,
+                                close_bracket_id: self.close_bracket_id,
+                            },
                         );
                         continue;
                     }
 
-                    self.parse_nested_template(
-                        context,
-                        template,
-                        control_context,
-                        inherited_wrappers,
-                    )?;
+                    self.parse_nested_template(input, construction_context)?;
                     continue;
                 }
 
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
+                    let byte_len = self.string_table.resolve(*content).len();
                     #[cfg(feature = "detailed_timers")]
                     {
-                        add_ast_counter(
-                            AstCounter::TemplateTextBytesParsed,
-                            self.string_table.resolve(*content).len(),
-                        );
+                        add_ast_counter(AstCounter::TemplateTextBytesParsed, byte_len);
                     }
-                    template.content.add(Expression::string_slice(
-                        *content,
-                        self.token_stream.current_location(),
-                        ValueMode::ImmutableOwned,
-                    ));
+                    let location = self.token_stream.current_location();
+                    construction_context.record_text(*content, byte_len, location);
                 }
 
                 TokenKind::Newline => {
                     add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
-                    template.content.add(Expression::string_slice(
-                        self.newline_id,
-                        self.token_stream.current_location(),
-                        ValueMode::ImmutableOwned,
-                    ));
+                    let location = self.token_stream.current_location();
+                    construction_context.record_text(self.newline_id, 1, location);
                 }
 
                 found => {
-                    return Err(CompilerDiagnostic::unexpected_token(
+                    return Err(Box::new(CompilerDiagnostic::unexpected_token(
                         found.clone(),
                         self.token_stream.current_location(),
-                    ));
+                    )));
                 }
             }
 
             self.token_stream.advance();
         }
 
-        Err(CompilerDiagnostic::unexpected_end_of_file(
+        Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
             Some(self.close_bracket_id),
             last_known_location,
-        ))
+        )))
     }
 
+    /// Parses an `[if]` body and any `[else if]` / `[else]` followers into a
+    /// branch-chain control-flow node.
+    ///
+    /// WHAT: each branch body is parsed into a fresh TIR construction context.
+    ///       Branch selectors, fallback bodies and whitespace trimming are
+    ///       collected in source order.
+    /// WHY: branch bodies are TIR-only and must not inherit the parent wrapper
+    ///      policy directly; composition attaches wrappers to the whole chain.
     fn parse_if_body(
         &mut self,
         template: &mut Template,
+        construction_context: &mut TemplateConstructionContext,
         input: TemplateIfBodyParseInput,
         control_context: TemplateBodyControlContext,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> BodyParseResult<TemplateControlFlowBodyScratch> {
         let mut branches = Vec::new();
+        let mut branch_body_scratch = Vec::new();
+        let mut branch_tir_branches = Vec::new();
         let mut branch_selector = input.selector;
         let mut branch_context = input.then_context;
         let mut branch_location = input.location.clone();
         let mut branch_starts_after_else_if = false;
         let fallback;
+        let mut fallback_body_scratch = None;
+        let mut fallback_tir_body = None;
 
+        // -------------------
+        //  Parse branch bodies
+        // -------------------
+
+        let owner = BodyOwnerSnapshot::from_template(template);
         loop {
-            let mut branch_template = empty_body_template_from(template, self.capacity_policy);
+            let mut branch_construction_context =
+                tir_only_body_construction_context(&owner, &branch_context);
+            let parse_input = BodyParseInput {
+                context: &branch_context,
+                owner: &owner,
+                control_context: control_context.with_else_policy(ElseSentinelPolicy::SplitIf),
+                inherited_wrappers: InheritedChildWrapperPolicy::Skip,
+            };
 
-            let boundary = self.parse_content(
-                &branch_context,
-                &mut branch_template,
-                control_context.with_else_policy(ElseSentinelPolicy::SplitIf),
-                InheritedChildWrapperPolicy::Skip,
-            )?;
+            let boundary = self.parse_content(parse_input, &mut branch_construction_context)?;
 
+            // An `[else if]` sentinel ends on the same line as the previous branch's
+            // closing bracket. Strip the leading whitespace that follows it so the
+            // new branch body starts at the first meaningful line.
             if branch_starts_after_else_if {
-                trim_leading_whitespace_atoms(&mut branch_template.content, self.string_table);
+                branch_construction_context.trim_leading_whitespace(self.string_table);
             }
+
+            let (branch_body_tir_reference, branch_body_node_id) = finalize_tir_body_builder(
+                owner.style.clone(),
+                owner.kind.clone(),
+                owner.location.clone(),
+                &mut branch_construction_context,
+            );
+
+            branch_tir_branches.push(TemplateIrBranch::new(
+                branch_selector.clone(),
+                branch_body_node_id,
+                branch_location.clone(),
+            ));
 
             branches.push(TemplateConditionalBranch {
                 selector: branch_selector,
-                content: branch_template.content,
-                render_plan: None,
+                body_tir_reference: Some(branch_body_tir_reference),
                 location: branch_location,
             });
+            branch_body_scratch.push(branch_body_node_id);
 
             match boundary {
                 TemplateBodyBoundary::ElseIf {
@@ -344,12 +406,16 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 }
 
                 TemplateBodyBoundary::Else { location } => {
-                    fallback = Some(self.parse_fallback_branch(
-                        template,
+                    let fallback_branch = self.parse_fallback_branch(
+                        &owner,
                         &input.else_context,
                         control_context,
                         location,
-                    )?);
+                    )?;
+                    let fallback_body_node_id = fallback_branch.body_node_id;
+                    fallback_body_scratch = Some(fallback_body_node_id);
+                    fallback = Some(fallback_branch.branch);
+                    fallback_tir_body = Some(fallback_body_node_id);
                     break;
                 }
 
@@ -360,6 +426,16 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             }
         }
 
+        // -----------------------
+        //  Finalize branch chain
+        // -----------------------
+
+        construction_context.record_branch_chain(
+            branch_tir_branches,
+            fallback_tir_body,
+            input.location.clone(),
+        );
+
         template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
             TemplateBranchChain {
                 branches,
@@ -368,37 +444,59 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             },
         )));
 
-        Ok(())
+        Ok(TemplateControlFlowBodyScratch::BranchChain(
+            TemplateBranchChainBodyScratch {
+                branches: branch_body_scratch,
+                fallback: fallback_body_scratch,
+            },
+        ))
     }
 
+    /// Parses the `[else]` fallback body of a branch chain.
+    ///
+    /// WHAT: validates the sentinel boundary, parses the fallback body as TIR-only,
+    ///       trims leading whitespace, and seals the builder state.
+    /// WHY: fallback bodies share the same control-flow semantics as branch bodies
+    ///      but start from a different sentinel and must begin on a fresh boundary.
     fn parse_fallback_branch(
         &mut self,
-        owner: &Template,
+        owner: &BodyOwnerSnapshot,
         fallback_context: &ScopeContext,
         control_context: TemplateBodyControlContext,
         location: SourceLocation,
-    ) -> Result<TemplateFallbackBranch, CompilerDiagnostic> {
+    ) -> BodyParseResult<ParsedFallbackBranch> {
         ensure_else_boundary_after_sentinel(self.token_stream, &location, self.string_table)?;
 
-        let mut else_template = empty_body_template_from(owner, self.capacity_policy);
-        self.parse_content(
-            fallback_context,
-            &mut else_template,
-            control_context.with_else_policy(ElseSentinelPolicy::Duplicate),
-            InheritedChildWrapperPolicy::Skip,
-        )?;
+        let mut else_construction_context =
+            tir_only_body_construction_context(owner, fallback_context);
+        let parse_input = BodyParseInput {
+            context: fallback_context,
+            owner,
+            control_context: control_context.with_else_policy(ElseSentinelPolicy::Duplicate),
+            inherited_wrappers: InheritedChildWrapperPolicy::Skip,
+        };
+        self.parse_content(parse_input, &mut else_construction_context)?;
 
-        ensure_else_content_starts_on_new_boundary(
-            &else_template.content,
+        ensure_else_body_starts_on_new_boundary(
+            &else_construction_context,
             &location,
             self.string_table,
         )?;
-        trim_leading_whitespace_atoms(&mut else_template.content, self.string_table);
+        else_construction_context.trim_leading_whitespace(self.string_table);
 
-        Ok(TemplateFallbackBranch {
-            content: else_template.content,
-            render_plan: None,
-            location,
+        let (fallback_body_tir_reference, fallback_body_node_id) = finalize_tir_body_builder(
+            owner.style.clone(),
+            owner.kind.clone(),
+            owner.location.clone(),
+            &mut else_construction_context,
+        );
+
+        Ok(ParsedFallbackBranch {
+            branch: TemplateFallbackBranch {
+                body_tir_reference: Some(fallback_body_tir_reference),
+                location: location.clone(),
+            },
+            body_node_id: fallback_body_node_id,
         })
     }
 
@@ -408,14 +506,14 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         if_index: usize,
         close_index: usize,
         location: &SourceLocation,
-    ) -> Result<ParsedElseIfBranch, CompilerDiagnostic> {
+    ) -> BodyParseResult<ParsedElseIfBranch> {
         self.token_stream.index = if_index + 1;
 
         if next_meaningful_token_is_template_close(self.token_stream, close_index) {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::MissingTemplateElseIfCondition,
                 location.clone(),
-            ));
+            )));
         }
 
         let parsed_header = parse_if_header(
@@ -431,10 +529,10 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 TokenKind::TemplateClose
             )
         {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::MalformedTemplateElseIf,
                 self.token_stream.current_location(),
-            ));
+            )));
         }
 
         self.token_stream.advance();
@@ -461,51 +559,64 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
     fn parse_loop_body(
         &mut self,
         template: &mut Template,
+        construction_context: &mut TemplateConstructionContext,
         input: TemplateLoopBodyParseInput,
         control_context: TemplateBodyControlContext,
-    ) -> Result<(), CompilerDiagnostic> {
-        let mut body_template = empty_body_template_from(template, self.capacity_policy);
+    ) -> BodyParseResult<TemplateControlFlowBodyScratch> {
+        let owner = BodyOwnerSnapshot::from_template(template);
+        let mut body_construction_context =
+            tir_only_body_construction_context(&owner, &input.body_context);
+        let parse_input = BodyParseInput {
+            context: &input.body_context,
+            owner: &owner,
+            control_context: control_context.enter_template_loop(),
+            inherited_wrappers: InheritedChildWrapperPolicy::Skip,
+        };
 
-        self.parse_content(
-            &input.body_context,
-            &mut body_template,
-            control_context.enter_template_loop(),
-            InheritedChildWrapperPolicy::Skip,
-        )?;
+        self.parse_content(parse_input, &mut body_construction_context)?;
+
+        let (body_tir_reference, body_node_id) = finalize_tir_body_builder(
+            owner.style.clone(),
+            owner.kind.clone(),
+            owner.location.clone(),
+            &mut body_construction_context,
+        );
+
+        construction_context.record_loop(
+            input.header.clone(),
+            body_node_id,
+            input.location.clone(),
+        );
 
         template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
             TemplateLoopControlFlow {
                 header: input.header,
-                body_content: body_template.content,
-                body_render_plan: None,
-                aggregate_render_plan: None,
+                body_tir_reference: Some(body_tir_reference),
+                aggregate_wrapper_tir_reference: None,
                 location: input.location,
             },
         )));
 
-        Ok(())
+        Ok(TemplateControlFlowBodyScratch::Loop(
+            TemplateLoopBodyScratch { body: body_node_id },
+        ))
     }
 
     /// Handles a nested `[...]` template token encountered inside a parent body.
-    /// Recursively parses the child, then either folds it into the parent content
-    /// or pushes it as a child template expression.
+    /// Recursively parses the child, then records it as a parser TIR
+    /// child-template, slot, or insert-contribution node.
     fn parse_nested_template(
         &mut self,
-        context: &ScopeContext,
-        template: &mut Template,
-        control_context: TemplateBodyControlContext,
-        inherited_wrappers: InheritedChildWrapperPolicy,
-    ) -> Result<(), CompilerDiagnostic> {
+        input: BodyParseInput<'_, '_>,
+        construction_context: &mut TemplateConstructionContext,
+    ) -> BodyParseResult<()> {
         add_ast_counter(AstCounter::TemplateNestedTemplateParses, 1);
-        add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
 
-        let nested_inheritance = TemplateInheritance {
-            direct_child_wrappers: template.style.child_templates.to_owned(),
-        };
+        let nested_direct_child_wrappers = input.owner.child_wrappers.to_owned();
 
         let parse_options = NestedTemplateParseOptions {
             parsing_mode: if matches!(
-                template.kind,
+                input.owner.kind,
                 TemplateType::Comment(CommentDirectiveKind::Doc)
             ) {
                 TemplateParsingMode::DocComment
@@ -513,65 +624,38 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 TemplateParsingMode::Standard
             },
             control_flow_validation: self.control_flow_validation,
-            control_context,
+            control_context: input.control_context,
+            default_style: self.default_style.clone(),
         };
 
         let child_template = Template::new_nested_template(
             self.token_stream,
-            context,
+            input.context,
             self.type_interner,
-            nested_inheritance,
+            nested_direct_child_wrappers,
             self.string_table,
             parse_options,
         )?;
 
-        // Doc comment children are collected separately from template content.
-        if matches!(
-            template.kind,
-            TemplateType::Comment(CommentDirectiveKind::Doc)
-        ) {
-            template.doc_children.push(child_template);
-            return Ok(());
+        match &child_template.kind {
+            TemplateType::SlotInsert(_) => {
+                record_parser_tir_insert_contribution(construction_context, &child_template);
+            }
+            TemplateType::Comment(_) | TemplateType::SlotDefinition(_) => {}
+            _ => {
+                record_parser_tir_child_template(construction_context, &child_template);
+            }
         }
 
+        // Control-flow children are fully TIR-owned: their TIR body roots carry
+        // branch/loop structure and the child template node is already recorded
+        // above through `record_parser_tir_child_template`. No content mirror is
+        // needed.
         if child_template.control_flow.is_some() {
-            let expression = Expression::template(child_template, ValueMode::ImmutableOwned);
-            template.content.add(expression);
             return Ok(());
         }
 
         match &child_template.kind {
-            TemplateType::String
-                if !child_template.has_unresolved_slots()
-                    && !has_direct_child_template_outputs(&child_template) =>
-            {
-                ast_log!(
-                    "Found a compile time foldable template inside a template. Folding into a string slice..."
-                );
-
-                let mut fold_context = context.new_template_fold_context(
-                    self.string_table,
-                    "nested compile-time template folding in body parser",
-                )?;
-                let folded_child_id = child_template
-                    .fold_into_stringid(&mut fold_context)
-                    .map_err(TemplateError::into_diagnostic)?;
-
-                template.content.atoms.push(TemplateAtom::Content(
-                    TemplateSegment::from_child_template_output(
-                        Expression::string_slice(
-                            folded_child_id,
-                            self.token_stream.current_location(),
-                            ValueMode::ImmutableOwned,
-                        ),
-                        TemplateSegmentOrigin::Body,
-                        child_template.clone_for_composition(),
-                    ),
-                ));
-
-                return Ok(());
-            }
-
             TemplateType::StringFunction => {
                 *self.foldable = false;
             }
@@ -583,72 +667,95 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             TemplateType::String | TemplateType::SlotInsert(_) => {}
 
             TemplateType::SlotDefinition(slot_key) => {
-                let inherited_direct_child_wrappers = match inherited_wrappers {
-                    InheritedChildWrapperPolicy::Apply => {
-                        add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
-                        self.direct_child_wrappers.to_owned()
-                    }
+                let inherited_direct_child_wrappers = match input.inherited_wrappers {
+                    InheritedChildWrapperPolicy::Apply => self.direct_child_wrappers.to_owned(),
                     InheritedChildWrapperPolicy::Skip => Vec::new(),
                 };
 
-                add_ast_counter(AstCounter::TemplateWrapperVectorClones, 1);
-                template.content.push_slot_with_wrappers(
+                let slot_placeholder = SlotPlaceholder::with_wrappers(
                     slot_key.to_owned(),
                     inherited_direct_child_wrappers,
-                    template.style.child_templates.to_owned(),
-                    template.style.skip_parent_child_wrappers,
+                    input.owner.child_wrappers.to_owned(),
+                    input.owner.style.skip_parent_child_wrappers,
                 );
+
+                // Slot definitions are recorded exclusively in parser TIR
+                // through `record_slot`.
+                construction_context
+                    .record_slot(slot_placeholder, child_template.location.clone())
+                    .map_err(TemplateError::into_diagnostic)?;
                 return Ok(());
             }
         }
 
-        let expression = Expression::template(child_template, ValueMode::ImmutableOwned);
-        template.content.add(expression);
-
+        // Ordinary nested child templates (String, SlotInsert) are fully
+        // TIR-owned: `record_parser_tir_child_template` above recorded the
+        // child reference in parser TIR, and the TIR fold/format/handoff
+        // pipeline owns composition, folding, and runtime handoff.
         Ok(())
     }
 
     fn handle_loop_control_marker(
         &mut self,
-        template: &mut Template,
+        input: BodyParseInput<'_, '_>,
+        construction_context: &mut TemplateConstructionContext,
         marker: &DirectLoopControlMarker,
-        control_context: TemplateBodyControlContext,
-    ) -> Result<(), CompilerDiagnostic> {
-        if template.style.suppress_child_templates {
-            return Err(CompilerDiagnostic::invalid_template_structure(
+    ) -> BodyParseResult<()> {
+        if input.owner.style.suppress_child_templates {
+            return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::TemplateLoopControlInLiteralBody,
                 loop_control_marker_location(marker).clone(),
-            ));
+            )));
         }
 
-        if !control_context.accepts_loop_control() {
-            return Err(orphan_loop_control_diagnostic(marker));
+        if !input.control_context.accepts_loop_control() {
+            return Err(Box::new(orphan_loop_control_diagnostic(marker)));
         }
 
         let Some(close_index) = loop_control_marker_close_index(marker) else {
-            return Err(malformed_loop_control_reason(marker));
+            return Err(Box::new(malformed_loop_control_reason(marker)));
         };
 
         ensure_loop_control_boundary_before_sentinel(self.token_stream, marker, self.string_table)?;
-        trim_trailing_whitespace_atoms(&mut template.content, self.string_table);
 
-        let mut control_template = empty_body_template_from(template, self.capacity_policy);
-        control_template.control_flow = Some(TemplateControlFlow::LoopControl(
-            TemplateLoopControlSignal {
-                kind: loop_control_kind(marker),
-                location: loop_control_marker_location(marker).clone(),
-            },
-        ));
+        construction_context.trim_trailing_whitespace(self.string_table);
 
-        template.content.add(Expression::template(
-            control_template,
-            ValueMode::ImmutableOwned,
-        ));
+        let kind = loop_control_kind(marker);
+        let location = loop_control_marker_location(marker).clone();
+        construction_context.record_loop_control(kind, location.clone());
 
         self.token_stream.index = close_index;
         self.token_stream.advance();
         ensure_loop_control_boundary_after_sentinel(self.token_stream, marker, self.string_table)
+            .map_err(Box::new)
     }
+}
+
+fn record_parser_tir_child_template(
+    construction_context: &mut TemplateConstructionContext,
+    child_template: &Template,
+) {
+    let Some(child_reference) = child_template.tir_reference.as_ref() else {
+        return;
+    };
+
+    construction_context.record_child_template(
+        child_reference,
+        TemplateSegmentOrigin::Body,
+        child_template.location.clone(),
+    );
+}
+
+fn record_parser_tir_insert_contribution(
+    construction_context: &mut TemplateConstructionContext,
+    child_template: &Template,
+) {
+    let Some(child_template_id) = child_template.tir_template_id() else {
+        return;
+    };
+
+    construction_context
+        .record_insert_contribution(child_template_id, child_template.location.clone());
 }
 
 fn loop_control_kind(marker: &DirectLoopControlMarker) -> TemplateLoopControlKind {
@@ -663,12 +770,16 @@ struct ParsedElseIfBranch {
     branch_context: ScopeContext,
 }
 
-#[allow(clippy::result_large_err)]
+struct ParsedFallbackBranch {
+    branch: TemplateFallbackBranch,
+    body_node_id: TemplateIrNodeId,
+}
+
 fn branch_selector_and_context_from_parsed_if_header(
     parsed_header: ParsedIfHeader,
     base_context: &ScopeContext,
     parser: &mut TemplateBodyParser<'_, '_>,
-) -> Result<(TemplateBranchSelector, ScopeContext), CompilerDiagnostic> {
+) -> BodyParseResult<(TemplateBranchSelector, ScopeContext)> {
     match parsed_header {
         ParsedIfHeader::BoolCondition { condition } => {
             let branch_context =
@@ -695,10 +806,10 @@ fn branch_selector_and_context_from_parsed_if_header(
         }
 
         ParsedIfHeader::MatchStyle { scrutinee } => {
-            Err(CompilerDiagnostic::invalid_template_structure(
+            Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported,
                 scrutinee.location,
-            ))
+            )))
         }
     }
 }
@@ -726,40 +837,146 @@ enum InheritedChildWrapperPolicy {
     Skip,
 }
 
-fn empty_body_template_from(owner: &Template, capacity_policy: TemplateCapacityPolicy) -> Template {
-    let mut template =
-        Template::empty_with_content_capacity(capacity_policy.initial_atom_capacity());
-    template.kind = owner.kind.to_owned();
-    template.style = owner.style.to_owned();
-    template.location = owner.location.to_owned();
-    template
+/// Lightweight read-only snapshot of the template fields needed for TIR-only
+/// body parsing. Control-flow branch/loop bodies no longer accumulate into a
+/// temporary `Template` shell for parse-content reads; they write directly
+/// into `TemplateConstructionContext`.
+struct BodyOwnerSnapshot {
+    kind: TemplateType,
+    style: Style,
+    child_wrappers: Vec<TemplateWrapperReference>,
+    location: SourceLocation,
+}
+
+impl BodyOwnerSnapshot {
+    fn from_template(template: &Template) -> Self {
+        Self {
+            kind: template.kind.clone(),
+            style: template.style.clone(),
+            child_wrappers: template.child_wrappers.clone(),
+            location: template.location.clone(),
+        }
+    }
+}
+
+fn tir_only_body_construction_context(
+    owner: &BodyOwnerSnapshot,
+    context: &ScopeContext,
+) -> TemplateConstructionContext {
+    TemplateConstructionContext::new(
+        Rc::clone(&context.template_ir_store),
+        context.template_ir_store_id,
+        Rc::clone(&context.template_ir_registry),
+        owner.location.clone(),
+    )
+}
+
+fn body_sentinel_target<'a>(
+    construction_context: &'a mut TemplateConstructionContext,
+    suppress_child_templates: bool,
+) -> BodySentinelTarget<'a> {
+    BodySentinelTarget {
+        construction_context,
+        suppress_child_templates,
+    }
+}
+
+/// Finalizes a control-flow body template's parser-emitted TIR and returns a
+/// store-qualified body reference plus the body root node ID.
+///
+/// WHAT: every branch/loop body shell starts a `TemplateConstructionContext`
+///       with its own parser TIR builder state. This helper seals that builder
+///       state into a finalized `TemplateIr`, reads the root node from the
+///       shared store, and wraps it in a `TemplateControlFlowTirReference`.
+/// WHY: control-flow bodies are emitted directly into TIR, so the body only
+///      needs to be finished and referenced.
+fn finalize_tir_body_builder(
+    style: Style,
+    kind: TemplateType,
+    location: SourceLocation,
+    construction_context: &mut TemplateConstructionContext,
+) -> (TemplateControlFlowTirReference, TemplateIrNodeId) {
+    let tir_reference = construction_context
+        .finish(style, kind, location.clone())
+        .expect("control-flow body parser TIR builder state should be finalized");
+
+    let store = construction_context.store();
+    let template_ir = store
+        .get_template(tir_reference.root.template_id)
+        .expect("finalized control-flow body template should exist in the TIR store");
+    let root = template_ir.root;
+
+    let body_reference = TemplateTirBodyReference::new(
+        store.owner(),
+        tir_reference.root.store_id,
+        root,
+        tir_reference.phase,
+        tir_reference.overlay_set_id,
+        location,
+    );
+
+    (
+        TemplateControlFlowTirReference::from_body_reference(body_reference),
+        root,
+    )
+}
+
+/// Ensures an `[else]` fallback body starts on a new boundary line.
+///
+/// WHAT: after the `[else]` sentinel is consumed, the first meaningful content
+///       in the fallback body must not share the sentinel's line.
+/// WHY: control-flow bodies are TIR-only, so boundary validation reads the
+///      in-progress builder state.
+fn ensure_else_body_starts_on_new_boundary(
+    construction_context: &TemplateConstructionContext,
+    sentinel_location: &SourceLocation,
+    string_table: &StringTable,
+) -> BodyParseResult<()> {
+    let store = construction_context.store();
+    let Some(first_child_id) = construction_context.builder().root_children().first() else {
+        return Ok(());
+    };
+
+    let node = store
+        .get_node(*first_child_id)
+        .expect("control-flow body TIR builder child should exist in the store");
+
+    if let TemplateIrNodeKind::Text { text, .. } = &node.kind
+        && first_line_has_meaningful_text(string_table.resolve(*text))
+    {
+        return Err(Box::new(inline_else_diagnostic(sentinel_location)));
+    }
+
+    Ok(())
 }
 
 // -------------------------
 //  Literal Content
 // -------------------------
 
-/// Consumes a `[...]` bracketed region as literal text when child templates are
-/// suppressed (e.g. in `$doc` bodies). Tracks bracket nesting depth so balanced
-/// brackets are included in the literal output.
+/// Consumes a `[...]` bracketed region directly into parser TIR as literal text
+/// when child templates are suppressed (e.g. in `$doc` bodies). Tracks bracket
+/// nesting depth so balanced brackets are included in the literal output.
 ///
 /// Accepts pre-interned `StringId`s for newline and bracket literals so the
 /// caller can reuse cached IDs rather than re-interning on every token.
-fn consume_balanced_brackets_as_literal_text(
-    token_stream: &mut FileTokens,
-    template: &mut Template,
-    string_table: &mut StringTable,
+#[derive(Clone, Copy)]
+struct LiteralTemplateTextIds {
     newline_id: StringId,
     open_bracket_id: StringId,
     close_bracket_id: StringId,
+}
+
+fn consume_balanced_brackets_as_literal_text(
+    token_stream: &mut FileTokens,
+    construction_context: &mut TemplateConstructionContext,
+    string_table: &mut StringTable,
+    text_ids: LiteralTemplateTextIds,
 ) {
     // Emit the opening bracket as literal text.
     add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
-    template.content.add(Expression::string_slice(
-        open_bracket_id,
-        token_stream.current_location(),
-        ValueMode::ImmutableOwned,
-    ));
+    let location = token_stream.current_location();
+    construction_context.record_text(text_ids.open_bracket_id, 1, location);
     token_stream.advance();
 
     let _ = consume_balanced_template_region(
@@ -767,44 +984,34 @@ fn consume_balanced_brackets_as_literal_text(
         |token, token_kind| match token_kind {
             TokenKind::TemplateHead => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
-                template.content.add(Expression::string_slice(
-                    open_bracket_id,
+                construction_context.record_text(
+                    text_ids.open_bracket_id,
+                    1,
                     token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                );
             }
 
             TokenKind::TemplateClose => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
-                template.content.add(Expression::string_slice(
-                    close_bracket_id,
+                construction_context.record_text(
+                    text_ids.close_bracket_id,
+                    1,
                     token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                );
             }
 
             TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
+                let byte_len = string_table.resolve(*content).len();
                 #[cfg(feature = "detailed_timers")]
                 {
-                    add_ast_counter(
-                        AstCounter::TemplateTextBytesParsed,
-                        string_table.resolve(*content).len(),
-                    );
+                    add_ast_counter(AstCounter::TemplateTextBytesParsed, byte_len);
                 }
-                template.content.add(Expression::string_slice(
-                    *content,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(*content, byte_len, token.location.clone());
             }
 
             TokenKind::Newline => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
-                template.content.add(Expression::string_slice(
-                    newline_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(text_ids.newline_id, 1, token.location.clone());
             }
 
             TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
@@ -817,51 +1024,31 @@ fn consume_balanced_brackets_as_literal_text(
                 let literal = format!("{prefix}{name}");
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, literal.len());
                 let literal_id = string_table.intern(&literal);
-                template.content.add(Expression::string_slice(
-                    literal_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(literal_id, literal.len(), token.location.clone());
             }
 
             TokenKind::StartTemplateBody | TokenKind::Colon => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let colon_id = string_table.intern(":");
-                template.content.add(Expression::string_slice(
-                    colon_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(colon_id, 1, token.location.clone());
             }
 
             TokenKind::Comma => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let comma_id = string_table.intern(",");
-                template.content.add(Expression::string_slice(
-                    comma_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(comma_id, 1, token.location.clone());
             }
 
             TokenKind::OpenParenthesis => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let paren_id = string_table.intern("(");
-                template.content.add(Expression::string_slice(
-                    paren_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(paren_id, 1, token.location.clone());
             }
 
             TokenKind::CloseParenthesis => {
                 add_ast_counter(AstCounter::TemplateTextBytesParsed, 1);
                 let paren_id = string_table.intern(")");
-                template.content.add(Expression::string_slice(
-                    paren_id,
-                    token.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
+                construction_context.record_text(paren_id, 1, token.location.clone());
             }
 
             _ => {}
@@ -872,17 +1059,3 @@ fn consume_balanced_brackets_as_literal_text(
 
 // -------------------------
 //  Internal Helpers
-// -------------------------
-
-/// Returns true if the template contains any direct child template output atoms.
-///
-/// WHY:
-/// - Folding such templates would merge those individual child outputs into one
-///   string slice, losing the structure needed for `$children(..)` wrapper
-///   application in slot composition.
-fn has_direct_child_template_outputs(template: &Template) -> bool {
-    template.content.atoms.iter().any(|atom| match atom {
-        TemplateAtom::Content(segment) => segment.is_child_template_output,
-        TemplateAtom::Slot(_) => false,
-    })
-}

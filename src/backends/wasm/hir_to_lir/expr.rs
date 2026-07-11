@@ -53,8 +53,19 @@ pub(crate) fn lower_expression(
                 crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
                     ..
                 }
-                | crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option
-                | crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
+                | crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::ConstI64 {
+                        dst,
+                        value: *variant_index as i64,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                #[cfg(test)]
+                crate::compiler_frontend::hir::expressions::HirVariantCarrier::Fallible => {
                     let dst = context.alloc_temp(WasmAbiType::I64);
                     statements.push(WasmLirStmt::ConstI64 {
                         dst,

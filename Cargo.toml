@@ -9,7 +9,9 @@ resolver = "2"
 
 [features]
 # These add println! macros for debugging and info when compiling
-detailed_timers = []
+timers = []
+detailed_timers = ["timers"]
+benchmark_counters = []
 show_tokens = []
 show_headers = []
 show_ast = []

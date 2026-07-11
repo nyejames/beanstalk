@@ -8,10 +8,10 @@ page_head #= theme_head
 #[navbar]
 #[title, center: PROJECTS, MODULES AND HTML BUILDER]
 
-#[section, $markdown:
+#[section, $md:
     Beanstalk projects are built around a small set of conventions:
 
-    - a project root with a `#config.bst` file
+    - a project root with a `config.bst` file
     - an entry root, usually `src`
     - module entry files named like `#page.bst`
     - module API boundaries defined by `#mod.bst`
@@ -20,13 +20,13 @@ page_head #= theme_head
 
     `#mod.bst`  = module API / visibility boundary
     `#page.bst` = HTML builder entry/configuration convention
-    `#config.bst`   = build/project configuration convention
+    `config.bst`    = build/project configuration convention
 
     At this stage of development, this is the only supported project structure to rely on.
     The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # The modular build system
 
     The Beanstalk compiler frontend is shared by every project builder.
@@ -59,10 +59,10 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
-    # Project root and #config.bst
+#[section, $md:
+    # Project root and config.bst
 
-    A normal HTML project has a `#config.bst` file at the project root.
+    A normal HTML project has a `config.bst` file at the project root.
     Config entries are known top-level `#` constants whose values fold at compile time.
 
     [codeblock, $code("bst"):
@@ -87,7 +87,7 @@ page_head #= theme_head
 
     Config keys are strict about value shape. String settings accept string literals and folded templates, `project` currently accepts only `"html"`, `library_folders` accepts one string or a collection of strings, `template_const_loop_iteration_limit` requires a positive folded `Int` no greater than `1_000_000`, and boolean HTML settings such as `redirect_index_html` require real `true` / `false` values rather than strings.
 
-    Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. `#config.bst` may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and `["#[...]"]` page fragments are rejected. Const-record field projection is supported when the `#=` config expression fully folds.
+    Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. `config.bst` may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and `["#[...]"]` page fragments are rejected. Const-record field projection is supported when the `#=` config expression fully folds.
 
     Important settings:
 
@@ -134,14 +134,14 @@ page_head #= theme_head
     That means [$html:<code>entry_root</code>] and [$html:<code>library_folders</code>] shape how the project is searched and how imports resolve.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Default project scaffold
 
     The `bean new html` command generates a complete default project:
 
     [codeblock, $code("text"):
         project-root/
-        ├── #config.bst
+        ├── config.bst
         ├── src/
         │   └── #page.bst
         ├── lib/
@@ -160,12 +160,12 @@ page_head #= theme_head
     - `src/#page.bst` is the default HTML page entry and includes a starter page.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Module entry files
 
     A module entry file is a Beanstalk file whose file name starts with `#`.
     In directory projects, the compiler searches the configured entry root for `#*.bst` files.
-    `#config.bst` is not a module entry.
+    `config.bst` is not module source.
 
     Examples:
 
@@ -174,7 +174,7 @@ page_head #= theme_head
         src/docs/#page.bst         -> module entry
         src/docs/basics/#page.bst  -> module entry
         src/styles/docs.bst        -> normal source file
-        #config.bst                -> project config, not a module entry
+        config.bst                 -> project config, not a module entry
     ]
 
     Only module entry files have top-level runtime execution.
@@ -184,7 +184,7 @@ page_head #= theme_head
     They should not rely on top-level runtime statements being executed by themselves.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Builder-owned meaning of # file names
 
     The compiler discovers `#*.bst` files as module entries.
@@ -222,7 +222,7 @@ page_head #= theme_head
     Other `#name.bst` files become named routes under the same folder.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Top-level templates in page entries
 
     Top-level templates are special.
@@ -256,7 +256,7 @@ page_head #= theme_head
         -- Const fragments are folded by the compiler and emitted directly.
         #[navbar]
 
-        #[section, $markdown:
+        #[section, $md:
             # Welcome
             This part is static.
         ]
@@ -264,7 +264,7 @@ page_head #= theme_head
         name = "Beanstalk"
 
         -- Runtime fragments are produced by the implicit start function.
-        [section, $markdown:
+        [section, $md:
             Runtime hello from [name].
         ]
     ]
@@ -277,7 +277,7 @@ page_head #= theme_head
     Helper files should export reusable declarations, then page entries should import and use them.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Visibility and compile-time constants
 
     [styled_table:
@@ -352,7 +352,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Module boundaries and imports
 
     Imports are how a page entry reaches helper declarations, module facades, source libraries, core packages, and JavaScript packages.
@@ -364,7 +364,7 @@ page_head #= theme_head
     - files in the same module can import ordinary sibling source files directly
     - imports that cross into another module root must go through that module's `#mod.bst` facade
     - source-library prefixes come from `library_folders` or from the builder
-    - direct imports of `#mod.bst`, `#page.bst`, and `#config.bst` are rejected
+    - direct imports of `#mod.bst`, `#page.bst`, and `config.bst` are rejected
     - sibling `name.bst` / `name/` import-name collisions are rejected during project discovery
 
     In this shape:
@@ -383,7 +383,7 @@ page_head #= theme_head
     `src/docs/#page.bst` is a different module entry, so it imports the root module's public surface through `src/#mod.bst` instead of bypassing into `src/components/card.bst`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Example: the documentation site structure
 
     The Beanstalk documentation website is itself a Beanstalk HTML project.
@@ -391,7 +391,7 @@ page_head #= theme_head
 
     [codeblock, $code("txt"):
         docs/
-        ├── #config.bst
+        ├── config.bst
         ├── src/
         │   ├── #mod.bst
         │   ├── #page.bst
@@ -430,7 +430,7 @@ page_head #= theme_head
     - `dev/` and `release/` are output folders, not source folders.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Output files
 
     The build command compiles the project, then writes the builder's output files under the selected output root.
@@ -462,7 +462,7 @@ page_head #= theme_head
     Generated output folders should be treated as build artifacts, not source.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Module facades at a glance
 
     `#mod.bst` is the public surface for a module root.

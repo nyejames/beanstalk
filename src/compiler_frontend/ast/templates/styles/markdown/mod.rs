@@ -1,4 +1,4 @@
-//! Built-in `$markdown` template style support.
+//! Built-in `$md` template style support.
 //!
 //! WHAT:
 //! - Converts template body text into a narrow, deterministic HTML-flavoured markdown output.
@@ -10,13 +10,13 @@
 //! - Parent markdown runs must keep child template output sealed while still preserving
 //!   paragraph and list structure across opaque anchors.
 
+use crate::compiler_frontend::ast::templates::formatter_contract::{
+    FormatterInput, FormatterInputPiece, FormatterOpaquePiece, FormatterOutput,
+    FormatterOutputPiece,
+};
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
-};
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOpaquePiece, FormatterOutput,
-    FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
@@ -52,7 +52,7 @@ impl TemplateFormatter for MarkdownTemplateFormatter {
 
 pub fn markdown_formatter() -> Formatter {
     Formatter {
-        // `$markdown` opts into the shared default body dedent/trim pass explicitly.
+        // `$md` opts into the shared default body dedent/trim pass explicitly.
         pre_format_whitespace_passes: vec![TemplateWhitespacePassProfile::default_template_body()],
         formatter: Arc::new(MarkdownTemplateFormatter),
         post_format_whitespace_passes: Vec::new(),
@@ -63,7 +63,7 @@ pub(crate) fn markdown_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,
 ) -> Result<Formatter, String> {
     if argument.is_some() {
-        return Err("'$markdown' does not accept arguments.".to_string());
+        return Err("'$md' does not accept arguments.".to_string());
     }
 
     Ok(markdown_formatter())
@@ -98,21 +98,6 @@ fn split_formatter_input_into_lines(
             FormatterInputPiece::Opaque(anchor) => {
                 push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Opaque(anchor));
             }
-        }
-    }
-
-    lines
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn split_text_into_lines(content: &str) -> Vec<MarkdownLine> {
-    let mut lines = vec![MarkdownLine::default()];
-
-    for ch in content.chars() {
-        if ch == '\n' {
-            lines.push(MarkdownLine::default());
-        } else {
-            push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Char(ch));
         }
     }
 

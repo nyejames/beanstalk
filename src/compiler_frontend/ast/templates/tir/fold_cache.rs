@@ -1,0 +1,113 @@
+//! AST-phase-local fold cache for TIR templates.
+//!
+//! WHAT: stores the result of folding a specific TIR view (root + phase + overlay
+//!       set + safe fold-context dimensions) so that repeated folds of the same
+//!       effective view can reuse the previous result.
+//!
+//! WHY: parent templates can reference the same child template multiple times,
+//!      and bottom-up folding can otherwise re-fold identical subtrees. A cache
+//!      keyed by the stable dimensions of the fold input removes that redundant
+//!      work without changing user-visible output.
+//!
+//! ## Cache lifetime
+//!
+//! The cache is AST-phase-local. It lives on `TemplateFoldContext`, which is
+//! created and dropped during one compile-time template fold operation. It does
+//! not survive into HIR, backend, or public API data and is never global or
+//! static.
+//!
+//! ## Key safety
+//!
+//! The key includes only dimensions that are stable and identity-bearing today:
+//! - store-qualified root `TemplateRef`;
+//! - pipeline `TemplateTirPhase`;
+//! - canonical `TemplateOverlaySetId`;
+//! - const-loop iteration limit;
+//! - whether the active fold-binding stack is empty.
+//!
+//! It deliberately does NOT include `source_file_scope`, `path_format_config`,
+//! or `project_path_resolver`, because `TemplateFoldContext` stores those as
+//! references without stable identity. It also does not include the binding
+//! stack contents; the cache is only valid when bindings are empty, which is
+//! recorded as a boolean guard.
+
+use std::collections::HashMap;
+
+use crate::compiler_frontend::ast::templates::template_folding::TemplateEmission;
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
+use crate::compiler_frontend::ast::templates::tir::refs::TemplateRef;
+use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
+
+// -------------------------
+//  Cache key
+// -------------------------
+
+/// Deterministic key for one TIR fold cache entry.
+///
+/// WHAT: identifies the exact effective view and fold context that produced a
+///       cached fold result. Two folds with equal keys must produce equal output.
+///
+/// WHY: the cache must not return stale results when the input view or context
+///      changes. Including phase and overlay set alongside the root makes the
+///      key precise; recording loop-limit and empty-bindings guards makes the
+///      remaining context dimensions explicit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TirFoldCacheKey {
+    /// Store-qualified root template ref.
+    pub(crate) root: TemplateRef,
+
+    /// Pipeline phase of the root.
+    pub(crate) phase: TemplateTirPhase,
+
+    /// Overlay set applied to the root.
+    pub(crate) overlay_set_id: TemplateOverlaySetId,
+
+    /// Const-loop iteration limit active during folding.
+    pub(crate) loop_iteration_limit: usize,
+
+    /// True only when the active fold-binding stack is empty.
+    ///
+    /// WHAT: fold bindings are pushed and restored during branch option captures
+    ///       and loop iterations. The cache cannot safely share results across
+    ///       different binding states, so it only caches views seen with no
+    ///       active bindings.
+    pub(crate) bindings_empty: bool,
+}
+
+// -------------------------
+//  Cache
+// -------------------------
+
+/// AST-phase-local cache for TIR fold emissions.
+///
+/// WHAT: maps a deterministic `TirFoldCacheKey` to the previously computed
+///       `TemplateEmission`.
+///
+/// WHY: avoids re-folding the same effective TIR view within one fold context.
+///      The key is precise enough that cached results remain valid for the exact
+///      view they were computed from.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TirFoldCache {
+    entries: HashMap<TirFoldCacheKey, TemplateEmission>,
+}
+
+impl TirFoldCache {
+    /// Creates an empty cache.
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns the cached emission for `key`, if any.
+    pub(crate) fn get(&self, key: &TirFoldCacheKey) -> Option<&TemplateEmission> {
+        self.entries.get(key)
+    }
+
+    /// Stores `emission` under `key`, returning any previous emission.
+    pub(crate) fn insert(
+        &mut self,
+        key: TirFoldCacheKey,
+        emission: TemplateEmission,
+    ) -> Option<TemplateEmission> {
+        self.entries.insert(key, emission)
+    }
+}

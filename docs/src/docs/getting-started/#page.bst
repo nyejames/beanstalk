@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: GETTING STARTED WITH BEAN]
 
-#[section, $markdown:
+#[section, $md:
     `bean` is the Beanstalk compiler and project tool.
     It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.
 
@@ -26,7 +26,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Current commands
 
     [styled_table:
@@ -76,7 +76,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Current flags
 
     [styled_table:
@@ -126,11 +126,11 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Create a new HTML project
 
     The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore.
-    The HTML project builder itself has more rules than this page needs to cover; see @../html-project-builder (the HTML project builder guide) for page layout, routing, assets, fragments, and generated output details.
+    The HTML project builder itself has more rules than this page needs to cover; see @../project-structure (the project structure guide) for page layout, routing, assets, fragments, and generated output details.
 
     Start a new project:
 
@@ -190,7 +190,7 @@ page_head #= theme_head
 
     [codeblock, $code("text"):
         project-root/
-        ├── #config.bst
+        ├── config.bst
         ├── src/
         │   └── #page.bst
         ├── lib/
@@ -225,7 +225,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Run the dev server
 
     `dev` is currently the most useful command for normal Beanstalk project work.
@@ -253,7 +253,7 @@ page_head #= theme_head
     The dev server is designed around fast feedback rather than a manual rebuild loop.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Build a project
 
     Use `build` when you want files written to disk without running the dev server.
@@ -272,7 +272,7 @@ page_head #= theme_head
     The default scaffold currently uses `dev` for development output and `release` for release output.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Check without building
 
     `check` is the fastest correctness command for editor loops and CI-style validation.
@@ -296,7 +296,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Reading compiler errors
 
     Beanstalk uses the same formatted diagnostic system across the compiler front end and backend builders.
@@ -333,7 +333,7 @@ page_head #= theme_head
     5. The guidance lines are suggestions, not a separate error.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Error kinds
 
     [styled_table:
@@ -366,7 +366,7 @@ page_head #= theme_head
         [data:
             [: Malformed Config]
             [: The project config exists but contains unsupported, missing, or invalid settings.]
-            [: Check [$html:<code>#config.bst</code>] and backend-specific config rules.]
+            [: Check [$html:<code>config.bst</code>] and backend-specific config rules.]
         ]
 
         [data:
@@ -389,7 +389,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Warnings and future suggestions
 
     Warnings are for code that can still compile but deserves attention.
@@ -410,7 +410,7 @@ page_head #= theme_head
     For now, use `check` and the compiler's normal warnings as the practical baseline.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Planned bean extensions
 
     `bean` is expected to become the main Beanstalk project tool, not just a thin compiler launcher.

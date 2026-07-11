@@ -10,8 +10,10 @@
 //! (`builders`, `local_declarations`, `diagnostic_sinks`).
 
 use super::*;
+use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -147,29 +149,52 @@ impl ScopeContext {
     }
 
     /// Return the semantic role of a declaration without inspecting display-only type spelling.
+    ///
+    /// WHAT: falls back to expression classification for body-local declarations that are
+    ///       not in the precomputed semantic table. Template constness is classified through
+    ///       the module registry so composed views retain their exact store and overlay identity.
     pub(crate) fn semantic_kind_for_declaration(
         &self,
         declaration: &Declaration,
         type_environment: &TypeEnvironment,
-    ) -> DeclarationSemanticKind {
+        string_table: &StringTable,
+    ) -> Result<DeclarationSemanticKind, TemplateError> {
         if let Some(kind) = self
             .lookups
             .declaration_semantics
             .kind_for_path(&declaration.id)
         {
-            return kind;
+            return Ok(kind);
         }
 
-        match &declaration.value.kind {
+        let kind = match &declaration.value.kind {
             ExpressionKind::Function(..) => DeclarationSemanticKind::Function,
             ExpressionKind::NoValue => match type_environment.get(declaration.value.type_id) {
                 Some(TypeDefinition::Struct(..)) => DeclarationSemanticKind::Struct,
                 Some(TypeDefinition::Choice(..)) => DeclarationSemanticKind::Choice,
                 _ => DeclarationSemanticKind::Value,
             },
-            _ if declaration.value.is_compile_time_constant() => DeclarationSemanticKind::Constant,
-            _ => DeclarationSemanticKind::Value,
-        }
+            _ => {
+                let value_is_compile_time_constant = declaration
+                    .value
+                    .const_value_kind_with_template_classifier(&mut |template| {
+                        classify_template_from_effective_tir(
+                            template,
+                            &self.template_ir_registry,
+                            string_table,
+                        )
+                    })?
+                    .is_compile_time_value();
+
+                if value_is_compile_time_constant {
+                    DeclarationSemanticKind::Constant
+                } else {
+                    DeclarationSemanticKind::Value
+                }
+            }
+        };
+
+        Ok(kind)
     }
 
     /// Resolve callable metadata for a source declaration.
@@ -199,15 +224,26 @@ impl ScopeContext {
         &'a self,
         declaration: &'a Declaration,
         type_environment: &TypeEnvironment,
-    ) -> Option<SourceStructConstructor<'a>> {
-        if self.semantic_kind_for_declaration(declaration, type_environment)
+        string_table: &StringTable,
+    ) -> Result<Option<SourceStructConstructor<'a>>, TemplateError> {
+        if self.semantic_kind_for_declaration(declaration, type_environment, string_table)?
             != DeclarationSemanticKind::Struct
         {
-            return None;
+            return Ok(None);
         }
 
         let type_id = declaration.value.type_id;
-        let struct_path = type_environment.nominal_path(type_id)?.to_owned();
+        // The semantic check above confirmed this declaration is a struct, so
+        // the nominal type path must be registered. A missing path is a compiler
+        // invariant violation, not a user-facing diagnostic.
+        let struct_path = type_environment
+            .nominal_path(type_id)
+            .ok_or_else(|| {
+                TemplateError::from(CompilerError::compiler_error(
+                    "Struct declaration did not resolve to a nominal type path.",
+                ))
+            })?
+            .to_owned();
         let fields = self
             .resolved_struct_fields_by_path
             .as_ref()
@@ -215,12 +251,12 @@ impl ScopeContext {
             .map(Vec::as_slice)
             .unwrap_or(&[]);
 
-        Some(SourceStructConstructor {
+        Ok(Some(SourceStructConstructor {
             struct_path,
             fields,
             struct_value_mode: &declaration.value.value_mode,
             type_id,
-        })
+        }))
     }
 
     /// Return whether a source declaration is a choice type.
@@ -228,9 +264,12 @@ impl ScopeContext {
         &self,
         declaration: &Declaration,
         type_environment: &TypeEnvironment,
-    ) -> bool {
-        self.semantic_kind_for_declaration(declaration, type_environment)
-            == DeclarationSemanticKind::Choice
+        string_table: &StringTable,
+    ) -> Result<bool, TemplateError> {
+        Ok(
+            self.semantic_kind_for_declaration(declaration, type_environment, string_table)?
+                == DeclarationSemanticKind::Choice,
+        )
     }
 
     pub(crate) fn lookup_receiver_method(

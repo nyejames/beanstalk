@@ -16,7 +16,7 @@ pub(crate) mod capacity;
 pub(crate) mod header_stats;
 pub(crate) mod token_stats;
 
-pub(crate) use capacity::{FrontendArenaCapacityEstimate, TemplateCapacityPolicy};
+pub(crate) use capacity::FrontendArenaCapacityEstimate;
 pub(crate) use header_stats::HeaderStats;
 pub(crate) use token_stats::TokenStats;
 

@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Top-level const-template header creation.
 //!
 //! WHAT: turns entry-file `#[...]` templates into const-template headers plus placement metadata.
@@ -18,13 +16,20 @@ use crate::compiler_frontend::utilities::token_scan::{
 use crate::projects::settings::TOP_LEVEL_CONST_TEMPLATE_NAME;
 use std::collections::HashSet;
 
+/// Boxed diagnostic result for top-level const-template header creation.
+///
+/// WHAT: keeps the const-template parser on one small error boundary.
+/// WHY: const-template scanning can preserve structured diagnostics without
+///      carrying the large value inline through every successful header build.
+type ConstFragmentResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 pub(super) fn create_top_level_const_template(
     scope: InternedPath,
     opening_template_token: Token,
     const_template_number: usize,
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
-) -> Result<Header, CompilerDiagnostic> {
+) -> ConstFragmentResult<Header> {
     let const_template_name = context.string_table.intern(&format!(
         "{TOP_LEVEL_CONST_TEMPLATE_NAME}{const_template_number}"
     ));
@@ -51,7 +56,12 @@ pub(super) fn create_top_level_const_template(
             }
             body.push(token);
         },
-        |location| CompilerDiagnostic::unexpected_end_of_file(Some(closing_bracket), location),
+        |location| {
+            Box::new(CompilerDiagnostic::unexpected_end_of_file(
+                Some(closing_bracket),
+                location,
+            ))
+        },
     )?;
 
     // Add an EOF sentinel so downstream parsers can safely terminate even if

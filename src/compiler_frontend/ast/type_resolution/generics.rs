@@ -168,5 +168,4 @@ fn validate_nominal_bound_evidence_for_instantiation(
     };
 
     validate_nominal_generic_bound_evidence(type_id, location.clone(), &evidence_context)
-        .map_err(Box::new)
 }

@@ -1,0 +1,94 @@
+
+Dependency sorting operates only on top-level declaration headers and header-provided dependency edges.
+
+It makes declarations linearly consumable by AST.
+It doesn't look into executable bodies.
+It doesn't fix missing header edges by doing semantic work late.
+
+## Main path
+
+`src/compiler_frontend/module_dependencies.rs`
+
+## What dependency sorting owns
+
+Dependency sorting owns:
+
+- topological sorting of parsed top-level declaration headers
+- cycle detection in the strict top-level declaration graph
+- missing header-provided dependency diagnostics
+- source-order stability among otherwise independent declarations
+- finalising `ModuleSymbols.declarations` in sorted order
+- appending builtin declarations
+- appending the implicit entry `start` header after sorted declarations
+
+It doesn't use executable function/start body references.
+It doesn't use body-local declarations.
+
+## Constants
+
+Constant initializer references are top-level compile-time declaration dependencies.
+They are not body references.
+They belong in the header dependency graph.
+
+Dependency sorting orders constants using header-provided constant initializer dependency edges.
+Same-file constants keep source-order semantics.
+Same-file forward references are rejected.
+Cross-file constant cycles are dependency cycles.
+
+Same-file symbol hints that don't materialise as headers are not always dependency-sort errors.
+When a hint looks like a same-file declaration reference but no graph header exists, Stage 3 defers to AST type/expression resolution so the later stage can report the more precise semantic diagnostic.
+
+## Facades
+
+Module-root facades, `#mod.bst` files that belong to a project module root, participate in dependency sorting like other top-level declaration providers.
+
+They remain boundary export layers for visibility.
+They are still declarations.
+Public authored declarations, public re-exports, exported constants and exported type surfaces must be ordered before declarations in outside modules that import them through the facade.
+
+Other files inside the same module should not depend on symbols declared directly inside the module-root facade.
+Header import visibility enforces that boundary.
+Dependency sorting should not make facade-private implementation details look like normal local dependencies.
+
+## Source libraries
+
+Source-library facades, such as builder-provided `@html`, also participate in dependency sorting.
+Their declarations are first-class providers to the consuming module, not opaque blobs.
+
+Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
+
+Source-library facade export edges may use the public import path rather than the concrete `#mod.bst` header path.
+Stage 3 treats those as satisfied facade-export edges, not as new graph nodes.
+This lets public source-library API names order consumers without leaking facade filesystem identity into the dependency graph.
+
+## Header/dependency/AST contract
+
+Header parsing and dependency sorting are responsible for making top-level declarations linearly consumable by AST.
+
+After dependency sorting:
+
+- AST receives headers in dependency order.
+- AST doesn't topologically sort constants, structs, choices, functions or aliases again.
+- AST must not rediscover top-level declarations from raw file tokens.
+- AST must not rebuild file import visibility from scratch.
+- AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment.
+- The implicit entry `start` header is never a dependency participant and is always emitted after sorted declarations.
+
+AST may register nominal identity and generic parameter metadata before constants so constructors are name-resolvable.
+Unresolved field and variant constructor shells stay in AST-owned side tables until semantic `TypeId`s are checked and final member definitions are written to `TypeEnvironment`.
+
+## Feature rule
+
+If AST needs a top-level declaration to be resolved before another declaration, that dependency belongs in the header dependency graph.
+
+If a new feature introduces a top-level dependency, add it to header parsing and dependency sorting.
+Don't add another AST ordering pass.
+
+That shortcut seems convenient once.
+Then the compiler has two declaration-order systems forever.
+
+## Related reading
+
+- @../header-parsing (Stage 2: Header parsing): where dependency edges are discovered
+- @../ast-construction (Stage 4: AST construction): the consumer of sorted headers
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): facade and source-library ordering rules

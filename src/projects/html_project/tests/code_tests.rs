@@ -1,4 +1,8 @@
+use crate::compiler_frontend::ast::templates::formatter_contract::{
+    FormatterInput, FormatterInputPiece, FormatterOutputPiece, FormatterTextPiece,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::projects::html_project::styles::code::{
     CodeLanguage, code_formatter, highlight_code_html,
 };
@@ -76,13 +80,11 @@ fn code_formatter_wrapper_preserves_newlines_after_dedent() {
     let formatter = code_formatter(CodeLanguage::Generic);
 
     let id = string_table.intern("    x\n    y");
-    let input = crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput {
-        pieces: vec![crate::compiler_frontend::ast::templates::template_render_plan::FormatterInputPiece::Text(
-            crate::compiler_frontend::ast::templates::template_render_plan::FormatterTextPiece {
-                text: id,
-                location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
-            },
-        )],
+    let input = FormatterInput {
+        pieces: vec![FormatterInputPiece::Text(FormatterTextPiece {
+            text: id,
+            location: SourceLocation::default(),
+        })],
     };
 
     let output = formatter
@@ -90,7 +92,7 @@ fn code_formatter_wrapper_preserves_newlines_after_dedent() {
         .format(input, &mut string_table)
         .expect("code formatter should succeed");
     let content = match &output.output.pieces[0] {
-        crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutputPiece::Text(t) => t,
+        FormatterOutputPiece::Text(t) => t,
         _ => panic!("Expected text output"),
     };
 

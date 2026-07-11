@@ -175,7 +175,6 @@ pub(crate) fn run_profile_benchmarks(options: ProfileOptions) -> Result<(), Stri
                 samply_run.presymbolication_flag.display_label(),
                 &case_paths.profile_json,
                 None,
-                None,
                 "samply_failed",
             );
             return Err(format!(
@@ -492,19 +491,28 @@ fn print_symbolication_smoke_diagnostic(
     profile_path: &std::path::Path,
     hotspots: &HotspotExtractionResult,
 ) {
+    let hot_function_counts = SymbolicationHotFunctionCounts {
+        hot_function_count: hotspots.symbolication.hot_function_count,
+        raw_address_function_count: hotspots.symbolication.raw_address_function_count,
+    };
+
     let text = format_symbolication_smoke_diagnostic(
         samply,
         profiling_binary,
         presymbolicate_requested,
         selected_presymbolication_flag,
         profile_path,
-        Some(hotspots.symbolication.hot_function_count),
-        Some(hotspots.symbolication.raw_address_function_count),
+        Some(hot_function_counts),
         hotspots.symbolication.status.as_str(),
     );
 
     println!();
     println!("{text}");
+}
+
+struct SymbolicationHotFunctionCounts {
+    hot_function_count: usize,
+    raw_address_function_count: usize,
 }
 
 fn format_symbolication_smoke_diagnostic(
@@ -513,8 +521,7 @@ fn format_symbolication_smoke_diagnostic(
     presymbolicate_requested: bool,
     selected_presymbolication_flag: &str,
     profile_path: &std::path::Path,
-    hot_function_count: Option<usize>,
-    raw_address_function_count: Option<usize>,
+    hot_function_counts: Option<SymbolicationHotFunctionCounts>,
     symbolication_status: &str,
 ) -> String {
     let profiling_symbols = profiling_binary.profiling_symbols.as_ref();
@@ -537,11 +544,13 @@ fn format_symbolication_smoke_diagnostic(
         )
     };
 
-    let hot_functions = hot_function_count
-        .map(|count| count.to_string())
+    let hot_functions = hot_function_counts
+        .as_ref()
+        .map(|counts| counts.hot_function_count.to_string())
         .unwrap_or_else(|| "unavailable".to_string());
-    let raw_address_hot_functions = raw_address_function_count
-        .map(|count| count.to_string())
+    let raw_address_hot_functions = hot_function_counts
+        .as_ref()
+        .map(|counts| counts.raw_address_function_count.to_string())
         .unwrap_or_else(|| "unavailable".to_string());
 
     format!(

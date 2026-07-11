@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: STRUCTS]
 
-#[section, $markdown:
+#[section, $md:
 
     # The Struct
     A struct is a collection of named fields, similar to a struct in other languages.
@@ -54,7 +54,7 @@ page_head #= theme_head
 
 ]
 
-#[section, $markdown:
+#[section, $md:
     ## Methods
     Methods in Beanstalk are created using the special `this` receiver parameter.
 

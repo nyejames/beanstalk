@@ -3,6 +3,8 @@ export @styles/docs {
     theme_css,
     palette,
     theme_head,
+    codebase_theme_css,
+    codebase_theme_head,
     section,
     navbar,
     footer,

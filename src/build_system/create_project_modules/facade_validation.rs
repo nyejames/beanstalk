@@ -7,7 +7,7 @@
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
+use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 use super::project_structure_diagnostics::{path_id, project_structure_messages};

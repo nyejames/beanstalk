@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CORE IO]
 
-#[section, $markdown:
+#[section, $md:
     `io` is the prelude namespace alias for `@core/io`.
     Console helpers write string content to the backend output surface.
 

@@ -1,0 +1,23 @@
+# Stage 7: Backend lowering
+
+Builder handoff, target validation and artifact production.
+
+## Contract
+
+- Input: compiled modules, borrow facts, builder metadata and selected backend
+- Output: backend artifacts and explicit output-file records
+- Decides: target-specific code generation, backend feature validation, project artifact assembly
+- Must not decide: frontend semantics, HIR shape, source syntax
+- Invariant: backend lowerers consume validated HIR and companion metadata without rediscovering frontend facts
+
+## Main paths
+
+- `src/backends/js/`
+- `src/backends/wasm/`
+- `src/backends/backend_feature_validation.rs`
+- `src/projects/html_project/`
+
+## Read next
+
+- `docs/src/docs/codebase/compiler-design/stages/backend-lowering/backend-lowering.bd`
+- `docs/src/docs/codebase/compiler-design/backend/overview.bd`

@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: GENERICS IN BEANSTALK]
 
-#[section, $markdown:
+#[section, $md:
     Generics are partially implemented for the current Alpha compiler.
 
     The supported surface is intentionally small:
@@ -29,7 +29,7 @@ page_head #= theme_head
     stay hidden behind real public wrapper declarations.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Current status
 
     [styled_table:
@@ -97,7 +97,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Generic type syntax
 
     Generic parameters are introduced with `type`.
@@ -119,7 +119,7 @@ page_head #= theme_head
     generic function calls, runtime generic values, type values, or type-level computation.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Generic choices
 
     Generic choices use the same `type` parameter list.
@@ -140,7 +140,7 @@ page_head #= theme_head
     Use record payload variants such as `Some | value T |`.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Concrete aliases
 
     Type aliases can name a fully applied generic instance.
@@ -161,7 +161,7 @@ page_head #= theme_head
     a type would otherwise need deeper composition.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Collections and constructed types
 
     Collections use the public `{T}` syntax and are compiler-owned constructed
@@ -186,7 +186,7 @@ page_head #= theme_head
     generic error slot.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Nesting rule
 
     Alpha allows one inline `of` application per annotation.
@@ -212,7 +212,7 @@ page_head #= theme_head
     ]
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Generic functions
 
     Generic free functions are callable when their type arguments can be inferred from the call
@@ -370,7 +370,7 @@ page_head #= theme_head
     wrapper declarations.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Trait bounds
 
     Generic bounds use `is`, not `must`.
@@ -429,7 +429,7 @@ page_head #= theme_head
     `where` clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Deferred generic work
 
     The following fit the language design but are not current Alpha generics:
@@ -445,7 +445,7 @@ page_head #= theme_head
     - `Option.Some`, `Result.Ok`, public `Ok` or `Err` constructors
 ]
 
-#[section, $markdown:
+#[section, $md:
     # Outside generic design scope
 
     These features are intentionally outside Beanstalk's generic design scope:

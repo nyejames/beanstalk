@@ -13,6 +13,14 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::return_token;
 
+/// Boxed diagnostic result for numeric literal tokenization.
+///
+/// WHAT: one file-local alias for the boxed `CompilerDiagnostic` error variant returned by
+/// `tokenize_numeric_literal`.
+/// WHY: numeric tokens return directly into the lexer's boxed dispatch family, so matching its
+/// error shape avoids a boundary adapter while diagnostic constructors remain plain until return.
+type NumericResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Tokenize an integer or float literal starting with `first_digit`.
 ///
 /// WHAT: consumes the full literal run, then asks `numeric_text` to validate it and
@@ -24,7 +32,7 @@ pub(super) fn tokenize_numeric_literal(
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
     sign: NumericLiteralSign,
-) -> Result<Token, CompilerDiagnostic> {
+) -> NumericResult<Token> {
     let mut literal_text = String::new();
     literal_text.push(first_digit);
 
@@ -46,11 +54,11 @@ pub(super) fn tokenize_numeric_literal(
             // Report the authored source text so diagnostics preserve underscores and sign.
             let authored = authored_numeric_text(sign, &literal_text);
             let authored_id = string_table.intern(&authored);
-            return Err(CompilerDiagnostic::invalid_number_literal(
+            return Err(Box::new(CompilerDiagnostic::invalid_number_literal(
                 authored_id,
                 NumberLiteralErrorReason::MultipleDecimalPoints,
                 stream.new_location(),
-            ));
+            )));
         }
     }
 
@@ -102,11 +110,11 @@ pub(super) fn tokenize_numeric_literal(
         Err(reason) => {
             // Report the authored source text so diagnostics preserve underscores and sign.
             let authored_id = string_table.intern(&authored);
-            Err(CompilerDiagnostic::invalid_number_literal(
+            Err(Box::new(CompilerDiagnostic::invalid_number_literal(
                 authored_id,
                 reason,
                 stream.new_location(),
-            ))
+            )))
         }
     }
 }

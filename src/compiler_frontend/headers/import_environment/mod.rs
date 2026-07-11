@@ -79,9 +79,11 @@ pub(crate) fn prepare_import_environment(
     };
 
     for source_file in input.module_symbols.module_file_paths.clone() {
-        if let Err(diag) = builder.build_file_visibility(&source_file, &importable_symbol_paths) {
+        if let Err(boxed_diagnostic) =
+            builder.build_file_visibility(&source_file, &importable_symbol_paths)
+        {
             return Err(CompilerMessages::from_diagnostic(
-                diag,
+                *boxed_diagnostic,
                 builder.string_table.clone(),
             ));
         }

@@ -8,7 +8,7 @@ page_head #= theme_head
 #[navbar]
 #[title, center: CHOICES]
 
-#[section, $markdown:
+#[section, $md:
 
     # Choices (enums)
     Choices are a way to define a set of possible values.

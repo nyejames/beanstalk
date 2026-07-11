@@ -417,7 +417,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     fs::create_dir_all(&src).expect("should create source folder");
 
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"src\"\noutput_folder #= \"release\"\n",
     )
     .expect("should write config");
@@ -471,7 +471,7 @@ fn build_directory_project_respects_custom_entry_root() {
     fs::create_dir_all(pages.join("docs")).expect("should create docs folder");
 
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"pages\"\noutput_folder #= \"release\"\n",
     )
     .expect("should write config");
@@ -507,7 +507,7 @@ fn build_directory_project_requires_root_page_in_configured_entry_root() {
     fs::create_dir_all(src.join("about")).expect("should create about folder");
 
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"src\"\noutput_folder #= \"release\"\n",
     )
     .expect("should write config");
@@ -545,7 +545,7 @@ fn build_directory_project_rejects_invalid_page_url_style() {
     let src = root.join("src");
     fs::create_dir_all(&src).expect("should create source folder");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"src\"\noutput_folder #= \"release\"\npage_url_style #= \"slashy\"\n",
     )
     .expect("should write config");
@@ -578,7 +578,7 @@ fn build_directory_project_rejects_invalid_redirect_index_html() {
     let src = root.join("src");
     fs::create_dir_all(&src).expect("should create source folder");
     fs::write(
-        root.join("#config.bst"),
+        root.join("config.bst"),
         "entry_root #= \"src\"\noutput_folder #= \"release\"\nredirect_index_html #= \"yes\"\n",
     )
     .expect("should write config");

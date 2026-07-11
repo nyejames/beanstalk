@@ -100,3 +100,48 @@ fn renderer_keeps_script_inside_body() {
 
     assert_fragment_before_body_close(&html, "<script>bootstrap()</script>");
 }
+
+#[test]
+fn renderer_injects_codeblock_scroll_styles() {
+    let html = render_shell(
+        &HtmlDocumentConfig::default(),
+        &HtmlPageMetadata::default(),
+        "index.html",
+        "",
+        "<h1>Hello</h1>\n",
+        "",
+    );
+
+    let codeblock_rule = extract_css_rule(&html, ".codeblock");
+
+    assert!(
+        codeblock_rule.contains("overflow-x: auto"),
+        "expected .codeblock to set overflow-x: auto, got: {codeblock_rule}"
+    );
+    assert!(
+        codeblock_rule.contains("white-space: pre"),
+        "expected .codeblock to set white-space: pre, got: {codeblock_rule}"
+    );
+}
+
+/// Extracts the first CSS rule block that starts with `selector`.
+///
+/// WHAT: finds the selector in the CSS and returns the text between the following `{` and the
+///       matching `}`.
+/// WHY: lets tests assert properties within a specific rule without being fooled by the same
+///      property appearing in unrelated rules.
+fn extract_css_rule<'a>(css: &'a str, selector: &str) -> &'a str {
+    let selector_start = css
+        .find(selector)
+        .unwrap_or_else(|| panic!("expected CSS to contain selector '{selector}'"));
+    let block_start = css[selector_start..]
+        .find('{')
+        .map(|offset| selector_start + offset)
+        .expect("expected opening brace after selector");
+    let block_end = css[block_start..]
+        .find('}')
+        .map(|offset| block_start + offset)
+        .expect("expected closing brace for selector block");
+
+    &css[block_start..=block_end]
+}

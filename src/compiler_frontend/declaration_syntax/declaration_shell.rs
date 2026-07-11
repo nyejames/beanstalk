@@ -7,7 +7,6 @@
 //! references, while AST resolves the full expression semantics later.
 //! MUST NOT: perform type checking, constant folding, or semantic validation.
 
-#![allow(clippy::result_large_err)]
 use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
@@ -22,6 +21,15 @@ use crate::compiler_frontend::utilities::token_scan::{
 use crate::compiler_frontend::value_mode::ValueMode;
 
 pub use crate::compiler_frontend::utilities::token_scan::InitializerReference;
+
+/// Boxed diagnostic result for declaration-shell parsing.
+///
+/// WHAT: keeps declaration parsing and binding-marker validation on one small
+///       error boundary while preserving the original structured diagnostic.
+/// WHY: these connected helpers otherwise carry the large diagnostic value
+///      through every successful parse. Plain-diagnostic callers unbox once at
+///      their existing boundary.
+type DeclarationShellResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 // All the component parts of a declaration before it is resolved / parsed.
 // Header parsing stores the shell; AST resolves the shell into a fully typed declaration.
@@ -72,7 +80,7 @@ pub fn parse_declaration_syntax(
     token_stream: &mut FileTokens,
     name: StringId,
     string_table: &mut StringTable,
-) -> Result<DeclarationSyntax, CompilerDiagnostic> {
+) -> DeclarationShellResult<DeclarationSyntax> {
     // This checks for mutability marker first (in the case of mutable methods)
     // Or whether the declaration has an explicit Type
     let target = parse_binding_target_syntax(name, token_stream, string_table)?;
@@ -83,17 +91,17 @@ pub fn parse_declaration_syntax(
             token_stream.advance();
         }
         TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
-            return Err(CompilerDiagnostic::uninitialized_variable(
+            return Err(Box::new(CompilerDiagnostic::uninitialized_variable(
                 name,
                 token_stream.current_location(),
-            ));
+            )));
         }
         _ => {
-            return Err(CompilerDiagnostic::expected_token(
+            return Err(Box::new(CompilerDiagnostic::expected_token(
                 TokenKind::Assign,
                 Some(token_stream.current_token_kind().to_owned()),
                 token_stream.current_location(),
-            ));
+            )));
         }
     }
 
@@ -101,10 +109,10 @@ pub fn parse_declaration_syntax(
     // when the initializer is unclosed at end-of-file.
     let initializer_tokens = collect_declaration_initializer_tokens(token_stream, string_table)?;
     if initializer_tokens.is_empty() {
-        return Err(CompilerDiagnostic::uninitialized_variable(
+        return Err(Box::new(CompilerDiagnostic::uninitialized_variable(
             name,
             target.location.clone(),
-        ));
+        )));
     }
 
     Ok(DeclarationSyntax {
@@ -120,7 +128,7 @@ pub fn parse_binding_target_syntax(
     name: StringId,
     token_stream: &mut FileTokens,
     string_table: &StringTable,
-) -> Result<BindingTargetSyntax, CompilerDiagnostic> {
+) -> DeclarationShellResult<BindingTargetSyntax> {
     let target_location = token_stream.current_location();
 
     let binding_mode = if token_stream.current_token_kind() == &TokenKind::Mutable {
@@ -165,7 +173,7 @@ pub fn parse_binding_target_syntax(
 pub(crate) fn require_binding_marker_adjacent(
     token_stream: &FileTokens,
     mode: BindingMode,
-) -> Result<(), CompilerDiagnostic> {
+) -> DeclarationShellResult<()> {
     let Some(current_token) = token_stream.tokens.get(token_stream.index) else {
         return Ok(());
     };
@@ -190,10 +198,10 @@ pub(crate) fn require_binding_marker_adjacent(
             }
             BindingMode::ImmutableRuntime => return Ok(()),
         };
-        return Err(CompilerDiagnostic::common_syntax_mistake(
+        return Err(Box::new(CompilerDiagnostic::common_syntax_mistake(
             reason,
             current_token.location.clone(),
-        ));
+        )));
     }
 
     Ok(())

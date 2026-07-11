@@ -9,6 +9,7 @@ use super::*;
 use crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderKind, HeaderParseOptions, Headers, parse_headers, prepare_file_from_tokens,
 };
@@ -440,5 +441,165 @@ fn capacity_references_across_header_type_surfaces_create_dependency_edges() {
         non_start_names,
         vec!["limit", "Buffer", "Status", "make"],
         "capacity references in fields, payloads, and returns must order the constant first"
+    );
+}
+
+#[test]
+fn trait_requirement_type_dependencies_order_required_type_before_trait() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/traits.bst",
+                "import @types { Message }\n\
+                 DISPLAYABLE must:\n\
+                     display |This| -> Message\n\
+                 ;\n",
+            ),
+            ("src/types.bst", "Message = | text String |\n"),
+        ],
+        "src/traits.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .map(|header| header_name(header, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["Message", "DISPLAYABLE"],
+        "trait requirement signatures must order imported type surfaces before the trait"
+    );
+}
+
+#[test]
+fn trait_conformance_references_do_not_create_dependency_sort_edges() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/app.bst",
+                "import @traits { DISPLAYABLE }\n\
+                 Label = | text String |\n\
+                 Label must DISPLAYABLE\n",
+            ),
+            (
+                "src/traits.bst",
+                "DISPLAYABLE must:\n\
+                     display |This| -> String\n\
+                 ;\n",
+            ),
+        ],
+        "src/app.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let conformance_position = sorted
+        .headers
+        .iter()
+        .position(|header| matches!(header.kind, HeaderKind::TraitConformance { .. }))
+        .expect("expected a conformance header");
+    let trait_position = sorted
+        .headers
+        .iter()
+        .position(|header| header_name(header, &string_table) == "DISPLAYABLE")
+        .expect("expected imported trait header");
+
+    assert!(
+        conformance_position < trait_position,
+        "conformance references are resolved by AST after trait definitions are registered, so \
+         they intentionally do not add dependency-sort edges"
+    );
+}
+
+#[test]
+fn trait_incompatibility_references_do_not_create_dependency_sort_edges() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/app.bst",
+                "import @traits { SERIALIZABLE }\n\
+                 DISPLAYABLE must:\n\
+                 ;\n\
+                 DISPLAYABLE must not SERIALIZABLE\n",
+            ),
+            ("src/traits.bst", "SERIALIZABLE must:\n;\n"),
+        ],
+        "src/app.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let incompatibility_position = sorted
+        .headers
+        .iter()
+        .position(|header| matches!(header.kind, HeaderKind::TraitIncompatibility { .. }))
+        .expect("expected an incompatibility header");
+    let imported_trait_position = sorted
+        .headers
+        .iter()
+        .position(|header| header_name(header, &string_table) == "SERIALIZABLE")
+        .expect("expected imported trait header");
+
+    assert!(
+        incompatibility_position < imported_trait_position,
+        "trait incompatibility references are resolved by AST after trait definitions are \
+         registered, so they intentionally do not add dependency-sort edges"
+    );
+}
+
+#[test]
+fn source_library_facade_export_dependency_edges_do_not_require_concrete_header_paths() {
+    let (mut headers, mut string_table) = parse_module_headers(
+        &[("src/page.bst", "NeedsWidget #String = \"ok\"\n")],
+        "src/page.bst",
+    );
+
+    let helper_prefix = string_table.intern("helper");
+    let widget_name = string_table.intern("Widget");
+    let public_export_path = InternedPath::from_components(vec![helper_prefix, widget_name]);
+    let concrete_target = InternedPath::from_path_buf(
+        &PathBuf::from("lib/helper/internal/Widget"),
+        &mut string_table,
+    );
+
+    let dependent_header = headers
+        .headers
+        .iter_mut()
+        .find(|header| header_name(header, &string_table) == "NeedsWidget")
+        .expect("expected dependent header");
+    dependent_header.dependencies.insert(public_export_path);
+
+    headers
+        .module_symbols
+        .facade_exports
+        .entry("helper".to_owned())
+        .or_default()
+        .insert(FacadeExportEntry {
+            export_name: widget_name,
+            target: FacadeExportTarget::Source(concrete_target),
+        });
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("facade export dependency path should be accepted without a graph header");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .map(|header| header_name(header, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["NeedsWidget"],
+        "source-library public facade export paths may differ from concrete source headers"
     );
 }
