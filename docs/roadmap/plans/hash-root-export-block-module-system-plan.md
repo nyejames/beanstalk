@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3 generic source-library root discovery and preflight
-LAST_ACCEPTED_COMMIT: `c3ec769ca` (`refactor: generalize hash root import identity`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `templates-refactor`; this branch is the source of truth for current TIR code and documentation. Phases 1 and 2 plus the first Phase 3 slice are committed and fully validated. The former dedicated hash-root worktree still contains extensive dirty documentation changes, so removal is deferred until the user-owned state is resolved. Concurrent user-owned plan and documentation edits must remain unstaged.
+CURRENT_SLICE: Phase 3 remaining entry-root facade identity and duplicate-policy transition
+LAST_ACCEPTED_COMMIT: `2413c538a` (`refactor: discover generic source library roots`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The accepted source-library slice is committed and the plan checkpoint is the only remaining change. Concurrent user-owned plan and documentation edits must remain unstaged.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: language overview, project-structure docs, libraries docs and progress matrix use canonical `config.bst`; module-root and inline `export` wording remains for later phases.
-- code: `project_config.rs`, `projects/settings.rs`, dev-server watch/config tests, HTML scaffold, output routing, fixtures and benchmarks use only `config.bst`. `create_project_modules/source_tree_index.rs` owns the single directory scan and passes prepared `ModuleRootTable` data plus entry candidates forward. `source_libraries/root_file.rs` now owns generic hash/config filename and import identity, while the temporary `MOD_FILE_NAME` remains isolated there for current facade consumers. `path_resolution.rs` no longer scans the filesystem. Header roles, source-library root selection and facade data still encode the temporary `#mod.bst` / `#page.bst` model for the remaining Phase 3 work.
+- code: `project_config.rs`, `projects/settings.rs`, dev-server watch/config tests, HTML scaffold, output routing, fixtures and benchmarks use only `config.bst`. `create_project_modules/source_tree_index.rs` owns the single entry-root scan and passes prepared `ModuleRootTable` data plus entry candidates forward. `source_libraries/root_file.rs` owns generic hash/config filename identity plus deterministic direct-child source-library root discovery. Source-library preflight requires exactly one generic root and `path_resolution.rs` canonicalizes it into the existing temporary facade map. The temporary `MOD_FILE_NAME` remains isolated for current header/file-role consumers. Entry-root header roles and facade data still encode the temporary `#mod.bst` / `#page.bst` model for the remaining Phase 3 work.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -174,18 +174,19 @@ VALIDATION_STATE:
 - Phase 2 performance: the post-slice frontend matrix was approximately 52 ms default, 122 ms with one thread, 82 ms with two and 63 ms with four versus the Phase 0 matrix of 50/125/80/58 ms. `just bench-check` passed 28/28 at -2 ms average. A 20-run direct comparison on `module-root-stress` measured the new single discovery at 0.312 ms versus two old timed scans averaging 0.224 ms each, plus the removed untimed entry walk. `BST_COUNTERS=summary` reported `source scans 1` for the directory build.
 - Phase 2 final gate: `just validate` passed cross-target Clippy, 3309 unit tests, 1735 integration cases, clean docs and bench-check 28/28.
 - Phase 3 generic import identity: Codex CLI added the generic root/config classifier, arbitrary hash-root direct-import rejection and exact dynamic diagnostic rendering. Parent moved the remaining temporary `#mod.bst` helpers into the same owner with no forwarding shim. Focused root-file (4), header (165) and Stage 0 (138) tests passed. Full `just validate` passed cross-target Clippy, 3314 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
+- Phase 3 generic source-library roots: Codex CLI added deterministic direct-child `#*.bst` discovery, threaded unique cosmetic roots through the existing temporary facade map and added structured missing/multiple-root diagnostics with sorted candidate paths. Parent reviewed stage ownership and temporary-map duplication, updated the progress matrix and ran full `just validate`: cross-target Clippy, 3319 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 
 DOCS_IMPACT:
-- progress matrix needed: yes, once syntax/config/module-root behavior changes land
+- progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
 - other docs stale: `docs/language-overview.md`, `docs/compiler-design-overview.md`, docs-site project-structure/libraries/getting-started pages, `README.md` examples, scaffold docs and benchmark docs if metric names change
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate the Phase 3 source-library root discovery and preflight slice: select one generic `#*.bst` root per library, preserve `libraries/html/#mod.bst` as cosmetic and remove hard-coded facade-file probing from resolver construction and validation without entering file-role changes.
-DELEGATION_DECISION: codex-cli - completed the first Phase 3 generic import-identity slice; parent consolidated remaining temporary root identity, ran the full gate and accepted it
+- Review and delegate the smallest coherent Phase 3 entry-root transition that replaces `module_root_facades` and hard-coded `#mod.bst` synthesis without leaving the repository in a broken mixed `#page.bst` / `#mod.bst` state or prematurely entering active/imported root execution semantics.
+DELEGATION_DECISION: codex-cli - completed and accepted the generic source-library discovery/preflight slice; continue with Codex CLI after the parent bounds the coupled entry-root transition
 NEXT_WORKER_ORDER: codex-cli, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: prepare the bounded Phase 3 source-library root worker envelope
+NEXT_RESUME_ACTION: inspect the remaining Phase 3 entry-root facade synthesis owners and prepare the bounded Codex CLI worker envelope
 
 ---
 
@@ -708,11 +709,11 @@ After Phase 2, path resolution should consume module-root data instead of discov
   - [ ] `src/compiler_frontend/headers/import_environment/builder.rs`
   - [ ] `src/compiler_frontend/headers/facade_data.rs`
   - [ ] `src/compiler_frontend/headers/symbol_collection.rs`
-- [ ] Update source-library facade/root discovery:
-  - [ ] each source-library root may contain one non-config `#*.bst` root file;
-  - [ ] existing `libraries/html/#mod.bst` remains valid as a cosmetic root name;
-  - [ ] `#mod.bst` is no longer the only accepted source-library facade filename.
-- [ ] Update `src/build_system/create_project_modules/facade_validation.rs` so source-library preflight validates a generic root file instead of hard-coded `#mod.bst`.
+- [x] Update source-library facade/root discovery:
+  - [x] each source-library root may contain one non-config `#*.bst` root file;
+  - [x] existing `libraries/html/#mod.bst` remains valid as a cosmetic root name;
+  - [x] `#mod.bst` is no longer the only accepted source-library facade filename.
+- [x] Update `src/build_system/create_project_modules/facade_validation.rs` so source-library preflight validates a generic root file instead of hard-coded `#mod.bst`.
 
 ### Review / audit / validation
 
