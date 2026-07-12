@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5C remove obsolete legacy-export import-path scanning and finish the Phase 5 grep audit
+CURRENT_SLICE: Phase 6 rebuild module public export maps from generic root files
 LAST_ACCEPTED_COMMIT: `f1fd97fbd` (`test: migrate module export fixtures`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `f1fd97fbd`; Phase 5B is committed. Concurrent user-owned docs source, generated docs and docs-migration plan edits remain unstaged and uncommitted and must be ignored.
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `63809e044`; Phase 5C is accepted for its next checkpoint. The concurrent docs migration is committed separately and remains outside this plan's implementation commits.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -179,6 +179,7 @@ VALIDATION_STATE:
 - Phase 4 root-role cutover: Codex CLI replaced entry/facade roles with active/imported/normal module-root roles, suppressed imported-root start output, preserved public surfaces and added header activity facts. The parent replaced a linear root-file identity scan with a prepared hash index, removed the obsolete duplicate-root counter and added end-to-end duplicate-root diagnostics coverage. `cargo fmt --check`, 3321 unit tests, 113 path tests, 140 Stage 0 tests and 1738 integration cases passed. `just validate` reached the docs check after code gates passed, then failed because concurrent user-owned `docs/src/**` edits already use Phase 5 `export:` syntax. This docs-only block is accepted temporarily by explicit user direction.
 - Phase 5A strict export parser: Codex CLI added one file-level `export:` parser mode, rejected legacy inline forms, required grouped imports, rejected invalid runtime/evidence/receiver items and preserved public header/import carriers without adding a scope frame. The parent aligned module-root and receiver import/export diagnostic names. Empty `export:` is a structured error because an empty public API section is almost certainly accidental. `cargo fmt --check`, 174 header tests, 51 compiler-message tests and library Clippy with warnings denied passed. Full integration and validation are intentionally deferred to Phase 5B after production sources and fixtures migrate.
 - Phase 5B fixture migration: Codex CLI migrated remaining integration and test-only sources to one strict `export:` block, added 11 stable-code export-block integration cases and passed `cargo fmt --check`, 1749 integration cases, all-target Clippy and full `just validate`. Parent renamed the stale page-root success case and reran formatting plus all 1749 integration cases. The grep audit found obsolete legacy-export recognition only in `paths/const_paths/import_clauses.rs`, which is isolated as Phase 5C before Phase 5 closes.
+- Phase 5C legacy scanner removal: Codex CLI deleted the dedicated `export import` / `export @path` path collector and its sugar helper so strict export-block imports flow through the ordinary import scanner. Focused path coverage now proves strict block discovery and deliberate legacy-prefix skipping. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 114 path tests and 140 Stage 0 module-creation tests.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -186,11 +187,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate removal of legacy-export import-path scanning and its obsolete tests through the verified `codex-cli-beanstalk` wrapper.
+- Commit the accepted Phase 5C cleanup, then delegate the first bounded Phase 6 public-export-map ownership slice through the verified `codex-cli-beanstalk` wrapper.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch `.codex-worker/tasks/hash-root-phase-5c.md` through codex-cli
+NEXT_RESUME_ACTION: inspect Phase 6 facade-oriented owners and prepare its first bounded codex-cli task
 
 ---
 
@@ -842,9 +843,9 @@ The export block should be the only public API marker. This phase should delete 
 - [x] Run integration tests for public imports/re-exports.
 - [x] Run failure fixtures using stable diagnostic codes.
 - [x] Run `just validate`.
-- [ ] Grep audit:
-  - [ ] no compatibility parser path for old inline export syntax;
-  - [ ] no `export @path` sugar remains;
+- [x] Grep audit:
+  - [x] no compatibility parser path for old inline export syntax;
+  - [x] no `export @path` sugar remains;
   - [x] `export:` block does not create a scope frame.
 - [x] Update active context capsule.
 

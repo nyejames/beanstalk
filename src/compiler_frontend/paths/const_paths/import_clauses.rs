@@ -24,42 +24,14 @@ pub struct ParsedImportItem {
 pub fn parse_import_clause_items(
     tokens: &[Token],
     start_index: usize,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> ImportClauseResult<(Vec<ParsedImportItem>, usize)> {
-    parse_path_clause_items(
-        tokens,
-        start_index,
-        TokenKind::Import,
-        "import",
-        string_table,
-    )
-}
-
-/// Parse an `export @path { ... }` sugar clause into import items.
-///
-/// WHAT: `export @path { Symbol }` is syntactic sugar for `export import @path { Symbol }`.
-/// WHY: Stage 0 path collection and header parsing both need to resolve the path items inside
-///      `export @path` without an explicit `import` token.
-pub fn parse_export_path_clause_items(
-    tokens: &[Token],
-    start_index: usize,
-    string_table: &StringTable,
-) -> ImportClauseResult<(Vec<ParsedImportItem>, usize)> {
-    parse_path_clause_items(
-        tokens,
-        start_index,
-        TokenKind::Export,
-        "export",
-        string_table,
-    )
+    parse_path_clause_items(tokens, start_index)
 }
 
 fn parse_path_clause_items(
     tokens: &[Token],
     start_index: usize,
-    expected_token_kind: TokenKind,
-    _clause_name: &str,
-    _string_table: &StringTable,
 ) -> ImportClauseResult<(Vec<ParsedImportItem>, usize)> {
     let Some(clause_token) = tokens.get(start_index) else {
         return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
@@ -69,7 +41,7 @@ fn parse_path_clause_items(
         )));
     };
 
-    if clause_token.kind != expected_token_kind {
+    if clause_token.kind != TokenKind::Import {
         return Err(Box::new(CompilerDiagnostic::invalid_import_clause(
             ImportClauseKind::Import,
             InvalidImportClauseReason::ExpectedPath,
@@ -218,9 +190,12 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<Int
 
     while index < tokens.len() {
         if matches!(tokens[index].kind, TokenKind::Import) {
-            if previous_significant_token_is_hash(tokens, index) {
-                // Stage 0 only gathers reachable files. Legacy `#import` is diagnosed by header
-                // parsing so users get the explicit removed-syntax error instead of a path error.
+            if previous_significant_token_kind(tokens, index)
+                .is_some_and(|kind| matches!(kind, TokenKind::Hash | TokenKind::Export))
+            {
+                // Stage 0 only gathers reachable files. Header parsing owns diagnostics for
+                // legacy `#import` and other removed export-prefixed forms, while imports inside
+                // an `export:` block remain ordinary Import tokens after the block colon.
                 index += 1;
                 continue;
             }
@@ -231,59 +206,16 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<Int
             continue;
         }
 
-        // Collect paths from `export import @path { ... }` and `export @path { ... }`.
-        // Exported authored declarations do not carry import paths and are ignored here.
-        if matches!(tokens[index].kind, TokenKind::Export) {
-            if previous_significant_token_is_hash(tokens, index) {
-                index += 1;
-                continue;
-            }
-
-            // `export import @path { ... }`
-            if tokens
-                .get(index + 1)
-                .is_some_and(|token| matches!(token.kind, TokenKind::Import))
-            {
-                let (paths, next_index) = parse_import_clause_tokens(tokens, index + 1)?;
-                parsed_paths.extend(paths);
-                index = next_index;
-                continue;
-            }
-
-            // `export @path { ... }` sugar — only if the next token is a path.
-            if tokens
-                .get(index + 1)
-                .is_some_and(path_token_uses_grouped_syntax)
-            {
-                let string_table = StringTable::new();
-                let (items, next_index) =
-                    parse_export_path_clause_items(tokens, index, &string_table)?;
-                parsed_paths.extend(items.into_iter().map(|item| item.path));
-                index = next_index;
-                continue;
-            }
-
-            index += 1;
-            continue;
-        }
-
         index += 1;
     }
 
     Ok(parsed_paths)
 }
 
-fn path_token_uses_grouped_syntax(token: &Token) -> bool {
-    match &token.kind {
-        TokenKind::Path(items) => items.iter().any(|item| item.from_grouped),
-        _ => false,
-    }
-}
-
-fn previous_significant_token_is_hash(tokens: &[Token], index: usize) -> bool {
+fn previous_significant_token_kind(tokens: &[Token], index: usize) -> Option<&TokenKind> {
     tokens[..index]
         .iter()
         .rev()
         .find(|token| !matches!(token.kind, TokenKind::Newline))
-        .is_some_and(|token| matches!(token.kind, TokenKind::Hash))
+        .map(|token| &token.kind)
 }

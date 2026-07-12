@@ -791,27 +791,31 @@ fn reject_grouped_import_alias_that_is_a_keyword() {
     );
 }
 
-// ---- Stage 0 export path collection tests ----
+// ---- Stage 0 import path collection tests ----
 
 #[test]
-fn collect_import_paths_from_tokens_sees_export_import() {
-    let paths = collect_import_path_values("export import @./button { Card }\n");
+fn collect_import_paths_from_tokens_collects_strict_export_block_imports() {
+    let paths = collect_import_path_values("export:\n    import @./button { Card }\n;\n");
     assert_eq!(paths, vec!["./button/Card".to_string()]);
 }
 
 #[test]
-fn collect_import_paths_from_tokens_sees_export_path_sugar() {
+fn collect_import_paths_from_tokens_skips_legacy_export_import_prefix() {
+    let paths = collect_import_path_values("export import @./button { Card }\n");
+    assert!(paths.is_empty());
+}
+
+#[test]
+fn collect_import_paths_from_tokens_skips_legacy_export_path_prefix() {
     let paths = collect_import_path_values("export @./card { Button, render }\n");
-    assert_eq!(
-        paths,
-        vec!["./card/Button".to_string(), "./card/render".to_string()]
-    );
+    assert!(paths.is_empty());
 }
 
 #[test]
 fn collect_import_paths_from_tokens_ignores_exported_declarations() {
-    let paths =
-        collect_import_path_values("export Button = | label String |\nexport import @./x { A }\n");
+    let paths = collect_import_path_values(
+        "export:\n    Button = | label String |\n    import @./x { A }\n;\n",
+    );
     assert_eq!(paths, vec!["./x/A".to_string()]);
 }
 
