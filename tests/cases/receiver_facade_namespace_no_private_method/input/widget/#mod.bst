@@ -1,9 +1,11 @@
-export Counter = |
-    count Int,
-|
+export:
+    Counter = |
+        count Int,
+    |
 
-export make_counter || -> Counter:
-    return Counter(41)
+    make_counter || -> Counter:
+        return Counter(41)
+    ;
 ;
 
 tick |this Counter| -> Int:

@@ -1,4 +1,6 @@
-export @./internal {
-    greet as hello,
-    farewell as goodbye,
-}
+export:
+    import @./internal {
+        greet as hello,
+        farewell as goodbye,
+    }
+;

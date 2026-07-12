@@ -1,7 +1,9 @@
-export Counter = |
-    count Int,
-|
+export:
+    Counter = |
+        count Int,
+    |
 
-export tick |this Counter| -> Int:
-    return this.count + 1
+    tick |this Counter| -> Int:
+        return this.count + 1
+    ;
 ;

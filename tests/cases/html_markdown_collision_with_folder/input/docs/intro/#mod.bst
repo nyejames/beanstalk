@@ -1,1 +1,3 @@
-export intro_message #String = "ambiguous folder facade"
+export:
+    intro_message #String = "ambiguous folder facade"
+;

@@ -1,1 +1,3 @@
-export @./impl { tick }
+export:
+    import @./impl { tick }
+;

@@ -2,4 +2,6 @@ PrivateData = |
     value String,
 |
 
-export PublicAlias as PrivateData
+export:
+    PublicAlias as PrivateData
+;

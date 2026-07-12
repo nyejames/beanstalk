@@ -1,1 +1,3 @@
-export @./internal/clock { seconds }
+export:
+    import @./internal/clock { seconds }
+;

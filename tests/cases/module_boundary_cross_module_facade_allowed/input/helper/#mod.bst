@@ -1,3 +1,5 @@
-export greet || -> String:
-    return "hello"
+export:
+    greet || -> String:
+        return "hello"
+    ;
 ;

@@ -1,3 +1,5 @@
-export double |x Int| -> Int:
-    return x * 2
+export:
+    double |x Int| -> Int:
+        return x * 2
+    ;
 ;

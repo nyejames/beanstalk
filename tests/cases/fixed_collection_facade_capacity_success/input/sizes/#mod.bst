@@ -1,1 +1,3 @@
-export capacity #Int = 4
+export:
+    capacity #Int = 4
+;

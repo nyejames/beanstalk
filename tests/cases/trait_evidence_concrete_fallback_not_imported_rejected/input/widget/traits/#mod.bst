@@ -1,3 +1,5 @@
-export DISPLAY_TEXT must:
-    display |This| -> String
+export:
+    DISPLAY_TEXT must:
+        display |This| -> String
+    ;
 ;

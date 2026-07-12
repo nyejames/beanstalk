@@ -1,1 +1,3 @@
-export greet #= "Hello"
+export:
+    greet #= "Hello"
+;

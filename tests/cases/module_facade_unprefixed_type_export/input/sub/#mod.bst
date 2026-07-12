@@ -1,10 +1,12 @@
-export ExportedStruct = |
-    value String,
-|
+export:
+    ExportedStruct = |
+        value String,
+    |
 
-export ExportedChoice ::
-    VariantA,
-    VariantB | payload Int |,
+    ExportedChoice ::
+        VariantA,
+        VariantB | payload Int |,
+    ;
+
+    ExportedAlias as String
 ;
-
-export ExportedAlias as String

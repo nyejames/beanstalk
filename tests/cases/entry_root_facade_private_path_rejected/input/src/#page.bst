@@ -1,3 +1,5 @@
 io.line("root")
 
-export @./public { greet }
+export:
+    import @./public { greet }
+;

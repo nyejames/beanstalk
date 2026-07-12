@@ -7349,8 +7349,8 @@ path = "export_outside_ordinary_file_rejected"
 tags = ["integration", "diagnostics", "imports", "facades"]
 
 [[case]]
-id = "export_outside_page_file_rejected"
-path = "export_outside_page_file_rejected"
+id = "export_block_active_root_success"
+path = "export_block_active_root_success"
 tags = ["integration", "diagnostics", "imports", "facades"]
 
 [[case]]
@@ -8032,3 +8032,58 @@ tags = ["integration", "diagnostics", "field-access"]
 id = "choice_variant_did_you_mean"
 path = "choice_variant_did_you_mean"
 tags = ["integration", "diagnostics", "choices"]
+
+[[case]]
+id = "export_block_strict_success"
+path = "export_block_strict_success"
+tags = ["integration", "imports", "facades"]
+
+[[case]]
+id = "export_block_outside_module_root_rejected"
+path = "export_block_outside_module_root_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_missing_colon_rejected"
+path = "export_block_missing_colon_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_duplicate_rejected"
+path = "export_block_duplicate_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_empty_rejected"
+path = "export_block_empty_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_runtime_item_rejected"
+path = "export_block_runtime_item_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_bare_import_rejected"
+path = "export_block_bare_import_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_block_conformance_rejected"
+path = "export_block_conformance_rejected"
+tags = ["integration", "diagnostics", "imports", "facades", "traits"]
+
+[[case]]
+id = "export_block_incompatibility_rejected"
+path = "export_block_incompatibility_rejected"
+tags = ["integration", "diagnostics", "imports", "facades", "traits"]
+
+[[case]]
+id = "export_block_nested_rejected"
+path = "export_block_nested_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "legacy_inline_export_rejected"
+path = "legacy_inline_export_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]

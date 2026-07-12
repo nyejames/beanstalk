@@ -1,1 +1,3 @@
-export @./impl { Counter }
+export:
+    import @./impl { Counter }
+;

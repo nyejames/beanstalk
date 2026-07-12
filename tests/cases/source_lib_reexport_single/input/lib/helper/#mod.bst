@@ -1,1 +1,3 @@
-export import @./greet { greet }
+export:
+    import @./greet { greet }
+;

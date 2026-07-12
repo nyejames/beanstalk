@@ -887,7 +887,7 @@ fn accepts_config_imported_builder_source_library_constant() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "export default_entry_root #= \"src\"\n",
+        "export:\n    default_entry_root #= \"src\"\n;\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -924,7 +924,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "root_folder #= \"src\"\nexport default_entry_root #= root_folder\n",
+        "root_folder #= \"src\"\nexport:\n    default_entry_root #= root_folder\n;\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -961,7 +961,7 @@ fn accepts_config_imported_constant_reexported_from_builder_source_library_file(
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "import @./values { root_folder as internal_root }\nexport default_entry_root #= internal_root\n",
+        "import @./values { root_folder as internal_root }\n\nexport:\n    default_entry_root #= internal_root\n;\n",
     )
     .expect("should write builder facade");
     fs::write(library_root.join("values.bst"), "root_folder #= \"src\"\n")
@@ -1000,7 +1000,7 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "export EntryRoot as String\nexport Config = |\n    value String,\n|\nexport Mode ::\n    Ready,\n;\nexport default_entry_root #= \"src\"\n",
+        "export:\n    EntryRoot as String\n    Config = |\n        value String,\n    |\n    Mode ::\n        Ready,\n    ;\n    default_entry_root #= \"src\"\n;\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -1082,7 +1082,7 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "export default_entry_root || -> String:\n    return \"src\"\n;\n",
+        "export:\n    default_entry_root || -> String:\n        return \"src\"\n    ;\n;\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -3549,7 +3549,7 @@ fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
 
     fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
     fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
-    fs::write(src.join("other/#mod.bst"), "export x #= 1\n")
+    fs::write(src.join("other/#mod.bst"), "export:\n    x #= 1\n;\n")
         .expect("should write other module root");
 
     let mut config = Config::new(root.clone());
@@ -4222,7 +4222,8 @@ fn provider_free_parallel_preserves_cross_module_facade_queuing() {
         "import @module_b/impl\n#[:pageA]\n",
     )
     .expect("should write pageA");
-    fs::write(module_b.join("#mod.bst"), "export b #= 1\n").expect("should write module_b root");
+    fs::write(module_b.join("#mod.bst"), "export:\n    b #= 1\n;\n")
+        .expect("should write module_b root");
     fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
 
     let mut config = Config::new(root.clone());

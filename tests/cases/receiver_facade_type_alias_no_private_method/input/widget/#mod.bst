@@ -1,9 +1,11 @@
 import @./impl { Counter, make_counter_impl }
 
-export @./impl { Counter }
+export:
+    import @./impl { Counter }
 
-export PublicCounter as Counter
+    PublicCounter as Counter
 
-export make_counter || -> PublicCounter:
-    return make_counter_impl()
+    make_counter || -> PublicCounter:
+        return make_counter_impl()
+    ;
 ;

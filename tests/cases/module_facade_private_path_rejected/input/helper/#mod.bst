@@ -1,1 +1,3 @@
-export @./impl { greet }
+export:
+    import @./impl { greet }
+;

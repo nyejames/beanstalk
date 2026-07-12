@@ -1,1 +1,3 @@
-export two #Int = 2
+export:
+    two #Int = 2
+;

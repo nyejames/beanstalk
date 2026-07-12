@@ -1,6 +1,8 @@
-export Label = |
-    text String,
-|
+export:
+    Label = |
+        text String,
+    |
+;
 
 display |this Label| -> String:
     return this.text

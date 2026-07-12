@@ -1,1 +1,3 @@
-export exported_constant #= "hello"
+export:
+    exported_constant #= "hello"
+;

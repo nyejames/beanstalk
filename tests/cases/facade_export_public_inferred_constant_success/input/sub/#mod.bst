@@ -1,5 +1,7 @@
-export PublicData = |
-    value String,
-|
+export:
+    PublicData = |
+        value String,
+    |
 
-export public_value #= PublicData("shown")
+    public_value #= PublicData("shown")
+;

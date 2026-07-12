@@ -1,7 +1,9 @@
-export @./intro {
-    content as intro_content,
-}
+export:
+    import @./intro {
+        content as intro_content,
+    }
 
-export render_local || -> String:
-    return "runtime"
+    render_local || -> String:
+        return "runtime"
+    ;
 ;

@@ -1,1 +1,3 @@
-export import @core/math { sin }
+export:
+    import @core/math { sin }
+;

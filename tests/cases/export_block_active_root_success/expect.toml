@@ -3,4 +3,4 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["export_outside_page_file_rejected"]
+rendered_output_contains = ["export_block_active_root_success"]

@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: blocked
-CURRENT_SLICE: Phase 5B production-library and integration-fixture migration to strict `export:` blocks
+STATUS: active
+CURRENT_SLICE: Phase 5C remove obsolete legacy-export import-path scanning and finish the Phase 5 grep audit
 LAST_ACCEPTED_COMMIT: `c754a4f95` (`feat: parse strict module export blocks`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 5A is committed and Phase 5B made no source changes. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `a0b050edc`; Phase 5A is committed and the Phase 5B fixture migration is accepted for its next checkpoint. Concurrent user-owned docs source, generated docs and docs-migration plan edits remain unstaged and uncommitted and must be ignored.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -178,6 +178,7 @@ VALIDATION_STATE:
 - Phase 3 entry-root export identity: Codex CLI renamed prepared entry-root facade maps to export-file identity and added `ModuleRootBoundary` so namespace resolution consumes the Stage 0-selected export path. Parent corrected the worker's dropped no-export-root boundary regression by making the carried export file optional, preserving missing-facade enforcement. Full `just validate` passed cross-target Clippy, 3320 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 4 root-role cutover: Codex CLI replaced entry/facade roles with active/imported/normal module-root roles, suppressed imported-root start output, preserved public surfaces and added header activity facts. The parent replaced a linear root-file identity scan with a prepared hash index, removed the obsolete duplicate-root counter and added end-to-end duplicate-root diagnostics coverage. `cargo fmt --check`, 3321 unit tests, 113 path tests, 140 Stage 0 tests and 1738 integration cases passed. `just validate` reached the docs check after code gates passed, then failed because concurrent user-owned `docs/src/**` edits already use Phase 5 `export:` syntax. This docs-only block is accepted temporarily by explicit user direction.
 - Phase 5A strict export parser: Codex CLI added one file-level `export:` parser mode, rejected legacy inline forms, required grouped imports, rejected invalid runtime/evidence/receiver items and preserved public header/import carriers without adding a scope frame. The parent aligned module-root and receiver import/export diagnostic names. Empty `export:` is a structured error because an empty public API section is almost certainly accidental. `cargo fmt --check`, 174 header tests, 51 compiler-message tests and library Clippy with warnings denied passed. Full integration and validation are intentionally deferred to Phase 5B after production sources and fixtures migrate.
+- Phase 5B fixture migration: Codex CLI migrated remaining integration and test-only sources to one strict `export:` block, added 11 stable-code export-block integration cases and passed `cargo fmt --check`, 1749 integration cases, all-target Clippy and full `just validate`. Parent renamed the stale page-root success case and reran formatting plus all 1749 integration cases. The grep audit found obsolete legacy-export recognition only in `paths/const_paths/import_clauses.rs`, which is isolated as Phase 5C before Phase 5 closes.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -185,11 +186,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate Phase 5B production-library and integration-fixture migration to the verified `codex-cli-beanstalk` wrapper, then run the full gate while preserving user-owned docs edits.
+- Commit the accepted Phase 5B fixture migration, then delegate removal of legacy-export import-path scanning and its obsolete tests through the verified `codex-cli-beanstalk` wrapper.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
-NEXT_WORKER_ORDER: none until codex-cli usage capacity resets
-STOP_REASON: codex-cli rejected the clean Phase 5B launch because its usage limit is exhausted until 2026-07-18 07:04 local time; the explicit codex-cli-only worker constraint forbids provider fallback
-NEXT_RESUME_ACTION: retry `.codex-worker/tasks/hash-root-phase-5b.md` with codex-cli after usage capacity resets
+NEXT_WORKER_ORDER: codex-cli only for this run
+STOP_REASON: none
+NEXT_RESUME_ACTION: create and launch the bounded Phase 5C codex-cli task after the Phase 5B checkpoint
 
 ---
 
@@ -832,20 +833,20 @@ The export block should be the only public API marker. This phase should delete 
 - [x] conformance/incompatibility inside `export:`.
 - [x] nested `export:`.
 - [x] old inline export syntax.
-- [ ] duplicate public export names.
-- [ ] public API leaking private facade/root-only types.
+- [x] duplicate public export names.
+- [x] public API leaking private facade/root-only types.
 
 ### Review / audit / validation
 
-- [ ] Run header/export parser tests.
-- [ ] Run integration tests for public imports/re-exports.
-- [ ] Run failure fixtures using stable diagnostic codes.
-- [ ] Run `just validate`.
+- [x] Run header/export parser tests.
+- [x] Run integration tests for public imports/re-exports.
+- [x] Run failure fixtures using stable diagnostic codes.
+- [x] Run `just validate`.
 - [ ] Grep audit:
   - [ ] no compatibility parser path for old inline export syntax;
   - [ ] no `export @path` sugar remains;
-  - [ ] `export:` block does not create a scope frame.
-- [ ] Update active context capsule.
+  - [x] `export:` block does not create a scope frame.
+- [x] Update active context capsule.
 
 ---
 

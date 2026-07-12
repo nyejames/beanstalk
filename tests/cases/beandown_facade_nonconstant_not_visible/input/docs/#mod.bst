@@ -1,11 +1,13 @@
-export @./intro {
-    content as intro_content,
-}
+export:
+    import @./intro {
+        content as intro_content,
+    }
 
-export LocalCard = |
-    title String,
-|
+    LocalCard = |
+        title String,
+    |
 
-export render_local || -> String:
-    return "runtime"
+    render_local || -> String:
+        return "runtime"
+    ;
 ;

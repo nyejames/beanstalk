@@ -1,3 +1,5 @@
-export add |a Int, b Int| -> Int:
-    return a + b
+export:
+    add |a Int, b Int| -> Int:
+        return a + b
+    ;
 ;

@@ -1,1 +1,3 @@
-export count $Int = 1
+export:
+    count $Int = 1
+;

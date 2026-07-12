@@ -1,3 +1,5 @@
-export PublicData = |
-    label String,
-|
+export:
+    PublicData = |
+        label String,
+    |
+;

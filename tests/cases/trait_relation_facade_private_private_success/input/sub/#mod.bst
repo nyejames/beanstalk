@@ -1,5 +1,7 @@
-export public_fn || -> String:
-    return "ok"
+export:
+    public_fn || -> String:
+        return "ok"
+    ;
 ;
 
 PRIVATE_ONE must:

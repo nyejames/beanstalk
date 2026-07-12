@@ -1,2 +1,4 @@
-export greet #= "direct"
-export @./internal { internal_greet as greet }
+export:
+    greet #= "direct"
+    import @./internal { internal_greet as greet }
+;

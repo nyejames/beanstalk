@@ -2,7 +2,9 @@ PrivateData = |
     value String,
 |
 
-export PublicChoice ::
-    Ready,
-    Wrapped | data PrivateData |,
+export:
+    PublicChoice ::
+        Ready,
+        Wrapped | data PrivateData |,
+    ;
 ;
