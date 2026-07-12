@@ -309,11 +309,6 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "`#` is no longer a declaration prefix",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::RuntimeTemplateInModuleFacade => DiagnosticDescriptor::new(
-            "BST-RULE-0026",
-            "Runtime template in module facade",
-            DiagnosticSeverity::Error,
-        ),
         RuleDiagnosticKind::ReservedBuiltinName => DiagnosticDescriptor::new(
             "BST-RULE-0027",
             "Reserved builtin name",
@@ -568,29 +563,24 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid trait keyword usage",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::ExportOutsideModuleFacade => DiagnosticDescriptor::new(
+        RuleDiagnosticKind::ExportOutsideModuleRoot => DiagnosticDescriptor::new(
             "BST-RULE-0077",
-            "`export` is only valid in `#mod.bst`; expose declarations through the nearest module facade",
-            DiagnosticSeverity::Error,
-        ),
-        RuleDiagnosticKind::MissingExportTarget => DiagnosticDescriptor::new(
-            "BST-RULE-0078",
-            "Missing export target",
-            DiagnosticSeverity::Error,
-        ),
-        RuleDiagnosticKind::DeferredNamespaceExport => DiagnosticDescriptor::new(
-            "BST-RULE-0079",
-            "Namespace exports are deferred; use `export @path { Symbol }` to re-export explicit symbols",
+            "`export:` is only valid in a module root file",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::InvalidExportTarget => DiagnosticDescriptor::new(
             "BST-RULE-0080",
-            "`export` can only be used with declarations and imports",
+            "`export:` contains an invalid module API item",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::DuplicatePublicExport => DiagnosticDescriptor::new(
             "BST-RULE-0081",
             "Duplicate public export",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::DuplicateExportBlock => DiagnosticDescriptor::new(
+            "BST-RULE-0085",
+            "Duplicate export block",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::PrivateTypeInExportedApi => DiagnosticDescriptor::new(

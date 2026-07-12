@@ -9,7 +9,7 @@
 //!
 //! Facade exports come from two sources:
 //! 1. Public authored headers (`export` declarations) in the facade file.
-//! 2. Public import records (`export import` or `export @path { ... }`) in the facade file.
+//! 2. Public grouped-import records from the module-root file's `export:` block.
 //!
 //! Because public imports may re-export symbols from other facades, construction is two-pass:
 //! - Pass 1 collects all public authored declarations for every facade.
@@ -66,7 +66,8 @@ fn is_authored_facade_declaration(kind: &HeaderKind) -> bool {
 
 /// Whether a header is a public authored facade export.
 ///
-/// WHAT: only explicit `export` declarations in module-root files become public facade entries.
+/// WHAT: only declarations marked public by a module-root file's `export:` block become public
+///       facade entries.
 fn is_authored_facade_export(header: &Header) -> bool {
     header.file_role.is_export_capable()
         && header.export_mode == HeaderExportMode::Public
@@ -375,7 +376,7 @@ fn reject_source_receiver_method_export(
 ) -> FacadeDataResult<()> {
     if module_symbols.receiver_method_paths.contains(method_path) {
         return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
-            InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
+            InvalidReceiverDeclarationReason::ReceiverMethodImportOrExportNotAllowed,
             location,
         )));
     }

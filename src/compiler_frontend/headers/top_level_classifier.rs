@@ -13,6 +13,7 @@ pub(super) enum HeaderFileItem {
     BuiltinTypeConformanceTarget(&'static str),
     Import,
     Export,
+    ExportBlock,
     Hash { at_statement_boundary: bool },
     RuntimeTemplate,
     ReservedTraitSyntax,
@@ -24,10 +25,33 @@ pub(super) fn classify_current_item(
     token_stream: &FileTokens,
     current_token: &Token,
 ) -> HeaderFileItem {
+    classify_current_item_with_boundary(
+        token_stream,
+        current_token,
+        current_item_started_at_statement_boundary(token_stream),
+    )
+}
+
+/// Classify an item whose enclosing parser has already established a top-level boundary.
+///
+/// WHAT: lets the `export:` block parse its first item even when the author places it directly
+/// after the block colon without a newline.
+/// WHY: ordinary top-level classification must not treat every token after `:` as a new header,
+/// because function and control-flow bodies use the same token boundary.
+pub(super) fn classify_export_block_item(
+    token_stream: &FileTokens,
+    current_token: &Token,
+) -> HeaderFileItem {
+    classify_current_item_with_boundary(token_stream, current_token, true)
+}
+
+fn classify_current_item_with_boundary(
+    token_stream: &FileTokens,
+    current_token: &Token,
+    at_statement_boundary: bool,
+) -> HeaderFileItem {
     match current_token.kind {
-        TokenKind::Symbol(name_id) if current_item_started_at_statement_boundary(token_stream) => {
-            HeaderFileItem::Symbol(name_id)
-        }
+        TokenKind::Symbol(name_id) if at_statement_boundary => HeaderFileItem::Symbol(name_id),
 
         TokenKind::Symbol(_) => HeaderFileItem::StartBodyToken,
 
@@ -36,7 +60,7 @@ pub(super) fn classify_current_item(
         | TokenKind::DatatypeBool
         | TokenKind::DatatypeString
         | TokenKind::DatatypeChar
-            if current_item_started_at_statement_boundary(token_stream) =>
+            if at_statement_boundary =>
         {
             if let Some(type_name) = builtin_conformance_target_name(&current_token.kind)
                 && token_stream.current_token_kind() == &TokenKind::Must
@@ -49,14 +73,18 @@ pub(super) fn classify_current_item(
 
         TokenKind::Import => HeaderFileItem::Import,
 
-        TokenKind::Export if current_item_started_at_statement_boundary(token_stream) => {
-            HeaderFileItem::Export
+        TokenKind::Export if at_statement_boundary => {
+            if token_stream.current_token_kind() == &TokenKind::Colon {
+                HeaderFileItem::ExportBlock
+            } else {
+                HeaderFileItem::Export
+            }
         }
 
         TokenKind::Export => HeaderFileItem::StartBodyToken,
 
         TokenKind::Hash => HeaderFileItem::Hash {
-            at_statement_boundary: current_item_started_at_statement_boundary(token_stream),
+            at_statement_boundary,
         },
 
         TokenKind::TemplateHead => HeaderFileItem::RuntimeTemplate,
@@ -148,11 +176,6 @@ pub(super) fn starts_trait_declaration_after_must(token_stream: &FileTokens) -> 
 ///
 /// WHY: repeated `TRAIT must not TRAIT` incompatibility declarations reuse the subject trait name
 /// and must not shadow the original trait declaration.
-pub(super) fn starts_trait_incompatibility_after_must(token_stream: &FileTokens) -> bool {
-    token_stream.current_token_kind() == &TokenKind::Must
-        && matches!(token_stream.peek_next_token(), Some(TokenKind::Not))
-}
-
 pub(super) fn starts_specialized_generic_conformance_declaration(
     token_stream: &FileTokens,
 ) -> bool {

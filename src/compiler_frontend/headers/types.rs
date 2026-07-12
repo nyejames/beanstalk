@@ -166,9 +166,9 @@ pub enum HeaderKind {
 
 /// Explicit export mode for a parsed header or file import.
 ///
-/// WHAT: distinguishes private source-file items from public facade API surface.
-/// WHY: module-root files use explicit `export` to mark public declarations and re-exports.
-/// All other files keep every declaration as `Private` in this phase.
+/// WHAT: distinguishes private source-file items from public module-root API surface.
+/// WHY: module-root files use one explicit `export:` block to mark public declarations and
+/// grouped re-exports. All other files keep every declaration as `Private`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeaderExportMode {
     /// Private to the source file or importing file.
@@ -404,7 +404,7 @@ pub struct FileImport {
     pub from_grouped: bool,
     /// Whether this import is part of the public facade API.
     ///
-    /// WHAT: `Public` for `export import` or `export @path` items in module-root files;
+    /// WHAT: `Public` for grouped imports inside an `export:` block;
     /// `Private` for ordinary imports.
     pub export_mode: HeaderExportMode,
 }

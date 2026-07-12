@@ -35,6 +35,12 @@ pub(super) fn handle_hash_item(
 
     match token_stream.current_token_kind() {
         TokenKind::TemplateHead => {
+            if state.export_mode.is_public() {
+                return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                    current_location,
+                )));
+            }
+
             handle_top_level_const_template(token_stream, state, context, current_location)
         }
 

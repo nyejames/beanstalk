@@ -7,8 +7,8 @@
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::types::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header, HeaderKind,
-    TopLevelConstFragment,
+    FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header,
+    HeaderExportMode, HeaderKind, TopLevelConstFragment,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
@@ -35,6 +35,15 @@ pub(super) struct HeaderFileParseState {
     pub(super) top_level_const_fragments: Vec<TopLevelConstFragment>,
     pub(super) runtime_fragment_count: usize,
     pub(super) const_template_count: usize,
+    /// The first `export:` block location, if this file has one.
+    ///
+    /// WHAT: enforces one public section per module-root file.
+    /// WHY: public visibility is a file-level parser mode, not a lexical scope or a declaration
+    /// prefix that can be reopened for a later group of items.
+    pub(super) seen_export_block: Option<SourceLocation>,
+    /// Current visibility mode while the top-level parser walks an `export:` block.
+    pub(super) export_mode: HeaderExportMode,
+    pub(super) export_block_item_count: usize,
     pub(super) token_count: usize,
 }
 
@@ -54,6 +63,9 @@ impl HeaderFileParseState {
             top_level_const_fragments: Vec::new(),
             runtime_fragment_count: 0,
             const_template_count: 0,
+            seen_export_block: None,
+            export_mode: HeaderExportMode::Private,
+            export_block_item_count: 0,
             token_count,
         }
     }

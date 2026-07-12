@@ -194,12 +194,14 @@ impl BeandownScopeFixture {
         // Beandown implicit scope proves it is filtering by source declaration kind.
         fs::write(
             &html_facade_path,
-            r#"export p #String = "<p>"
-export collision #= "html"
-export html_defaults #= HtmlDefaults(color = "green")
-export HtmlDefaults = | color String |
-export render_html || -> String:
-    return "runtime"
+            r#"export:
+    p #String = "<p>"
+    collision #= "html"
+    html_defaults #= HtmlDefaults(color = "green")
+    HtmlDefaults = | color String |
+    render_html || -> String:
+        return "runtime"
+    ;
 ;
 "#,
         )
@@ -771,7 +773,7 @@ fn module_facade_export_syntax_can_target_beandown_content() {
     let entry_path = PathBuf::from("src/#page.bst");
 
     let facade_output = prepare_beanstalk_source(
-        "export @./intro { content as intro }\n",
+        "export:\n    import @./intro { content as intro }\n;\n",
         &facade_path,
         &entry_path,
         &mut string_table,
@@ -839,7 +841,7 @@ fn beandown_body_sees_exported_same_directory_facade_constants() {
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",
-            "export local_label #= \"from facade\"\n",
+            "export:\n    local_label #= \"from facade\"\n;\n",
         ),
         ("src/docs/intro.bd", "[local_label]"),
     ]);
@@ -865,7 +867,10 @@ fn beandown_without_same_directory_facade_sees_only_html_constants() {
 #[test]
 fn same_directory_facade_constants_override_html_constants() {
     let fixture = BeandownScopeFixture::new(&[
-        ("src/docs/#mod.bst", "export collision #= \"local\"\n"),
+        (
+            "src/docs/#mod.bst",
+            "export:\n    collision #= \"local\"\n;\n",
+        ),
         ("src/docs/intro.bd", "[collision]"),
     ]);
     let (ast, string_table) = fixture.compile_beandown_ast_ok(
@@ -898,8 +903,10 @@ fn beandown_runtime_function_call_is_rejected_by_const_template_folding() {
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",
-            r#"export render_local || -> String:
-    return "runtime"
+            r#"export:
+    render_local || -> String:
+        return "runtime"
+    ;
 ;
 "#,
         ),
@@ -936,9 +943,11 @@ fn exported_same_directory_functions_and_types_are_not_visible_to_beandown_body(
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",
-            r#"export LocalType = | value String |
-export render_local || -> String:
-    return "runtime"
+            r#"export:
+    LocalType = | value String |
+    render_local || -> String:
+        return "runtime"
+    ;
 ;
 "#,
         ),
@@ -970,7 +979,10 @@ fn beandown_const_record_field_access_folds_in_template_head() {
 #[test]
 fn facade_supplied_content_constant_can_be_referenced_normally() {
     let fixture = BeandownScopeFixture::new(&[
-        ("src/docs/#mod.bst", "export @./other { content }\n"),
+        (
+            "src/docs/#mod.bst",
+            "export:\n    import @./other { content }\n;\n",
+        ),
         ("src/docs/other.bd", "shared body"),
         ("src/docs/intro.bd", "[content]"),
     ]);
@@ -1010,7 +1022,10 @@ fn generated_self_content_is_not_visible_to_beandown_body() {
 #[test]
 fn self_originating_content_reexport_is_excluded_from_beandown_body_scope() {
     let fixture = BeandownScopeFixture::new(&[
-        ("src/docs/#mod.bst", "export @./intro { content }\n"),
+        (
+            "src/docs/#mod.bst",
+            "export:\n    import @./intro { content }\n;\n",
+        ),
         ("src/docs/intro.bd", "[content]"),
     ]);
     let diagnostic = fixture.compile_beandown_diagnostic(

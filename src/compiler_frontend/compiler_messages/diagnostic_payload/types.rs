@@ -743,7 +743,7 @@ pub enum InvalidReceiverDeclarationReason {
         function_name: StringId,
         type_name: StringId,
     },
-    ReceiverMethodImportNotAllowed,
+    ReceiverMethodImportOrExportNotAllowed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -8,9 +8,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
 use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode, HeaderParseContext};
-use crate::compiler_frontend::paths::const_paths::{
-    parse_export_path_clause_items, parse_import_clause_items,
-};
+use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
@@ -49,19 +47,20 @@ pub(super) fn parse_and_record_imports(
         HeaderExportMode::Private,
         import_location,
         token_stream.index.saturating_sub(1),
+        false,
     )
 }
 
-/// Parse and record imports from an `export import @path { ... }` clause.
+/// Parse a grouped import inside the single public `export:` block.
 ///
-/// WHAT: public re-export of imported symbols; shares the same clause parser but records
-/// `export_mode: Public`.
-pub(super) fn parse_and_record_public_imports(
+/// WHAT: records grouped source or external imports as public API entries.
+/// WHY: the block owns visibility, so a bare namespace import cannot silently become a public
+/// export merely because it appears between the block delimiters.
+pub(super) fn parse_and_record_public_block_imports(
     token_stream: &mut FileTokens,
     state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     import_location: SourceLocation,
-    clause_token_index: usize,
 ) -> FileImportResult<()> {
     parse_and_record_import_clause(
         token_stream,
@@ -69,53 +68,9 @@ pub(super) fn parse_and_record_public_imports(
         context,
         HeaderExportMode::Public,
         import_location,
-        clause_token_index,
+        token_stream.index.saturating_sub(1),
+        true,
     )
-}
-
-/// Parse and record imports from an `export @path { ... }` sugar clause.
-///
-/// WHAT: `export @path { Symbol }` is syntactic sugar for `export import @path { Symbol }`.
-/// WHY: the tokenizer produces a `Path` token directly after `export`, so this helper uses the
-/// export-path clause parser and records every item as public.
-pub(super) fn parse_and_record_export_path_clause(
-    token_stream: &mut FileTokens,
-    state: &mut HeaderFileParseState,
-    context: &mut HeaderParseContext<'_>,
-    export_location: SourceLocation,
-    clause_token_index: usize,
-) -> FileImportResult<()> {
-    let (items, next_index) = parse_export_path_clause_items(
-        &token_stream.tokens,
-        clause_token_index,
-        context.string_table,
-    )?;
-
-    for item in items {
-        let normalized_path = normalize_import_dependency_path(
-            &item.path,
-            &token_stream.src_path,
-            &item.path_location,
-            context.string_table,
-        )?;
-
-        record_import_item(
-            state,
-            ImportItemRecord {
-                header_path: normalized_path,
-                alias: item.alias,
-                location: export_location.clone(),
-                path_location: item.path_location,
-                alias_location: item.alias_location,
-                from_grouped: item.from_grouped,
-                export_mode: HeaderExportMode::Public,
-            },
-        );
-    }
-
-    token_stream.index = next_index;
-
-    Ok(())
 }
 
 fn parse_and_record_import_clause(
@@ -125,12 +80,19 @@ fn parse_and_record_import_clause(
     export_mode: HeaderExportMode,
     clause_location: SourceLocation,
     clause_token_index: usize,
+    require_grouped: bool,
 ) -> FileImportResult<()> {
     let (items, next_index) = parse_import_clause_items(
         &token_stream.tokens,
         clause_token_index,
         context.string_table,
     )?;
+
+    if require_grouped && items.iter().any(|item| !item.from_grouped) {
+        return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+            clause_location,
+        )));
+    }
 
     for item in items {
         let normalized_path = normalize_import_dependency_path(

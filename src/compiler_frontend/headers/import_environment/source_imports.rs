@@ -141,7 +141,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             // Source-authored receiver methods are not independently importable or aliasable.
             // They travel with their receiver type's visibility.
             return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
-                InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
+                InvalidReceiverDeclarationReason::ReceiverMethodImportOrExportNotAllowed,
                 import.location.clone(),
             )));
         }

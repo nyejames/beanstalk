@@ -5,21 +5,24 @@
 //! WHY: file-level control flow is different from declaration parsing, import recording, and hash
 //! item handling; this module keeps the high-level loop visible while delegated modules own details.
 
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidReceiverDeclarationReason,
+};
 use crate::compiler_frontend::headers::file_imports::{
-    parse_and_record_export_path_clause, parse_and_record_imports, parse_and_record_public_imports,
+    parse_and_record_imports, parse_and_record_public_block_imports,
 };
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::hash_items::handle_hash_item;
 use crate::compiler_frontend::headers::header_dispatch::create_header;
 use crate::compiler_frontend::headers::start_capture::push_runtime_template_tokens_to_start_function;
+use crate::compiler_frontend::headers::symbol_collection::is_receiver_method_candidate;
 use crate::compiler_frontend::headers::top_level_classifier::{
-    HeaderFileItem, classify_current_item, starts_duplicate_top_level_header_declaration,
+    HeaderFileItem, classify_current_item, classify_export_block_item,
+    starts_duplicate_top_level_header_declaration,
     starts_specialized_generic_conformance_declaration, starts_trait_declaration_after_must,
-    starts_trait_incompatibility_after_must,
 };
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext,
@@ -99,6 +102,10 @@ fn parse_headers_in_file_inner(
                 )?;
             }
 
+            HeaderFileItem::ExportBlock => {
+                handle_export_block(token_stream, state, context, current_location)?;
+            }
+
             HeaderFileItem::Hash {
                 at_statement_boundary,
             } => {
@@ -136,129 +143,175 @@ fn parse_headers_in_file_inner(
 
 fn handle_export_item(
     token_stream: &mut FileTokens,
-    state: &mut HeaderFileParseState,
+    _state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     _export_token: Token,
     export_location: SourceLocation,
 ) -> FileParserResult<()> {
     // `export` is a module-root-only keyword; ordinary files cannot use it.
     if !context.file_role.is_export_capable() || context.is_config_file {
-        return Err(Box::new(CompilerDiagnostic::export_outside_module_facade(
+        return Err(Box::new(CompilerDiagnostic::export_outside_module_root(
             export_location,
         )));
     }
 
-    // `export` must have a target on the same logical line.
-    if matches!(
+    // The old prefix form is intentionally gone. Report the block delimiter that all remaining
+    // `export` syntax must provide instead of dispatching to a compatibility parser.
+    Err(Box::new(CompilerDiagnostic::expected_token(
+        TokenKind::Colon,
+        Some(token_stream.current_token_kind().to_owned()),
+        export_location,
+    )))
+}
+
+fn handle_export_block(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    export_location: SourceLocation,
+) -> FileParserResult<()> {
+    if !context.file_role.is_export_capable() || context.is_config_file {
+        return Err(Box::new(CompilerDiagnostic::export_outside_module_root(
+            export_location,
+        )));
+    }
+
+    if state.seen_export_block.is_some() {
+        return Err(Box::new(CompilerDiagnostic::duplicate_export_block(
+            export_location,
+        )));
+    }
+
+    // The classifier only produces ExportBlock when the current token is `:`, but consume it
+    // here so the item parser starts at the first ordinary top-level item.
+    if token_stream.current_token_kind() != &TokenKind::Colon {
+        return Err(Box::new(CompilerDiagnostic::expected_token(
+            TokenKind::Colon,
+            Some(token_stream.current_token_kind().to_owned()),
+            export_location,
+        )));
+    }
+    state.seen_export_block = Some(export_location.clone());
+    state.export_mode = HeaderExportMode::Public;
+    token_stream.advance();
+
+    while !matches!(
         token_stream.current_token_kind(),
-        TokenKind::Newline | TokenKind::End | TokenKind::Eof
+        TokenKind::End | TokenKind::Eof
     ) {
-        return Err(Box::new(CompilerDiagnostic::missing_export_target(
-            export_location,
+        if token_stream.current_token_kind() == &TokenKind::Newline {
+            token_stream.advance();
+            continue;
+        }
+
+        let current_token = token_stream.current_token();
+        let current_location = token_stream.current_location();
+        token_stream.advance();
+
+        let item = classify_export_block_item(token_stream, &current_token);
+        parse_export_block_item(
+            token_stream,
+            state,
+            context,
+            item,
+            current_token,
+            current_location,
+        )?;
+        state.export_block_item_count += 1;
+    }
+
+    if token_stream.current_token_kind() == &TokenKind::Eof {
+        return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
+            Some(context.string_table.intern(";")),
+            token_stream.current_location(),
         )));
     }
 
-    match token_stream.current_token_kind() {
-        // `export import @path { ... }` — public re-export of imported symbols.
-        TokenKind::Import => {
-            parse_and_record_public_imports(
-                token_stream,
-                state,
-                context,
-                export_location,
-                token_stream.index,
-            )?;
-        }
+    // The block terminator belongs to this parser mode and must not become an implicit start-body
+    // token for the surrounding file.
+    token_stream.advance();
+    state.export_mode = HeaderExportMode::Private;
 
-        // `export @path { ... }` — syntactic sugar for public grouped imports.
-        TokenKind::Path(_) => {
-            let has_grouped = if let TokenKind::Path(items) = &token_stream.current_token().kind {
-                items.iter().any(|item| item.from_grouped)
-            } else {
-                false
-            };
-
-            if !has_grouped {
-                return Err(Box::new(CompilerDiagnostic::deferred_namespace_export(
-                    export_location,
-                )));
-            }
-
-            parse_and_record_export_path_clause(
-                token_stream,
-                state,
-                context,
-                export_location,
-                token_stream.index.saturating_sub(1),
-            )?;
-        }
-
-        // Exported authored declaration: `export name = ...`, `export name #= ...`, etc.
-        TokenKind::Symbol(name_id) => {
-            let name_id = *name_id;
-            let symbol_token = token_stream.current_token();
-            let symbol_location = token_stream.current_location();
-            token_stream.advance();
-
-            if starts_exported_trait_conformance(token_stream) {
-                return Err(Box::new(CompilerDiagnostic::invalid_export_target(
-                    export_location,
-                )));
-            }
-
-            if !starts_duplicate_top_level_header_declaration(token_stream) {
-                return Err(Box::new(CompilerDiagnostic::invalid_export_target(
-                    export_location,
-                )));
-            }
-
-            handle_symbol_item_with_export_mode(
-                token_stream,
-                state,
-                context,
-                symbol_token,
-                name_id,
-                symbol_location,
-                HeaderExportMode::Public,
-            )?;
-        }
-
-        // `export` before a runtime template is invalid in a facade.
-        TokenKind::TemplateHead => {
-            return Err(Box::new(
-                CompilerDiagnostic::runtime_template_in_module_facade(export_location),
-            ));
-        }
-
-        // `export` before reserved trait syntax.
-        TokenKind::Must | TokenKind::TraitThis => {
-            if let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) {
-                return Err(Box::new(reserved_trait_keyword_error(
-                    keyword,
-                    export_location,
-                )));
-            }
-            return Err(Box::new(CompilerDiagnostic::invalid_export_target(
-                export_location,
-            )));
-        }
-
-        // `export` before any other token is unsupported.
-        _ => {
-            return Err(Box::new(CompilerDiagnostic::invalid_export_target(
-                export_location,
-            )));
-        }
+    if state.export_block_item_count == 0 {
+        return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+            export_location,
+        )));
     }
 
     Ok(())
 }
 
-fn starts_exported_trait_conformance(token_stream: &FileTokens) -> bool {
-    (token_stream.current_token_kind() == &TokenKind::Must
-        && !starts_trait_declaration_after_must(token_stream)
-        && !starts_trait_incompatibility_after_must(token_stream))
-        || starts_specialized_generic_conformance_declaration(token_stream)
+fn parse_export_block_item(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    item: HeaderFileItem,
+    current_token: Token,
+    current_location: SourceLocation,
+) -> FileParserResult<()> {
+    match item {
+        HeaderFileItem::Symbol(name_id) => handle_symbol_item(
+            token_stream,
+            state,
+            context,
+            current_token,
+            name_id,
+            current_location,
+        ),
+
+        HeaderFileItem::BuiltinTypeConformanceTarget(type_name) => {
+            let name_id = context.string_table.intern(type_name);
+            handle_symbol_item(
+                token_stream,
+                state,
+                context,
+                current_token,
+                name_id,
+                current_location,
+            )
+        }
+
+        HeaderFileItem::Import => {
+            parse_and_record_public_block_imports(token_stream, state, context, current_location)
+        }
+
+        HeaderFileItem::Export | HeaderFileItem::ExportBlock => Err(Box::new(
+            CompilerDiagnostic::invalid_export_target(current_location),
+        )),
+
+        HeaderFileItem::Hash {
+            at_statement_boundary,
+        } => handle_hash_item(
+            token_stream,
+            state,
+            context,
+            current_token,
+            current_location,
+            at_statement_boundary,
+        ),
+
+        HeaderFileItem::RuntimeTemplate | HeaderFileItem::StartBodyToken => Err(Box::new(
+            CompilerDiagnostic::invalid_export_target(current_location),
+        )),
+
+        HeaderFileItem::ReservedTraitSyntax => {
+            if let Some(keyword) = reserved_trait_keyword(&current_token.kind) {
+                return Err(Box::new(reserved_trait_keyword_error(
+                    keyword,
+                    current_location,
+                )));
+            }
+
+            Err(Box::new(CompilerDiagnostic::invalid_export_target(
+                current_location,
+            )))
+        }
+
+        HeaderFileItem::Eof => Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
+            Some(context.string_table.intern(";")),
+            current_location,
+        ))),
+    }
 }
 
 fn handle_symbol_item(
@@ -269,6 +322,7 @@ fn handle_symbol_item(
     name_id: StringId,
     current_location: SourceLocation,
 ) -> FileParserResult<()> {
+    let export_mode = state.export_mode;
     handle_symbol_item_with_export_mode(
         token_stream,
         state,
@@ -276,7 +330,7 @@ fn handle_symbol_item(
         current_token,
         name_id,
         current_location,
-        HeaderExportMode::Private,
+        export_mode,
     )
 }
 
@@ -289,6 +343,12 @@ fn handle_symbol_item_with_export_mode(
     current_location: SourceLocation,
     export_mode: HeaderExportMode,
 ) -> FileParserResult<()> {
+    if export_mode.is_public() && !starts_duplicate_top_level_header_declaration(token_stream) {
+        return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+            current_location,
+        )));
+    }
+
     // Only prelude-visible external symbols block local declarations; package-scoped symbols that
     // are not imported should not prevent a file from declaring its own symbol with the same name.
     if context
@@ -346,10 +406,33 @@ fn handle_symbol_item_with_export_mode(
     let header = create_header(
         token_stream.src_path.append(name_id),
         token_stream,
-        current_location,
+        current_location.clone(),
         export_mode,
         &mut build_context,
     )?;
+
+    if export_mode.is_public()
+        && matches!(
+            &header.kind,
+            HeaderKind::StartFunction
+                | HeaderKind::TraitConformance { .. }
+                | HeaderKind::TraitIncompatibility { .. }
+        )
+    {
+        return Err(Box::new(CompilerDiagnostic::invalid_export_target(
+            current_location,
+        )));
+    }
+
+    if export_mode.is_public()
+        && let HeaderKind::Function { signature, .. } = &header.kind
+        && is_receiver_method_candidate(signature, context.string_table)
+    {
+        return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
+            InvalidReceiverDeclarationReason::ReceiverMethodImportOrExportNotAllowed,
+            current_location,
+        )));
+    }
 
     match header.kind {
         HeaderKind::StartFunction => {

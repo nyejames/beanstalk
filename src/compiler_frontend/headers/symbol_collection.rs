@@ -132,7 +132,7 @@ fn validate_declared_name(
 ///      value-member paths without waiting for AST type resolution.
 /// NOTE: invalid receiver types (unsupported types, wrong file, etc.) are left
 ///       for AST validation; this helper only identifies the candidate shape.
-fn is_receiver_method_candidate(
+pub(super) fn is_receiver_method_candidate(
     signature: &FunctionSignatureSyntax,
     string_table: &StringTable,
 ) -> bool {

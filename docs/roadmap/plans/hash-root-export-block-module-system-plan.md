@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: blocked
-CURRENT_SLICE: Phase 4 accepted but uncommitted; Phase 5 pending
-LAST_ACCEPTED_COMMIT: `943542afe` (`docs: checkpoint module root export identity`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 4 implementation is accepted and uncommitted because the parent sandbox cannot create `.git/index.lock`. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
+STATUS: active
+CURRENT_SLICE: Phase 5B production-library and integration-fixture migration to strict `export:` blocks
+LAST_ACCEPTED_COMMIT: `f4adfa7b1` (`refactor: unify active and imported module roots`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 4 is committed. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -177,6 +177,7 @@ VALIDATION_STATE:
 - Phase 3 generic source-library roots: Codex CLI added deterministic direct-child `#*.bst` discovery, threaded unique cosmetic roots through the existing temporary facade map and added structured missing/multiple-root diagnostics with sorted candidate paths. Parent reviewed stage ownership and temporary-map duplication, updated the progress matrix and ran full `just validate`: cross-target Clippy, 3319 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 3 entry-root export identity: Codex CLI renamed prepared entry-root facade maps to export-file identity and added `ModuleRootBoundary` so namespace resolution consumes the Stage 0-selected export path. Parent corrected the worker's dropped no-export-root boundary regression by making the carried export file optional, preserving missing-facade enforcement. Full `just validate` passed cross-target Clippy, 3320 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 4 root-role cutover: Codex CLI replaced entry/facade roles with active/imported/normal module-root roles, suppressed imported-root start output, preserved public surfaces and added header activity facts. The parent replaced a linear root-file identity scan with a prepared hash index, removed the obsolete duplicate-root counter and added end-to-end duplicate-root diagnostics coverage. `cargo fmt --check`, 3321 unit tests, 113 path tests, 140 Stage 0 tests and 1738 integration cases passed. `just validate` reached the docs check after code gates passed, then failed because concurrent user-owned `docs/src/**` edits already use Phase 5 `export:` syntax. This docs-only block is accepted temporarily by explicit user direction.
+- Phase 5A strict export parser: Codex CLI added one file-level `export:` parser mode, rejected legacy inline forms, required grouped imports, rejected invalid runtime/evidence/receiver items and preserved public header/import carriers without adding a scope frame. The parent aligned module-root and receiver import/export diagnostic names. Empty `export:` is a structured error because an empty public API section is almost certainly accidental. `cargo fmt --check`, 174 header tests, 51 compiler-message tests and library Clippy with warnings denied passed. Full integration and validation are intentionally deferred to Phase 5B after production sources and fixtures migrate.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -184,11 +185,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate Phase 5 strict `export:` block parsing and legacy inline-export removal to the verified `codex-cli-beanstalk` wrapper. The parser cutover should make the concurrent docs root syntactically valid without editing those user-owned files.
+- Delegate Phase 5B production-library and integration-fixture migration to the verified `codex-cli-beanstalk` wrapper, then run the full gate while preserving user-owned docs edits.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only
-STOP_REASON: parent filesystem permissions allow reading `.git` but deny `.git/index.lock`, so the orchestrator cannot stage or commit the accepted Phase 4 checkpoint
-NEXT_RESUME_ACTION: stage `src`, `tests` and this plan only, commit Phase 4, then resume with Phase 5
+STOP_REASON: none
+NEXT_RESUME_ACTION: commit Phase 5A, then launch and review Phase 5B
 
 ---
 
@@ -798,39 +799,39 @@ The export block should be the only public API marker. This phase should delete 
 
 ### Checklist
 
-- [ ] Add parser support for `export:` at top-level statement boundary.
-- [ ] Add per-file state tracking:
-  - [ ] `seen_export_block: Option<SourceLocation>`
-  - [ ] current export block mode / parser state.
-- [ ] Parse block contents until the matching top-level `;`.
-- [ ] Update `top_level_classifier.rs` / `file_parser.rs` so `export:` is distinguished from legacy inline `export ...` before dispatching to declaration parsing.
-- [ ] Inside the block:
-  - [ ] grouped `import @path { ... }` => public import record;
-  - [ ] authored exportable declaration => public header;
-  - [ ] invalid item => structured diagnostic.
-- [ ] Reject non-grouped imports inside `export:`.
-- [ ] Reject trait conformance and trait incompatibility inside `export:`.
-- [ ] Reject nested `export:`.
-- [ ] Reject empty `export:` as warning or error; choose one and document it. Recommended: warning unless diagnostics policy strongly prefers error.
-- [ ] Remove support for legacy forms:
-  - [ ] `export name #= ...`
-  - [ ] `export function ...`
-  - [ ] `export import @path { ... }`
-  - [ ] `export @path { ... }`
-- [ ] Keep JavaScript `export` scanning under `src/projects/html_project/external_js/**` unchanged; it is a JS provider concern, not Beanstalk module syntax.
-- [ ] Keep `HeaderExportMode::Public` as the underlying visibility carrier.
-- [ ] Keep export block as parser/header mode, not a new scope.
+- [x] Add parser support for `export:` at top-level statement boundary.
+- [x] Add per-file state tracking:
+  - [x] `seen_export_block: Option<SourceLocation>`
+  - [x] current export block mode / parser state.
+- [x] Parse block contents until the matching top-level `;`.
+- [x] Update `top_level_classifier.rs` / `file_parser.rs` so `export:` is distinguished from legacy inline `export ...` before dispatching to declaration parsing.
+- [x] Inside the block:
+  - [x] grouped `import @path { ... }` => public import record;
+  - [x] authored exportable declaration => public header;
+  - [x] invalid item => structured diagnostic.
+- [x] Reject non-grouped imports inside `export:`.
+- [x] Reject trait conformance and trait incompatibility inside `export:`.
+- [x] Reject nested `export:`.
+- [x] Reject empty `export:` as a structured error because an empty public API section is accidental and has no semantic effect.
+- [x] Remove support for legacy forms:
+  - [x] `export name #= ...`
+  - [x] `export function ...`
+  - [x] `export import @path { ... }`
+  - [x] `export @path { ... }`
+- [x] Keep JavaScript `export` scanning under `src/projects/html_project/external_js/**` unchanged; it is a JS provider concern, not Beanstalk module syntax.
+- [x] Keep `HeaderExportMode::Public` as the underlying visibility carrier.
+- [x] Keep export block as parser/header mode, not a new scope.
 
 ### Diagnostics checklist
 
-- [ ] `export:` outside module root file.
-- [ ] missing `:` after `export`.
-- [ ] duplicate `export:` block.
-- [ ] invalid runtime item inside `export:`.
-- [ ] non-grouped import inside `export:`.
-- [ ] conformance/incompatibility inside `export:`.
-- [ ] nested `export:`.
-- [ ] old inline export syntax.
+- [x] `export:` outside module root file.
+- [x] missing `:` after `export`.
+- [x] duplicate `export:` block.
+- [x] invalid runtime item inside `export:`.
+- [x] non-grouped import inside `export:`.
+- [x] conformance/incompatibility inside `export:`.
+- [x] nested `export:`.
+- [x] old inline export syntax.
 - [ ] duplicate public export names.
 - [ ] public API leaking private facade/root-only types.
 

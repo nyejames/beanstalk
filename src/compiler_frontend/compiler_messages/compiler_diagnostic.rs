@@ -1267,25 +1267,9 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn export_outside_module_facade(location: SourceLocation) -> Self {
+    pub(crate) fn export_outside_module_root(location: SourceLocation) -> Self {
         Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleFacade),
-            location,
-            DiagnosticPayload::None,
-        )
-    }
-
-    pub(crate) fn missing_export_target(location: SourceLocation) -> Self {
-        Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::MissingExportTarget),
-            location,
-            DiagnosticPayload::None,
-        )
-    }
-
-    pub(crate) fn deferred_namespace_export(location: SourceLocation) -> Self {
-        Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::DeferredNamespaceExport),
+            DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleRoot),
             location,
             DiagnosticPayload::None,
         )
@@ -1304,6 +1288,14 @@ impl CompilerDiagnostic {
             DiagnosticKind::Rule(RuleDiagnosticKind::DuplicatePublicExport),
             location,
             DiagnosticPayload::DuplicatePublicExport { name },
+        )
+    }
+
+    pub(crate) fn duplicate_export_block(location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateExportBlock),
+            location,
+            DiagnosticPayload::None,
         )
     }
 
@@ -1468,14 +1460,6 @@ impl CompilerDiagnostic {
             DiagnosticKind::Rule(RuleDiagnosticKind::OldPrefixDeclarationSyntax),
             location,
             DiagnosticPayload::OldPrefixDeclarationSyntax,
-        )
-    }
-
-    pub(crate) fn runtime_template_in_module_facade(location: SourceLocation) -> Self {
-        Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::RuntimeTemplateInModuleFacade),
-            location,
-            DiagnosticPayload::None,
         )
     }
 

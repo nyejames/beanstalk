@@ -1756,7 +1756,7 @@ fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
 #[test]
 fn imported_module_root_discards_root_body_but_keeps_exportable_headers() {
     let headers = parse_single_file_headers_with_entry(
-        "export Button = | label String |\n[ Button(\"ignored\") ]\n",
+        "export:\n    Button = | label String |\n;\n[ Button(\"ignored\") ]\n",
         "src/#components.bst",
         "src/#page.bst",
     )
@@ -2330,36 +2330,89 @@ fn imported_module_root_prepare_output_has_imported_root_role() {
 }
 
 // ------------------------------
-//  Export keyword parsing tests
+//  Export block parsing tests
 // ------------------------------
 
 #[test]
-fn export_outside_module_facade_is_rejected() {
+fn export_outside_module_root_is_rejected() {
     let result = parse_single_file_headers_with_entry(
-        "export Button = | label String |\n",
+        "export:\n    Button = | label String |\n;\n",
         "src/helper.bst",
         "src/#page.bst",
     );
-    let errors = expect_header_error(result, "export outside #mod.bst should be rejected");
+    let errors = expect_header_error(
+        result,
+        "export block outside a module root should be rejected",
+    );
 
     assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
-        == DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleFacade)));
+        == DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleRoot)));
 }
 
 #[test]
 fn export_alone_is_rejected() {
     let result = parse_single_file_headers_with_entry("export\n", "src/#mod.bst", "src/#page.bst");
-    let errors = expect_header_error(result, "export alone should be rejected");
+    let errors = expect_header_error(result, "export without a block colon should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::ExpectedToken {
+                expected: TokenKind::Colon,
+                ..
+            }
+        )
+    }));
+}
+
+#[test]
+fn empty_export_block_is_rejected() {
+    let result =
+        parse_single_file_headers_with_entry("export:\n;\n", "src/#mod.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "empty export block should be rejected");
 
     assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
-        == DiagnosticKind::Rule(RuleDiagnosticKind::MissingExportTarget)));
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
+}
+
+#[test]
+fn duplicate_export_blocks_are_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export:\n    first #= 1\n;\nexport:\n    second #= 2\n;\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "duplicate export blocks should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateExportBlock)));
+}
+
+#[test]
+fn legacy_inline_export_declaration_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export Button = | label String |\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "legacy inline export should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::ExpectedToken {
+                expected: TokenKind::Colon,
+                ..
+            }
+        )
+    }));
 }
 
 #[test]
 fn export_import_path_parsed_as_public_import() {
     let mut string_table = StringTable::new();
     let output = prepare_single_file(
-        "export import @./button { Button }\n",
+        "export:\n    import @./button { Button }\n;\n",
         &PathBuf::from("src/#mod.bst"),
         &PathBuf::from("src/#page.bst"),
         &mut string_table,
@@ -2376,22 +2429,64 @@ fn export_import_path_parsed_as_public_import() {
 }
 
 #[test]
-fn export_path_sugar_parsed_as_public_import() {
-    let mut string_table = StringTable::new();
-    let output = prepare_single_file(
-        "export @./card { Card, render as render_card }\n",
-        &PathBuf::from("src/#mod.bst"),
-        &PathBuf::from("src/#page.bst"),
-        &mut string_table,
+fn export_block_requires_grouped_imports() {
+    let result = parse_single_file_headers_with_entry(
+        "export:\n    import @./button\n;\n",
+        "src/#mod.bst",
+        "src/#page.bst",
     );
+    let errors = expect_header_error(result, "bare imports in export blocks should be rejected");
 
-    assert_eq!(output.file_imports.len(), 2);
-    assert!(
-        output
-            .file_imports
-            .iter()
-            .all(|import| import.export_mode == HeaderExportMode::Public)
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
+}
+
+#[test]
+fn nested_export_blocks_are_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export:\n    export:\n        value #= 1\n    ;\n;\n",
+        "src/#mod.bst",
+        "src/#page.bst",
     );
+    let errors = expect_header_error(result, "nested export blocks should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
+}
+
+#[test]
+fn export_block_accepts_an_item_without_a_following_newline() {
+    let headers = parse_single_file_headers_with_entry(
+        "export: Button = | label String |\n;\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    )
+    .expect("export block should accept its first item after the colon");
+
+    assert!(headers.headers.iter().any(|header| {
+        matches!(header.kind, HeaderKind::Struct { .. })
+            && header.export_mode == HeaderExportMode::Public
+    }));
+}
+
+#[test]
+fn legacy_export_path_syntax_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export @./card { Card, render as render_card }\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "legacy export path syntax should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::ExpectedToken {
+                expected: TokenKind::Colon,
+                ..
+            }
+        )
+    }));
 }
 
 #[test]
@@ -2403,13 +2498,20 @@ fn export_bare_path_rejected_as_deferred_namespace_export() {
         "bare namespace export should be rejected as deferred",
     );
 
-    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
-        == DiagnosticKind::Rule(RuleDiagnosticKind::DeferredNamespaceExport)));
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::ExpectedToken {
+                expected: TokenKind::Colon,
+                ..
+            }
+        )
+    }));
 }
 
 #[test]
 fn export_before_authored_declaration_marks_header_public() {
-    let source = "export Button = | label String |\nexport render |button Button| -> String:\n    return button.label\n;\n";
+    let source = "export:\n    Button = | label String |\n    render |button Button| -> String:\n        return button.label\n    ;\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
 
@@ -2449,7 +2551,7 @@ fn unmarked_authored_declarations_in_mod_facade_remain_private() {
 #[test]
 fn duplicate_declaration_detection_works_with_exported_declarations() {
     let result = parse_single_file_headers_with_entry(
-        "export Button = | label String |\nButton = | title String |\n",
+        "export:\n    Button = | label String |\n;\nButton = | title String |\n",
         "src/#mod.bst",
         "src/#page.bst",
     );
@@ -2466,7 +2568,7 @@ fn duplicate_declaration_detection_works_with_exported_declarations() {
 
 #[test]
 fn export_before_constant_marks_header_public() {
-    let source = "export theme #= \"dark\"\nexport threshold #Int = 42\n";
+    let source = "export:\n    theme #= \"dark\"\n    threshold #Int = 42\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
 
@@ -2488,7 +2590,7 @@ fn export_before_constant_marks_header_public() {
 
 #[test]
 fn export_before_type_alias_marks_header_public() {
-    let source = "export UserId as Int\n";
+    let source = "export:\n    UserId as Int\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
 
@@ -2503,7 +2605,7 @@ fn export_before_type_alias_marks_header_public() {
 
 #[test]
 fn export_before_choice_marks_header_public() {
-    let source = "export Status :: Ready, Failed | message String |;\n";
+    let source = "export:\n    Status :: Ready, Failed | message String |;\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
 
@@ -2518,7 +2620,7 @@ fn export_before_choice_marks_header_public() {
 
 #[test]
 fn export_before_trait_declaration_marks_header_public() {
-    let source = "export DISPLAY_TEXT must:\n    display |This| -> String\n;\n";
+    let source = "export:\n    DISPLAY_TEXT must:\n        display |This| -> String\n    ;\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
 
@@ -2532,24 +2634,19 @@ fn export_before_trait_declaration_marks_header_public() {
 }
 
 #[test]
-fn export_before_trait_incompatibility_marks_header_public() {
-    let source = "export DISPLAY_TEXT must not TRY_DISPLAY_TEXT\n";
-    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
-        .expect("headers should parse");
+fn export_trait_incompatibility_is_rejected() {
+    let source = "export:\n    DISPLAY_TEXT must not TRY_DISPLAY_TEXT\n;\n";
+    let result = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "trait incompatibility must not be exported");
 
-    let incompatibility_header = headers
-        .headers
-        .iter()
-        .find(|header| matches!(header.kind, HeaderKind::TraitIncompatibility { .. }))
-        .expect("expected trait incompatibility header");
-
-    assert_eq!(incompatibility_header.export_mode, HeaderExportMode::Public);
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
 }
 
 #[test]
 fn export_before_trait_conformance_is_rejected() {
     let result = parse_single_file_headers_with_entry(
-        "export Label must DISPLAY_TEXT\n",
+        "export:\n    Label must DISPLAY_TEXT\n;\n",
         "src/#mod.bst",
         "src/#page.bst",
     );
@@ -2562,7 +2659,7 @@ fn export_before_trait_conformance_is_rejected() {
 #[test]
 fn export_before_unsupported_runtime_statement_is_rejected() {
     let result = parse_single_file_headers_with_entry(
-        "export io.line([: [\"hello\"]])\n",
+        "export:\n    io.line([: [\"hello\"]])\n;\n",
         "src/#mod.bst",
         "src/#page.bst",
     );
@@ -2573,23 +2670,37 @@ fn export_before_unsupported_runtime_statement_is_rejected() {
 }
 
 #[test]
+fn receiver_methods_cannot_be_directly_exported() {
+    let result = parse_single_file_headers_with_entry(
+        "export:\n    Button = | label String |\n    render |this Button| -> String:\n        return this.label\n    ;\n;\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "receiver methods should not be direct exports");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidReceiverDeclaration)
+    }));
+}
+
+#[test]
 fn export_before_runtime_template_is_rejected() {
     let result = parse_single_file_headers_with_entry(
-        "export [: hello ]\n",
+        "export:\n    [: hello ]\n;\n",
         "src/#mod.bst",
         "src/#page.bst",
     );
     let errors = expect_header_error(result, "export before runtime template should be rejected");
 
     assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
-        == DiagnosticKind::Rule(RuleDiagnosticKind::RuntimeTemplateInModuleFacade)));
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
 }
 
 #[test]
 fn export_import_and_private_import_normalize_to_one_public_record() {
     let mut string_table = StringTable::new();
     let output = prepare_single_file(
-        "import @./button { Button }\nexport import @./button { Button }\n",
+        "import @./button { Button }\nexport:\n    import @./button { Button }\n;\n",
         &PathBuf::from("src/#mod.bst"),
         &PathBuf::from("src/#page.bst"),
         &mut string_table,
@@ -2721,7 +2832,7 @@ fn header_parsing_rejects_facade_re_export_with_core_cast_trait_name() {
             "src/helper.bst".to_owned(),
         ),
         (
-            "export import @./helper { USER_TRAIT as CASTABLE_TO_STRING }\n".to_owned(),
+            "export:\n    import @./helper { USER_TRAIT as CASTABLE_TO_STRING }\n;\n".to_owned(),
             "src/#mod.bst".to_owned(),
         ),
         ("import @./helper\n".to_owned(), "src/#page.bst".to_owned()),

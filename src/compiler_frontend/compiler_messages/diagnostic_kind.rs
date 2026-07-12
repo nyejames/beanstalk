@@ -201,7 +201,6 @@ pub enum RuleDiagnosticKind {
     InvalidTopLevelRuntimeStatement,
     LegacyImportSyntax,
     OldPrefixDeclarationSyntax,
-    RuntimeTemplateInModuleFacade,
     ReservedBuiltinName,
     InvalidSignatureMember,
     InvalidChoiceVariant,
@@ -254,11 +253,10 @@ pub enum RuleDiagnosticKind {
     GenericBoundPrivateSurfaceLeak,
     TraitNameUsedAsType,
     InvalidTraitKeywordUsage,
-    ExportOutsideModuleFacade,
-    MissingExportTarget,
-    DeferredNamespaceExport,
+    ExportOutsideModuleRoot,
     InvalidExportTarget,
     DuplicatePublicExport,
+    DuplicateExportBlock,
     PrivateTypeInExportedApi,
 }
 
@@ -283,7 +281,6 @@ impl RuleDiagnosticKind {
             Self::InvalidTopLevelRuntimeStatement,
             Self::LegacyImportSyntax,
             Self::OldPrefixDeclarationSyntax,
-            Self::RuntimeTemplateInModuleFacade,
             Self::ReservedBuiltinName,
             Self::InvalidSignatureMember,
             Self::InvalidChoiceVariant,
@@ -335,11 +332,10 @@ impl RuleDiagnosticKind {
             Self::GenericBoundPrivateSurfaceLeak,
             Self::TraitNameUsedAsType,
             Self::InvalidTraitKeywordUsage,
-            Self::ExportOutsideModuleFacade,
-            Self::MissingExportTarget,
-            Self::DeferredNamespaceExport,
+            Self::ExportOutsideModuleRoot,
             Self::InvalidExportTarget,
             Self::DuplicatePublicExport,
+            Self::DuplicateExportBlock,
             Self::PrivateTypeInExportedApi,
         ]
         .into_iter()
