@@ -2404,6 +2404,16 @@ path = "html_missing_homepage_reports_config_error"
 tags = ["integration","html","diagnostics"]
 
 [[case]]
+id = "html_api_only_directory_missing_homepage"
+path = "html_api_only_directory_missing_homepage"
+tags = ["integration","html","diagnostics"]
+
+[[case]]
+id = "html_api_only_module_artifact_filtering"
+path = "html_api_only_module_artifact_filtering"
+tags = ["integration","html","imports"]
+
+[[case]]
 id = "html_tracked_asset_entry_root_basic"
 path = "html_tracked_asset_entry_root_basic"
 tags = ["integration","html"]

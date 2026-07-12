@@ -78,7 +78,12 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
         borrow_analysis: BorrowCheckReport::default(),
         warnings: vec![],
         const_top_level_fragments: vec![],
-        root_activity: ModuleRootActivity::default(),
+        // Most builder fixtures represent active page roots. API-only modules opt into the
+        // explicit default when a test needs to verify artifact filtering.
+        root_activity: ModuleRootActivity {
+            has_non_trivial_root_body: true,
+            ..ModuleRootActivity::default()
+        },
         external_package_registry: Arc::new(ExternalPackageRegistry::new()),
         module_external_imports: vec![],
     }

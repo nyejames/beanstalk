@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: active
-CURRENT_SLICE: Phase 7B filter HTML artifacts from explicit root activity metadata
-LAST_ACCEPTED_COMMIT: `dec78365d` (`refactor: rename module public surfaces`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `dec78365d`; Phase 7A is accepted for its next checkpoint. Concurrent docs migration and `tmp/docs-language-probes/**` remain user-owned and outside this plan's commits.
+STATUS: blocked
+CURRENT_SLICE: Phase 7B accepted for checkpoint; Phase 8 waits on the external canvas validation blocker
+LAST_ACCEPTED_COMMIT: `d04dc106b` (`feat: carry module root activity`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 7B is ready for its checkpoint commit. Concurrent docs migration, generated docs, `tmp/**`, `libraries/html/#mod.bst` and the parent-owned template whitespace fix remain outside this plan's commit.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -183,6 +183,7 @@ VALIDATION_STATE:
 - Phase 6A public export data ownership: Codex CLI replaced `facade_data.rs` with `public_exports.rs`, renamed the entry/target types and source-library/module-root maps and threaded the current names through header imports, dependency sorting and required AST references without compatibility aliases. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 174 header tests, 14 dependency tests and 8 AST environment tests.
 - Phase 6B public surface semantics and diagnostics: Codex CLI replaced the facade resolver with `public_export_resolution.rs`, renamed AST public-surface validation and renamed structured import diagnostics while preserving `BST-IMPORT-0011` and `BST-IMPORT-0012`. Imported-root conformance wording now describes its real role. A correction worker removed stale `#mod.bst` keyword/token comments. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 51 compiler-message tests, 174 header tests and 8 AST environment tests.
 - Phase 7A root activity handoff: Codex CLI added `ModuleRootActivity`, preserved all three existing header facts through dependency sorting and replaced the standalone backend runtime-fragment count with one `Module.root_activity` value. Existing JS/Wasm compilation reads its runtime member without changing artifact behavior. Worker full `just validate` passed 3331 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting plus focused propagation and helper-policy tests.
+- Phase 7B HTML artifact policy: Codex CLI filters page compilation, runtime assets and tracked assets through `ModuleRootActivity`, makes directory routes depend only on module directories and selects the homepage by the active root directory rather than a `#page.bst` filename. Directory builds with only API roots retain the structured missing-homepage diagnostic while single-file API-only builds may emit an empty project. Focused HTML tests passed (253), build orchestration tests passed (17), compiler-message tests passed (53) and `just bench-frontend-check` passed (26 cases). The integration runner reached only five concurrent canvas failures. All-target tests reached only the matching canvas unit failure.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -190,11 +191,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Commit Phase 7A, then delegate Phase 7B HTML artifact filtering, homepage handling and active-module asset planning through the verified `codex-cli-beanstalk` wrapper.
+- After the concurrent canvas cleanup and fixture updates settle, rerun `just validate`. If it passes, refresh this state with the Phase 7B commit and delegate Phase 8 through codex-cli.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
-STOP_REASON: none
-NEXT_RESUME_ACTION: inspect the full HTML build loop and prepare the bounded Phase 7B codex-cli task
+STOP_REASON: validation exposes an out-of-scope blocker: concurrent `libraries/html/#mod.bst` changes removed positional canvas slots while one Rust test and five integration cases still pass width and height as loose contributions.
+NEXT_RESUME_ACTION: rerun `just validate` after the user-owned canvas change and its fixtures are consistent.
 
 ---
 
@@ -931,25 +932,25 @@ impl ModuleRootActivity {
 
 - [x] Populate metadata from header parsing / sorted headers / AST finalization without HIR rescans.
 - [x] Add the metadata to `build.rs::Module`.
-- [ ] Update HTML builder:
-  - [ ] review `src/projects/html_project/output_plan.rs` and `src/projects/html_project/path_policy.rs`, which currently special-case `#page`;
-  - [ ] skip page artifact compilation for modules with no HTML artifact activity;
-  - [ ] keep skipped modules available for import/export validation and external package metadata where relevant;
-  - [ ] homepage selection ignores skipped API-only modules;
-  - [ ] if all modules are API-only, produce a clear diagnostic or empty project according to existing project policy. Recommended: diagnostic for HTML directory builds with no page roots.
-- [ ] Ensure runtime asset/tracked asset planning only uses modules that emitted page artifacts unless a future builder explicitly asks for API-only artifact emission.
-- [ ] Do not add a second discovery scan to classify artifact relevance.
+- [x] Update HTML builder:
+  - [x] review `src/projects/html_project/output_plan.rs` and `src/projects/html_project/path_policy.rs`, which currently special-case `#page`;
+  - [x] skip page artifact compilation for modules with no HTML artifact activity;
+  - [x] keep skipped modules available for import/export validation and external package metadata where relevant;
+  - [x] homepage selection ignores skipped API-only modules;
+  - [x] if all modules are API-only, produce a clear diagnostic or empty project according to existing project policy. Recommended: diagnostic for HTML directory builds with no page roots.
+- [x] Ensure runtime asset/tracked asset planning only uses modules that emitted page artifacts unless a future builder explicitly asks for API-only artifact emission.
+- [x] Do not add a second discovery scan to classify artifact relevance.
 
 ### Review / audit / validation
 
-- [ ] Add integration test: API-only module root emits no HTML output.
-- [ ] Add integration test: module root with top-level template emits HTML output.
-- [ ] Add integration test: module root with top-level runtime code emits output if current HTML semantics support it.
-- [ ] Add integration test: imported API-only module contributes functions/types to a page root.
-- [ ] Run HTML builder tests.
+- [x] Add integration test: API-only module root emits no HTML output.
+- [x] Add integration test: module root with top-level template emits HTML output.
+- [x] Add integration test: module root with top-level runtime code emits output if current HTML semantics support it.
+- [x] Add integration test: imported API-only module contributes functions/types to a page root.
+- [x] Run HTML builder tests.
 - [ ] Run `just validate`.
-- [ ] Run focused benchmark check for API-only module projects if fixtures are added.
-- [ ] Update active context capsule.
+- [x] Run focused benchmark check for API-only module projects if fixtures are added.
+- [x] Update active context capsule.
 
 ---
 

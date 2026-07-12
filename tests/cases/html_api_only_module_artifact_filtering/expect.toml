@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "html_api_only_module_artifact_filtering api-only-import",
+]
+
+[[backends.html.artifact_assertions]]
+path = "docs/index.html"
+kind = "html"
+must_contain = ["html_api_only_module_artifact_filtering const-root"]

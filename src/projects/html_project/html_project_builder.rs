@@ -118,13 +118,17 @@ impl BackendBuilder for HtmlProjectBuilder {
         let mut output_path_owners: HashMap<PathBuf, PathBuf> = HashMap::new();
         let mut entry_page_rel = None;
         let mut has_directory_homepage = false;
-        let mut compiled_html_output_paths = Vec::with_capacity(modules.len());
+        let artifact_modules: Vec<&Module> = modules
+            .iter()
+            .filter(|module| module.root_activity.has_html_artifact_activity())
+            .collect();
+        let mut compiled_html_output_paths = Vec::with_capacity(artifact_modules.len());
         let mut warnings = Vec::new();
 
         {
             let _module_compile_guard =
                 crate::timing::PipelineTimingGuard::new("backend.html.module_compile_total");
-            for (module_index, module) in modules.iter().enumerate() {
+            for module in artifact_modules.iter().copied() {
                 // Derive the canonical page route once. Both JS-only and HTML+Wasm output modes
                 // consume this same path — downstream code must not re-derive route semantics.
                 let logical_html_output_path = html_output_path(
@@ -159,14 +163,12 @@ impl BackendBuilder for HtmlProjectBuilder {
                     output_path_owners.insert(output_path.clone(), module.entry_point.clone());
                     output_files.push(output_file);
                 }
-                compiled_html_output_paths.push((module_index, html_output_path.clone()));
+                compiled_html_output_paths.push((module, html_output_path.clone()));
 
-                if let Some(homepage_entry) = entry_paths.expected_homepage_entry.as_ref() {
-                    if module.entry_point == *homepage_entry {
-                        has_directory_homepage = true;
-                        entry_page_rel = Some(html_output_path.clone());
-                    }
-                } else if entry_page_rel.is_none() {
+                if entry_paths.is_homepage_entry(&module.entry_point) {
+                    has_directory_homepage = true;
+                    entry_page_rel = Some(html_output_path.clone());
+                } else if !entry_paths.is_directory_build() && entry_page_rel.is_none() {
                     entry_page_rel = Some(html_output_path);
                 }
             }
@@ -178,7 +180,8 @@ impl BackendBuilder for HtmlProjectBuilder {
             string_table,
         )?;
 
-        let runtime_emission_plan = HtmlExternalRuntimeEmissionPlan::from_modules(&modules);
+        let runtime_emission_plan =
+            HtmlExternalRuntimeEmissionPlan::from_modules(artifact_modules.iter().copied());
 
         {
             let _runtime_assets_guard =
@@ -205,8 +208,7 @@ impl BackendBuilder for HtmlProjectBuilder {
         {
             let _tracked_assets_plan_guard =
                 crate::timing::PipelineTimingGuard::new("backend.html.tracked_assets_plan");
-            for (module_index, html_output_path) in &compiled_html_output_paths {
-                let module = &modules[*module_index];
+            for (module, html_output_path) in &compiled_html_output_paths {
                 let planned_assets =
                     plan_module_tracked_assets(module, html_output_path, string_table)?;
                 warnings.extend(planned_assets.warnings);

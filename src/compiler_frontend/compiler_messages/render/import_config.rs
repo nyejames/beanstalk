@@ -108,7 +108,7 @@ pub(crate) fn invalid_config_message(
             string_table.resolve(*expected)
         ),
         InvalidConfigReason::MissingHtmlHomepage { entry_root } => format!(
-            "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+            "HTML project builds require an artifact-producing module root at the configured entry root '{}'.",
             string_table.resolve(*entry_root),
         ),
         InvalidConfigReason::DuplicateHtmlOutputPath {

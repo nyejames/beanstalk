@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 
 pub(crate) struct HtmlEntryPathPlan {
     pub(crate) resolved_entry_root: Option<PathBuf>,
-    pub(crate) expected_homepage_entry: Option<PathBuf>,
     is_directory_build: bool,
 }
 
@@ -30,21 +29,29 @@ impl HtmlEntryPathPlan {
         let is_directory_build = config.entry_dir.is_dir();
         let resolved_entry_root =
             resolve_canonical_entry_root(config, is_directory_build, string_table)?;
-        let expected_homepage_entry = resolved_entry_root
-            .as_ref()
-            .map(|entry_root| entry_root.join("#page.bst"));
 
         Ok(Self {
             resolved_entry_root,
-            expected_homepage_entry,
             is_directory_build,
         })
     }
 
+    /// Return whether an artifact-producing module is the directory-build homepage.
+    ///
+    /// WHAT: identifies the active module whose root directory is exactly `entry_root`.
+    /// WHY: hash-root filenames are cosmetic and API-only roots must not claim the homepage.
+    pub(crate) fn is_homepage_entry(&self, entry_point: &Path) -> bool {
+        self.is_directory_build && entry_point.parent() == self.resolved_entry_root.as_deref()
+    }
+
+    pub(crate) fn is_directory_build(&self) -> bool {
+        self.is_directory_build
+    }
+
     /// Enforce the HTML homepage requirement for directory builds.
     ///
-    /// WHY: directory routing depends on a concrete root `#page.bst`, while single-file builds do
-    /// not have that contract.
+    /// WHY: directory routing depends on an active artifact-producing module at `entry_root`,
+    /// while single-file builds do not have that contract.
     pub(crate) fn require_homepage_if_directory_build(
         &self,
         config: &Config,

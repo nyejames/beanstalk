@@ -31,13 +31,13 @@ pub(crate) struct HtmlExternalRuntimeEmissionPlan {
 }
 
 impl HtmlExternalRuntimeEmissionPlan {
-    /// Build an emission plan from a slice of compiled modules.
+    /// Build an emission plan from the compiled modules selected for artifact emission.
     ///
     /// WHAT: scans each module's `module_external_imports` once to collect:
     ///       - JS runtime assets by canonical source path;
     ///       - runtime module specifiers from `required_runtime_imports`.
     /// WHY: deterministic deduplication in one pass avoids redundant iteration later.
-    pub(crate) fn from_modules(modules: &[Module]) -> Self {
+    pub(crate) fn from_modules<'a>(modules: impl IntoIterator<Item = &'a Module>) -> Self {
         let mut js_assets = BTreeMap::new();
         let mut runtime_module_specifiers = BTreeSet::new();
 

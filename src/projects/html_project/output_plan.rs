@@ -66,9 +66,8 @@ pub(crate) fn plan_wasm_output_from_logical_html_path(
 /// Derive the logical HTML output path from an entry file.
 ///
 /// WHAT: maps Beanstalk entry conventions to HTML paths:
-/// - `#page.bst` (root) → `index.html`
-/// - `#page.bst` (subdir) → `<subdir>/index.html`
-/// - `#about.bst` (root) → `about/index.html` (folder-backed)
+/// - Directory builds use only the module root directory relative to `entry_root`, so a root
+///   module emits `index.html` and a nested module emits `<directory>/index.html`.
 /// - Single-file builds strip `#` prefix and use legacy `.html` extension.
 pub(crate) fn derive_logical_html_path(
     entry_point: &Path,
@@ -111,38 +110,16 @@ fn derive_logical_html_path_from_entry_root(
             string_table,
         )
     })?;
-    let file_stem = relative_entry
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| !stem.is_empty())
-        .ok_or_else(|| {
-            CompilerError::file_error(
-                entry_point,
-                format!(
-                    "HTML entry '{}' is missing a valid file stem.",
-                    entry_point.display(),
-                ),
-                string_table,
-            )
-        })?;
     let parent = relative_entry.parent().unwrap_or_else(|| Path::new(""));
 
-    if file_stem == "#page" {
-        if parent.as_os_str().is_empty() {
-            return Ok(PathBuf::from("index.html"));
-        }
-        return Ok(parent.join("index.html"));
+    // Directory routes describe module directories, not cosmetic hash-root filenames. The
+    // active root module is the homepage and every nested module is folder-backed at its
+    // entry-root-relative directory.
+    if parent.as_os_str().is_empty() {
+        return Ok(PathBuf::from("index.html"));
     }
 
-    let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-    // Directory builds emit folder-backed routes so dev/prod routing semantics match
-    // and every page has one canonical `.../index.html` backing file.
-    let route_base = if parent.as_os_str().is_empty() {
-        PathBuf::from(route_name)
-    } else {
-        parent.join(route_name)
-    };
-    Ok(route_base.join("index.html"))
+    Ok(parent.join("index.html"))
 }
 
 /// Derive the route folder base from a logical HTML path for Wasm artifact co-location.

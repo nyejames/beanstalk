@@ -4,7 +4,7 @@ use super::*;
 use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
 use crate::build_system::build::ModuleExternalImport;
 use crate::build_system::build::ResolvedConstFragment;
-use crate::build_system::build::{FileKind, Project};
+use crate::build_system::build::{FileKind, ModuleRootActivity, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidConfigReason};
@@ -197,8 +197,8 @@ fn directory_build_maps_routes_relative_to_entry_root() {
     let project = build_with_test_modules(
         &builder,
         vec![
-            entry_root.join("#page.bst"),
-            entry_root.join("about").join("#page.bst"),
+            entry_root.join("#home.bst"),
+            entry_root.join("about").join("#anything.bst"),
             entry_root.join("docs").join("basics").join("#page.bst"),
             entry_root.join("blog").join("#404.bst"),
         ],
@@ -211,7 +211,7 @@ fn directory_build_maps_routes_relative_to_entry_root() {
     assert!(output_paths.contains(&PathBuf::from("index.html")));
     assert!(output_paths.contains(&PathBuf::from("about/index.html")));
     assert!(output_paths.contains(&PathBuf::from("docs/basics/index.html")));
-    assert!(output_paths.contains(&PathBuf::from("blog/404/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("blog/index.html")));
     assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -459,6 +459,73 @@ fn directory_build_requires_homepage_at_entry_root() {
 }
 
 #[test]
+fn directory_build_skips_api_only_sibling_from_all_artifact_planning() {
+    let root = temp_dir("api_only_sibling");
+    fs::create_dir_all(root.join("src/api")).expect("should create module directories");
+    let entry_root = fs::canonicalize(root.join("src")).expect("entry root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+    let mut string_table = StringTable::new();
+
+    let homepage = create_test_module(entry_root.join("#home.bst"), &mut string_table);
+    let mut api_only = create_test_module(entry_root.join("api/#api.bst"), &mut string_table);
+    api_only.root_activity = ModuleRootActivity::default();
+    api_only.module_external_imports = vec![ModuleExternalImport {
+        package_id: ExternalPackageId(1),
+        runtime_asset: Some(RuntimeAssetIdentity {
+            canonical_source_path: entry_root.join("missing-runtime.js"),
+            asset_kind: "js".to_owned(),
+        }),
+        required_runtime_imports: vec![],
+    }];
+    api_only.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut string_table,
+        RenderedPathUsageInput {
+            source_path_components: &["missing-asset.png"],
+            public_path_components: &["assets", "missing-asset.png"],
+            filesystem_path: entry_root.join("missing-asset.png"),
+            base: CompileTimePathBase::EntryRoot,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["api", "#api.bst"],
+            line_number: 1,
+        },
+    ));
+
+    let project = builder
+        .build_backend(vec![homepage, api_only], &config, &[], &mut string_table)
+        .expect("API-only modules should not enter artifact planning");
+
+    let output_paths = collect_output_paths(&project.output_files);
+    assert_eq!(output_paths, vec![PathBuf::from("index.html")]);
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_api_only_build_can_emit_no_artifacts() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("api.bst");
+    let mut string_table = StringTable::new();
+    let mut api_only = create_test_module(entry_path.clone(), &mut string_table);
+    api_only.root_activity = ModuleRootActivity::default();
+
+    let project = builder
+        .build_backend(
+            vec![api_only],
+            &Config::new(entry_path),
+            &[],
+            &mut string_table,
+        )
+        .expect("single-file API-only build should not require an entry page");
+
+    assert!(project.output_files.is_empty());
+    assert_eq!(project.entry_page_rel, None);
+}
+
+#[test]
 fn wasm_flag_emits_html_js_and_wasm_artifacts() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
@@ -537,9 +604,9 @@ fn wasm_directory_build_preserves_nested_routes() {
     assert!(output_paths.contains(&PathBuf::from("docs/index.html")));
     assert!(output_paths.contains(&PathBuf::from("docs/page.js")));
     assert!(output_paths.contains(&PathBuf::from("docs/page.wasm")));
-    assert!(output_paths.contains(&PathBuf::from("blog/404/index.html")));
-    assert!(output_paths.contains(&PathBuf::from("blog/404/page.js")));
-    assert!(output_paths.contains(&PathBuf::from("blog/404/page.wasm")));
+    assert!(output_paths.contains(&PathBuf::from("blog/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("blog/page.js")));
+    assert!(output_paths.contains(&PathBuf::from("blog/page.wasm")));
     assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

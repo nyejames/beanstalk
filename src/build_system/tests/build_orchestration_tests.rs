@@ -458,7 +458,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     .expect("should write project outputs");
 
     assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("errors/404/index.html").exists());
+    assert!(output_root.join("errors/index.html").exists());
     assert!(output_root.join("about/index.html").exists());
     assert!(output_root.join("docs/basics/index.html").exists());
 

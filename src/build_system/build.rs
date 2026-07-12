@@ -84,7 +84,6 @@ pub(crate) struct ModuleRootActivity {
 
 impl ModuleRootActivity {
     /// Return whether the HTML builder has any root activity from which to assemble a page.
-    #[allow(dead_code)] // Consumed by the Phase 7B HTML artifact policy.
     pub(crate) fn has_html_artifact_activity(&self) -> bool {
         self.has_non_trivial_root_body
             || self.const_fragment_count > 0
