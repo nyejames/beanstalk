@@ -31,9 +31,9 @@ export:
         theme_css,
         palette,
         theme_head,
+        docs_content_css,
         language_docs_css,
         language_theme_head,
-        codebase_theme_css,
         codebase_theme_head,
         section,
         navbar,
@@ -45,6 +45,8 @@ export:
         title,
         doc_level,
         doc_pager,
+        doc_pager_previous,
+        doc_pager_next,
     }
 ;
 

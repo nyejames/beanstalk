@@ -40,6 +40,14 @@ order.
 - A binding name must not collide with another visible name.
 - An empty collection runs the body zero times.
 
+### Evaluation
+
+The source expression is evaluated once before iteration begins. The collection
+length is captured at the same point.
+
+The loop then visits zero-based indexes from `0` up to, but not including, that
+captured length.
+
 ### Removed syntax
 
 The old `in` form is not valid.

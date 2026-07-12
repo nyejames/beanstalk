@@ -24,13 +24,18 @@ A range loop generates numeric values directly from its loop header.
     loop to end |value|:
         ...
     ;
+
+    loop to & end |value|:
+        ...
+    ;
 ]
 
 ### Bounds
 
 - `to` uses an exclusive end bound.
 - `to &` uses an inclusive end bound.
-- `loop to end` uses `0` as the start.
+- `loop to end` starts at `0`.
+- `loop to & end` starts at `0` and includes the end value.
 - Ascending bounds count upward.
 - Descending bounds count downward.
 - There is no `reverse` keyword.
@@ -40,9 +45,23 @@ A range loop generates numeric values directly from its loop header.
 
 - Without `by`, integer ranges use a step magnitude of `1`.
 - `by` supplies a magnitude. The compiler applies the direction implied by the bounds.
-- A step of zero is invalid.
+- A literal zero step is rejected during compilation.
+- A non-literal step is checked before the first iteration. A value of zero fails at runtime.
 - Any range using `Float` requires an explicit `by` step.
 - Start, end and step expressions must have numeric types.
+
+[codeblock, $code("bst"):
+    loop 0.0 to 1.0 by 0.1 |amount|:
+        io.line([: [amount]])
+    ;
+]
+
+### Evaluation
+
+Start, end and explicit step expressions are evaluated once, from left to
+right, before the first bounds check.
+
+The loop keeps those evaluated values for the complete iteration.
 
 ### Bindings
 

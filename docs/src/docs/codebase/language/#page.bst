@@ -1,7 +1,7 @@
 import @styles/docs {navbar, section, codebase_theme_head}
 
 page_title #= "Compiler-facing language reference"
-page_description #= "Routing for canonical language semantics, public explanations and related compiler design references."
+page_description #= "Current language authority, focused replacement references and related compiler design documentation."
 page_head #= codebase_theme_head
 
 #[navbar]
@@ -11,13 +11,15 @@ page_head #= codebase_theme_head
 
     # Compiler-facing language reference
 
-    Compiler changes should start from the language contract. Canonical language references now live beside their public routes as concepts are migrated out of the consolidated overview.
+    Compiler changes should start from the language contract. `docs/language-overview.md` remains the complete reference for syntax, semantics, edge cases and deferred language surface.
 ]
 
 #[section, $md:
-    ## Migrated language references
+    ## Focused references
 
-    Loops are the first migrated language area.
+    The language documentation is being split into smaller references without changing the active authority during the migration.
+
+    Loops is the first completed replacement set:
 
     - @../../loops (Loops): public Basic and Advanced documentation
     - `docs/src/docs/loops/conditional-loops.bd`
@@ -25,15 +27,13 @@ page_head #= codebase_theme_head
     - `docs/src/docs/loops/range-loops.bd`
     - `docs/src/docs/loops/loop-control.bd`
 
-    The unsuffixed Beandown files own exact loop semantics.
+    The unsuffixed files contain detailed semantic replacements under parity review. They do not supersede `docs/language-overview.md` yet.
 ]
 
 #[section, $md:
-    ## Remaining language reference
+    ## Reference map
 
-    `docs/language-overview.md` remains canonical for every language concept that has not moved into a focused unsuffixed Beandown reference.
-
-    The complete authority map is `docs/src/docs/codebase/language/overview.bd`.
+    `docs/src/docs/codebase/language/overview.bd` lists each focused replacement completed so far and points back to the consolidated authority.
 ]
 
 #[section, $md:

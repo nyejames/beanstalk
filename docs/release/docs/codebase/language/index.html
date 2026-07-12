@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Compiler-facing language reference | Beanstalk</title>
-    <meta name="description" content="Routing for canonical language semantics, public explanations and related compiler design references.">
+    <meta name="description" content="Current language authority, focused replacement references and related compiler design documentation.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,7 +239,16 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
-    <style>table {
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
         width: 100%;
         border-collapse: collapse;
         max-width: 100%;
@@ -379,9 +388,9 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Codebase</a> / Compiler-facing language reference</p><h1>Compiler-facing language reference</h1><p>Compiler changes should start from the language contract. Canonical language references now live beside their public routes as concepts are migrated out of the consolidated overview.</p></section>
-    <section class="container"><h2>Migrated language references</h2><p>Loops are the first migrated language area.</p><ul><li><a href="../../loops">Loops</a>: public Basic and Advanced documentation</li><li><code>docs/src/docs/loops/conditional-loops.bd</code></li><li><code>docs/src/docs/loops/collection-loops.bd</code></li><li><code>docs/src/docs/loops/range-loops.bd</code></li><li><code>docs/src/docs/loops/loop-control.bd</code></li></ul><p>The unsuffixed Beandown files own exact loop semantics.</p></section>
-    <section class="container"><h2>Remaining language reference</h2><p><code>docs/language-overview.md</code> remains canonical for every language concept that has not moved into a focused unsuffixed Beandown reference.</p><p>The complete authority map is <code>docs/src/docs/codebase/language/overview.bd</code>.</p></section>
+    <section class="container"><p><a href="../">Codebase</a> / Compiler-facing language reference</p><h1>Compiler-facing language reference</h1><p>Compiler changes should start from the language contract. <code>docs/language-overview.md</code> remains the complete reference for syntax, semantics, edge cases and deferred language surface.</p></section>
+    <section class="container"><h2>Focused references</h2><p>The language documentation is being split into smaller references without changing the active authority during the migration.</p><p>Loops is the first completed replacement set:</p><ul><li><a href="../../loops">Loops</a>: public Basic and Advanced documentation</li><li><code>docs/src/docs/loops/conditional-loops.bd</code></li><li><code>docs/src/docs/loops/collection-loops.bd</code></li><li><code>docs/src/docs/loops/range-loops.bd</code></li><li><code>docs/src/docs/loops/loop-control.bd</code></li></ul><p>The unsuffixed files contain detailed semantic replacements under parity review. They do not supersede <code>docs/language-overview.md</code> yet.</p></section>
+    <section class="container"><h2>Reference map</h2><p><code>docs/src/docs/codebase/language/overview.bd</code> lists each focused replacement completed so far and points back to the consolidated authority.</p></section>
     <section class="container"><h2>Related design</h2><ul><li><a href="../design-scope">Design scope</a>: accepted mechanisms and intentionally excluded complexity</li><li><a href="../memory-management/access-and-aliasing">Access and aliasing</a>: shared reads, explicit copies and exclusive access</li><li><a href="../compiler-design">Compiler design overview</a>: stage ownership and cross-stage data flow</li><li><a href="../../progress">Progress matrix</a>: current implementation support and known gaps</li></ul></section>
     <section class="container"><h2>More documentation</h2><p>See <a href="../../">All documentation</a> for tutorials, examples and feature-focused language pages.</p></section>
     <script>

@@ -197,6 +197,22 @@ language_docs_css #= [$css:
         margin-block: 3rem 1rem;
     }
 
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
     .doc-pager__link {
         display: flex;
         flex-direction: column;
@@ -283,6 +299,11 @@ language_docs_css #= [$css:
             align-items: flex-start;
             text-align: left;
         }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
     }
 
     @media (prefers-color-scheme: dark) {
@@ -333,12 +354,16 @@ language_docs_css #= [$css:
     }
 ]
 
-language_theme_head #= [$html:
-    [theme_head]
-    <style>[language_docs_css]</style>
-]
+docs_content_css #= [$css:
+    .container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
 
-codebase_theme_css #= [$css:
     table {
         width: 100%;
         border-collapse: collapse;
@@ -401,9 +426,15 @@ codebase_theme_css #= [$css:
     }
 ]
 
+language_theme_head #= [$html:
+    [theme_head]
+    <style>[docs_content_css]</style>
+    <style>[language_docs_css]</style>
+]
+
 codebase_theme_head #= [$html:
     [theme_head]
-    <style>[codebase_theme_css]</style>
+    <style>[docs_content_css]</style>
 ]
 
 section #= [$html:
@@ -478,6 +509,36 @@ doc_pager #= [$html:
             <span class="doc-pager__title">[$slot("previous_title")]</span>
         </a>
 
+        <a
+            class="doc-pager__link doc-pager__link--next"
+            href="[$slot("next_path")]"
+            rel="next"
+        >
+            <span class="doc-pager__direction">Next →</span>
+            <span class="doc-pager__title">[$slot("next_title")]</span>
+        </a>
+
+        [$slot]
+    </nav>
+]
+
+doc_pager_previous #= [$html:
+    <nav class="doc-pager doc-pager--single" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="[$slot("previous_path")]"
+            rel="prev"
+        >
+            <span class="doc-pager__direction">← Previous</span>
+            <span class="doc-pager__title">[$slot("previous_title")]</span>
+        </a>
+
+        [$slot]
+    </nav>
+]
+
+doc_pager_next #= [$html:
+    <nav class="doc-pager doc-pager--single" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--next"
             href="[$slot("next_path")]"

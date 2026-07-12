@@ -2,9 +2,12 @@
 
 `docs/src/docs/codebase/**` owns compiler architecture, memory design, design scope, implementation style, testing and validation.
 
-`docs/src/docs/codebase/language/overview.bd` routes compiler-facing language
-semantics. Canonical unsuffixed Beandown files own migrated concepts.
-`docs/language-overview.md` owns the remaining unmigrated surface.
+`docs/language-overview.md` remains the complete compiler-facing language
+authority during the language documentation migration.
+
+`docs/src/docs/codebase/language/overview.bd` indexes focused Beandown
+replacement references as they are prepared and reviewed against that
+authority.
 
 Use the progress matrix for current support. Use the roadmap for sequencing and unaccepted proposals.
 

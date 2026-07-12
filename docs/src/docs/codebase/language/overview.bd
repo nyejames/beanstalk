@@ -1,32 +1,37 @@
 # Compiler-facing language reference
 
-Language semantics are moving from the consolidated language overview into
-focused canonical Beandown references. Use this map to find the current owner
-for each concept.
+`docs/language-overview.md` remains the complete compiler-facing language
+authority while the public language documentation is split into focused
+Beandown references.
 
-## Migrated concepts
+## Consolidated authority
+
+Read `docs/language-overview.md` for syntax, semantic invariants, edge cases,
+deferred behaviour and the exact outside-scope language surface.
+
+The file remains untouched throughout the migration so every focused
+replacement can be checked against one stable baseline.
+
+## Focused references under review
 
 ### Loops
+
+Detailed replacements:
 
 - `docs/src/docs/loops/conditional-loops.bd`
 - `docs/src/docs/loops/collection-loops.bd`
 - `docs/src/docs/loops/range-loops.bd`
 - `docs/src/docs/loops/loop-control.bd`
 
-The unsuffixed files above own exact loop semantics.
+Their paired `-basic.bd` files provide simplified teaching versions.
 
-Their paired `-basic.bd` files provide simplified teaching versions. The public
-route combines both levels:
+The public route combines both levels:
 
 `docs/src/docs/loops/#page.bst`
 
-## Remaining language authority
-
-`docs/language-overview.md` remains the canonical compiler-facing reference for
-every language concept not listed under Migrated concepts.
-
-A migrated section in the consolidated overview points to its new canonical
-files instead of retaining a second copy of the rules.
+These files are written in the intended final shape. They do not supersede
+`docs/language-overview.md` until the complete language migration and parity
+review have been approved.
 
 ## Public documentation
 
