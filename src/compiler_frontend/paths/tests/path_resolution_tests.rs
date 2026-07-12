@@ -149,15 +149,15 @@ fn prepared_module_root_table(root_file: &std::path::Path) -> ModuleRootTable {
         .parent()
         .expect("root file should have a parent")
         .to_path_buf();
-    let facade_file = canonical_root_file
+    let export_file = canonical_root_file
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| *name == "#mod.bst")
         .map(|_| canonical_root_file.clone());
-    ModuleRootTable::from_records(vec![ModuleRootRecord::with_facade(
+    ModuleRootTable::from_records(vec![ModuleRootRecord::with_export_file(
         root_directory,
         canonical_root_file,
-        facade_file,
+        export_file,
     )])
 }
 

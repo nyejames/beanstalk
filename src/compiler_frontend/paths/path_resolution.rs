@@ -199,8 +199,8 @@ impl ProjectPathResolver {
         &self.source_library_root_files
     }
 
-    pub(crate) fn module_root_facades(&self) -> &HashMap<PathBuf, PathBuf> {
-        self.module_roots.facade_files()
+    pub(crate) fn module_root_export_files(&self) -> &HashMap<PathBuf, PathBuf> {
+        self.module_roots.export_files()
     }
 
     pub(crate) fn module_roots(&self) -> impl Iterator<Item = &PathBuf> {
@@ -323,8 +323,8 @@ impl ProjectPathResolver {
                         importer_file,
                         string_table,
                     ) {
-                        Ok(Some(facade_file)) => Ok(ResolvedImportFile {
-                            path: facade_file,
+                        Ok(Some(export_file)) => Ok(ResolvedImportFile {
+                            path: export_file,
                             kind: SourceFileKind::Beanstalk,
                         }),
                         Ok(None) => Err(original_error),
@@ -347,11 +347,11 @@ impl ProjectPathResolver {
         self.facade_files.get(prefix).cloned()
     }
 
-    /// WHAT: checks whether an import path targets a regular module root with a facade,
-    /// and if so, returns the facade file path. If the target is a module root without a facade,
-    /// returns a diagnostic so the caller can report a clear missing-facade error.
-    /// WHY: regular module roots (under the entry root) use their prepared facade file as the
-    ///      outward-facing export surface. Plain folder imports resolve to it only when present.
+    /// WHAT: checks whether an import path targets a regular module root with an export file,
+    /// and if so, returns the prepared export file path. If the target is a module root without
+    /// an export file, returns a diagnostic so the caller can report a clear missing-facade error.
+    /// WHY: regular module roots (under the entry root) use their prepared export file as the
+    ///      outward-facing surface. Plain folder imports resolve to it only when present.
     fn resolve_module_root_facade_fallback(
         &self,
         import_path: &InternedPath,
@@ -384,8 +384,8 @@ impl ProjectPathResolver {
                     return Ok(None);
                 }
 
-                if let Some(facade_path) = self.module_root_facades().get(&lookup_current) {
-                    return Ok(Some(facade_path.clone()));
+                if let Some(export_path) = self.module_root_export_files().get(&lookup_current) {
+                    return Ok(Some(export_path.clone()));
                 }
 
                 // Target module root has no facade.

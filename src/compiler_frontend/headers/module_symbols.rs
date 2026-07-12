@@ -66,6 +66,19 @@ pub struct FacadeExportEntry {
     pub target: FacadeExportTarget,
 }
 
+/// Prepared entry-root boundary identity used by header import resolution.
+///
+/// WHAT: carries the logical import prefix, module-root identity and actual prepared export file
+///       together for one entry-root boundary.
+/// WHY: namespace imports must use the Stage 0-selected export file instead of reconstructing a
+///      filename from the import prefix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ModuleRootBoundary {
+    pub(crate) import_prefix: InternedPath,
+    pub(crate) module_root: InternedPath,
+    pub(crate) export_file: Option<InternedPath>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GenericDeclarationKind {
     Function,
@@ -162,9 +175,10 @@ pub(crate) struct ModuleSymbols {
     pub(crate) file_module_membership: FxHashMap<InternedPath, InternedPath>,
     // Facade exports for entry-root module roots, keyed by module root path.
     pub(crate) module_root_facade_exports: FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
-    // Module root prefixes relative to the entry root, sorted longest first.
-    // Used for intercepting cross-module imports before file resolution.
-    pub(crate) module_root_prefixes: Vec<(InternedPath, InternedPath)>,
+    // Prepared entry-root boundary identities, sorted by import prefix longest first.
+    // Used for intercepting cross-module imports before file resolution and for resolving the
+    // actual prepared export file for namespace imports.
+    pub(crate) module_root_boundaries: Vec<ModuleRootBoundary>,
 }
 
 impl ModuleSymbols {
@@ -196,7 +210,7 @@ impl ModuleSymbols {
             file_library_membership: FxHashMap::default(),
             file_module_membership: FxHashMap::default(),
             module_root_facade_exports: FxHashMap::default(),
-            module_root_prefixes: Vec::new(),
+            module_root_boundaries: Vec::new(),
         }
     }
 

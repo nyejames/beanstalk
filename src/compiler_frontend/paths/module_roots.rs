@@ -17,33 +17,33 @@ pub(crate) struct ModuleRootId(usize);
 pub(crate) struct ModuleRootRecord {
     root_directory: PathBuf,
     root_file: PathBuf,
-    facade_file: Option<PathBuf>,
+    export_file: Option<PathBuf>,
 }
 
 impl ModuleRootRecord {
-    pub(crate) fn with_facade(
+    pub(crate) fn with_export_file(
         root_directory: PathBuf,
         root_file: PathBuf,
-        facade_file: Option<PathBuf>,
+        export_file: Option<PathBuf>,
     ) -> Self {
         Self {
             root_directory,
             root_file,
-            facade_file,
+            export_file,
         }
     }
 }
 
 /// Prepared module-root records and indexes used by path resolution.
 ///
-/// The facade map is an index over the same records, not an independently discovered filesystem
-/// view. It remains available to the current facade/export consumers until their later roadmap
-/// phase replaces the filename-specific surface.
+/// The export-file map is an index over the same records, not an independently discovered
+/// filesystem view. It remains available to the current facade/export consumers until their later
+/// roadmap phase replaces the filename-specific surface.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModuleRootTable {
     records: Vec<ModuleRootRecord>,
     by_directory: HashMap<PathBuf, ModuleRootId>,
-    facade_files: HashMap<PathBuf, PathBuf>,
+    export_files: HashMap<PathBuf, PathBuf>,
 }
 
 impl ModuleRootTable {
@@ -67,10 +67,10 @@ impl ModuleRootTable {
             let id = ModuleRootId(index);
             table.by_directory.insert(record.root_directory.clone(), id);
 
-            if let Some(facade_file) = &record.facade_file {
+            if let Some(export_file) = &record.export_file {
                 table
-                    .facade_files
-                    .insert(record.root_directory.clone(), facade_file.clone());
+                    .export_files
+                    .insert(record.root_directory.clone(), export_file.clone());
             }
         }
 
@@ -81,8 +81,8 @@ impl ModuleRootTable {
         self.records.iter().map(|record| &record.root_directory)
     }
 
-    pub(crate) fn facade_files(&self) -> &HashMap<PathBuf, PathBuf> {
-        &self.facade_files
+    pub(crate) fn export_files(&self) -> &HashMap<PathBuf, PathBuf> {
+        &self.export_files
     }
 
     pub(crate) fn module_root_for_file(&self, file: &Path) -> Option<PathBuf> {

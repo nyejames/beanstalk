@@ -535,22 +535,22 @@ fn resolve_and_queue_local_import(
         )
         .map_err(SourceDiscoveryError::from)?;
 
-    // Ensure target module root facades are compiled for cross-module imports.
+    // Ensure target module root export files are compiled for cross-module imports.
     // WHY: when an import resolves to an implementation file in another module root,
-    //      the facade must be available so AST can validate boundary enforcement.
+    //      the prepared export file must be available so AST can validate boundary enforcement.
     if let Some(importer_root) = project_path_resolver.module_root_for_file(canonical_file)
         && let Some(target_root) = project_path_resolver.module_root_for_file(&resolved.path)
         && importer_root != target_root
-        && let Some(facade_path) = project_path_resolver
-            .module_root_facades()
+        && let Some(export_path) = project_path_resolver
+            .module_root_export_files()
             .get(&target_root)
         && !reachable.contains(&ReachableSourceFile {
-            path: facade_path.clone(),
+            path: export_path.clone(),
             kind: SourceFileKind::Beanstalk,
         })
     {
         queue.push_back(ReachableSourceFile {
-            path: facade_path.clone(),
+            path: export_path.clone(),
             kind: SourceFileKind::Beanstalk,
         });
     }

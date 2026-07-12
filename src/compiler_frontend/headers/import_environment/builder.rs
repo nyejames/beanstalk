@@ -616,7 +616,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             file_library_membership: &self.module_symbols.file_library_membership,
             module_root_facade_exports: &self.module_symbols.module_root_facade_exports,
             file_module_membership: &self.module_symbols.file_module_membership,
-            module_root_prefixes: &self.module_symbols.module_root_prefixes,
+            module_root_boundaries: &self.module_symbols.module_root_boundaries,
             string_table: self.string_table,
         };
 

@@ -10,7 +10,9 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFaca
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::import_environment::target_resolution::suffix_matches_with_optional_source_extension;
-use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
+use crate::compiler_frontend::headers::module_symbols::{
+    FacadeExportEntry, FacadeExportTarget, ModuleRootBoundary,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -58,7 +60,7 @@ pub(crate) struct FacadeResolutionInput<'a> {
     pub(crate) module_root_facade_exports:
         &'a FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
     pub(crate) file_module_membership: &'a FxHashMap<InternedPath, InternedPath>,
-    pub(crate) module_root_prefixes: &'a [(InternedPath, InternedPath)],
+    pub(crate) module_root_boundaries: &'a [ModuleRootBoundary],
     pub(crate) string_table: &'a StringTable,
 }
 
@@ -142,7 +144,7 @@ fn try_resolve_library_facade_import(
 fn try_resolve_module_root_facade_import(
     input: &FacadeResolutionInput<'_>,
 ) -> Option<FacadeLookupResult> {
-    if input.module_root_prefixes.is_empty() {
+    if input.module_root_boundaries.is_empty() {
         return None;
     }
 
@@ -169,21 +171,23 @@ fn try_resolve_module_root_facade_import(
     };
 
     // Find the longest matching module root prefix.
-    for (prefix, module_root) in input.module_root_prefixes {
-        if effective_path.starts_with(prefix) {
+    for boundary in input.module_root_boundaries {
+        if effective_path.starts_with(&boundary.import_prefix) {
             // Internal imports within the same module root use normal resolution.
             let importer_root = input.file_module_membership.get(input.importer_file);
-            if importer_root == Some(module_root) {
+            if importer_root == Some(&boundary.module_root) {
                 return Some(FacadeLookupResult::NotAFacadeImport);
             }
 
             // Named module roots use the root path as their public API prefix. The entry-root
             // facade has no prefix, so its public re-exports stay addressable at their real
             // source paths, but arbitrary paths with the same final name must not match.
-            let prefix_len = prefix.as_components().len();
+            let prefix_len = boundary.import_prefix.as_components().len();
             let effective_components = effective_path.as_components();
             let public_suffix = &effective_components[prefix_len..];
-            let exports = input.module_root_facade_exports.get(module_root)?;
+            let exports = input
+                .module_root_facade_exports
+                .get(&boundary.module_root)?;
 
             if prefix_len == 0 {
                 for entry in exports {
@@ -202,7 +206,9 @@ fn try_resolve_module_root_facade_import(
                 }
 
                 return Some(FacadeLookupResult::NotExported {
-                    facade_name: prefix.to_portable_string(input.string_table),
+                    facade_name: boundary
+                        .import_prefix
+                        .to_portable_string(input.string_table),
                     facade_type: FacadeType::ModuleRoot,
                 });
             }
@@ -214,7 +220,9 @@ fn try_resolve_module_root_facade_import(
             };
             let Some(symbol_name) = symbol_name else {
                 return Some(FacadeLookupResult::NotExported {
-                    facade_name: prefix.to_portable_string(input.string_table),
+                    facade_name: boundary
+                        .import_prefix
+                        .to_portable_string(input.string_table),
                     facade_type: FacadeType::ModuleRoot,
                 });
             };
@@ -237,7 +245,9 @@ fn try_resolve_module_root_facade_import(
                 }
             }
             return Some(FacadeLookupResult::NotExported {
-                facade_name: prefix.to_portable_string(input.string_table),
+                facade_name: boundary
+                    .import_prefix
+                    .to_portable_string(input.string_table),
                 facade_type: FacadeType::ModuleRoot,
             });
         }

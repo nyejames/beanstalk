@@ -45,8 +45,9 @@ pub(crate) struct SourceTreeSkipPolicy {
 
 /// One directory that contains multiple current hash-root files.
 ///
-/// Phase 2 records this evidence without rejecting it because the live `#mod.bst` facade and
-/// multi-entry page model are removed only when root roles are unified in later phases.
+/// Phase 2 records this evidence without rejecting it because the live temporary `#mod.bst`
+/// export-file selection and multi-entry page model are removed only when root roles are unified
+/// in later phases.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DuplicateHashRootDirectory {
     pub(crate) directory: PathBuf,
@@ -195,7 +196,9 @@ impl SourceTreeIndex {
                 }
 
                 stats.module_roots_found += 1;
-                let facade_file = hash_root_files
+                // Keep the current `#mod.bst` choice isolated until the later root-role
+                // transition. The selected path is carried as prepared export identity below.
+                let export_file = hash_root_files
                     .iter()
                     .find(|file| root_file_name_is_mod(file))
                     .cloned();
@@ -203,7 +206,7 @@ impl SourceTreeIndex {
                     .iter()
                     .find(|file| !root_file_name_is_mod(file))
                     .cloned()
-                    .or_else(|| facade_file.clone())
+                    .or_else(|| export_file.clone())
                 else {
                     continue;
                 };
@@ -215,10 +218,10 @@ impl SourceTreeIndex {
                         .cloned(),
                 );
 
-                records.push(ModuleRootRecord::with_facade(
+                records.push(ModuleRootRecord::with_export_file(
                     root_directory,
                     root_file,
-                    facade_file,
+                    export_file,
                 ));
             }
 
@@ -318,6 +321,8 @@ fn path_is_hash_root_file(path: &Path) -> bool {
         .is_some_and(file_name_is_hash_root_file)
 }
 
+// Temporary Phase 3 selector: `#mod.bst` remains the prepared export file when present until
+// the later root-role transition removes filename-specific identity.
 fn root_file_name_is_mod(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())

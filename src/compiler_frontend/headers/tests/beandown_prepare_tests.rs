@@ -441,10 +441,10 @@ fn prepared_module_roots(entry_root: &Path, files: &[PathBuf]) -> ModuleRootTabl
             .parent()
             .expect("fixture source file should have a parent")
             .to_path_buf();
-        let (root_file, facade_file) = roots_by_directory.entry(directory).or_default();
+        let (root_file, export_file) = roots_by_directory.entry(directory).or_default();
 
         if file_name == "#mod.bst" {
-            *facade_file = Some(file.clone());
+            *export_file = Some(file.clone());
         } else {
             *root_file = Some(file.clone());
         }
@@ -452,12 +452,12 @@ fn prepared_module_roots(entry_root: &Path, files: &[PathBuf]) -> ModuleRootTabl
 
     let records = roots_by_directory
         .into_iter()
-        .filter_map(|(directory, (root_file, facade_file))| {
-            let root_file = root_file.or_else(|| facade_file.clone())?;
-            Some(ModuleRootRecord::with_facade(
+        .filter_map(|(directory, (root_file, export_file))| {
+            let root_file = root_file.or_else(|| export_file.clone())?;
+            Some(ModuleRootRecord::with_export_file(
                 directory,
                 root_file,
-                facade_file,
+                export_file,
             ))
         })
         .collect();

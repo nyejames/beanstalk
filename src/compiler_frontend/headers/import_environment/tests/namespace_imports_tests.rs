@@ -15,7 +15,7 @@ use crate::compiler_frontend::external_packages::{
 use crate::compiler_frontend::headers::import_environment::{
     ImportEnvironmentInput, prepare_import_environment,
 };
-use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::module_symbols::{ModuleRootBoundary, ModuleSymbols};
 use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -333,6 +333,54 @@ fn source_receiver_methods_remain_absent_from_namespace_records() {
     assert!(!record.value_members.contains_key(&method_name));
     assert!(!record.type_members.contains_key(&method_name));
     assert!(record.child_namespaces.is_empty());
+}
+
+#[test]
+fn module_root_namespace_uses_prepared_export_file_identity() {
+    let mut string_table = StringTable::new();
+    let source_file = intern_path(&["src", "#page.bst"], &mut string_table);
+    let module_root = intern_path(&["helper-root"], &mut string_table);
+    let export_file = intern_path(&["helper", "#page.bst"], &mut string_table);
+    let import = test_import(
+        intern_path(&["helper"], &mut string_table),
+        &mut string_table,
+    );
+
+    let mut module_symbols = ModuleSymbols::empty();
+    module_symbols.module_file_paths.insert(source_file.clone());
+    module_symbols.module_file_paths.insert(export_file.clone());
+    module_symbols.file_module_membership.insert(
+        source_file.clone(),
+        intern_path(&["entry-root"], &mut string_table),
+    );
+    module_symbols
+        .file_module_membership
+        .insert(export_file.clone(), module_root.clone());
+    module_symbols
+        .module_root_boundaries
+        .push(ModuleRootBoundary {
+            import_prefix: intern_path(&["helper"], &mut string_table),
+            module_root,
+            export_file: Some(export_file.clone()),
+        });
+
+    let registry = ExternalPackageRegistry::new();
+    let external_import_resolution_table = ExternalImportResolutionTable::new();
+    let mut builder = ImportEnvironmentBuilder {
+        module_symbols: &module_symbols,
+        external_package_registry: &registry,
+        external_import_resolution_table: &external_import_resolution_table,
+        string_table: &mut string_table,
+        environment: Default::default(),
+        warnings: Vec::new(),
+    };
+
+    let Some(ResolvedNamespaceTarget::SourceFile(path)) =
+        builder.resolve_module_root_namespace_facade(&import.header_path, &source_file)
+    else {
+        panic!("module root namespace should use the prepared export file");
+    };
+    assert_eq!(path, export_file);
 }
 
 // ------------------------------------------------------------------

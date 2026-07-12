@@ -29,7 +29,7 @@ use crate::compiler_frontend::headers::import_environment::{
     resolve_import_target,
 };
 use crate::compiler_frontend::headers::module_symbols::{
-    FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
+    FacadeExportEntry, FacadeExportTarget, ModuleRootBoundary, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::types::{FileRole, Header, HeaderExportMode, HeaderKind};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -228,10 +228,10 @@ fn build_module_root_facade_exports_pass1(
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> FacadeDataResult<()> {
-    let mut module_root_prefixes =
-        build_module_root_prefixes(module_symbols, resolver, string_table);
-    module_root_prefixes.sort_by_key(|(prefix, _)| std::cmp::Reverse(prefix.len()));
-    module_symbols.module_root_prefixes = module_root_prefixes;
+    let mut module_root_boundaries =
+        build_module_root_boundaries(module_symbols, resolver, string_table)?;
+    module_root_boundaries.sort_by_key(|boundary| std::cmp::Reverse(boundary.import_prefix.len()));
+    module_symbols.module_root_boundaries = module_root_boundaries;
 
     for header in headers {
         let Some(canonical_path) = &header.tokens.canonical_os_path else {
@@ -252,8 +252,8 @@ fn build_module_root_facade_exports_pass1(
             .file_module_membership
             .insert(canonical, module_root_interned.clone());
 
-        if let Some(facade_file) = resolver.module_root_facades().get(&module_root)
-            && canonical_path == facade_file
+        if let Some(export_file) = resolver.module_root_export_files().get(&module_root)
+            && canonical_path == export_file
             && is_authored_facade_export(header)
             && let Some(export_name) = header.tokens.src_path.name()
         {
@@ -292,20 +292,20 @@ fn build_module_root_facade_imports(
         .collect();
 
     for facade_source in facade_sources {
-        let Some(canonical_facade_path) = module_symbols
+        let Some(canonical_export_path) = module_symbols
             .canonical_os_path_by_source
             .get(&facade_source)
         else {
             continue;
         };
-        let Some(module_root) = resolver.module_root_for_file(canonical_facade_path) else {
+        let Some(module_root) = resolver.module_root_for_file(canonical_export_path) else {
             continue;
         };
-        let Some(module_facade_path) = resolver.module_root_facades().get(&module_root) else {
+        let Some(module_export_path) = resolver.module_root_export_files().get(&module_root) else {
             continue;
         };
 
-        if module_facade_path != canonical_facade_path {
+        if module_export_path != canonical_export_path {
             continue;
         }
 
@@ -443,7 +443,7 @@ fn resolve_public_facade_import(
         file_library_membership: &module_symbols.file_library_membership,
         module_root_facade_exports: &module_symbols.module_root_facade_exports,
         file_module_membership: &module_symbols.file_module_membership,
-        module_root_prefixes: &module_symbols.module_root_prefixes,
+        module_root_boundaries: &module_symbols.module_root_boundaries,
         string_table,
     };
 
@@ -629,28 +629,41 @@ fn build_module_root_membership(
     }
 }
 
-fn build_module_root_prefixes(
+fn build_module_root_boundaries(
     module_symbols: &mut ModuleSymbols,
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) -> Vec<(InternedPath, InternedPath)> {
-    let mut module_root_prefixes = Vec::new();
+) -> FacadeDataResult<Vec<ModuleRootBoundary>> {
+    let mut module_root_boundaries = Vec::new();
 
     for module_root in resolver.module_roots() {
         let root_interned = InternedPath::from_path_buf(module_root, string_table);
 
-        if resolver.module_root_facades().contains_key(module_root) {
-            module_symbols
-                .module_root_facade_exports
-                .entry(root_interned.clone())
-                .or_default();
-        }
+        let export_file = resolver
+            .module_root_export_files()
+            .get(module_root)
+            .map(|export_file| {
+                module_symbols
+                    .module_root_facade_exports
+                    .entry(root_interned.clone())
+                    .or_default();
+
+                resolver
+                    .logical_path_for_canonical_file(export_file, string_table)
+                    .map(|logical_path| InternedPath::from_path_buf(&logical_path, string_table))
+                    .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))
+            })
+            .transpose()?;
 
         if let Ok(relative) = module_root.strip_prefix(resolver.entry_root()) {
             let prefix_interned = InternedPath::from_path_buf(relative, string_table);
-            module_root_prefixes.push((prefix_interned, root_interned));
+            module_root_boundaries.push(ModuleRootBoundary {
+                import_prefix: prefix_interned,
+                module_root: root_interned,
+                export_file,
+            });
         }
     }
 
-    module_root_prefixes
+    Ok(module_root_boundaries)
 }

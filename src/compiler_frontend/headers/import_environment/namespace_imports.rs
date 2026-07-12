@@ -21,7 +21,6 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::keywords::is_valid_identifier;
-use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -331,8 +330,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Resolve a bare import that names a public facade namespace.
     ///
-    /// WHAT: `import @library` and cross-module `import @module` expose the target `#mod.bst`
-    /// surface as a namespace record.
+    /// WHAT: `import @library` and cross-module `import @module` expose the target prepared export
+    /// file surface as a namespace record.
     /// WHY: namespace imports must obey the same facade boundary as grouped imports.
     pub(super) fn resolve_facade_namespace_target(
         &mut self,
@@ -394,19 +393,19 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) -> Option<ResolvedNamespaceTarget> {
         let effective_path = self.effective_module_import_path(import_path, source_file);
 
-        for (prefix, module_root) in &self.module_symbols.module_root_prefixes {
-            if &effective_path != prefix {
+        for boundary in &self.module_symbols.module_root_boundaries {
+            if effective_path != boundary.import_prefix {
                 continue;
             }
 
             let importer_root = self.module_symbols.file_module_membership.get(source_file);
-            if importer_root == Some(module_root) {
+            if importer_root == Some(&boundary.module_root) {
                 return None;
             }
 
-            let facade_file = prefix.join_str(MOD_FILE_NAME, self.string_table);
-            if self.module_symbols.module_file_paths.contains(&facade_file) {
-                return Some(ResolvedNamespaceTarget::SourceFile(facade_file));
+            let export_file = boundary.export_file.as_ref()?;
+            if self.module_symbols.module_file_paths.contains(export_file) {
+                return Some(ResolvedNamespaceTarget::SourceFile(export_file.clone()));
             }
         }
 
@@ -482,8 +481,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         if self
-            .module_root_facade_logical_path(target_root)
-            .is_some_and(|facade_file| target_file == &facade_file)
+            .module_root_export_file(target_root)
+            .is_some_and(|export_file| target_file == &export_file)
         {
             return Ok(());
         }
@@ -505,16 +504,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         )))
     }
 
-    fn module_root_facade_logical_path(
-        &mut self,
-        module_root: &InternedPath,
-    ) -> Option<InternedPath> {
+    fn module_root_export_file(&self, module_root: &InternedPath) -> Option<InternedPath> {
         self.module_symbols
-            .module_root_prefixes
+            .module_root_boundaries
             .iter()
-            .find_map(|(prefix, root)| {
-                (root == module_root).then(|| prefix.join_str(MOD_FILE_NAME, self.string_table))
-            })
+            .find(|boundary| boundary.module_root == *module_root)
+            .and_then(|boundary| boundary.export_file.clone())
     }
 
     /// Derive the local namespace name from an import, validating the default name.
