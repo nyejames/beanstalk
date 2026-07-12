@@ -1,0 +1,39 @@
+Reactivity V1 is a constrained template and UI mechanism. It is not general closure or function-value support.
+
+### What V1 covers
+
+- explicit reactive declarations with `$Type` and `$=`
+- reactive parameters with `$Type`
+- template subscriptions with `$(source)`
+- whole-source invalidation
+- top-level HTML-JS runtime fragments as live sinks
+
+### Deferred
+
+- reactive template control flow beyond the accepted source and sink model
+- field and path subscriptions
+- collection item subscriptions
+- expression dependency tracking
+- derived reactive values
+- reactive IO sinks
+- fine-grained DOM text, attribute and style updates
+- nested reactive regions
+- keyed loop diffing
+- template-owned event, action or effect syntax
+- `$bind(...)`
+- typed component events or messages
+- HTML-Wasm runtime support
+
+### Outside current design scope
+
+- general closures
+- anonymous function values
+- generic function values
+- higher-order polymorphism
+
+Backend optimizations may become finer without changing source semantics.
+
+### Related concepts
+
+- For the design rationale see @../codebase/design-scope/overview (Design scope).
+- For templates see @../templates (Templates).

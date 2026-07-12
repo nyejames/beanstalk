@@ -1,259 +1,159 @@
-import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
+import @./trait-declarations {
+    content as trait_declarations,
+}
 
-page_title #= "Traits in Beanstalk"
-page_description #= "Current Alpha trait declarations, explicit conformance, and static generic bounds."
-page_head #= theme_head
+import @./trait-declarations-basic {
+    content as trait_declarations_basic,
+}
+
+import @./trait-requirements {
+    content as trait_requirements,
+}
+
+import @./trait-requirements-basic {
+    content as trait_requirements_basic,
+}
+
+import @./conformance {
+    content as conformance,
+}
+
+import @./conformance-basic {
+    content as conformance_basic,
+}
+
+import @./generic-trait-bounds {
+    content as generic_trait_bounds,
+}
+
+import @./generic-trait-bounds-basic {
+    content as generic_trait_bounds_basic,
+}
+
+import @./trait-incompatibility {
+    content as trait_incompatibility,
+}
+
+import @./trait-incompatibility-basic {
+    content as trait_incompatibility_basic,
+}
+
+import @./core-cast-traits {
+    content as core_cast_traits,
+}
+
+import @./core-cast-traits-basic {
+    content as core_cast_traits_basic,
+}
+
+import @./trait-design-scope {
+    content as trait_design_scope,
+}
+
+import @./trait-design-scope-basic {
+    content as trait_design_scope_basic,
+}
+
+import @styles/docs {
+    navbar,
+    section,
+    language_theme_head,
+    doc_level,
+    doc_pager,
+}
+
+page_title #= "Traits"
+page_description #= "Static trait contracts, explicit conformance and generic bounds in Beanstalk."
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: TRAITS IN BEANSTALK]
 
 #[section, $md:
-    Traits define named behavioural contracts for types.
+    @../ (Documentation) / Traits
 
-    Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares `Type must TRAIT`. Matching method shapes alone are not conformance.
+    # Traits
 
-    Trait names are static contracts. They can appear in trait declarations, explicit conformance declarations, and generic bounds. They are not ordinary value types.
+    Traits name behavior a type promises to provide.
+
+    The promise is explicit. Method shapes do not count until the source declares
+    conformance, and every reusable bound stays static before runtime begins.
 ]
 
-#[section, $md:
-    # Trait declarations
+#[section:
+    [doc_level:
+        [$insert("key"):trait-declarations]
+        [$insert("title"):Trait declarations]
+        [$insert("advanced"):[trait_declarations]]
 
-    Trait declarations use `must:` and contain method requirements.
-
-    [codeblock, $code("bst"):
-        DISPLAY_TEXT must:
-            display |This| -> String
-        ;
-    ]
-
-    Rules:
-
-    - trait names are all caps
-    - trait declarations are top-level declarations
-    - requirements are method signatures only
-    - empty marker traits are valid
-    - static non-method requirements are deferred
-    - default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are outside Beanstalk's trait design scope
-]
-
-#[section, $md:
-    # This and mutable receivers
-
-    `This` is valid only inside trait declarations. It means the concrete implementing type.
-
-    [codeblock, $code("bst"):
-        RESETTABLE must:
-            reset |~This|
-        ;
-    ]
-
-    Rules:
-
-    - the first requirement parameter must be `This` or `~This`
-    - `This` means an immutable receiver requirement
-    - `~This` means a mutable receiver requirement
-    - `~This` is valid only as the first parameter
-    - direct non-receiver `This` parameters must be named, such as `other This`
-    - bare non-receiver `This` is rejected because only the receiver may omit a name
-    - direct `This` returns are supported
-    - composed forms such as `This?`, `{This}`, and `Box of This` are rejected in the Alpha surface
-    - lowercase `this` is not valid in trait requirements
-    - `This` outside trait declarations is rejected
-]
-
-#[section, $md:
-    # Explicit conformance
-
-    A conformance declaration states that a type implements one or more traits.
-
-    [codeblock, $code("bst"):
-        Label = |
-            text String,
-        |
-
-        display |this Label| -> String:
-            return this.text
-        ;
-
-        Label must DISPLAY_TEXT
-    ]
-
-    Conformance declarations are bodyless, top-level declarations. They do not end with a semicolon.
-
-    Multiple traits can be listed with commas:
-
-    [codeblock, $code("bst"):
-        Label must DISPLAY_TEXT, SERIALIZABLE
-    ]
-
-    The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.
-]
-
-#[section, $md:
-    # Canonical evidence
-
-    Beanstalk stores explicit conformance as evidence selected by the frontend.
-
-    [styled_table:
-        [header: [: Evidence] [: When it is created] [: Visibility] ]
-
-        [data:
-            [: Canonical]
-            [: The conformance target is a struct, choice, or generic type constructor declared in the same file.]
-            [: Reusable wherever both the target type and trait are visible.]
-        ]
-    ]
-
-    User-authored conformances for builtin, imported, dependency/library, external opaque, and
-    other-file types are rejected. Use a local wrapper choice or struct when adapting values owned
-    by another file or package.
-]
-
-#[section, $md:
-    # Static generic bounds
-
-    Generic bounds use `is`, not `must`.
-
-    [codeblock, $code("bst"):
-        render type Item is DISPLAY_TEXT |item Item| -> String:
-            return item.display()
-        ;
-    ]
-
-    Multiple bounds on one parameter use `and`:
-
-    [codeblock, $code("bst"):
-        render type Item is DISPLAY_TEXT and NAMED |item Item| -> String:
-            return item.display()
-        ;
-    ]
-
-    Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. Trait names cannot be supplied as value types or concrete generic arguments.
-]
-
-#[section, $md:
-    # Traits are not value types
-
-    A trait name in a normal type annotation is rejected.
-
-    [codeblock, $code("bst"):
-        -- invalid: DISPLAY_TEXT is a trait, not a value type
-        render |value DISPLAY_TEXT| -> String:
-            return value.display()
-        ;
-    ]
-
-    Use `type T is TRAIT` when static reuse is intended. Use choices when runtime heterogeneity is needed.
-]
-
-#[section, $md:
-    # Trait incompatibility
-
-    `TRAIT must not TRAIT` records narrow incompatibility metadata for explicit conformance.
-
-    [codeblock, $code("bst"):
-        TEXT must:
-            text |This| -> String
-        ;
-
-        FALLIBLE_TEXT must:
-            try_text |This| -> String, Error!
-        ;
-
-        TEXT must not FALLIBLE_TEXT
-    ]
-
-    A type may not explicitly conform to both sides of an active incompatibility relation.
-    The relation is symmetric and affects conformance validation only. It does not add
-    requirements, imply negative conformance, compose traits, or create runtime dispatch.
-]
-
-#[section, $md:
-    # Core cast traits
-
-    The compiler owns static cast traits such as `CASTABLE_TO_STRING` and
-    `TRY_CASTABLE_TO_INT`. They resolve without imports and cannot be redeclared, imported,
-    exported, aliased, shadowed, or used as ordinary values.
-
-    Same-file nominal source types, including aligned generic constructors, can provide
-    user-defined cast evidence by implementing the required receiver method and declaring
-    conformance.
-
-    [codeblock, $code("bst"):
-        Label = |
-            text String,
-        |
-
-        to_string |this Label| -> String:
-            return this.text
-        ;
-
-        Label must CASTABLE_TO_STRING
-
-        value String = cast Label("docs")
-    ]
-
-    Core cast traits prove source evidence for `cast`. They do not create user-defined cast
-    targets, generic cast targets, external opaque cast targets, or a general conversion system.
-    Infallible and fallible cast traits for the same builtin target are incompatible through
-    compiler-owned `must not` metadata.
-]
-
-#[section, $md:
-    # Runtime heterogeneity
-
-    Runtime heterogeneity is represented with choices, not trait objects.
-
-    [codeblock, $code("bst"):
-        Renderable ::
-            LabelItem | value Label |,
-            ButtonItem | value Button |,
-        ;
+        [trait_declarations_basic]
     ]
 ]
 
-#[section, $md:
-    # Dispatch and backends
+#[section:
+    [doc_level:
+        [$insert("key"):trait-requirements]
+        [$insert("title"):Trait requirements]
+        [$insert("advanced"):[trait_requirements]]
 
-    Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.
-
-    Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.
+        [trait_requirements_basic]
+    ]
 ]
 
-#[section, $md:
-    # DISPLAYABLE scaffold
+#[section:
+    [doc_level:
+        [$insert("key"):conformance]
+        [$insert("title"):Conformance]
+        [$insert("advanced"):[conformance]]
 
-    `DISPLAYABLE` exists as compiler-owned trait metadata for conformance and generic-bound tests.
-
-    It does not change `io.line(...)`, template interpolation, string coercion, equality, or operators. Implement `display |This| -> String` yourself and call it explicitly.
+        [conformance_basic]
+    ]
 ]
 
-#[section, $md:
-    # Outside trait design scope
+#[section:
+    [doc_level:
+        [$insert("key"):generic-trait-bounds]
+        [$insert("title"):Generic trait bounds]
+        [$insert("advanced"):[generic_trait_bounds]]
 
-    These surfaces are intentionally outside Beanstalk's trait design scope:
-
-    - default methods
-    - associated types and associated constants
-    - trait inheritance and composition
-    - generic traits and generic trait methods
-    - blanket, conditional, negative, or specialized conformance
-    - structural conformance
-    - specialized generic instance conformance such as `Box of Int must DISPLAY_TEXT`
-    - composed `This` forms
-    - automatic primitive conformances
-    - output coercion through `DISPLAYABLE`
-    - operator-to-trait integration
-    - deriving, hashing, ordering, formatting, iteration, and serialization traits
-    - dynamic trait values / trait objects
-    - trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types
+        [generic_trait_bounds_basic]
+    ]
 ]
 
-#[section, $md:
-    # Deferred trait work
+#[section:
+    [doc_level:
+        [$insert("key"):trait-incompatibility]
+        [$insert("title"):Trait incompatibility]
+        [$insert("advanced"):[trait_incompatibility]]
 
-    Deferred trait work is limited to static non-method requirements, compiler-owned builtin
-    conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that does
-    not change traits into runtime values or a type-level programming system.
+        [trait_incompatibility_basic]
+    ]
+]
+
+#[section:
+    [doc_level:
+        [$insert("key"):core-cast-traits]
+        [$insert("title"):Core cast traits]
+        [$insert("advanced"):[core_cast_traits]]
+
+        [core_cast_traits_basic]
+    ]
+]
+
+#[section:
+    [doc_level:
+        [$insert("key"):trait-design-scope]
+        [$insert("title"):Trait design scope]
+        [$insert("advanced"):[trait_design_scope]]
+
+        [trait_design_scope_basic]
+    ]
+]
+
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../generics/]
+        [$insert("previous_title"):Generics]
+        [$insert("next_path"):../reactivity/]
+        [$insert("next_title"):Reactivity]
+    ]
 ]

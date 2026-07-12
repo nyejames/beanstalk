@@ -723,6 +723,19 @@ body {
         render_card,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><p>The same facade idea is used by project-local source libraries under <code>lib/&lt;name&gt;/#mod.bst</code>. The detailed library, facade, core package, and JavaScript import guide is <a href="../libraries">Libraries and modules</a>.</p><h1>Future extension points</h1><h2>#test.bst test modules</h2><p>A future <code>#test.bst</code> file can hold project tests. Normal builds would ignore it. A planned test command could discover and run those files, similar to how <code>cargo test</code> discovers Rust tests.</p><p>This is separate from the current compiler-internal integration test runner.</p><h2>$doc documentation templates</h2><p>The <code>$doc</code> style directive can eventually make documentation part of Beanstalk source. Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.</p><p>This would make documentation generation feel closer to Rust doc comments, but with Beanstalk&#39;s template system instead of comment syntax.</p></section>
+    <section class="container"><nav class="doc-pager doc-pager--single" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../reactivity/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Reactivity</span>
+            </a>
+
+            
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

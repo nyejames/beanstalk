@@ -1,463 +1,123 @@
-import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
+import @./generic-declarations {
+    content as generic_declarations,
+}
 
-page_title #= "Generics in Beanstalk"
-page_description #= "Current Alpha generic type and generic function behavior."
-page_head #= theme_head
+import @./generic-declarations-basic {
+    content as generic_declarations_basic,
+}
+
+import @./type-application {
+    content as type_application,
+}
+
+import @./type-application-basic {
+    content as type_application_basic,
+}
+
+import @./generic-inference {
+    content as generic_inference,
+}
+
+import @./generic-inference-basic {
+    content as generic_inference_basic,
+}
+
+import @./generic-instances {
+    content as generic_instances,
+}
+
+import @./generic-instances-basic {
+    content as generic_instances_basic,
+}
+
+import @./generic-limits {
+    content as generic_limits,
+}
+
+import @./generic-limits-basic {
+    content as generic_limits_basic,
+}
+
+import @styles/docs {
+    navbar,
+    section,
+    language_theme_head,
+    doc_level,
+    doc_pager,
+}
+
+page_title #= "Generics"
+page_description #= "Declaration-site generics, type application and local inference in Beanstalk."
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: GENERICS IN BEANSTALK]
 
 #[section, $md:
-    Generics are partially implemented for the current Alpha compiler.
+    @../ (Documentation) / Generics
 
-    The supported surface is intentionally small:
+    # Generics
 
-    - declaration-site generic parameters with `type` on top-level structs, choices, and free functions
-    - `of` type application in type positions
-    - concrete generic aliases to fully applied generic types
-    - constructor inference for concrete generic structs and choices
-    - collections as compiler-owned generic constructed types using `{T}`
-    - generic free-function calls across same-file use, visible same-module imports, and authored facades
-    - declaration-site trait bounds with `type T is TRAIT`
+    Generics let one declaration describe a family of concrete types or functions.
 
-    Generic function headers are parsed and tracked by the frontend, and their bodies are
-    validated against unconstrained generic parameters before any concrete call is accepted.
-    Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer
-    type arguments from immediate arguments and immediate expected result context. Facade wrappers
-    resolve their bodies through the facade file's own imports, so private implementation helpers
-    stay hidden behind real public wrapper declarations.
+    Beanstalk keeps the solving local. Type arguments come from the declaration,
+    the call in front of you and its immediate receiving type.
 ]
 
-#[section, $md:
-    # Current status
+#[section:
+    [doc_level:
+        [$insert("key"):generic-declarations]
+        [$insert("title"):Generic declarations]
+        [$insert("advanced"):[generic_declarations]]
 
-    [styled_table:
-        [header: [: Surface] [: Status] [: Notes] ]
-
-        [data:
-            [: Generic structs]
-            [: Supported]
-            [: Concrete instances such as [$html:<code>Box of Int</code>] have canonical frontend type identity and substituted field views.]
-        ]
-
-        [data:
-            [: Generic choices]
-            [: Supported]
-            [: Concrete constructors and matching work for instantiated generic choice types.]
-        ]
-
-        [data:
-            [: Concrete generic aliases]
-            [: Supported]
-            [: Aliases may target fully applied generic instances and remain transparent.]
-        ]
-
-        [data:
-            [: Generic functions]
-            [: Partial]
-            [: Same-file, same-module grouped or namespace, and authored facade wrapper free-function calls infer from immediate arguments and type context, then emit concrete executable instances. Generic optional and fallible returns work across visible imports.]
-        ]
-
-        [data:
-            [: Generic aliases with parameters]
-            [: Outside scope]
-            [: Alias only a fully concrete generic instance; parameterized aliases create a separate type-level abstraction layer.]
-        ]
-
-        [data:
-            [: Explicit generic call syntax]
-            [: Rejected / Not Alpha]
-            [: Generic calls use ordinary call syntax and inference only.]
-        ]
-
-        [data:
-            [: Generic function values]
-            [: Outside scope]
-            [: Generic functions are callable declarations only, not first-class values.]
-        ]
-
-        [data:
-            [: Generic receiver methods]
-            [: Partial]
-            [: Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Bound-provided receiver calls are available through visible reusable trait evidence; receiver methods on fully instantiated generic types remain rejected.]
-        ]
-
-        [data:
-            [: Type values / type-level CTFE]
-            [: Outside scope]
-            [: Types are compile-time annotation facts, not runtime or compile-time values.]
-        ]
-
-        [data:
-            [: Trait bounds]
-            [: Partial]
-            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic-bound dispatch are outside scope.]
-        ]
+        [generic_declarations_basic]
     ]
 ]
 
-#[section, $md:
-    # Generic type syntax
+#[section:
+    [doc_level:
+        [$insert("key"):type-application]
+        [$insert("title"):Type application]
+        [$insert("advanced"):[type_application]]
 
-    Generic parameters are introduced with `type`.
-
-    [codeblock, $code("bst"):
-        Box type T = |
-            value T,
-        |
-    ]
-
-    Concrete type arguments are applied with `of` in type positions.
-
-    [codeblock, $code("bst"):
-        number_box Box of Int = Box(42)
-        text_box Box of String = Box("hello")
-    ]
-
-    `of` is type-position-only. It is not current Alpha syntax for explicit
-    generic function calls, runtime generic values, type values, or type-level computation.
-]
-
-#[section, $md:
-    # Generic choices
-
-    Generic choices use the same `type` parameter list.
-
-    Payload variants use record payload syntax.
-
-    [codeblock, $code("bst"):
-        Maybe type T ::
-            Some | value T |,
-            Empty,
-        ;
-
-        name Maybe of String = Maybe::Some("Ana")
-        missing Maybe of String = Maybe::Empty
-    ]
-
-    Choice payload shorthand such as `Some T` is not current Alpha syntax.
-    Use record payload variants such as `Some | value T |`.
-]
-
-#[section, $md:
-    # Concrete aliases
-
-    Type aliases can name a fully applied generic instance.
-
-    [codeblock, $code("bst"):
-        Box type T = |
-            value T,
-        |
-
-        StringBox as Box of String
-
-        item StringBox = Box("docs")
-        raw Box of String = item
-    ]
-
-    Generic aliases with their own parameters, partial application, and type-constructor
-    composition are outside the generic design scope. Name an intermediate concrete alias when
-    a type would otherwise need deeper composition.
-]
-
-#[section, $md:
-    # Collections and constructed types
-
-    Collections use the public `{T}` syntax and are compiler-owned constructed
-    types. Fixed collections use `{N T}`, and the fixed capacity is part of type
-    identity rather than allocation metadata.
-
-    [codeblock, $code("bst"):
-        names {String} = {"Ana", "Nye"}
-
-        cache_capacity #Int = 64
-        cached ~{cache_capacity Box of String} = {}
-    ]
-
-    Optional types `T?` and fallible return slots such as `Error!`
-    are also compiler-owned constructed forms. Public `Option of T`,
-    public `Result of T, E`, `Option.Some`, and
-    `Result.Ok` are not current Alpha syntax.
-
-    Generic functions can use final generic error slots, `return!`,
-    postfix propagation, and `catch` when ordinary local inference can solve the
-    generic parameters. The compiler still rejects body-side specialization of an abstract
-    generic error slot.
-]
-
-#[section, $md:
-    # Nesting rule
-
-    Alpha allows one inline `of` application per annotation.
-
-    Collection element annotations may contain that one application:
-
-    [codeblock, $code("bst"):
-        boxes {Box of String} = {}
-    ]
-
-    Nested inline applications are deferred:
-
-    [codeblock, $code("bst"):
-        -- deferred
-        value Box of Pair of String, Int = Box(Pair("count", 3))
-    ]
-
-    Use a concrete alias instead:
-
-    [codeblock, $code("bst"):
-        StringCount as Pair of String, Int
-        value Box of StringCount = Box(Pair("count", 3))
+        [type_application_basic]
     ]
 ]
 
-#[section, $md:
-    # Generic functions
+#[section:
+    [doc_level:
+        [$insert("key"):generic-inference]
+        [$insert("title"):Generic inference]
+        [$insert("advanced"):[generic_inference]]
 
-    Generic free functions are callable when their type arguments can be inferred from the call
-    itself or from an immediate expected result type. The same inference rules apply for same-file
-    calls, grouped imports, namespace imports, and authored facade wrappers. There is no explicit
-    generic call-site type argument syntax.
-
-    [codeblock, $code("bst"):
-        identity type T |value T| -> T:
-            return value
-        ;
-
-        value Int = identity(42)
-        text String = identity("hello")
+        [generic_inference_basic]
     ]
-
-    Return type context can also fix otherwise ambiguous type parameters:
-
-    [codeblock, $code("bst"):
-        empty_values type T || -> {T}:
-            return {}
-        ;
-
-        numbers {Int} = empty_values()
-    ]
-
-    Immediate expected-result inference also works across visible imports:
-
-    [codeblock, $code("bst"):
-        -- helpers.bst
-        empty_values type T || -> {T}:
-            return {}
-        ;
-
-        -- #page.bst
-        import @./helpers {empty_values}
-
-        numbers {Int} = empty_values()
-    ]
-
-    Body validation currently allows pass-through behavior such as returning a value of the
-    same generic parameter type, forwarding it to another generic function, or storing it in
-    a generic wrapper. Local annotations inside the generic body may use the active generic
-    parameters, including `T`, `{T}`, and `Box of T`.
-    Behavior-dependent operations on unconstrained `T` are rejected. A declaration-site
-    trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic,
-    equality, field access, template interpolation, and external/IO behavior still require concrete
-    support or a future dedicated trait integration.
-
-    Inference is deliberately immediate. Beanstalk does not infer a generic function's type
-    arguments from later uses of the resulting value, whole-program analysis, HIR, borrow
-    validation, or expected parameter context from an outer function call into a nested generic
-    call:
-
-    [codeblock, $code("bst"):
-        -- rejected: T is ambiguous at the declaration site
-        values = empty_values()
-    ]
-
-    Use an intermediate annotation when a nested generic call would otherwise need evidence from
-    its parent call:
-
-    [codeblock, $code("bst"):
-        user User = parse_json(text)!
-        save_user(user)
-    ]
-
-    Generic functions may also return optional or fallible values, including across imports:
-
-    [codeblock, $code("bst"):
-        -- helpers.bst
-        wrap_optional type T |value T| -> T?:
-            return value
-        ;
-
-        read_or_raise type T, E |value T, err E, fail Bool| -> T, E!:
-            if fail:
-                return! err
-            ;
-
-            return value
-        ;
-
-        -- #page.bst
-        import @./helpers {read_or_raise, wrap_optional}
-
-        maybe_name String? = wrap_optional("Ana")
-
-        value = read_or_raise(7, Error("bad"), false) catch:
-            then 0
-        ;
-    ]
-
-    Generic optional and fallible support still depends on immediate evidence. A bare
-    `none` cannot infer `T` by itself, and a concrete callee error type
-    cannot specialize an abstract surrounding `E!` from inside the generic body.
-
-    Same-module grouped imports can call generic free functions by their imported local name:
-
-    [codeblock, $code("bst"):
-        -- helpers.bst
-        identity type T |value T| -> T:
-            return value
-        ;
-
-        -- #page.bst
-        import @./helpers {identity}
-
-        value = identity(42)
-    ]
-
-    Namespace imports can call generic free functions through the source namespace record:
-
-    [codeblock, $code("bst"):
-        -- #page.bst
-        import @./helpers as helpers
-
-        value = helpers.identity(42)
-    ]
-
-    Public facade wrappers are ordinary authored generic functions marked with `export` in `#mod.bst`.
-    Normal imports inside the facade remain private and are only usable by the wrapper body:
-
-    [codeblock, $code("bst"):
-        -- lib/utils/internal.bst
-        identity_impl type T |value T| -> T:
-            return value
-        ;
-
-        -- lib/utils/#mod.bst
-        import @./internal {identity_impl}
-
-        export identity type T |value T| -> T:
-            return identity_impl(value)
-        ;
-
-        -- src/#page.bst
-        import @utils {identity}
-
-        value = identity(42)
-    ]
-
-    Namespace imports can call authored facade wrappers too:
-
-    [codeblock, $code("bst"):
-        -- src/#page.bst
-        import @utils as utils
-
-        value = utils.identity("hello")
-    ]
-
-    Generic functions are still callable declarations only. They cannot be passed around as
-    first-class values, including through namespace members such as `helpers.identity`.
-    Direct facade re-export syntax is also deferred; expose imported behavior with real authored
-    wrapper declarations.
 ]
 
-#[section, $md:
-    # Trait bounds
+#[section:
+    [doc_level:
+        [$insert("key"):generic-instances]
+        [$insert("title"):Generic instances]
+        [$insert("advanced"):[generic_instances]]
 
-    Generic bounds use `is`, not `must`.
-
-    [codeblock, $code("bst"):
-        render type Item is DISPLAY_TEXT |item Item| -> String:
-            return item.display()
-        ;
+        [generic_instances_basic]
     ]
-
-    Compiler-owned cast traits can also be used as static bounds when a generic body needs an
-    explicit cast target.
-
-    [codeblock, $code("bst"):
-        show_text type Item is CASTABLE_TO_STRING |item Item| -> String:
-            text String = cast item
-            return text
-        ;
-    ]
-
-    Multiple bounds on one parameter use `and`. Commas still separate generic parameters:
-
-    [codeblock, $code("bst"):
-        combine type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> String:
-            return left.display() + right.display()
-        ;
-
-        render_named type Item is DISPLAY_TEXT and NAMED |item Item| -> String:
-            return item.display()
-        ;
-    ]
-
-    Concrete generic function calls and concrete generic struct/choice instantiations require
-    visible reusable evidence for each concrete type argument. A conformance declaration does not
-    independently import trait methods as concrete receiver methods.
-
-    [codeblock, $code("bst"):
-        Label = |
-            text String,
-        |
-
-        display |this Label| -> String:
-            return this.text
-        ;
-
-        Label must DISPLAY_TEXT
-
-        value = render(Label("ok"))
-    ]
-
-    Trait names are static contracts. They can appear in generic bounds, trait declarations, and
-    conformance declarations, but not as normal value types or concrete generic arguments.
-
-    Bound-provided receiver methods use the selected static evidence and lower to concrete calls
-    before HIR.
-    `where` clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 
-#[section, $md:
-    # Deferred generic work
+#[section:
+    [doc_level:
+        [$insert("key"):generic-limits]
+        [$insert("title"):Generic limits]
+        [$insert("advanced"):[generic_limits]]
 
-    The following fit the language design but are not current Alpha generics:
-
-    - explicit generic call syntax such as `identity of Int(42)`, `identity<Int>(42)`, `["identity[Int](42)"]`, or `identity(42 Int)`
-    - inline generic sugar such as `|value type A|`
-    - recursive generic structs or choices
-    - receiver methods on instantiated generic types
-    - namespace or wildcard facade exports and function alias exports through `#mod.bst`
-    - generic JS or external package functions
-    - nested generic type application beyond the collection element exception
-    - public `Option of T` or `Result of T, E`
-    - `Option.Some`, `Result.Ok`, public `Ok` or `Err` constructors
+        [generic_limits_basic]
+    ]
 ]
 
-#[section, $md:
-    # Outside generic design scope
-
-    These features are intentionally outside Beanstalk's generic design scope:
-
-    - generic function values and higher-order polymorphism
-    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
-    - `where` clauses and file-local evidence-backed generic-bound dispatch
-    - parameterized aliases and partial type application
-    - higher-kinded types
-    - const generics beyond fixed collection capacity
-    - lifetime parameters
-    - specialization
-    - associated types
-    - dynamic generic reification
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../aliases/]
+        [$insert("previous_title"):Aliases]
+        [$insert("next_path"):../traits/]
+        [$insert("next_title"):Traits]
+    ]
 ]

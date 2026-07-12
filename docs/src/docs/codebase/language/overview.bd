@@ -111,6 +111,39 @@ replacement can be checked against one stable baseline.
 - `docs/src/docs/constants/const-records.bd`
 - `docs/src/docs/constants/const-templates.bd`
 
+### Aliases
+
+- `docs/src/docs/aliases/type-aliases.bd`
+- `docs/src/docs/aliases/import-aliases.bd`
+- `docs/src/docs/aliases/payload-capture-aliases.bd`
+
+### Generics
+
+- `docs/src/docs/generics/generic-declarations.bd`
+- `docs/src/docs/generics/type-application.bd`
+- `docs/src/docs/generics/generic-inference.bd`
+- `docs/src/docs/generics/generic-instances.bd`
+- `docs/src/docs/generics/generic-limits.bd`
+
+### Traits
+
+- `docs/src/docs/traits/trait-declarations.bd`
+- `docs/src/docs/traits/trait-requirements.bd`
+- `docs/src/docs/traits/conformance.bd`
+- `docs/src/docs/traits/generic-trait-bounds.bd`
+- `docs/src/docs/traits/trait-incompatibility.bd`
+- `docs/src/docs/traits/core-cast-traits.bd`
+- `docs/src/docs/traits/trait-design-scope.bd`
+
+### Reactivity
+
+- `docs/src/docs/reactivity/reactive-sources.bd`
+- `docs/src/docs/reactivity/subscriptions.bd`
+- `docs/src/docs/reactivity/reactive-parameters.bd`
+- `docs/src/docs/reactivity/mutation-and-invalidation.bd`
+- `docs/src/docs/reactivity/runtime-sinks.bd`
+- `docs/src/docs/reactivity/reactivity-scope.bd`
+
 Each unsuffixed file has a paired `-basic.bd` teaching version.
 
 Each public route imports both levels.

@@ -41,6 +41,16 @@ page_head #= codebase_theme_head
     - @../../templates (Templates)
     - @../../constants (Constants and compile-time behaviour)
 
+    Names and static abstraction:
+
+    - @../../aliases (Aliases)
+    - @../../generics (Generics)
+    - @../../traits (Traits)
+
+    UI state:
+
+    - @../../reactivity (Reactivity)
+
     Each route combines a Basic teaching layer with detailed Advanced references. The unsuffixed Beandown files remain replacements under parity review and do not supersede `docs/language-overview.md` yet.
 ]
 

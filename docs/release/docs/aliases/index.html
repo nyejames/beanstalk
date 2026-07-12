@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Aliases | Beanstalk</title>
-    <meta name="description" content="Type aliases, import aliases, and local renaming with as in Beanstalk.">
+    <meta name="description" content="Type aliases, import aliases and choice payload capture aliases in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -661,482 +661,321 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Documentation</a> / Aliases</p><h1>Aliases</h1><p>Aliases give a local name to something that already exists.</p><p>Beanstalk uses <code>as</code> for three narrow, deliberate renaming surfaces:</p><ul><li>Type alias declarations.</li><li>Import aliases.</li><li>Choice payload capture aliases in match arms.</li></ul><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <section class="container"><p><a href="../">Documentation</a> / Aliases</p><h1>Aliases</h1><p>Aliases give an existing thing a better name. They do not create a second value, a hidden conversion or a new nominal type.</p><p>Beanstalk keeps <code>as</code> narrow: type names, imported names and arm-local payload captures.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Type aliases
+    </legend>
 
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="type-aliases-level"
+                id="type-aliases-basic"
+                value="basic"
+                checked
+            >
 
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Aliases are useful when a name has a domain-specific meaning, when a type annotation is long, or when two imported libraries export symbols with the same name.</p><p>They are not a general shadowing feature. An alias introduces a visible file-local name and must not collide with any other visible name in that file.</p></section>
-    <section class="container"><h2>Type Aliases</h2><p>Type aliases give another name to an existing type.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="type-aliases-level"
+                id="type-aliases-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="type-aliases">
+                    Type aliases
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="type-aliases-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="type-aliases-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A type alias gives an existing type a clearer name. It does not create a new type.</p><h3>When to use a type alias</h3><p>Use a type alias when a type annotation would be repetitive or when a name carries domain meaning.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
-    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
-    <span class='bst-code-struct'>MaybeName</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span>
-    </code></pre><p>The syntax is:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>AliasName</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExistingType</span>
-    </code></pre><p>Alias names should use UpperCamelCase, the same as structs, choices, and other type names.</p><p>Type aliases are compile-time-only. They do not create runtime values and they do not emit code.</p></section>
-    <section class="container"><h2>Transparent Type Aliases</h2><p>Type aliases are transparent.</p><p>This means an alias does not create a new nominal type. It is another name for the target type.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <span class='bst-code-struct'>HtmlFragment</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>RouteParts</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Aliases are transparent</h3><p>An alias is just another spelling of the same type.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
     id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    raw <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> id <span class='bst-code-comment'>-- valid, because UserId is Int</span>
-    </code></pre><p>This is different from a struct.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    raw <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> id
+    </code></pre><p><code>id</code> has type <code>UserId</code>, but it is also an <code>Int</code>. You can pass it anywhere an <code>Int</code> is expected.</p><h3>Alias versus struct</h3><p>A struct creates a brand new type with its own fields and constructor. An alias does not.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
     <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         id <span class='bst-code-struct'>Int,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><p><code>UserId</code> is just another name for <code>Int</code>. <code>User</code> is a distinct nominal struct type.</p><p>Use a struct when you need a real domain type with its own fields, constructor, and methods. Use a type alias when you only want a clearer type name.</p></section>
-    <section class="container"><h2>Type Aliases Are Not Values</h2><p>A type alias can only be used where the compiler expects a type annotation.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>UserId</code> is <code>Int</code>. <code>User</code> is a separate type.</p><h3>One collection alias</h3><p>An alias can name a collection type.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Remember</h3><ul><li>A type alias is for naming, not for creating a new type.</li><li>Aliases work in parameters, fields, returns and local annotations.</li><li>Aliases are not values. You cannot pass <code>UserId</code> to a function or call it as a constructor.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A type alias is a compile-time name for an existing type. It introduces no runtime value and no new semantic type identity.</p><h3>Definition and syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+    <span class='bst-code-struct'>MaybeName</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span>
+    <span class='bst-code-struct'>StringBox</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span>
+    </code></pre><p>The syntax is <code>AliasName as ExistingType</code>. Alias names follow type-name casing. The target may be any valid type expression that resolves to a concrete semantic type.</p><h3>Exact contract</h3><ul><li>A type alias is a compile-time name for an existing type.</li><li>Aliases are transparent: an alias and its target denote the same <code>TypeId</code>.</li><li>Aliases do not create nominal identity.</li><li>Alias and target values are type-compatible in both directions.</li><li>Aliases are valid in type positions such as parameters, fields, returns and local annotations.</li><li>Aliases are not ordinary values. They cannot be assigned, passed, copied or used in expression position.</li><li><code>as</code> in a type-alias declaration is not a cast.</li></ul><h3>Valid targets</h3><p>An alias target may be:</p><ul><li>a builtin scalar such as <code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>Char</code> or <code>String</code></li><li>a struct or choice declared in the same file</li><li>an option such as <code>String?</code></li><li>a growable collection such as <code>{String}</code></li><li>a fixed collection such as <code>{4 Int}</code></li><li>a hashmap such as <code>{String = Int}</code></li><li>a fully concrete generic instance such as <code>Box of String</code></li><li>an imported type, imported type alias or external package type</li></ul><p>Concrete generic aliases are supported. Parameterized aliases and partial generic application are outside the current language scope.</p><h3>Transparency</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
-    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span> <span class='bst-code-comment'>-- valid</span>
-    </code></pre><p>A type alias cannot be used as a value, constructor, receiver, or copy target.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    raw <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> id
+    </code></pre><p>Because <code>UserId</code> is transparent, assigning a <code>UserId</code> value to an <code>Int</code> binding is valid. The reverse is also valid: an <code>Int</code> value can be used where <code>UserId</code> is expected.</p><h3>Contrast with a struct</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
 
-    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>)</span>      <span class='bst-code-comment'>-- Error: UserId is a type alias, not a value</span>
-    id <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error: UserId is not a constructor</span>
-    copy_id <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-comment'>-- Error: aliases cannot be copied</span>
-    </code></pre><p>If the alias targets a constructible type, construct the real target type instead.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        id <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><p><code>UserId</code> is another name for <code>Int</code>. <code>User</code> is a distinct nominal struct type with its own constructor and fields. Use a struct when the domain concept needs its own identity. Use an alias when only the annotation name matters.</p><h3>Empty literals and aliases</h3><p>An alias can provide the explicit element type needed by an empty collection or map literal.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Alias chains</h3><p>Aliases may chain through other aliases. The chain remains transparent and resolves to the final target type.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Name</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Name</span><span class='bst-code-parenthesis'>}</span>
+
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Cycles</h3><p>Alias cycles are invalid. The compiler reports a circular dependency.</p><h3>Type aliases are not constructors</h3><p>If an alias targets a constructible type, construct the real target type. The alias name is not a constructor.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         name <span class='bst-code-struct'>String,</span>
-        age <span class='bst-code-struct'>Int,</span>
     <span class='bst-code-operator'>|</span>
 
     <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Person</span>
 
-    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-number'>36</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre></section>
-    <section class="container"><h2>Aliasing Collections and Options</h2><p>Aliases can target nested type expressions.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
-    <span class='bst-code-struct'>UserIds</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>}</span>
-    <span class='bst-code-struct'>MaybeUserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-operator'>?</span>
+    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Visibility and facade behaviour</h3><p>Type aliases follow ordinary visibility and facade rules. A type alias declared in a source file is importable by other files in the same module. Cross-module exposure is controlled by the module&#39;s <code>#mod.bst</code> facade. A public facade may re-export an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.</p><h3>Related concepts</h3><ul><li>For concrete generic application see <a href="../generics">Generics</a>.</li><li>For import aliasing see the next section.</li><li>For project visibility and <code>#mod.bst</code> see <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Import aliases
+    </legend>
 
-    ids <span class='bst-code-struct'>UserIds</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
-    selected <span class='bst-code-struct'>MaybeUserId</span> <span class='bst-code-operator'>=</span> none
-    </code></pre><p>Aliases are resolved before normal type checking, so nested aliases behave exactly like their final target type.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Name</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
-    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Name</span><span class='bst-code-parenthesis'>}</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="import-aliases-level"
+                id="import-aliases-basic"
+                value="basic"
+                checked
+            >
 
-    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span>, <span class='bst-code-string'>&quot;Evelyn&quot;</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Empty collection literals still need an explicit element type at the declaration site.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="import-aliases-level"
+                id="import-aliases-advanced"
+                value="advanced"
+            >
 
-    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- valid: the alias provides the collection element type</span>
-    bad_names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>  <span class='bst-code-comment'>-- Error: empty collection type is ambiguous</span>
-    </code></pre></section>
-    <section class="container"><h2>Aliases in Function Signatures</h2><p>Type aliases can be used in parameters, returns, and local declarations.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
-    <span class='bst-code-struct'>Username</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="import-aliases">
+                    Import aliases
+    </h2>
 
-    format_user <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>UserId,</span> name <span class='bst-code-struct'>Username</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>id<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    ;
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="import-aliases-basic"
+                    >
+                        Basic
+                    </label>
 
-    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>7</span>
-    name <span class='bst-code-struct'>Username</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Bean&quot;</span>
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="import-aliases-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
 
-    label <span class='bst-code-operator'>=</span> format_user<span class='bst-code-parenthesis'>(</span>id, name<span class='bst-code-parenthesis'>)</span>
-    io.line<span class='bst-code-parenthesis'>(</span>label<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Because aliases are transparent, passing an <code>Int</code> where <code>UserId</code> is expected is valid.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+            <div class="doc-level__panel doc-level__panel--basic">
+                
 
-    print_id <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>UserId</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>
-    ;
 
-    raw_id <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
-    print_id<span class='bst-code-parenthesis'>(</span>raw_id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- valid</span>
-    </code></pre><p>If you need the compiler to reject raw <code>Int</code> values in a user-id position, use a struct instead of an alias.</p></section>
-    <section class="container"><h2>Import Aliases</h2><p>Import aliases rename an imported symbol for the current file.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>admin <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>AdminUser</span> <span class='bst-code-parenthesis'>}</span>
 
-    model_user <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ModelUser</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
-    admin_user <span class='bst-code-struct'>AdminUser</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>AdminUser</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>The imported declaration keeps its original exported name in its source file. The alias only changes the name visible in the importing file.</p><p>Import aliases work for all explicitly imported symbols:</p><ul><li>Functions.</li><li>Constants.</li><li>Structs.</li><li>Choices.</li><li>Type aliases.</li><li>External package functions, constants, and types.</li></ul><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span> sin <span class='bst-code-keyword'>as</span> sine, <span class='bst-code-struct'>PI</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>CIRCLE_PI</span> <span class='bst-code-parenthesis'>}</span>
-
-    value <span class='bst-code-operator'>=</span> sine<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>CIRCLE_PI</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Import aliases are file-local. They are not exported and they do not rename the source declaration for other files.</p></section>
-    <section class="container"><h2>Resolving Import Name Conflicts</h2><p>Import aliases are most useful when two libraries export the same symbol name.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+            <p>Import aliases rename something you import so it fits better in the current file.</p><h3>Two libraries called <code>render</code></h3><p>Suppose two libraries both export a function named <code>render</code>. You cannot import both as <code>render</code> because names must not collide.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
     import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
 
     blog_html <span class='bst-code-operator'>=</span> render_blog<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     docs_html <span class='bst-code-operator'>=</span> render_docs<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Without aliases, both imports would try to introduce <code>render</code> into the same file. That is a name collision.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- Error: render is already visible in this file</span>
-    </code></pre><p>The same rule applies across value and type names. Even if the compiler can internally tell that one symbol is a type and another is a value, Beanstalk rejects duplicate visible spellings for readability.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- Error: User is already visible in this file</span>
-    </code></pre><p>Rename one or both imports so the file remains unambiguous.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> format_user <span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Namespace aliases</h3><p>You can also rename a whole namespace.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-keyword'>as</span> math
 
-    user <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ModelUser</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
-    label <span class='bst-code-operator'>=</span> format_user<span class='bst-code-parenthesis'>(</span>user<span class='bst-code-parenthesis'>)</span>
-    </code></pre></section>
-    <section class="container"><h2>Grouped Import Aliases</h2><p>Grouped imports can rename individual imported entries.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>PrimaryButton,</span>
-        <span class='bst-code-struct'>Card</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ArticleCard,</span>
-        render <span class='bst-code-keyword'>as</span> render_component,
+    value <span class='bst-code-operator'>=</span> math.sin<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>File-local scope</h3><p>An import alias is visible only in the file where it is written. It does not change the exported name in the source file, and it is not automatically re-exported.</p><h3>No shadowing</h3><p>An alias cannot hide an existing name. If <code>render</code> is already declared in the file, <code>import @other { render }</code> is an error. Pick a different local name instead.</p><h3>Remember</h3><ul><li>Import aliases fix local name collisions.</li><li>They are private to the importing file.</li><li>Grouped imports rename entries one at a time.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Import aliases rename an imported symbol for local use inside one file. They are distinct from type aliases and from public facade re-export names.</p><h3>Definition and syntax</h3><p>A namespace alias changes the local name of an imported namespace:</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-keyword'>as</span> math
+    </code></pre><p>A grouped symbol alias changes the local name of one imported binding:</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>
+        sin <span class='bst-code-keyword'>as</span> sine,
+        <span class='bst-code-struct'>PI</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>CIRCLE_PI,</span>
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Nested grouped paths can also use aliases.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span>
-        pages<span class='bst-code-operator'>/</span>home<span class='bst-code-operator'>/</span>render <span class='bst-code-keyword'>as</span> render_home,
-        pages<span class='bst-code-operator'>/</span>about<span class='bst-code-operator'>/</span>render <span class='bst-code-keyword'>as</span> render_about,
-    <span class='bst-code-parenthesis'>}</span>
-
-    home <span class='bst-code-operator'>=</span> render_home<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    about <span class='bst-code-operator'>=</span> render_about<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>The alias applies only to the final imported symbol binding. The canonical target still resolves to the full imported path.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span>
-        pages<span class='bst-code-operator'>/</span>home<span class='bst-code-operator'>/</span>render <span class='bst-code-keyword'>as</span> render_home,
-    <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-comment'>-- The local name is render_home.</span>
-    <span class='bst-code-comment'>-- The imported target is still @docs/pages/home/render.</span>
-    </code></pre><p>A grouped import cannot use one trailing alias for the whole group. Each entry must be renamed separately.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Button,</span> <span class='bst-code-struct'>Card</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Ui</span> <span class='bst-code-comment'>-- Error</span>
-
-    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiButton,</span>
-        <span class='bst-code-struct'>Card</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiCard,</span>
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre></section>
-    <section class="container"><h2>Import Aliases and Type Aliases Together</h2><p>Type aliases can target imported aliases.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span> <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-struct'>CurrentUser</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span>
-
-    user <span class='bst-code-struct'>CurrentUser</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ExternalUser</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>This is useful when one file wants a local import name, but also wants a domain-specific type alias for annotations.</p><p>Imported type aliases can also be renamed directly.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- types.bst</span>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
-    </code></pre><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- #page.bst</span>
-    import <span class='bst-code-operator'>@</span>types <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>AccountId</span> <span class='bst-code-parenthesis'>}</span>
-
-    id <span class='bst-code-struct'>AccountId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    </code></pre></section>
-    <section class="container"><h2>Alias Collision Rules</h2><p>Aliases must not collide with any visible name in the same file.</p><p>This includes:</p><ul><li>Same-file declarations.</li><li>Other imports.</li><li>Import aliases.</li><li>Type aliases.</li><li>Builtin names.</li><li>Prelude names.</li></ul><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><h3>Exact contract</h3><ul><li>A namespace alias changes the namespace name visible in one file.</li><li>A grouped symbol alias changes one imported binding visible in one file.</li><li>The source declaration keeps its canonical exported identity.</li><li>Ordinary import aliases are file-local.</li><li>Ordinary import aliases are not automatically re-exported.</li><li>Aliases work for every importable symbol category the import surface supports: functions, constants, structs, choices, type aliases and external package members.</li><li>External package aliases follow the same local collision policy as source imports.</li><li>Each grouped entry is renamed separately.</li><li>A grouped import cannot use one trailing group-level alias.</li></ul><h3>Collision rules</h3><p>Import aliases must not collide with any visible name in the same file, including:</p><ul><li>same-file declarations</li><li>other imports</li><li>other aliases</li><li>type aliases</li><li>builtins</li><li>preluded names</li></ul><p>Aliases do not shadow an existing visible name. A collision is a compile error.</p><pre style=""><code class='codeblock'>
     render <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;local&quot;</span>
     ;
 
-    import <span class='bst-code-operator'>@</span>other <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- Error: render is already declared in this file</span>
-    </code></pre><p>Aliases do not shadow existing names. Pick a more specific name instead.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error: render is already visible in this file</span>
+    import <span class='bst-code-operator'>@</span>other <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Resolve the collision by renaming the import.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>other <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_other <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Re-importing the same symbol with a different alias should be avoided unless the file genuinely needs both names. Prefer one local spelling per imported symbol.</p></section>
-    <section class="container"><h2>Alias Naming Warnings</h2><p>Import aliases should keep the same broad naming convention as the imported symbol.</p><p>If the imported symbol starts with a capital letter, the alias should also start with a capital letter. If the imported symbol starts with a lowercase letter, the alias should also start with a lowercase letter.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>      <span class='bst-code-comment'>-- good</span>
-    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> model_user <span class='bst-code-parenthesis'>}</span>     <span class='bst-code-comment'>-- warning</span>
+    </code></pre><h3>Leading-case warnings</h3><p>An alias whose leading case differs from the imported symbol&#39;s leading case produces a warning. The warning is intentionally simple: it catches obvious type-versus-value naming drift without trying to classify every naming convention.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Warning</span>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span> sin <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Sine</span> <span class='bst-code-parenthesis'>}</span>
 
-    import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_page <span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- good</span>
-    import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>RenderPage</span> <span class='bst-code-parenthesis'>}</span>  <span class='bst-code-comment'>-- warning</span>
-    </code></pre><p>This warning is intentionally simple. It does not try to fully distinguish <code>camelCase</code>, <code>snake_case</code>, or other naming styles.</p><p>The goal is only to catch obvious type/value naming drift.</p></section>
-    <section class="container"><h2>Choice Payload Capture Aliases</h2><p>Choice payload capture aliases rename a matched payload field inside one match arm.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Warning</span>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>PI</span> <span class='bst-code-keyword'>as</span> pi <span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Namespace aliases</h3><p>Use a namespace alias when the imported path would be awkward to repeat or when two imported namespaces share a basename.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-keyword'>as</span> math
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>text <span class='bst-code-keyword'>as</span> text
+
+    value <span class='bst-code-operator'>=</span> math.sin<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
+    length <span class='bst-code-operator'>=</span> text.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Grouped symbol aliases</h3><p>Use grouped symbol aliases when two libraries export the same name.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
+    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
+
+    blog_html <span class='bst-code-operator'>=</span> render_blog<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    docs_html <span class='bst-code-operator'>=</span> render_docs<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A grouped import cannot use a single alias for the whole group.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error</span>
+    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>Button,</span> <span class='bst-code-struct'>Card</span> <span class='bst-code-parenthesis'>}</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Ui</span>
+
+    <span class='bst-code-comment'>-- Correct</span>
+    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span>
+        <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiButton,</span>
+        <span class='bst-code-struct'>Card</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiCard,</span>
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Facade and public-name distinction</h3><p>An ordinary import alias is private to the importing file. A public name chosen in a module root&#39;s export surface is a different operation. The current <code>#mod.bst</code> export syntax is owned by <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>. Do not treat a local import alias as a public API rename.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Ordinary local import alias</span>
+    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-comment'>-- Public facade re-export is a separate surface</span>
+    <span class='bst-code-comment'>-- export @models { User as PublicUser }</span>
+    </code></pre><p>The local <code>ModelUser</code> is visible only in this file. The exact public export syntax must match the current compiler&#39;s explicit <code>export:</code> block rules.</p><h3>Import aliases with type aliases</h3><p>A type alias may target an imported type alias.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span> <span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-struct'>CurrentUser</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span>
+    </code></pre><p>This combines a file-local import rename with a domain-specific type alias.</p><h3>Related concepts</h3><ul><li>For type aliases see the previous section.</li><li>For payload capture aliases see the next section.</li><li>For import syntax and <code>#mod.bst</code> see <a href="../libraries">Libraries</a> and <a href="../project-structure">Project Structure</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Payload capture aliases
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="payload-capture-aliases-level"
+                id="payload-capture-aliases-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="payload-capture-aliases-level"
+                id="payload-capture-aliases-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="payload-capture-aliases">
+                    Payload capture aliases
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="payload-capture-aliases-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="payload-capture-aliases-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>When you match a choice with a payload, the field name becomes the local variable inside that arm. Sometimes that name collides with another variable or just feels wrong in context.</p><h3>Rename one payload field</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Err</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
         <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
     ;
 
-    response <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing title&quot;</span><span class='bst-code-parenthesis'>)</span>
+    response <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;oops&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span>value <span class='bst-code-keyword'>as</span> body<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>body<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>The name before <code>as</code> is the declared payload field name. The name after <code>as</code> is the local capture name visible inside that arm.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.</p><p>Without <code>as</code>, the capture name is the field name.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Capture aliases are useful when a field name would collide with an existing variable or when the local meaning is clearer than the generic payload field name.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>message as error_message</code> means: take the payload field called <code>message</code> and bind it to <code>error_message</code> in this arm only.</p><h3>Why rename?</h3><pre style=""><code class='codeblock'>
+    message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;outer message&quot;</span>
+
+    <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> failure_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>failure_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Without the alias, the arm would shadow the outer <code>message</code>. The alias keeps both names distinct.</p><h3>Remember</h3><ul><li>The name before <code>as</code> must match the field name.</li><li>The new name is visible only inside that arm.</li><li>It does not rename the field on the choice.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A payload capture alias renames a choice payload field inside one match arm. It is the third narrow <code>as</code> surface in Beanstalk.</p><h3>Definition and syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span>value <span class='bst-code-keyword'>as</span> body<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>body<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The name before <code>as</code> is the declared payload field name. The name after <code>as</code> is an arm-local binding.</p><h3>Exact contract</h3><ul><li>The name before <code>as</code> must be the declared payload field name.</li><li>The name after <code>as</code> is an arm-local binding.</li><li>The alias does not rename the field.</li><li>The alias does not leak into other arms.</li><li>The alias is visible in the arm guard and body.</li><li>Without <code>as</code>, the field name becomes the local binding.</li><li>The local binding follows naming and no-shadowing rules.</li><li>Duplicate local bindings in the same arm are invalid.</li><li>Payload capture aliases do not create value aliases.</li><li><code>value as Type</code> is not cast syntax.</li><li>Expression aliases are unsupported.</li></ul><h3>Avoiding outer-name collisions</h3><p>Use a capture alias when the field name would collide with an existing variable or when the local meaning is clearer.</p><pre style=""><code class='codeblock'>
     message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;outer message&quot;</span>
 
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Choice payload capture aliases are arm-local. They do not rename the variant field itself and they do not leak into other arms.</p></section>
-    <section class="container"><h2>What as Does Not Do</h2><p><code>as</code> is not a cast operator and it is not a general renaming expression.</p><p>These forms are invalid:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    value <span class='bst-code-operator'>=</span> input <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>        <span class='bst-code-comment'>-- Error: use an explicit typed cast such as `value Int = cast input`</span>
-    renamed <span class='bst-code-keyword'>as</span> existing_value   <span class='bst-code-comment'>-- Error: this is not a value alias</span>
-    function_call<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-keyword'>as</span> result   <span class='bst-code-comment'>-- Error: expression aliases are not supported</span>
-    </code></pre><p>Use <code>as</code> only for supported alias declarations, import aliases, and Choice payload capture aliases.</p><p>This keeps renaming predictable and avoids adding multiple ways to express the same idea.</p></section>
-    <section class="container"><h2>When To Use Aliases</h2><p>Use a type alias for clearer annotations:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
-    <span class='bst-code-struct'>HtmlFragment</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
-    <span class='bst-code-struct'>CssClass</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
-    <span class='bst-code-struct'>RouteParts</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Use an import alias when an imported name is too generic or conflicts with another visible name:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Use a Choice payload capture alias when the field name is correct on the type but awkward in one arm:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> failure_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>failure_message<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>A good rule:</p><ul><li>Type alias: better name for an existing type.</li><li>Import alias: better local name for an imported symbol.</li><li>Choice payload capture alias: better arm-local name for an extracted field.</li><li>Struct: new domain type with its own identity.</li><li>Choice: one of several named variants.</li></ul></section>
+    </code></pre><p>Inside the first arm, <code>error_message</code> holds the payload. In the <code>else</code> arm, <code>message</code> still refers to the outer binding.</p><h3>Related concepts</h3><ul><li>For choice declarations and variants see <a href="../choices">Choices</a>.</li><li>For pattern matching and exhaustiveness see <a href="../branching">Branching</a>.</li></ul>
+    </div>
+    </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--previous"

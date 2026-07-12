@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, theme_head}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, theme_head, doc_pager_previous}
 
 page_title #= "Projects, Modules and HTML Builder"
 page_description #= "How Beanstalk projects are structured, how modules are discovered, and how the HTML project builder emits pages."
@@ -515,4 +515,11 @@ page_head #= theme_head
     Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.
 
     This would make documentation generation feel closer to Rust doc comments, but with Beanstalk's template system instead of comment syntax.
+]
+
+#[section:
+    [doc_pager_previous:
+        [$insert("previous_path"):../reactivity/]
+        [$insert("previous_title"):Reactivity]
+    ]
 ]

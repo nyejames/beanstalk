@@ -2327,22 +2327,67 @@ Keep these visible until separately resolved. Classification:
 | 12 | Assert optional message arity | Required | Optional literal accepted | Confirmed current language |
 | 13 | Option ordering operators | Not discussed | Rejected | Confirmed rejection |
 | 14 | Function parameter default cross-parameter dependency | Not discussed | Rejected | Confirmed rejection |
-| 15 | Unused generic parameter policy | Accepted | Compiler behavior unclear | Unresolved design |
+| 15 | Unused generic parameter policy | Accepted | Rejected with BST-RULE-0043 | Confirmed rejection |
+| 16 | Aligned declaration-site generic receiver methods | Mentioned | Accepted with `type A \|this Box of A\|` syntax | Confirmed current language |
+| 17 | Receiver methods on concrete generic instances | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 18 | Nested inline `of` type application | Rejected | Rejected with explicit diagnostic | Confirmed Alpha restriction |
+| 19 | Recursive generic nominal types | Rejected | Rejected at parser | Confirmed rejection |
+| 20 | Explicit generic call-site syntax | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 21 | Composed `This` forms in trait requirements | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 22 | Trait conformance with semicolon terminator | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 23 | `where` clauses for generic bounds | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 24 | Trait names as ordinary value types | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 25 | Reactive parameter default values | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 26 | Reactive syntax in struct fields, choice payloads or return slots | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 27 | Field, call, expression or mutable-access template subscriptions | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 28 | Empty or multiple subscription arguments | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
+| 29 | Whitespace-separated `$ (source)` subscription syntax | Rejected | Rejected with invalid-character diagnostic | Confirmed rejection |
+| 30 | HTML-Wasm runtime support for reactive features | Not discussed | Rejected before lowering | Confirmed target gate |
 
 Ordinary documentation migration patches do not authorise compiler changes for
 these discrepancies.
 
+### 21.6 Aliases, Generics, Traits and Reactivity verification pass
+
+This batch verified and documented the surfaces above. The previous correction
+pass confirmed the following current language facts and gaps, which remain
+accurate:
+
+#### Confirmed current language or stale monolith
+
+- optional assert message
+- inline bound catch
+- error-only arrow syntax
+- compile-time function defaults
+- inline choice predicates
+- fixed literal direct construction
+- contextual empty maps
+- current two-level inline map nesting behavior
+
+#### Confirmed implementation gaps or absent forms
+
+- nested-block `return!`
+- block value-producing `if` with `then`
+- raw backtick string slices
+- stored named inserts
+
 ### Next route work
 
-After the current batch passes review, continue with:
+The current migration batch is:
 
 1. Aliases
 2. Generics
 3. Traits
 4. Reactivity
 
-These routes share type-position naming, evidence and static-contract rules, so
-they should be reviewed together before Project Structure and Libraries.
+After this batch passes review, continue with:
+
+1. Project Structure
+2. Libraries and Imports
+3. Beandown
+4. Plain Markdown
+5. Core-library language surfaces
+6. Final whole-language parity and authority review
 
 ---
 

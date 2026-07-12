@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Traits in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Current Alpha trait declarations, explicit conformance, and static generic bounds.">
+    <title>Traits | Beanstalk</title>
+    <meta name="description" content="Static trait contracts, explicit conformance and generic bounds in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,40 +661,217 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> TRAITS IN BEANSTALK</h1>
-    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <code>Type must TRAIT</code>. Matching method shapes alone are not conformance.</p><p>Trait names are static contracts. They can appear in trait declarations, explicit conformance declarations, and generic bounds. They are not ordinary value types.</p></section>
-    <section class="container"><h1>Trait declarations</h1><p>Trait declarations use <code>must:</code> and contain method requirements.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <section class="container"><p><a href="../">Documentation</a> / Traits</p><h1>Traits</h1><p>Traits name behavior a type promises to provide.</p><p>The promise is explicit. Method shapes do not count until the source declares conformance, and every reusable bound stays static before runtime begins.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Trait declarations
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="trait-declarations-level"
+                id="trait-declarations-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="trait-declarations-level"
+                id="trait-declarations-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="trait-declarations">
+                    Trait declarations
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="trait-declarations-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="trait-declarations-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A trait names a behaviour that a type can promise to provide.</p><h3>A trait with one requirement</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
         display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
-    </code></pre><p>Rules:</p><ul><li>trait names are all caps</li><li>trait declarations are top-level declarations</li><li>requirements are method signatures only</li><li>empty marker traits are valid</li><li>static non-method requirements are deferred</li><li>default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are outside Beanstalk&#39;s trait design scope</li></ul></section>
-    <section class="container"><h1>This and mutable receivers</h1><p><code>This</code> is valid only inside trait declarations. It means the concrete implementing type.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p>This says: any type that claims to be <code>DISPLAY_TEXT</code> must provide a <code>display</code> method that returns a <code>String</code>.</p><h3>A marker trait</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>SERIALIZABLE</span> must<span class='bst-code-operator'>:</span>
+    ;
+    </code></pre><p>A marker trait has no methods. It is still a real contract that a type can explicitly adopt.</p><h3>Remember</h3><ul><li>Trait names are all caps.</li><li>A trait lists method signatures, not bodies.</li><li>A trait is a static contract, not a runtime value or type.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A trait is an explicit nominal method contract. A type satisfies a trait only when source declares conformance.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+    </code></pre><h3>Exact contract</h3><ul><li>A trait is an explicit nominal method contract.</li><li>Trait names use all-caps identifiers.</li><li>Trait declarations are top-level.</li><li><code>TRAIT must:</code> opens a trait declaration.</li><li>One final semicolon closes the declaration.</li><li>Requirements are method signatures only.</li><li>Marker traits with no requirements are valid.</li><li>Traits are compile-time static contracts.</li><li>Traits are not runtime values.</li><li>Static non-method requirements are deferred.</li><li>Generic traits and generic trait methods are outside scope.</li></ul><h3>Marker traits</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>SERIALIZABLE</span> must<span class='bst-code-operator'>:</span>
+    ;
+    </code></pre><p>A marker trait carries no requirements but still represents a deliberate contract that a type may declare.</p><h3>Traits are not value types</h3><p>A trait name may appear in trait declarations, conformance declarations and generic bounds. It is invalid as an ordinary variable, parameter, field, return, collection element, choice payload or alias target type.</p><h3>Related concepts</h3><ul><li>For requirement syntax see <a href="./trait-requirements">Trait requirements</a>.</li><li>For conformance see <a href="./conformance">Conformance</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Trait requirements
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="trait-requirements-level"
+                id="trait-requirements-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="trait-requirements-level"
+                id="trait-requirements-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="trait-requirements">
+                    Trait requirements
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="trait-requirements-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="trait-requirements-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Trait requirements describe the methods a conforming type must have. The receiver has a special name.</p><h3><code>This</code> means the implementing type</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+    </code></pre><p><code>This</code> is a placeholder for whatever type later declares conformance.</p><h3>Mutable receiver</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
         reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>
     ;
-    </code></pre><p>Rules:</p><ul><li>the first requirement parameter must be <code>This</code> or <code>~This</code></li><li><code>This</code> means an immutable receiver requirement</li><li><code>~This</code> means a mutable receiver requirement</li><li><code>~This</code> is valid only as the first parameter</li><li>direct non-receiver <code>This</code> parameters must be named, such as <code>other This</code></li><li>bare non-receiver <code>This</code> is rejected because only the receiver may omit a name</li><li>direct <code>This</code> returns are supported</li><li>composed forms such as <code>This?</code>, <code>{This}</code>, and <code>Box of This</code> are rejected in the Alpha surface</li><li>lowercase <code>this</code> is not valid in trait requirements</li><li><code>This</code> outside trait declarations is rejected</li></ul></section>
-    <section class="container"><h1>Explicit conformance</h1><p>A conformance declaration states that a type implements one or more traits.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>~This</code> means the method may mutate the receiver.</p><h3>Named <code>This</code> parameters</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>SAME</span> must<span class='bst-code-operator'>:</span>
+        equals <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> other <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Bool</span>
+    ;
+    </code></pre><p>When <code>This</code> is not the receiver, it must have a parameter name like <code>other This</code>.</p><h3>Remember</h3><ul><li>Use <code>This</code> for the receiver in trait requirements.</li><li>Use lowercase <code>this</code> only in concrete method implementations.</li><li>Requirements have no body. They only declare the method shape.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Trait requirements describe the method shapes a conforming type must provide. The receiver is always <code>This</code> or <code>~This</code>.</p><h3>Receiver syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
+        reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>
+    ;
+
+    <span class='bst-code-struct'>COMPARABLE_WITH_SELF</span> must<span class='bst-code-operator'>:</span>
+        same <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> other <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Bool</span>
+        clone_value <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>This</span>
+    ;
+    </code></pre><h3>Exact contract</h3><ul><li>Requirement receivers use <code>This</code> or <code>~This</code>.</li><li>Lowercase <code>this</code> is source-method syntax and invalid in a requirement.</li><li>Bare <code>This</code> and <code>~This</code> are valid only as the first receiver parameter.</li><li><code>This</code> is a shared receiver.</li><li><code>~This</code> is a mutable receiver.</li><li>Direct non-receiver <code>This</code> parameters must be named, such as <code>other This</code>.</li><li>Direct return <code>This</code> is supported.</li><li>Composed <code>This</code> forms such as <code>This?</code>, <code>{This}</code> and <code>Box of This</code> are rejected in the Alpha surface.</li><li><code>This</code> is trait-local and invalid outside trait declarations.</li><li>Requirements have no body.</li><li>Parameter names are not part of the later conformance shape.</li><li>Parameter access modes, types, return types and return channels are part of the shape.</li></ul><h3>Multiple requirements</h3><p>Multiple method requirements may appear in one trait. The current separator between requirements is a newline. Each requirement has no body and no standalone semicolon. The trait itself closes with a final semicolon.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>NAMED</span> must<span class='bst-code-operator'>:</span>
+        name <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+        id <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span>
+    ;
+    </code></pre><h3>Non-receiver <code>This</code></h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>SAME</span> must<span class='bst-code-operator'>:</span>
+        equals <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> other <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Bool</span>
+    ;
+    </code></pre><p><code>This</code> as a non-receiver parameter must carry a name.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="./trait-declarations">Trait declarations</a>.</li><li>For conformance matching see <a href="./conformance">Conformance</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Conformance
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="conformance-level"
+                id="conformance-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="conformance-level"
+                id="conformance-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="conformance">
+                    Conformance
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="conformance-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="conformance-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A type does not satisfy a trait just because it happens to have the right methods. It must say so explicitly.</p><h3>Method plus conformance</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
     <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
@@ -362,79 +881,196 @@ body {
     ;
 
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
-    </code></pre><p>Conformance declarations are bodyless, top-level declarations. They do not end with a semicolon.</p><p>Multiple traits can be listed with commas:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>Label must DISPLAY_TEXT</code> is the explicit promise. Without it, the compiler does not treat <code>Label</code> as <code>DISPLAY_TEXT</code>.</p><h3>Shape must match exactly</h3><p>The method must have the same receiver mutability, parameter types, return type and return channel. Parameter names do not matter.</p><h3>Only same-file nominal types</h3><p>You can conform structs, choices and aligned generic constructors declared in the same file. You cannot conform builtins, imported types or types from another file.</p><h3>Remember</h3><ul><li>Conformance is explicit.</li><li>It has no body and no semicolon.</li><li>Multiple traits can be listed with commas.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A conformance declaration states that a type implements one or more traits. Matching method shapes alone are not conformance.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    display <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+    </code></pre><h3>Exact contract</h3><ul><li>Conformance is explicit.</li><li>A matching method without <code>Type must TRAIT</code> is not conformance.</li><li>A conformance declaration is top-level.</li><li>It is bodyless.</li><li>It is newline-terminated and has no semicolon.</li><li>Several traits may be listed with commas.</li><li>Every requirement must resolve to a method with exact:<ul><li>receiver mutability</li><li>non-receiver parameter access mode</li><li>parameter types</li><li>return types</li><li>return channels</li></ul></li><li>Parameter names do not affect conformance.</li><li>Accepted user-authored targets are same-file structs, choices and aligned generic constructors.</li><li>Rejected targets include builtins, imported types, dependency or library types, external opaque types and nominal types declared in another file.</li><li>Canonical evidence is reusable wherever both target type and trait are visible.</li><li>Conformance does not independently import receiver methods.</li><li>Concrete values use ordinary visible receiver methods.</li><li>Specialise-by-concrete-instance conformance is outside scope.</li></ul><h3>Multiple traits</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>SERIALIZABLE</span>
-    </code></pre><p>The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.</p></section>
-    <section class="container"><h1>Canonical evidence</h1><p>Beanstalk stores explicit conformance as evidence selected by the frontend.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><h3>Aligned generic constructor conformance</h3><p>A generic type declared in the same file may declare conformance. The trait requirements use <code>This</code>. The source implementation uses the concrete receiver type and lowercase <code>this</code>.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Evidence</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> When it is created</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Visibility</th> 
-    </tr>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
 
+    display type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> box<span class='bst-code-parenthesis'>]</span>
+    ;
 
+    <span class='bst-code-struct'>Box</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+    </code></pre><h3>Rejected targets</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error: builtin types cannot declare user-authored conformance</span>
+    <span class='bst-code-type'>Int</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
+    </code></pre><p>Use a local wrapper choice or struct when adapting a value owned by another file or package.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="./trait-declarations">Trait declarations</a>.</li><li>For generic bounds see <a href="./generic-trait-bounds">Generic trait bounds</a>.</li><li>For receiver methods see <a href="../structs/receiver-methods">Receiver methods</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Generic trait bounds
+    </legend>
 
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="generic-trait-bounds-level"
+                id="generic-trait-bounds-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="generic-trait-bounds-level"
+                id="generic-trait-bounds-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="generic-trait-bounds">
+                    Generic trait bounds
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="generic-trait-bounds-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="generic-trait-bounds-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Canonical</td>
-     <td style="padding: 0.2em 0.5em;  "> The conformance target is a struct, choice, or generic type constructor declared in the same file.</td>
-     <td style="padding: 0.2em 0.5em;  "> Reusable wherever both the target type and trait are visible.</td>
-        </tr>
-            
 
-    </table><p>User-authored conformances for builtin, imported, dependency/library, external opaque, and other-file types are rejected. Use a local wrapper choice or struct when adapting values owned by another file or package.</p></section>
-    <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+
+            <p>A generic bound says: this placeholder type must provide a specific trait.</p><h3>One bound</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Multiple bounds on one parameter use <code>and</code>:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>Inside <code>render</code>, <code>Item</code> is known to have a <code>display</code> method.</p><h3>Several bounds</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>NAMED</span> must<span class='bst-code-operator'>:</span>
+        name <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
+    render_named type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. Trait names cannot be supplied as value types or concrete generic arguments.</p></section>
-    <section class="container"><h1>Traits are not value types</h1><p>A trait name in a normal type annotation is rejected.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- invalid: DISPLAY_TEXT is a trait, not a value type</span>
-    render <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>DISPLAY_TEXT</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> value.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>and</code> adds another bound to the same parameter.</p><h3>Remember</h3><ul><li>Bounds use <code>is</code>, not <code>must</code>.</li><li><code>and</code> combines bounds on one parameter.</li><li>Commas still separate different parameters.</li><li>The concrete type must have visible evidence for every bound.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Generic bounds use traits to promise that a generic parameter provides certain behaviour inside the generic declaration.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
-    </code></pre><p>Use <code>type T is TRAIT</code> when static reuse is intended. Use choices when runtime heterogeneity is needed.</p></section>
-    <section class="container"><h1>Trait incompatibility</h1><p><code>TRAIT must not TRAIT</code> records narrow incompatibility metadata for explicit conformance.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Exact contract</h3><ul><li>Generic bounds use <code>is</code>, not <code>must</code>.</li><li><code>and</code> adds bounds to one parameter.</li><li>Commas separate generic parameters.</li><li>Bounds apply to generic functions, structs and choices.</li><li>Each concrete argument requires visible reusable evidence.</li><li>Trait names are static contracts, not concrete type arguments.</li><li>A bound may enable a unique required receiver call inside the generic declaration.</li><li>Bound calls resolve statically to concrete source methods.</li><li>Concrete values still use ordinary visible methods.</li><li>Conformance does not import methods into scope.</li><li>Backends do not receive trait objects or runtime evidence tables.</li><li><code>where</code> syntax is rejected.</li><li>File-local evidence-backed dispatch outside reusable conformance is outside scope.</li></ul><h3>Multiple bounds on one parameter</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>NAMED</span> must<span class='bst-code-operator'>:</span>
+        name <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
+    render_named type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Multiple parameters with bounds</h3><pre style=""><code class='codeblock'>
+    render_pair type <span class='bst-code-struct'>A</span> is <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>B</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>A,</span> right <span class='bst-code-struct'>B</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> left.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>+</span> right.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Evidence must be visible</h3><p>Concrete calls and instantiations require reusable evidence. The evidence is created by a same-file conformance declaration.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    display <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+
+    value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Related concepts</h3><ul><li>For conformance see <a href="./conformance">Conformance</a>.</li><li>For generics see <a href="../generics">Generics</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Trait incompatibility
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="trait-incompatibility-level"
+                id="trait-incompatibility-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="trait-incompatibility-level"
+                id="trait-incompatibility-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="trait-incompatibility">
+                    Trait incompatibility
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="trait-incompatibility-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="trait-incompatibility-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Some trait contracts are mutually exclusive. A type cannot claim both.</p><h3>Two ways to produce text</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>TEXT</span> must<span class='bst-code-operator'>:</span>
         text <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
@@ -444,15 +1080,73 @@ body {
     ;
 
     <span class='bst-code-struct'>TEXT</span> must not <span class='bst-code-struct'>FALLIBLE_TEXT</span>
-    </code></pre><p>A type may not explicitly conform to both sides of an active incompatibility relation. The relation is symmetric and affects conformance validation only. It does not add requirements, imply negative conformance, compose traits, or create runtime dispatch.</p></section>
-    <section class="container"><h1>Core cast traits</h1><p>The compiler owns static cast traits such as <code>CASTABLE_TO_STRING</code> and <code>TRY_CASTABLE_TO_INT</code>. They resolve without imports and cannot be redeclared, imported, exported, aliased, shadowed, or used as ordinary values.</p><p>Same-file nominal source types, including aligned generic constructors, can provide user-defined cast evidence by implementing the required receiver method and declaring conformance.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>TEXT</code> promises a <code>String</code> directly. <code>FALLIBLE_TEXT</code> promises a <code>String</code> or an error. A type cannot be both at once.</p><h3>Symmetric</h3><p>The relation goes both ways. Saying <code>A must not B</code> also means <code>B must not A</code> in effect.</p><h3>Remember</h3><ul><li>Incompatibility only affects conformance validation.</li><li>It does not create inheritance, composition or runtime dispatch.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Trait incompatibility records that two traits cannot both be claimed by the same concrete type.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>TEXT</span> must<span class='bst-code-operator'>:</span>
+        text <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
+    <span class='bst-code-struct'>FALLIBLE_TEXT</span> must<span class='bst-code-operator'>:</span>
+        try_text <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
+    ;
+
+    <span class='bst-code-struct'>TEXT</span> must not <span class='bst-code-struct'>FALLIBLE_TEXT</span>
+    </code></pre><h3>Exact contract</h3><ul><li>Incompatibility is trait metadata.</li><li>It is symmetric.</li><li>A concrete type cannot explicitly conform to both sides.</li><li>Several incompatible traits may be listed.</li><li>It affects conformance validation only.</li><li>It does not:<ul><li>add requirements</li><li>imply negative conformance</li><li>create trait composition</li><li>create inheritance</li><li>affect runtime dispatch</li></ul></li></ul><h3>Compiler-owned pairs</h3><p>The compiler uses <code>must not</code> for incompatible core cast trait pairs. For example, <code>CASTABLE_TO_STRING</code> and <code>TRY_CASTABLE_TO_STRING</code> cannot both be claimed for the same target type.</p><h3>Related concepts</h3><ul><li>For conformance see <a href="./conformance">Conformance</a>.</li><li>For core cast traits see <a href="./core-cast-traits">Core cast traits</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Core cast traits
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="core-cast-traits-level"
+                id="core-cast-traits-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="core-cast-traits-level"
+                id="core-cast-traits-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="core-cast-traits">
+                    Core cast traits
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="core-cast-traits-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="core-cast-traits-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>The compiler owns a fixed set of traits that let user types work with <code>cast</code>.</p><h3>String conversion</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
@@ -464,24 +1158,145 @@ body {
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
 
     value <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Core cast traits prove source evidence for <code>cast</code>. They do not create user-defined cast targets, generic cast targets, external opaque cast targets, or a general conversion system. Infallible and fallible cast traits for the same builtin target are incompatible through compiler-owned <code>must not</code> metadata.</p></section>
-    <section class="container"><h1>Runtime heterogeneity</h1><p>Runtime heterogeneity is represented with choices, not trait objects.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>CASTABLE_TO_STRING</code> means: this type can become a <code>String</code> without failing.</p><h3>Fallible conversion</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    try_to_int <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>, <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not implemented&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>TRY_CASTABLE_TO_INT</span>
+
+    number <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p><code>TRY_CASTABLE_TO_INT</code> means: this type may become an <code>Int</code>, but it can also fail.</p><h3>Remember</h3><ul><li>Core cast trait names are owned by the compiler.</li><li>You cannot redefine, import, export or alias them.</li><li>You declare conformance the same way as for user traits.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>The compiler owns a closed set of static cast traits. They provide source evidence for explicit <code>cast</code> and <code>cast!</code> conversions.</p><h3>Trait table</h3><p>Each trait requires one receiver method:</p><ul><li><code>CASTABLE_TO_INT</code> requires <code>to_int |This| -&gt; Int</code></li><li><code>TRY_CASTABLE_TO_INT</code> requires <code>try_to_int |This| -&gt; Int, Error!</code></li><li><code>CASTABLE_TO_FLOAT</code> requires <code>to_float |This| -&gt; Float</code></li><li><code>TRY_CASTABLE_TO_FLOAT</code> requires <code>try_to_float |This| -&gt; Float, Error!</code></li><li><code>CASTABLE_TO_BOOL</code> requires <code>to_bool |This| -&gt; Bool</code></li><li><code>TRY_CASTABLE_TO_BOOL</code> requires <code>try_to_bool |This| -&gt; Bool, Error!</code></li><li><code>CASTABLE_TO_STRING</code> requires <code>to_string |This| -&gt; String</code></li><li><code>TRY_CASTABLE_TO_STRING</code> requires <code>try_to_string |This| -&gt; String, Error!</code></li><li><code>CASTABLE_TO_CHAR</code> requires <code>to_char |This| -&gt; Char</code></li><li><code>TRY_CASTABLE_TO_CHAR</code> requires <code>try_to_char |This| -&gt; Char, Error!</code></li><li><code>CASTABLE_TO_ERROR</code> requires <code>to_error |This| -&gt; Error</code></li><li><code>TRY_CASTABLE_TO_ERROR</code> requires <code>try_to_error |This| -&gt; Error, Error!</code></li></ul><h3>Contract</h3><ul><li>These traits resolve without imports.</li><li>They cannot be redeclared, imported, exported, aliased or shadowed.</li><li>They cannot be used as values.</li><li>The compiler registers builtin evidence for the builtin cast table.</li><li>Same-file nominal source types and aligned generic constructors may provide evidence.</li><li>Source method implementations use lowercase <code>this</code> and the concrete receiver type.</li><li>Explicit conformance is required.</li><li>Infallible and fallible pairs for one target are incompatible.</li><li>Evidence resolves before HIR.</li><li>The traits prove source evidence only.</li><li>They do not create user-defined target types or a general conversion framework.</li></ul><h3>Example</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    to_string <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
+
+    value <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Infallible versus fallible</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Infallible: source always produces the target</span>
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
+
+    <span class='bst-code-comment'>-- Fallible: source may produce the target or an error</span>
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>TRY_CASTABLE_TO_INT</span>
+
+    number <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Related concepts</h3><ul><li>For cast target selection and fallible handling see <a href="../casts">Casts</a>.</li><li>For trait incompatibility see <a href="./trait-incompatibility">Trait incompatibility</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Trait design scope
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="trait-design-scope-level"
+                id="trait-design-scope-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="trait-design-scope-level"
+                id="trait-design-scope-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="trait-design-scope">
+                    Trait design scope
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="trait-design-scope-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="trait-design-scope-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Traits are for static reuse, not runtime flexibility.</p><h3>Static reuse</h3><pre style=""><code class='codeblock'>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The compiler knows at compile time which concrete <code>display</code> method to call.</p><h3>Runtime heterogeneity with choices</h3><p>When you need different types at runtime, use a choice instead.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Renderable</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
         <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
     ;
-    </code></pre></section>
-    <section class="container"><h1>Dispatch and backends</h1><p>Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.</p><p>Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.</p></section>
-    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io.line(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
-    <section class="container"><h1>Outside trait design scope</h1><p>These surfaces are intentionally outside Beanstalk&#39;s trait design scope:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>blanket, conditional, negative, or specialized conformance</li><li>structural conformance</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>composed <code>This</code> forms</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li><li>dynamic trait values / trait objects</li><li>trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types</li></ul></section>
-    <section class="container"><h1>Deferred trait work</h1><p>Deferred trait work is limited to static non-method requirements, compiler-owned builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that does not change traits into runtime values or a type-level programming system.</p></section>
+    </code></pre><p>A choice is a tagged union. The variant tag decides which code to run.</p><h3>Remember</h3><ul><li>Traits are static contracts, not runtime values.</li><li>A trait name cannot be used as a type annotation for a variable, parameter or field.</li><li>Use a bound for compile-time reuse.</li><li>Use a choice for runtime alternatives.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Beanstalk traits are deliberately static. They name behaviour before runtime begins and stay out of the type system as runtime values.</p><h3>Static model</h3><p>Trait names are valid in:</p><ul><li>trait declarations</li><li>conformance declarations</li><li>generic bounds</li></ul><p>Trait names are invalid as ordinary:</p><ul><li>variables</li><li>parameters</li><li>fields</li><li>returns</li><li>collection elements</li><li>map types</li><li>choice payloads</li><li>alias targets</li></ul><p>Use a generic bound for static reuse. Use a choice for runtime heterogeneity.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Static reuse</span>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+
+    <span class='bst-code-comment'>-- Runtime heterogeneity</span>
+    <span class='bst-code-struct'>Renderable</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
+    ;
+    </code></pre><p>Static traits are backend-independent. Backends do not receive trait objects, erased dispatch or runtime evidence tables.</p><h3>Deferred</h3><ul><li>static non-method requirements</li><li>compiler-owned builtin conformance facts</li><li>broader standard trait taxonomy that does not create runtime trait values</li></ul><h3>Outside scope</h3><ul><li>default methods</li><li>associated types and constants</li><li>inheritance</li><li>trait aliases and composition</li><li>generic traits and generic methods</li><li>blanket, conditional, negative or specialised conformance</li><li>structural conformance</li><li>dynamic trait values and trait objects</li><li>downcasting and reflection</li><li>output coercion</li><li>operator integration</li><li>automatic primitive conformance</li><li>derive-style hashing, ordering, formatting, iteration or serialization families</li></ul><p>Do not treat compiler-owned test-only or scaffold traits as public language features.</p><h3>Related concepts</h3><ul><li>For runtime heterogeneity see <a href="../choices">Choices</a>.</li><li>For generic bounds see <a href="./generic-trait-bounds">Generic trait bounds</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../generics/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Generics</span>
+            </a>
+
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../reactivity/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Reactivity</span>
+            </a>
+
+            
+
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Generics in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Current Alpha generic type and generic function behavior.">
+    <title>Generics | Beanstalk</title>
+    <meta name="description" content="Declaration-site generics, type application and local inference in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,252 +661,282 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
-    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>declaration-site generic parameters with <code>type</code> on top-level structs, choices, and free functions</li><li><code>of</code> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <code>{T}</code></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li><li>declaration-site trait bounds with <code>type T is TRAIT</code></li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
-    <section class="container"><h1>Current status</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><p><a href="../">Documentation</a> / Generics</p><h1>Generics</h1><p>Generics let one declaration describe a family of concrete types or functions.</p><p>Beanstalk keeps the solving local. Type arguments come from the declaration, the call in front of you and its immediate receiving type.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Generic declarations
+    </legend>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
-    </tr>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="generic-declarations-level"
+                id="generic-declarations-basic"
+                value="basic"
+                checked
+            >
 
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="generic-declarations-level"
+                id="generic-declarations-advanced"
+                value="advanced"
+            >
 
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="generic-declarations">
+                    Generic declarations
+    </h2>
 
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="generic-declarations-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="generic-declarations-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic structs</td>
-     <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Concrete instances such as <code>Box of Int</code> have canonical frontend type identity and substituted field views.</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic choices</td>
-     <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Concrete constructors and matching work for instantiated generic choice types.</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Concrete generic aliases</td>
-     <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Aliases may target fully applied generic instances and remain transparent.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic functions</td>
-     <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Same-file, same-module grouped or namespace, and authored facade wrapper free-function calls infer from immediate arguments and type context, then emit concrete executable instances. Generic optional and fallible returns work across visible imports.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic aliases with parameters</td>
-     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
-     <td style="padding: 0.2em 0.5em;  "> Alias only a fully concrete generic instance; parameterized aliases create a separate type-level abstraction layer.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Explicit generic call syntax</td>
-     <td style="padding: 0.2em 0.5em;  "> Rejected / Not Alpha</td>
-     <td style="padding: 0.2em 0.5em;  "> Generic calls use ordinary call syntax and inference only.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic function values</td>
-     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
-     <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only, not first-class values.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
-     <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Bound-provided receiver calls are available through visible reusable trait evidence; receiver methods on fully instantiated generic types remain rejected.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Type values / type-level CTFE</td>
-     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
-     <td style="padding: 0.2em 0.5em;  "> Types are compile-time annotation facts, not runtime or compile-time values.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
-     <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Declaration-site <code>type T is TRAIT</code> and <code>type T is A and B, U is C</code> bounds are supported for generic functions, structs, and choices. <code>where</code> clauses and file-local evidence-backed generic-bound dispatch are outside scope.</td>
-        </tr>
-            
-
-    </table></section>
-    <section class="container"><h1>Generic type syntax</h1><p>Generic parameters are introduced with <code>type</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>T,</span>
+            <p>A generic declaration describes a family of types or functions using a placeholder type.</p><h3>A generic struct</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><p>Concrete type arguments are applied with <code>of</code> in type positions.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    number_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><code>of</code> is type-position-only. It is not current Alpha syntax for explicit generic function calls, runtime generic values, type values, or type-level computation.</p></section>
-    <section class="container"><h1>Generic choices</h1><p>Generic choices use the same <code>type</code> parameter list.</p><p>Payload variants use record payload syntax.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>,
-        <span class='bst-code-struct'>Empty,</span>
+    </code></pre><p><code>A</code> stands for some concrete type. Later you can make a <code>Box of Int</code>, a <code>Box of String</code>, and so on.</p><h3>A generic function</h3><pre style=""><code class='codeblock'>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
     ;
+    </code></pre><p><code>identity</code> returns whatever type it receives.</p><h3>The placeholder is scoped</h3><p>The parameter name is meaningful only inside that declaration. You cannot use <code>A</code> as a value or refer to it from another declaration.</p><h3>Remember</h3><ul><li><code>type A</code> introduces the parameter after the declaration name.</li><li>Parameters use type-name casing.</li><li>Every parameter must be used somewhere in the declaration&#39;s public shape.</li></ul>
+    </div>
 
-    name <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
-    missing <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Empty</span>
-    </code></pre><p>Choice payload shorthand such as <code>Some T</code> is not current Alpha syntax. Use record payload variants such as <code>Some | value T |</code>.</p></section>
-    <section class="container"><h1>Concrete aliases</h1><p>Type aliases can name a fully applied generic instance.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>T,</span>
-    <span class='bst-code-operator'>|</span>
-
-    <span class='bst-code-struct'>StringBox</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span>
-
-    item <span class='bst-code-struct'>StringBox</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
-    raw <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> item
-    </code></pre><p>Generic aliases with their own parameters, partial application, and type-constructor composition are outside the generic design scope. Name an intermediate concrete alias when a type would otherwise need deeper composition.</p></section>
-    <section class="container"><h1>Collections and constructed types</h1><p>Collections use the public <code>{T}</code> syntax and are compiler-owned constructed types. Fixed collections use <code>{N T}</code>, and the fixed capacity is part of type identity rather than allocation metadata.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    names <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ana&quot;</span>, <span class='bst-code-string'>&quot;Nye&quot;</span><span class='bst-code-parenthesis'>}</span>
-
-    cache_capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>64</span>
-    cached <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>cache_capacity <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Optional types <code>T?</code> and fallible return slots such as <code>Error!</code> are also compiler-owned constructed forms. Public <code>Option of T</code>, public <code>Result of T, E</code>, <code>Option.Some</code>, and <code>Result.Ok</code> are not current Alpha syntax.</p><p>Generic functions can use final generic error slots, <code>return!</code>, postfix propagation, and <code>catch</code> when ordinary local inference can solve the generic parameters. The compiler still rejects body-side specialization of an abstract generic error slot.</p></section>
-    <section class="container"><h1>Nesting rule</h1><p>Alpha allows one inline <code>of</code> application per annotation.</p><p>Collection element annotations may contain that one application:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    boxes <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Nested inline applications are deferred:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- deferred</span>
-    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Use a concrete alias instead:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>StringCount</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
-    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>StringCount</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre></section>
-    <section class="container"><h1>Generic functions</h1><p>Generic free functions are callable when their type arguments can be inferred from the call itself or from an immediate expected result type. The same inference rules apply for same-file calls, grouped imports, namespace imports, and authored facade wrappers. There is no explicit generic call-site type argument syntax.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Generics are declaration-site type abstractions for top-level structs, choices and free functions. A generic parameter is a compile-time placeholder that stands for a concrete type selected later.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> value
     ;
 
-    value <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    text <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Return type context can also fix otherwise ambiguous type parameters:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    empty_values type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Empty,</span>
+    ;
+    </code></pre><p>Generic parameters follow the declaration name after <code>type</code>. Multiple parameters are separated by commas.</p><h3>Exact contract</h3><ul><li>Generic parameters are introduced with <code>type</code> after the declaration name.</li><li>Supported declaration owners are top-level structs, choices and free functions.</li><li>Parameter names use type-name casing.</li><li>Parameters are scoped to the declaration.</li><li>Parameters are compile-time placeholders, not runtime values.</li><li>Each parameter name must be unique within the declaration.</li><li>Parameters cannot collide with visible concrete types, type aliases, external package types, builtins or other type-position names.</li><li>A generic body may use active parameters in local type annotations.</li><li>Inline parameter sugar such as <code>|value type A|</code> is rejected.</li><li>Generic parameters do not create type values.</li><li>Generic declarations are resolved before HIR.</li></ul><h3>Multiple parameters</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Pair</span> type <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        first <span class='bst-code-struct'>A,</span>
+        second <span class='bst-code-struct'>B,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><h3>Unused parameters</h3><p>A generic parameter must be used in the public type shape of the declaration. An unused parameter is rejected.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error: parameter &#39;A&#39; is declared but never used</span>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><h3>No inline parameter sugar</h3><p>Generic parameters belong in the declaration header, not inside ordinary parameter lists.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error</span>
+    identity <span class='bst-code-operator'>|</span>value type <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><h3>Compiler stage note</h3><p>Header parsing records generic parameter lists and declaration metadata. AST resolves generic signatures to canonical type identities, validates generic bodies against unconstrained parameters and emits concrete instances before HIR generation. HIR never carries unresolved generic calls.</p><h3>Related concepts</h3><ul><li>For applying concrete type arguments see <a href="./type-application">Type application</a>.</li><li>For call-site inference see <a href="./generic-inference">Generic inference</a>.</li><li>For trait bounds see <a href="../traits/generic-trait-bounds">Generic trait bounds</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Type application
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="type-application-level"
+                id="type-application-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="type-application-level"
+                id="type-application-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="type-application">
+                    Type application
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="type-application-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="type-application-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Use <code>of</code> to choose the concrete type for a generic declaration.</p><h3>One argument</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Several arguments</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Pair</span> type <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        first <span class='bst-code-struct'>A,</span>
+        second <span class='bst-code-struct'>B,</span>
+    <span class='bst-code-operator'>|</span>
+
+    item <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Concrete aliases</h3><p>When a type would need nested <code>of</code> applications, name an intermediate alias.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>StringIntPair</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>StringIntPair</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Remember</h3><ul><li><code>of</code> goes in type position, not in ordinary expressions.</li><li>The number of arguments must match the declaration.</li><li>Different concrete arguments make different types.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Concrete generic instances are created with <code>of</code> in type position.</p><h3>Syntax</h3><pre style=""><code class='codeblock'>
+    number_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-struct'>Pair</span> type <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        first <span class='bst-code-struct'>A,</span>
+        second <span class='bst-code-struct'>B,</span>
+    <span class='bst-code-operator'>|</span>
+
+    item <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Exact contract</h3><ul><li><code>of</code> applies concrete type arguments in type position.</li><li>Argument count must match the generic declaration.</li><li>Each argument must be a valid concrete type.</li><li>Different concrete argument lists produce different semantic types.</li><li>Constructors use ordinary constructor syntax.</li><li>Explicit generic free-function call type arguments are not supported.</li></ul><h3>Nested <code>of</code> boundary</h3><p>Nested inline <code>of</code> applications are rejected. Use a named concrete alias for any nested shape the current compiler rejects.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error</span>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Work around the limit with an intermediate alias:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>StringIntPair</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>StringIntPair</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The collection element exception allows one inline <code>of</code> application inside a collection element annotation, such as <code>{Box of String}</code>.</p><h3>Concrete generic aliases</h3><p>A type alias may name a fully applied generic instance. The alias remains transparent.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>StringBox</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span>
+
+    box <span class='bst-code-struct'>StringBox</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
+    raw <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> box
+    </code></pre><h3>Constructed forms are compiler-owned</h3><p>Public <code>Option of T</code>, <code>Result of T, E</code>, <code>Option.Some</code> and <code>Result.Ok</code> are not language syntax. Options, fallible carriers and collections are compiler-owned constructed forms with their own source syntax.</p><h3>Related concepts</h3><ul><li>For generic declarations see <a href="./generic-declarations">Generic declarations</a>.</li><li>For type aliases see <a href="../aliases/type-aliases">Type aliases</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Generic inference
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="generic-inference-level"
+                id="generic-inference-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="generic-inference-level"
+                id="generic-inference-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="generic-inference">
+                    Generic inference
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="generic-inference-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="generic-inference-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>You call a generic function like any other function. The compiler figures out the concrete type from the immediate context.</p><h3>Inference from an argument</h3><pre style=""><code class='codeblock'>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Because <code>42</code> is an <code>Int</code>, <code>A</code> becomes <code>Int</code> for this call.</p><h3>Inference from the result type</h3><pre style=""><code class='codeblock'>
+    empty type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>A</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     ;
 
-    numbers <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Immediate expected-result inference also works across visible imports:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- helpers.bst</span>
-    empty_values type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
+    items <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The left-hand side says the result is <code>{Int}</code>, so <code>A</code> becomes <code>Int</code>.</p><h3>Remember</h3><ul><li>Inference is local. It looks at the call and its immediate receiving type.</li><li>It does not use later assignments, distant returns or whole-program analysis.</li><li>There is no explicit <code>of</code> syntax at the call site.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Generic function calls use ordinary call syntax. Type arguments are inferred from local evidence only.</p><h3>Inference sources</h3><pre style=""><code class='codeblock'>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    empty type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>A</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     ;
 
-    <span class='bst-code-comment'>-- #page.bst</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>empty_values<span class='bst-code-parenthesis'>}</span>
+    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    typed_value <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    items <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The concrete type for <code>A</code> can come from:</p><ul><li>immediate call arguments</li><li>the immediate expected result type at a closed receiving site</li></ul><h3>What inference does not use</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- Error: T is ambiguous at the declaration site</span>
+    values <span class='bst-code-operator'>=</span> empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Inference does not use:</p><ul><li>later mutation</li><li>later reads</li><li>whole-program analysis</li><li>HIR</li><li>borrow validation</li><li>distant return use</li><li>expected parameter context from an outer call into a nested generic call</li></ul><p>Use an intermediate annotation when a nested generic call would otherwise need evidence from its parent call.</p><pre style=""><code class='codeblock'>
+    parse_json type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-struct'>A</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- placeholder body</span>
+    ;
 
-    numbers <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Body validation currently allows pass-through behavior such as returning a value of the same generic parameter type, forwarding it to another generic function, or storing it in a generic wrapper. Local annotations inside the generic body may use the active generic parameters, including <code>T</code>, <code>{T}</code>, and <code>Box of T</code>. Behavior-dependent operations on unconstrained <code>T</code> are rejected. A declaration-site trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic, equality, field access, template interpolation, and external/IO behavior still require concrete support or a future dedicated trait integration.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- rejected: T is ambiguous at the declaration site</span>
-    values <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Use an intermediate annotation when a nested generic call would otherwise need evidence from its parent call:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    user <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> parse_json<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-    save_user<span class='bst-code-parenthesis'>(</span>user<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Generic functions may also return optional or fallible values, including across imports:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- helpers.bst</span>
+    save_user <span class='bst-code-operator'>|</span>user <span class='bst-code-struct'>User</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    ;
+
+    <span class='bst-code-comment'>-- user User = parse_json(text)! -- if inference failed, annotate</span>
+    </code></pre><h3>Optional and fallible generic returns</h3><p>Generic functions may return optional or fallible values when the concrete envelope is solved by immediate evidence.</p><pre style=""><code class='codeblock'>
     wrap_optional type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> value
     ;
@@ -577,140 +949,223 @@ body {
         <span class='bst-code-keyword'>return</span> value
     ;
 
-    <span class='bst-code-comment'>-- #page.bst</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>read_or_raise, wrap_optional<span class='bst-code-parenthesis'>}</span>
-
     maybe_name <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> wrap_optional<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
 
     value <span class='bst-code-operator'>=</span> read_or_raise<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>7</span>, <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>, false<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-    </code></pre><p>Generic optional and fallible support still depends on immediate evidence. A bare <code>none</code> cannot infer <code>T</code> by itself, and a concrete callee error type cannot specialize an abstract surrounding <code>E!</code> from inside the generic body.</p><p>Same-module grouped imports can call generic free functions by their imported local name:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- helpers.bst</span>
-    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>A bare <code>none</code> cannot infer an otherwise unknown parameter by itself.</p><h3>Imported generic functions</h3><p>Visible imported generic functions use the same local inference rules. There is no explicit call-site type argument syntax.</p><h3>Cast boundary</h3><p>Generic inference does not look through <code>cast</code>. The cast target must be selected after the generic call has already been solved.</p><h3>Explicit call-site syntax is rejected</h3><p>All of these are rejected:</p><pre style=""><code class='codeblock'>
+    identity of <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    identity<span class='bst-code-operator'>&lt;</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    identity<span class='bst-code-parenthesis'>[</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Related concepts</h3><ul><li>For generic declarations see <a href="./generic-declarations">Generic declarations</a>.</li><li>For concrete instance behaviour see <a href="./generic-instances">Generic instances</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Generic instances
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="generic-instances-level"
+                id="generic-instances-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="generic-instances-level"
+                id="generic-instances-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="generic-instances">
+                    Generic instances
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="generic-instances-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="generic-instances-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>When you apply concrete types to a generic declaration, you get a concrete instance.</p><h3>A concrete generic struct</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    int_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    string_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>Box of Int</code> and <code>Box of String</code> are different types. You cannot assign one to the other.</p><h3>A concrete generic choice</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Empty,</span>
+    ;
+
+    name <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>Maybe of String</code> stores a <code>String</code> payload. <code>Maybe of Int</code> would store an <code>Int</code>.</p><h3>Remember</h3><ul><li>Concrete arguments replace the generic parameter everywhere in the declaration.</li><li>Same arguments mean the same type.</li><li>Different arguments mean incompatible types.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A concrete generic instance substitutes the generic parameters with concrete type arguments. The resulting type is ordinary: it has fields, constructors and the same access rules as any other type.</p><h3>Field and payload substitution</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    int_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    string_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>Box of Int</code> and <code>Box of String</code> are different semantic types. The field <code>value</code> has type <code>Int</code> in the first and <code>String</code> in the second.</p><h3>Generic choices</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Empty,</span>
+    ;
+
+    name <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
+    missing <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Empty</span>
+    </code></pre><p>Choice payload matching uses the substituted payload types.</p><h3>Instance identity</h3><p>Same constructor plus same concrete arguments yields the same instance type. Different arguments yield incompatible instance types.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    a <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
+    b <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-comment'>-- c Box of String = a -- would be an error</span>
+    </code></pre><h3>Aligned receiver methods</h3><p>A receiver method may be declared on a generic type when the method&#39;s generic parameters align exactly with the receiver constructor&#39;s parameters.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>A,</span>
+    <span class='bst-code-operator'>|</span>
+
+    get type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.value
+    ;
+
+    box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    value <span class='bst-code-operator'>=</span> box.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Receiver methods on one concrete generic instance remain rejected.</p><h3>Generic bounds and evidence</h3><p>Concrete instantiation with trait bounds requires visible reusable evidence. See <a href="../traits/generic-trait-bounds">Generic trait bounds</a>.</p><h3>Deferred and rejected surfaces</h3><ul><li>Recursive generic nominal types are rejected.</li><li>Receiver methods on concrete instances are rejected.</li><li>Generic external package functions and types are deferred.</li></ul><h3>Related concepts</h3><ul><li>For type application see <a href="./type-application">Type application</a>.</li><li>For trait bounds see <a href="../traits/generic-trait-bounds">Generic trait bounds</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Generic limits
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="generic-limits-level"
+                id="generic-limits-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="generic-limits-level"
+                id="generic-limits-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="generic-limits">
+                    Generic limits
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="generic-limits-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="generic-limits-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Generic code can move an unknown type around, but it needs a bound before calling type-specific behaviour.</p><h3>Moving values around</h3><pre style=""><code class='codeblock'>
+    identity type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>A</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> value
     ;
-
-    <span class='bst-code-comment'>-- #page.bst</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>identity<span class='bst-code-parenthesis'>}</span>
-
-    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Namespace imports can call generic free functions through the source namespace record:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- #page.bst</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-keyword'>as</span> helpers
-
-    value <span class='bst-code-operator'>=</span> helpers.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Public facade wrappers are ordinary authored generic functions marked with <code>export</code> in <code>#mod.bst</code>. Normal imports inside the facade remain private and are only usable by the wrapper body:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- lib/utils/internal.bst</span>
-    identity_impl type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> value
+    </code></pre><p><code>identity</code> does not need to know anything about <code>A</code>. It just returns what it got.</p><h3>Needing a bound</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
 
-    <span class='bst-code-comment'>-- lib/utils/#mod.bst</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>internal <span class='bst-code-parenthesis'>{</span>identity_impl<span class='bst-code-parenthesis'>}</span>
-
-    export identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> identity_impl<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
-    ;
-
-    <span class='bst-code-comment'>-- src/#page.bst</span>
-    import <span class='bst-code-operator'>@</span>utils <span class='bst-code-parenthesis'>{</span>identity<span class='bst-code-parenthesis'>}</span>
-
-    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Namespace imports can call authored facade wrappers too:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- src/#page.bst</span>
-    import <span class='bst-code-operator'>@</span>utils <span class='bst-code-keyword'>as</span> utils
-
-    value <span class='bst-code-operator'>=</span> utils.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Generic functions are still callable declarations only. They cannot be passed around as first-class values, including through namespace members such as <code>helpers.identity</code>. Direct facade re-export syntax is also deferred; expose imported behavior with real authored wrapper declarations.</p></section>
-    <section class="container"><h1>Trait bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Compiler-owned cast traits can also be used as static bounds when a generic body needs an explicit cast target.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    show_text type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>CASTABLE_TO_STRING</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        text <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast item
-        <span class='bst-code-keyword'>return</span> text
-    ;
-    </code></pre><p>Multiple bounds on one parameter use <code>and</code>. Commas still separate generic parameters:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    combine type <span class='bst-code-struct'>A</span> is <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>B</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>A,</span> right <span class='bst-code-struct'>B</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> left.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>+</span> right.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>render</code> can call <code>.display()</code> because the bound promises that <code>Item</code> provides it.</p><h3>Remember</h3><ul><li>Generic code can store, return and forward values of an unknown type.</li><li>It cannot do arithmetic, compare, or call arbitrary methods without a bound.</li><li>Use a trait bound when the type must provide specific behaviour.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Unconstrained generic code can move values around but cannot assume type-specific behaviour.</p><h3>What unconstrained generic code may do</h3><ul><li>pass values through</li><li>return them</li><li>store them in generic structs or choices</li><li>forward them to another generic function when immediate evidence solves the call</li><li>use generic parameters in local annotations</li></ul><h3>What unconstrained generic code cannot assume</h3><ul><li>arithmetic</li><li>equality or ordering</li><li>field access</li><li>string-like template interpolation</li><li>external or IO behaviour</li><li>arbitrary receiver methods</li></ul><p>A trait bound may enable the unique receiver behaviour provided by its static contract.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
 
-    render_named type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Concrete generic function calls and concrete generic struct/choice instantiations require visible reusable evidence for each concrete type argument. A conformance declaration does not independently import trait methods as concrete receiver methods.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        text <span class='bst-code-struct'>String,</span>
-    <span class='bst-code-operator'>|</span>
+    </code></pre><h3>Rejected or deferred current Alpha surfaces</h3><ul><li>explicit call-site generic syntax</li><li>inline generic parameter sugar such as <code>|value type A|</code></li><li>recursive generic types</li><li>receiver methods on concrete instances</li><li>generic external package functions and types</li><li>nested inline <code>of</code> applications beyond the accepted single application</li><li>public <code>Option</code>/<code>Result</code> constructors</li></ul><h3>Outside generic design scope</h3><ul><li>generic function values</li><li>higher-order polymorphism</li><li>type values</li><li>type-returning functions</li><li>type-level <code>#if</code></li><li>compile-time type inspection</li><li><code>where</code> clauses</li><li>file-local evidence-backed bound dispatch</li><li>parameterized aliases</li><li>partial type application</li><li>higher-kinded types</li><li>user const generics beyond fixed collection capacity</li><li>lifetime parameters</li><li>specialization</li><li>associated types</li></ul><p>Deferred surfaces may land in future Alpha iterations. Outside-scope surfaces require an explicit language-philosophy change before they can be added.</p><h3>Related concepts</h3><ul><li>For trait bounds see <a href="../traits/generic-trait-bounds">Generic trait bounds</a>.</li><li>For the current implementation status see <a href="../../progress">Progress matrix</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../aliases/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Aliases</span>
+            </a>
 
-    display <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> this.text
-    ;
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../traits/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Traits</span>
+            </a>
 
-    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+            
 
-    value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Trait names are static contracts. They can appear in generic bounds, trait declarations, and conformance declarations, but not as normal value types or concrete generic arguments.</p><p>Bound-provided receiver methods use the selected static evidence and lower to concrete calls before HIR. <code>where</code> clauses remain rejected; write bounds directly on the generic parameter list.</p></section>
-    <section class="container"><h1>Deferred generic work</h1><p>The following fit the language design but are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <code>identity of Int(42)</code>, <code>identity&lt;Int&gt;(42)</code>, <code>identity[Int](42)</code>, or <code>identity(42 Int)</code></li><li>inline generic sugar such as <code>|value type A|</code></li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <code>#mod.bst</code></li><li>generic JS or external package functions</li><li>nested generic type application beyond the collection element exception</li><li>public <code>Option of T</code> or <code>Result of T, E</code></li><li><code>Option.Some</code>, <code>Result.Ok</code>, public <code>Ok</code> or <code>Err</code> constructors</li></ul></section>
-    <section class="container"><h1>Outside generic design scope</h1><p>These features are intentionally outside Beanstalk&#39;s generic design scope:</p><ul><li>generic function values and higher-order polymorphism</li><li>type values, type-returning functions, type-level <code>#if</code>, and compile-time type inspection</li><li><code>where</code> clauses and file-local evidence-backed generic-bound dispatch</li><li>parameterized aliases and partial type application</li><li>higher-kinded types</li><li>const generics beyond fixed collection capacity</li><li>lifetime parameters</li><li>specialization</li><li>associated types</li><li>dynamic generic reification</li></ul></section>
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
