@@ -192,11 +192,11 @@ pub struct Header {
     /// WHY: visibility and export decisions now depend on file role and declaration kind,
     /// not just the old `exported` boolean.
     pub file_role: FileRole,
-    /// Whether this header is part of the public facade API.
+    /// Whether this header is part of the module-root public export API.
     ///
     /// WHAT: `Public` only for explicit `export` items in module-root files; `Private` everywhere else.
-    /// WHY: import preparation builds module APIs from explicit facade metadata, not from file role
-    /// alone.
+    /// WHY: import preparation builds module APIs from explicit public export metadata, not from
+    /// file role alone.
     pub export_mode: HeaderExportMode,
     // Module-level dependency edges required before AST construction can lower this header.
     pub dependencies: HashSet<InternedPath>,
@@ -402,7 +402,7 @@ pub struct FileImport {
     pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
     pub from_grouped: bool,
-    /// Whether this import is part of the public facade API.
+    /// Whether this import is part of the module-root public export API.
     ///
     /// WHAT: `Public` for grouped imports inside an `export:` block;
     /// `Private` for ordinary imports.
@@ -467,14 +467,14 @@ pub struct FileFrontendPrepareOutput {
     ///
     /// WHAT: file-level import records are stored once per file instead of duplicated onto
     /// every header from that file.
-    /// WHY: import-only facades may produce no declaration headers but still contribute
+    /// WHY: import-only root files may produce no declaration headers but still contribute
     /// imports to the module symbol package.
     pub file_imports: Vec<FileImport>,
     /// Canonical OS filesystem path for this source file, if available.
     ///
     /// WHAT: the real filesystem path used by Stage 0 path resolution.
     /// WHY: import-only files and files without declaration headers still need path metadata
-    /// for module membership and facade data registration.
+    /// for module membership and public export data registration.
     pub canonical_os_path: Option<std::path::PathBuf>,
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,

@@ -494,8 +494,8 @@ pub enum TokenKind {
     // Module Import
     /// For Wasm files or host environment - importing from a different module or the host
     Import,
-    /// Facade-only API marker; valid only in #mod.bst to expose declarations or re-exports
-    /// through the module facade. Not a general visibility keyword.
+    /// Module-root API marker for the strict `export:` block; exposes declarations or re-exports
+    /// through the module's public export surface. Not a general visibility keyword.
     Export,
 
     // #

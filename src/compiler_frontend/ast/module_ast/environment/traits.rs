@@ -758,7 +758,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &mut self,
         trait_name: StringId,
         requirements: &[ResolvedTraitRequirement],
-        public_facade_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
+        public_root_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
@@ -767,7 +767,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.validate_public_trait_type(
                     trait_name,
                     parameter.type_id,
-                    public_facade_file,
+                    public_root_file,
                     parameter.location.clone(),
                     trait_environment,
                     string_table,
@@ -778,7 +778,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.validate_public_trait_type(
                     trait_name,
                     return_slot.type_id,
-                    public_facade_file,
+                    public_root_file,
                     return_slot.location.clone(),
                     trait_environment,
                     string_table,
@@ -793,7 +793,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         trait_name: StringId,
         type_id: TypeId,
-        public_facade_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
+        public_root_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         location: SourceLocation,
         trait_environment: &TraitEnvironment,
         string_table: &StringTable,
@@ -801,7 +801,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let mut visited_types = FxHashSet::default();
         if self.public_type_id_is_nameable(
             type_id,
-            public_facade_file,
+            public_root_file,
             trait_environment,
             &mut visited_types,
         ) {

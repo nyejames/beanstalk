@@ -114,8 +114,8 @@ fn render_payload_message(
         | DiagnosticPayload::DirectSpecialFileImport { .. }
         | DiagnosticPayload::ImportNameCollision { .. }
         | DiagnosticPayload::NotExportedBySourceFile { .. }
-        | DiagnosticPayload::NotExportedByFacade { .. }
-        | DiagnosticPayload::MissingModuleFacade { .. }
+        | DiagnosticPayload::NotExportedByPublicSurface { .. }
+        | DiagnosticPayload::MissingModuleRootPublicSurface { .. }
         | DiagnosticPayload::MissingPackageSymbol { .. }
         | DiagnosticPayload::CrossModuleImportNotExported { .. }
         | DiagnosticPayload::InvalidImportPath { .. }
@@ -328,7 +328,7 @@ fn render_payload_message(
             function_name,
             trait_name,
         } => format!(
-            "Public generic function '{}' exposes private trait bound '{}'. Export the trait through the same facade surface or keep the function private.",
+            "Public generic function '{}' exposes private trait bound '{}'. Export the trait through the same public surface or keep the function private.",
             string_table.resolve(*function_name),
             string_table.resolve(*trait_name)
         ),
@@ -336,7 +336,7 @@ fn render_payload_message(
             exported_name,
             private_type,
         } => format!(
-            "Exported declaration '{}' exposes private type {}. Export that type through the same facade surface or hide it behind a public wrapper.",
+            "Exported declaration '{}' exposes private type {}. Export that type through the same public surface or hide it behind a public wrapper.",
             string_table.resolve(*exported_name),
             diagnostic_type_name(*private_type, context)
         ),
@@ -352,7 +352,7 @@ fn render_payload_message(
             invalid_trait_keyword_usage_message(*reason).to_owned()
         }
         DiagnosticPayload::DuplicatePublicExport { name } => format!(
-            "Duplicate public export '{}' in module facade. Each exported name must be unique.",
+            "Duplicate public export '{}' in module public surface. Each exported name must be unique.",
             string_table.resolve(*name)
         ),
         DiagnosticPayload::InvalidTraitConformance {
@@ -541,8 +541,9 @@ fn invalid_trait_conformance_message(
         .unwrap_or_default();
 
     match reason {
-        InvalidTraitConformanceReason::ModuleFacade => {
-            "Trait conformance declarations are not allowed in #mod.bst facade files.".to_owned()
+        InvalidTraitConformanceReason::ImportedModuleRoot => {
+            "Trait conformance declarations are not allowed in imported module root files."
+                .to_owned()
         }
         InvalidTraitConformanceReason::AliasTarget => {
             format!(
@@ -703,7 +704,7 @@ fn invalid_trait_incompatibility_message(
         }
         InvalidTraitIncompatibilityReason::PrivateTraitSurfaceLeak => {
             format!(
-                "Exported trait incompatibility relation between '{subject}' and {trait_text} exposes a private trait through the facade. Both sides of an exported relation must be public from this facade."
+                "Exported trait incompatibility relation between '{subject}' and {trait_text} exposes a private trait through the public export surface. Both sides of an exported relation must be public from that surface."
             )
         }
     }
@@ -754,28 +755,28 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
                 symbol_path.to_portable_string(string_table)
             )
         }
-        DiagnosticPayload::NotExportedByFacade {
+        DiagnosticPayload::NotExportedByPublicSurface {
             requested_path,
-            facade_name,
-            facade_type,
+            public_surface_name,
+            public_surface_type,
         } => {
             let path_text = requested_path.to_portable_string(string_table);
-            let facade_name = string_table.resolve(*facade_name);
-            match facade_type {
-                crate::compiler_frontend::compiler_messages::ImportFacadeType::SourceLibrary => {
+            let public_surface_name = string_table.resolve(*public_surface_name);
+            match public_surface_type {
+                crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::SourceLibrary => {
                     format!(
-                        "Cannot import '{path_text}' from source library '@{facade_name}' because it is not exported by the library facade."
+                        "Cannot import '{path_text}' from source library '@{public_surface_name}' because it is not exported by the library public surface."
                     )
                 }
-                crate::compiler_frontend::compiler_messages::ImportFacadeType::ModuleRoot => {
+                crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::ModuleRoot => {
                     format!(
-                        "Cannot import '{path_text}' from module '{facade_name}' because it is not exported by the module's facade."
+                        "Cannot import '{path_text}' from module '{public_surface_name}' because it is not exported by the module's public surface."
                     )
                 }
             }
         }
-        DiagnosticPayload::MissingModuleFacade { symbol_path } => format!(
-            "Cannot import '{}' because the target module has no #mod.bst facade. Import a concrete file from inside the same module, or add #mod.bst to define the module's public import surface.",
+        DiagnosticPayload::MissingModuleRootPublicSurface { symbol_path } => format!(
+            "Cannot import '{}' because the target module has no public export surface. Import a concrete file from inside the same module, or add a module root file with an `export:` block to define the module's public import surface.",
             symbol_path.to_portable_string(string_table)
         ),
         DiagnosticPayload::MissingPackageSymbol {
@@ -787,7 +788,7 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
             string_table.resolve(*package_path)
         ),
         DiagnosticPayload::CrossModuleImportNotExported { symbol_path } => format!(
-            "Cannot import '{}' because it is not exported by the target module's facade.",
+            "Cannot import '{}' because it is not exported by the target module's public surface.",
             symbol_path.to_portable_string(string_table)
         ),
         DiagnosticPayload::InvalidImportPath { path, reason } => {

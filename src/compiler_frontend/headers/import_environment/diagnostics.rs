@@ -1,4 +1,4 @@
-//! Header-stage import, facade, alias, and collision diagnostic helpers.
+//! Header-stage import, public export, alias, and collision diagnostic helpers.
 //!
 //! WHAT: named helpers that construct structured diagnostics for import-environment failures.
 //! WHY: centralizing diagnostic construction keeps error messages consistent and makes it
@@ -6,7 +6,7 @@
 //! MUST NOT: contain business logic for resolution or registration.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::compiler_messages::ImportFacadeType;
+use crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -20,17 +20,17 @@ pub(super) fn import_name_collision(
     CompilerDiagnostic::import_name_collision(local_name, previous_location, location)
 }
 
-/// Diagnostic when a facade import resolves to a symbol that the facade does not export.
-pub(super) fn not_exported_by_facade(
+/// Diagnostic when a public export import resolves to a symbol that the public export does not export.
+pub(super) fn not_exported_by_public_surface(
     import_path: &InternedPath,
-    facade_name: StringId,
-    facade_type: ImportFacadeType,
+    public_surface_name: StringId,
+    public_surface_type: ImportPublicSurfaceType,
     location: SourceLocation,
 ) -> CompilerDiagnostic {
-    CompilerDiagnostic::not_exported_by_facade(
+    CompilerDiagnostic::not_exported_by_public_surface(
         import_path.clone(),
-        facade_name,
-        facade_type,
+        public_surface_name,
+        public_surface_type,
         location,
     )
 }
@@ -89,15 +89,15 @@ pub(super) fn missing_package_symbol(
     CompilerDiagnostic::missing_package_symbol(symbol, package_path, location)
 }
 
-/// Diagnostic when a module has no facade and an external importer tries to import from it.
-pub(super) fn missing_module_facade(
+/// Diagnostic when a module has no public export and an external importer tries to import from it.
+pub(super) fn missing_module_root_public_surface(
     symbol_path: &InternedPath,
     location: SourceLocation,
 ) -> CompilerDiagnostic {
-    CompilerDiagnostic::missing_module_facade(symbol_path.clone(), location)
+    CompilerDiagnostic::missing_module_root_public_surface(symbol_path.clone(), location)
 }
 
-/// Diagnostic when an import targets a symbol in another module root that is not exported by that module's facade.
+/// Diagnostic when an import targets a symbol in another module root that is not exported by that module's public export.
 pub(super) fn cross_module_import_not_exported(
     symbol_path: &InternedPath,
     location: SourceLocation,

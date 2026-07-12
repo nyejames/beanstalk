@@ -398,10 +398,13 @@ impl ProjectPathResolver {
                     return Ok(Some(export_path.clone()));
                 }
 
-                // Target module root has no facade.
+                // Target module root has no public export surface.
                 let location = SourceLocation::from_path(importer_file, string_table);
                 return Err(ImportPathResolutionError::Diagnostic(Box::new(
-                    CompilerDiagnostic::missing_module_facade(import_path.clone(), location),
+                    CompilerDiagnostic::missing_module_root_public_surface(
+                        import_path.clone(),
+                        location,
+                    ),
                 )));
             }
             if !current.pop() {

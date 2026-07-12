@@ -2,7 +2,7 @@
 //!
 //! WHAT: registers imports that resolve to source file declarations (same-module, cross-module,
 //! source library) and auto-imports receiver methods when a nominal receiver type is imported.
-//! WHY: source imports follow facade and export rules that differ from external package imports,
+//! WHY: source imports follow public-export visibility rules that differ from external package imports,
 //! so they deserve their own focused registration path.
 //! MUST NOT: register external package symbols or build namespace records.
 
@@ -80,7 +80,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// Whether the importer and the target of an import are in the same module or source library.
     ///
     /// WHAT: same-module and same-library imports see all authored declarations by default;
-    /// cross-module/cross-library imports must go through facade exports.
+    /// cross-module/cross-library imports must go through public export surfaces.
     /// WHY: this replaces the old `exported` boolean as the gate for same-module visibility.
     pub(super) fn is_internal_import(
         &self,
@@ -101,8 +101,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// Whether receiver methods can travel with a source type imported through this access path.
     ///
     /// WHAT: methods travel with the receiver type, not with an independent method export.
-    /// Internal imports and direct source exports have already proven the type is visible. Facade
-    /// imports must expose the receiver type through the facade surface.
+    /// Internal imports and direct source exports have already proven the type is visible. Public
+    /// export imports must expose the receiver type through the public export surface.
     pub(super) fn receiver_type_visible_for_method_surface(
         &self,
         nominal_type_path: &InternedPath,
@@ -110,7 +110,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) -> bool {
         match access {
             SourceImportAccess::Internal | SourceImportAccess::DirectSourceExport => true,
-            SourceImportAccess::Facade { exported_entries } => exported_entries.iter().any(
+            SourceImportAccess::PublicExport { exported_entries } => exported_entries.iter().any(
                 |entry| matches!(&entry.target, PublicExportTarget::Source(path) if path == nominal_type_path),
             ),
         }

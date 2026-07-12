@@ -34,13 +34,13 @@ pub(crate) enum ResolvedImportTarget {
 ///
 /// WHY: receiver methods travel with imported receiver types, but the set of methods that may
 /// travel depends on how the type was imported. Internal imports keep the module-local behavior,
-/// direct source imports use source-file exports, and facade imports use the explicit facade API
+/// direct source imports use source-file exports, and public export imports use the explicit public export API
 /// surface that resolved the type.
 #[derive(Clone, Debug)]
 pub(crate) enum SourceImportAccess {
     Internal,
     DirectSourceExport,
-    Facade {
+    PublicExport {
         exported_entries: FxHashSet<PublicExportEntry>,
     },
 }
@@ -59,8 +59,8 @@ pub(crate) struct ImportTargetResolutionInput<'a> {
 
 /// Result of resolving an import path against virtual external-package metadata.
 ///
-/// WHY: grouped external package imports need this lookup before source facade enforcement,
-/// while ordinary source imports must continue through the facade path first.
+/// WHY: grouped external package imports need this lookup before source public export enforcement,
+/// while ordinary source imports must continue through the public export path first.
 pub(crate) enum ExternalPackageSymbolLookup {
     Found {
         symbol_id: ExternalSymbolId,
@@ -75,7 +75,7 @@ pub(crate) enum ExternalPackageSymbolLookup {
 /// Input bundle for external-package-only symbol lookup.
 ///
 /// This deliberately does not include source files or source symbols, so callers cannot use it
-/// to bypass source-library or module-root facade checks.
+/// to bypass source-library or module-root public export checks.
 pub(crate) struct ExternalPackageSymbolResolutionInput<'a> {
     pub(crate) import_path: &'a InternedPath,
     pub(crate) external_package_registry: &'a ExternalPackageRegistry,
@@ -111,7 +111,7 @@ pub(crate) fn resolve_external_package_symbol(
 /// extension), file→symbol inference, and virtual-package lookup.
 ///
 /// Returns `DirectSourceExport` for all source targets because this function does not know whether
-/// the caller will later prove a more specific internal or facade access surface.
+/// the caller will later prove a more specific internal or public export access surface.
 pub(crate) fn resolve_import_target(
     input: ImportTargetResolutionInput<'_>,
 ) -> Result<ResolvedImportTarget, Box<CompilerDiagnostic>> {

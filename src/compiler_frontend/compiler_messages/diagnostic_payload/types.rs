@@ -54,7 +54,7 @@ pub enum NamingConvention {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ImportFacadeType {
+pub enum ImportPublicSurfaceType {
     SourceLibrary,
     ModuleRoot,
 }
@@ -802,7 +802,7 @@ pub enum InvalidTraitIncompatibilityReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidTraitConformanceReason {
-    ModuleFacade,
+    ImportedModuleRoot,
     AliasTarget,
     NonCanonicalTarget,
     NonlocalSourceTarget,
@@ -877,7 +877,7 @@ impl InvalidTraitConformanceReason {
                 *requirement_name = remap.get(*requirement_name);
             }
 
-            Self::ModuleFacade
+            Self::ImportedModuleRoot
             | Self::AliasTarget
             | Self::NonCanonicalTarget
             | Self::NonlocalSourceTarget

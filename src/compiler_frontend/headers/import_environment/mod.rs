@@ -1,6 +1,6 @@
 //! Header-stage import environment construction.
 //!
-//! WHAT: resolves parsed imports, aliases, facade boundaries, and external symbols into
+//! WHAT: resolves parsed imports, aliases, public export boundaries, and external symbols into
 //! file-local visibility maps.
 //! WHY: dependency sorting and AST need stable per-file visibility without rebuilding import
 //! semantics in later stages.
@@ -10,9 +10,9 @@ mod bindings;
 mod builder;
 mod diagnostics;
 mod external_imports;
-mod facade_resolution;
 mod namespace_imports;
 mod provider_imports;
+mod public_export_resolution;
 mod receiver_imports;
 mod source_imports;
 mod target_resolution;
@@ -23,10 +23,10 @@ pub(crate) use bindings::{
     NamespaceRecordSource, NamespaceTypeMember, NamespaceValueMember, ReceiverMethodVisibility,
     lookup_namespace_member,
 };
-pub(crate) use facade_resolution::{
-    FacadeLookupResult, FacadeResolutionInput, FacadeType, ModuleBoundaryCheckInput,
-    SourceLibraryBoundaryCheckInput, check_module_boundary, check_source_library_boundary,
-    resolve_facade_import,
+pub(crate) use public_export_resolution::{
+    ModuleBoundaryCheckInput, PublicExportLookupResult, PublicExportResolutionInput,
+    PublicExportSurfaceType, SourceLibraryBoundaryCheckInput, check_module_boundary,
+    check_source_library_boundary, resolve_public_export_boundary,
 };
 
 pub(crate) use target_resolution::{

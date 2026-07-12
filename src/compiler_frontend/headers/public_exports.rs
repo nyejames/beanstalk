@@ -19,15 +19,16 @@
 use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, ImportFacadeType, InvalidReceiverDeclarationReason, ReservedNameOwner,
+    CompilerDiagnostic, ImportPublicSurfaceType, InvalidReceiverDeclarationReason,
+    ReservedNameOwner,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::{
-    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
-    FacadeResolutionInput, FacadeType, ImportTargetResolutionInput, ModuleBoundaryCheckInput,
-    ResolvedImportTarget, SourceLibraryBoundaryCheckInput, check_module_boundary,
-    check_source_library_boundary, resolve_external_package_symbol, resolve_facade_import,
-    resolve_import_target,
+    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, ImportTargetResolutionInput,
+    ModuleBoundaryCheckInput, PublicExportLookupResult, PublicExportResolutionInput,
+    PublicExportSurfaceType, ResolvedImportTarget, SourceLibraryBoundaryCheckInput,
+    check_module_boundary, check_source_library_boundary, resolve_external_package_symbol,
+    resolve_import_target, resolve_public_export_boundary,
 };
 use crate::compiler_frontend::headers::module_symbols::{
     ModuleRootBoundary, ModuleSymbols, PublicExportEntry, PublicExportTarget,
@@ -441,7 +442,7 @@ fn resolve_public_export_import(
     }
 
     // 2. Try public export boundary resolution.
-    let public_boundary_input = FacadeResolutionInput {
+    let public_boundary_input = PublicExportResolutionInput {
         importer_file: root_file,
         header_path: &import.header_path,
         source_library_public_exports: &module_symbols.source_library_public_exports,
@@ -452,41 +453,47 @@ fn resolve_public_export_import(
         string_table,
     };
 
-    if let Some(public_boundary_result) = resolve_facade_import(&public_boundary_input) {
+    if let Some(public_boundary_result) = resolve_public_export_boundary(&public_boundary_input) {
         match public_boundary_result {
-            FacadeLookupResult::ExportedSource { path, .. } => {
+            PublicExportLookupResult::ExportedSource { path, .. } => {
                 return Ok(PublicExportTarget::Source(path));
             }
-            FacadeLookupResult::ExportedExternal { symbol_id } => {
+            PublicExportLookupResult::ExportedExternal { symbol_id } => {
                 return Ok(PublicExportTarget::External(symbol_id));
             }
-            FacadeLookupResult::NotExported {
-                facade_name,
-                facade_type,
+            PublicExportLookupResult::NotExported {
+                public_surface_name,
+                public_surface_type,
             } => {
                 // The entry-root public surface has no public path prefix. While building that root's
                 // own public imports, root-relative same-module re-exports must still be allowed
                 // to fall through to direct source resolution. Normal importers keep receiving
                 // `NotExported` from `prepare_import_environment`.
-                if matches!(facade_type, FacadeType::ModuleRoot) && facade_name.is_empty() {
+                if matches!(public_surface_type, PublicExportSurfaceType::ModuleRoot)
+                    && public_surface_name.is_empty()
+                {
                     // Fall through to direct source resolution.
                 } else {
                     // The target public surface exists but does not export this symbol.
                     // Preserve the same diagnostic that a normal importer would see.
-                    let facade_name_id = string_table.intern(&facade_name);
-                    let diagnostic_facade_type = match facade_type {
-                        FacadeType::SourceLibrary => ImportFacadeType::SourceLibrary,
-                        FacadeType::ModuleRoot => ImportFacadeType::ModuleRoot,
+                    let public_surface_name_id = string_table.intern(&public_surface_name);
+                    let diagnostic_public_surface_type = match public_surface_type {
+                        PublicExportSurfaceType::SourceLibrary => {
+                            ImportPublicSurfaceType::SourceLibrary
+                        }
+                        PublicExportSurfaceType::ModuleRoot => ImportPublicSurfaceType::ModuleRoot,
                     };
-                    return Err(Box::new(CompilerDiagnostic::not_exported_by_facade(
-                        import.header_path.clone(),
-                        facade_name_id,
-                        diagnostic_facade_type,
-                        import.location.clone(),
-                    )));
+                    return Err(Box::new(
+                        CompilerDiagnostic::not_exported_by_public_surface(
+                            import.header_path.clone(),
+                            public_surface_name_id,
+                            diagnostic_public_surface_type,
+                            import.location.clone(),
+                        ),
+                    ));
                 }
             }
-            FacadeLookupResult::NotAFacadeImport => {
+            PublicExportLookupResult::NotAPublicExportBoundary => {
                 // Fall through to direct source resolution.
             }
         }

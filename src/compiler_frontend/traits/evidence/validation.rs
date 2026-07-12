@@ -90,7 +90,7 @@ pub(crate) fn validate_trait_evidence(
             return Err(invalid_conformance(
                 conformance.target.name,
                 conformance.traits.first().map(|trait_ref| trait_ref.name),
-                InvalidTraitConformanceReason::ModuleFacade,
+                InvalidTraitConformanceReason::ImportedModuleRoot,
                 conformance.location.clone(),
                 Vec::new(),
             )

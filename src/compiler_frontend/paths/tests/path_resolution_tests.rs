@@ -1167,14 +1167,14 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
     assert_eq!(
         diagnostic.kind,
         crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
-            ImportDiagnosticKind::MissingModuleFacade
+            ImportDiagnosticKind::MissingModuleRootPublicSurface
         )
     );
 
     let rendered_msg = rendered_error_msg(&err, &string_table);
     assert!(
-        rendered_msg.contains("#mod.bst facade"),
-        "expected missing facade suggestion, got: {rendered_msg}"
+        rendered_msg.contains("no public export surface"),
+        "expected missing public-surface suggestion, got: {rendered_msg}"
     );
 }
 

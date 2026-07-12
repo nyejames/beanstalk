@@ -6,7 +6,7 @@
 //!      of import resolution; keeping it separate from the entry-point orchestration
 //!      makes the module structure easier to navigate.
 
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportPublicSurfaceType};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{
     ModuleSymbols, PublicExportEntry, PublicExportTarget,
@@ -23,13 +23,14 @@ use crate::libraries::external_import_providers::resolution_table::ExternalImpor
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
-    FacadeResolutionInput, FileVisibility, HeaderImportEnvironment, ImportTargetResolutionInput,
-    ModuleBoundaryCheckInput, NamespaceRecordSource, NamespaceTargetResolutionInput,
-    ResolvedImportTarget, SourceImportAccess, SourceLibraryBoundaryCheckInput, VisibleNameBinding,
-    VisibleNameRegistry, check_alias_case_warning, check_module_boundary,
-    check_source_library_boundary, has_explicit_bst_extension, resolve_external_package_symbol,
-    resolve_facade_import, resolve_import_target, resolve_namespace_target,
+    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FileVisibility,
+    HeaderImportEnvironment, ImportTargetResolutionInput, ModuleBoundaryCheckInput,
+    NamespaceRecordSource, NamespaceTargetResolutionInput, PublicExportLookupResult,
+    PublicExportResolutionInput, ResolvedImportTarget, SourceImportAccess,
+    SourceLibraryBoundaryCheckInput, VisibleNameBinding, VisibleNameRegistry,
+    check_alias_case_warning, check_module_boundary, check_source_library_boundary,
+    has_explicit_bst_extension, resolve_external_package_symbol, resolve_import_target,
+    resolve_namespace_target, resolve_public_export_boundary,
 };
 
 /// Boxed diagnostic result for the import-environment builder family.
@@ -86,7 +87,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    /// Whether two source files share the same non-facade import boundary.
+    /// Whether two source files share the same non-public export import boundary.
     ///
     /// WHAT: source-library members, same module-root members, and files in the implicit entry
     /// module can see each other's ordinary source declarations directly.
@@ -258,7 +259,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
 
                 if import.from_grouped {
-                    // Grouped imports keep the existing facade → target resolution flow.
+                    // Grouped imports keep the existing public export → target resolution flow.
                     self.resolve_and_register_grouped_import(
                         &mut file_visibility,
                         &mut registry,
@@ -362,12 +363,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let mut implicit_constants = FxHashMap::default();
         self.remove_beandown_generated_self_constants(file_visibility, source_file);
 
-        // Layer 1: exported constants from the HTML source-library facade.
-        self.collect_html_facade_constants(&mut implicit_constants);
+        // Layer 1: exported constants from the HTML source-library public export.
+        self.collect_html_public_export_constants(&mut implicit_constants);
 
-        // Layer 2: exported constants from the exact same-directory facade. Later inserts
-        // intentionally replace HTML names so local facade constants win on collisions.
-        self.collect_same_directory_facade_constants(source_file, &mut implicit_constants);
+        // Layer 2: exported constants from the exact same-directory public export. Later inserts
+        // intentionally replace HTML names so local public export constants win on collisions.
+        self.collect_same_directory_public_export_constants(source_file, &mut implicit_constants);
 
         for (name, path) in implicit_constants {
             file_visibility
@@ -412,7 +413,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    fn collect_html_facade_constants(
+    fn collect_html_public_export_constants(
         &self,
         implicit_constants: &mut FxHashMap<StringId, InternedPath>,
     ) {
@@ -427,20 +428,20 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         self.collect_constant_exports(entries, implicit_constants, None);
     }
 
-    fn collect_same_directory_facade_constants(
+    fn collect_same_directory_public_export_constants(
         &self,
         source_file: &InternedPath,
         implicit_constants: &mut FxHashMap<StringId, InternedPath>,
     ) {
-        let Some(facade_file) = self.same_directory_facade_file(source_file) else {
+        let Some(root_file) = self.same_directory_root_file(source_file) else {
             return;
         };
 
-        if let Some(entries) = self.source_library_public_exports_for_file(&facade_file) {
+        if let Some(entries) = self.source_library_public_exports_for_file(&root_file) {
             self.collect_constant_exports(entries, implicit_constants, Some(source_file));
         }
 
-        if let Some(entries) = self.module_root_public_exports_for_file(&facade_file) {
+        if let Some(entries) = self.module_root_public_exports_for_file(&root_file) {
             self.collect_constant_exports(entries, implicit_constants, Some(source_file));
         }
     }
@@ -518,7 +519,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             == Some(SourceFileKind::Beandown)
     }
 
-    fn same_directory_facade_file(&self, source_file: &InternedPath) -> Option<InternedPath> {
+    fn same_directory_root_file(&self, source_file: &InternedPath) -> Option<InternedPath> {
         let beandown_directory = self.source_directory(source_file)?;
 
         self.module_symbols
@@ -554,14 +555,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     fn source_library_public_exports_for_file(
         &self,
-        facade_file: &InternedPath,
+        root_file: &InternedPath,
     ) -> Option<&FxHashSet<PublicExportEntry>> {
         let prefix = self
             .module_symbols
             .source_library_root_files
             .iter()
             .find_map(|(prefix, source)| {
-                if source == facade_file {
+                if source == root_file {
                     Some(prefix)
                 } else {
                     None
@@ -575,12 +576,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     fn module_root_public_exports_for_file(
         &self,
-        facade_file: &InternedPath,
+        root_file: &InternedPath,
     ) -> Option<&FxHashSet<PublicExportEntry>> {
-        let module_root = self
-            .module_symbols
-            .file_module_membership
-            .get(facade_file)?;
+        let module_root = self.module_symbols.file_module_membership.get(root_file)?;
 
         self.module_symbols
             .module_root_public_exports
@@ -613,8 +611,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Ok(resolved);
         }
 
-        // Try facade resolution first.
-        let facade_input = FacadeResolutionInput {
+        // Try public export resolution first.
+        let public_export_input = PublicExportResolutionInput {
             importer_file: source_file,
             header_path: &import.header_path,
             source_library_public_exports: &self.module_symbols.source_library_public_exports,
@@ -625,9 +623,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             string_table: self.string_table,
         };
 
-        if let Some(facade_result) = resolve_facade_import(&facade_input) {
-            match facade_result {
-                FacadeLookupResult::ExportedSource {
+        if let Some(public_export_result) = resolve_public_export_boundary(&public_export_input) {
+            match public_export_result {
+                PublicExportLookupResult::ExportedSource {
                     path,
                     exported_entries,
                 } => {
@@ -636,10 +634,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         registry,
                         &path,
                         import,
-                        SourceImportAccess::Facade { exported_entries },
+                        SourceImportAccess::PublicExport { exported_entries },
                     );
                 }
-                FacadeLookupResult::ExportedExternal { symbol_id } => {
+                PublicExportLookupResult::ExportedExternal { symbol_id } => {
                     return self.register_external_import(
                         file_visibility,
                         registry,
@@ -647,27 +645,29 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         symbol_id,
                     );
                 }
-                FacadeLookupResult::NotExported {
-                    facade_name,
-                    facade_type,
+                PublicExportLookupResult::NotExported {
+                    public_surface_name,
+                    public_surface_type,
                 } => {
-                    let facade_name_id = self.string_table.intern(&facade_name);
-                    let diagnostic_facade_type = match facade_type {
-                        super::facade_resolution::FacadeType::SourceLibrary => {
-                            ImportFacadeType::SourceLibrary
+                    let public_surface_name_id = self.string_table.intern(&public_surface_name);
+                    let diagnostic_public_surface_type = match public_surface_type {
+                        super::public_export_resolution::PublicExportSurfaceType::SourceLibrary => {
+                            ImportPublicSurfaceType::SourceLibrary
                         }
-                        super::facade_resolution::FacadeType::ModuleRoot => {
-                            ImportFacadeType::ModuleRoot
+                        super::public_export_resolution::PublicExportSurfaceType::ModuleRoot => {
+                            ImportPublicSurfaceType::ModuleRoot
                         }
                     };
-                    return Err(Box::new(super::diagnostics::not_exported_by_facade(
-                        &import.header_path,
-                        facade_name_id,
-                        diagnostic_facade_type,
-                        import.location.clone(),
-                    )));
+                    return Err(Box::new(
+                        super::diagnostics::not_exported_by_public_surface(
+                            &import.header_path,
+                            public_surface_name_id,
+                            diagnostic_public_surface_type,
+                            import.location.clone(),
+                        ),
+                    ));
                 }
-                FacadeLookupResult::NotAFacadeImport => {
+                PublicExportLookupResult::NotAPublicExportBoundary => {
                     // Fall through to normal target resolution.
                 }
             }
@@ -732,13 +732,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    /// Resolve grouped virtual-package imports before source facade enforcement.
+    /// Resolve grouped virtual-package imports before source public export enforcement.
     ///
     /// WHAT: `import @web/canvas { get_canvas }` is parsed as a grouped import whose
     /// individual entry path is `web/canvas/get_canvas`. That path may also look like a
-    /// module-root facade import if the project has a `web/canvas/#mod.bst` shape. Checking
-    /// external metadata here keeps virtual packages out of source facade privacy rules while
-    /// leaving all source imports on the normal facade-first path.
+    /// module-root public export import if the project has a `web/canvas/#*.bst` root-file shape. Checking
+    /// external metadata here keeps virtual packages out of source public export privacy rules while
+    /// leaving all source imports on the normal public export-first path.
     fn resolve_and_register_external_package_grouped_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -796,11 +796,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Ok(resolved);
         }
 
-        // Try namespace resolution first. Facade namespaces must be checked before concrete
-        // file/package resolution so `import @module` exposes `module/#mod.bst`, not a private
+        // Try namespace resolution first. Public export namespaces must be checked before concrete
+        // file/package resolution so `import @module` exposes the module root's public surface, not a private
         // implementation path or a missing direct symbol.
         let namespace_target = self
-            .resolve_facade_namespace_target(import, source_file)
+            .resolve_public_export_namespace_target(import, source_file)
             .or_else(|| {
                 resolve_namespace_target(NamespaceTargetResolutionInput {
                     import_path: &import.header_path,

@@ -5,7 +5,7 @@
 //! WHY: same-file declarations, imports, aliases, builtins, and prelude symbols share one
 //! namespace; silent shadowing must be rejected before AST body parsing.
 //! MUST NOT: resolve import paths to files or external packages (that belongs in target
-//! and facade resolution).
+//! and public export resolution).
 
 use crate::compiler_frontend::builtins::casts::traits::for_each_core_cast_trait_name;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ReservedNameOwner};

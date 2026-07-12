@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 6B rename AST public-surface semantics and module-root diagnostics
-LAST_ACCEPTED_COMMIT: `06699066f` (`refactor: remove legacy export path scanning`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `06699066f`; Phase 6A is accepted for its next checkpoint. The concurrent docs migration is committed separately and remains outside this plan's implementation commits.
+CURRENT_SLICE: Phase 7 add root activity metadata and builder artifact filtering
+LAST_ACCEPTED_COMMIT: `202b1b5fb` (`refactor: rename module public export data`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `202b1b5fb`; Phase 6B and its comment audit are accepted for the next checkpoint. The concurrent docs migration is committed separately and remains outside this plan's implementation commits.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -181,6 +181,7 @@ VALIDATION_STATE:
 - Phase 5B fixture migration: Codex CLI migrated remaining integration and test-only sources to one strict `export:` block, added 11 stable-code export-block integration cases and passed `cargo fmt --check`, 1749 integration cases, all-target Clippy and full `just validate`. Parent renamed the stale page-root success case and reran formatting plus all 1749 integration cases. The grep audit found obsolete legacy-export recognition only in `paths/const_paths/import_clauses.rs`, which is isolated as Phase 5C before Phase 5 closes.
 - Phase 5C legacy scanner removal: Codex CLI deleted the dedicated `export import` / `export @path` path collector and its sugar helper so strict export-block imports flow through the ordinary import scanner. Focused path coverage now proves strict block discovery and deliberate legacy-prefix skipping. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 114 path tests and 140 Stage 0 module-creation tests.
 - Phase 6A public export data ownership: Codex CLI replaced `facade_data.rs` with `public_exports.rs`, renamed the entry/target types and source-library/module-root maps and threaded the current names through header imports, dependency sorting and required AST references without compatibility aliases. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 174 header tests, 14 dependency tests and 8 AST environment tests.
+- Phase 6B public surface semantics and diagnostics: Codex CLI replaced the facade resolver with `public_export_resolution.rs`, renamed AST public-surface validation and renamed structured import diagnostics while preserving `BST-IMPORT-0011` and `BST-IMPORT-0012`. Imported-root conformance wording now describes its real role. A correction worker removed stale `#mod.bst` keyword/token comments. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 51 compiler-message tests, 174 header tests and 8 AST environment tests.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -188,11 +189,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Commit Phase 6A, then delegate Phase 6B AST public-surface and module-root diagnostic naming through the verified `codex-cli-beanstalk` wrapper.
+- Commit Phase 6B, then inspect the Phase 7 root-activity and HTML output owners before preparing the first bounded codex-cli task.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: inspect Phase 6B diagnostic and AST owners, then create its bounded codex-cli task
+NEXT_RESUME_ACTION: inspect Phase 7 metadata flow and HTML output planning after the Phase 6B checkpoint
 
 ---
 
@@ -866,34 +867,34 @@ The public API map remains the same concept, but its source is now the root file
 - [x] Update `facade_data.rs` or split it if naming becomes misleading:
   - [x] file-level docs explain module-root public export map construction;
   - [x] source-library roots use same generic root-file logic.
-- [ ] Update AST public-surface validation naming in `src/compiler_frontend/ast/module_ast/environment/public_surface.rs` after export maps are root-based, without changing semantic ownership.
-- [ ] Rename facade-specific diagnostics and payload reasons only when the behavior has moved to generic module roots:
-  - [ ] `MissingModuleFacade`
-  - [ ] `ExportOutsideModuleFacade`
-  - [ ] `RuntimeTemplateInModuleFacade`
-  - [ ] `InvalidTraitConformanceReason::ModuleFacade`
-  - [ ] rendered wording that says `#mod.bst` is the only public surface.
+- [x] Update AST public-surface validation naming in `src/compiler_frontend/ast/module_ast/environment/public_surface.rs` after export maps are root-based, without changing semantic ownership.
+- [x] Rename facade-specific diagnostics and payload reasons only when the behavior has moved to generic module roots:
+  - [x] `MissingModuleFacade`
+  - [x] `ExportOutsideModuleFacade`
+  - [x] `RuntimeTemplateInModuleFacade`
+  - [x] `InvalidTraitConformanceReason::ModuleFacade`
+  - [x] rendered wording that says `#mod.bst` is the only public surface.
 - [x] Preserve two-pass export construction:
   - [x] authored public headers first;
   - [x] public import re-exports second.
 - [x] Preserve duplicate public name detection.
 - [x] Preserve reserved core cast trait collision checks.
 - [x] Preserve receiver-method direct-export rejection.
-- [ ] Preserve public API private-type leakage validation in AST/environment.
-- [ ] Ensure root modules with no `export:` produce an empty public export map.
-- [ ] Ensure imports across module boundaries require the target module root to have a matching export.
+- [x] Preserve public API private-type leakage validation in AST/environment.
+- [x] Ensure root modules with no `export:` produce an empty public export map.
+- [x] Ensure imports across module boundaries require the target module root to have a matching export.
 
 ### Review / audit / validation
 
-- [ ] Run source-library facade/export tests.
-- [ ] Run cross-module import tests.
-- [ ] Run public API leakage diagnostics tests.
-- [ ] Run `just validate`.
-- [ ] Manual stage-boundary review:
-  - [ ] header/import preparation builds visibility;
-  - [ ] AST consumes visibility and validates semantic leakage;
-  - [ ] no AST rediscovery of export syntax.
-- [ ] Update active context capsule.
+- [x] Run source-library facade/export tests.
+- [x] Run cross-module import tests.
+- [x] Run public API leakage diagnostics tests.
+- [x] Run `just validate`.
+- [x] Manual stage-boundary review:
+  - [x] header/import preparation builds visibility;
+  - [x] AST consumes visibility and validates semantic leakage;
+  - [x] no AST rediscovery of export syntax.
+- [x] Update active context capsule.
 
 ---
 

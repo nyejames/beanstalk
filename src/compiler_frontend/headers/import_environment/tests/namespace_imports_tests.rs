@@ -376,7 +376,7 @@ fn module_root_namespace_uses_prepared_export_file_identity() {
     };
 
     let Some(ResolvedNamespaceTarget::SourceFile(path)) =
-        builder.resolve_module_root_namespace_facade(&import.header_path, &source_file)
+        builder.resolve_module_root_public_export(&import.header_path, &source_file)
     else {
         panic!("module root namespace should use the prepared export file");
     };

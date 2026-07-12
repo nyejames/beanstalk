@@ -298,13 +298,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let _ = nominal_bound_surface_start;
 
         // --------------------------------
-        //  Validate public facade surfaces
+        //  Validate public export surfaces
         // --------------------------------
         let public_surface_start = Instant::now();
-        self.validate_public_facade_surfaces(sorted_headers, &trait_environment, string_table)?;
+        self.validate_public_export_surfaces(sorted_headers, &trait_environment, string_table)?;
         timer_log!(
             public_surface_start,
-            "AST/environment/public facade surfaces validated in: "
+            "AST/environment/public export surfaces validated in: "
         );
         let _ = public_surface_start;
 
@@ -556,7 +556,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         owner_name: StringId,
         generic_parameters: &GenericParameterList,
         resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
@@ -575,9 +575,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     ));
                 };
 
-                // Public generic signatures are consumed through the facade alone, so every
-                // bound trait on that public surface must be available from the same facade.
-                if self.public_trait_definition_is_nameable(trait_definition, public_facade_file) {
+                // Public generic signatures are consumed through the public export surface alone,
+                // so every bound trait must be available from that same surface.
+                if self.public_trait_definition_is_nameable(trait_definition, public_root_file) {
                     continue;
                 }
 

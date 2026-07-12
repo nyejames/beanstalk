@@ -86,13 +86,13 @@ pub enum DiagnosticPayload {
         symbol_path: InternedPath,
     },
 
-    NotExportedByFacade {
+    NotExportedByPublicSurface {
         requested_path: InternedPath,
-        facade_name: StringId,
-        facade_type: ImportFacadeType,
+        public_surface_name: StringId,
+        public_surface_type: ImportPublicSurfaceType,
     },
 
-    MissingModuleFacade {
+    MissingModuleRootPublicSurface {
         symbol_path: InternedPath,
     },
 

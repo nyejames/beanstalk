@@ -9,7 +9,7 @@ use crate::compiler_frontend::compiler_messages::{
     DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticKind,
     DiagnosticLabel, DiagnosticLabelMessage, DiagnosticPayload, DiagnosticPlace,
     DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
-    ImportFacadeType, IncompatibleChoiceComparisonReason, InvalidCastReason,
+    ImportPublicSurfaceType, IncompatibleChoiceComparisonReason, InvalidCastReason,
     InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidCompileTimePathReason,
     InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
     InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
@@ -190,31 +190,31 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn not_exported_by_facade(
+    pub(crate) fn not_exported_by_public_surface(
         requested_path: InternedPath,
-        facade_name: StringId,
-        facade_type: ImportFacadeType,
+        public_surface_name: StringId,
+        public_surface_type: ImportPublicSurfaceType,
         location: SourceLocation,
     ) -> Self {
         Self::new(
-            DiagnosticKind::Import(ImportDiagnosticKind::NotExportedByFacade),
+            DiagnosticKind::Import(ImportDiagnosticKind::NotExportedByPublicSurface),
             location,
-            DiagnosticPayload::NotExportedByFacade {
+            DiagnosticPayload::NotExportedByPublicSurface {
                 requested_path,
-                facade_name,
-                facade_type,
+                public_surface_name,
+                public_surface_type,
             },
         )
     }
 
-    pub(crate) fn missing_module_facade(
+    pub(crate) fn missing_module_root_public_surface(
         symbol_path: InternedPath,
         location: SourceLocation,
     ) -> Self {
         Self::new(
-            DiagnosticKind::Import(ImportDiagnosticKind::MissingModuleFacade),
+            DiagnosticKind::Import(ImportDiagnosticKind::MissingModuleRootPublicSurface),
             location,
-            DiagnosticPayload::MissingModuleFacade { symbol_path },
+            DiagnosticPayload::MissingModuleRootPublicSurface { symbol_path },
         )
     }
 

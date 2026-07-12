@@ -6,7 +6,7 @@
 //! prepared root files; external importers cannot bypass those public surfaces.
 //! MUST NOT: perform general import target resolution (that belongs in `target_resolution.rs`).
 
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportPublicSurfaceType};
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::import_environment::target_resolution::suffix_matches_with_optional_source_extension;
@@ -18,33 +18,33 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// Boxed diagnostic result for facade boundary checks.
+/// Boxed diagnostic result for public export boundary checks.
 ///
 /// WHAT: gives source-library and module privacy checks one small error boundary.
 /// WHY: both callers already propagate boxed diagnostics, so the checks can preserve
 ///      structured errors without unboxing and reboxing them.
 type BoundaryCheckResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
-/// Result of looking up an import path against a module facade.
-pub(crate) enum FacadeLookupResult {
-    /// This import does not target a facade; use normal file-based resolution.
-    NotAFacadeImport,
-    /// Facade exports a source symbol with this canonical path and public surface.
+/// Result of looking up an import path against a module public export.
+pub(crate) enum PublicExportLookupResult {
+    /// This import does not target a public export; use normal file-based resolution.
+    NotAPublicExportBoundary,
+    /// The public export surface exports a source symbol with this canonical path.
     ExportedSource {
         path: InternedPath,
         exported_entries: FxHashSet<PublicExportEntry>,
     },
-    /// Facade exports an external package symbol.
+    /// The public export surface exports an external package symbol.
     ExportedExternal { symbol_id: ExternalSymbolId },
-    /// Import targets a facade but the requested symbol is not exported.
+    /// The import targets a public export surface but the requested symbol is not exported.
     NotExported {
-        facade_name: String,
-        facade_type: FacadeType,
+        public_surface_name: String,
+        public_surface_type: PublicExportSurfaceType,
     },
 }
 
-/// Classification of facade for diagnostic messages.
-pub(crate) enum FacadeType {
+/// Classification of public export for diagnostic messages.
+pub(crate) enum PublicExportSurfaceType {
     SourceLibrary,
     ModuleRoot,
 }
@@ -52,7 +52,7 @@ pub(crate) enum FacadeType {
 /// Input bundle for public export boundary resolution.
 ///
 /// WHY: boundary resolution needs both the import path and the module's public export metadata.
-pub(crate) struct FacadeResolutionInput<'a> {
+pub(crate) struct PublicExportResolutionInput<'a> {
     pub(crate) importer_file: &'a InternedPath,
     pub(crate) header_path: &'a InternedPath,
     pub(crate) source_library_public_exports: &'a FxHashMap<String, FxHashSet<PublicExportEntry>>,
@@ -69,25 +69,25 @@ pub(crate) struct FacadeResolutionInput<'a> {
 /// WHAT: checks whether the import path starts with a known library prefix or module root,
 /// and whether the importer is outside that module. If so, looks up the symbol name in the
 /// public surface's exported entries.
-pub(crate) fn resolve_facade_import(
-    input: &FacadeResolutionInput<'_>,
-) -> Option<FacadeLookupResult> {
-    // Try cross-library facade resolution first.
-    if let Some(result) = try_resolve_library_facade_import(input) {
+pub(crate) fn resolve_public_export_boundary(
+    input: &PublicExportResolutionInput<'_>,
+) -> Option<PublicExportLookupResult> {
+    // Try cross-library public export resolution first.
+    if let Some(result) = try_resolve_library_public_export(input) {
         return Some(result);
     }
 
-    // Try cross-module-root facade resolution.
-    try_resolve_module_root_facade_import(input)
+    // Try cross-module-root public export resolution.
+    try_resolve_module_root_public_export(input)
 }
 
 /// Cross-library public export lookup.
 ///
 /// WHAT: when an import path starts with a library prefix and the importer is outside that
 /// library, the symbol must be exported by the module's root-file public surface.
-fn try_resolve_library_facade_import(
-    input: &FacadeResolutionInput<'_>,
-) -> Option<FacadeLookupResult> {
+fn try_resolve_library_public_export(
+    input: &PublicExportResolutionInput<'_>,
+) -> Option<PublicExportLookupResult> {
     let components = input.header_path.as_components();
     if components.is_empty() {
         return None;
@@ -102,15 +102,15 @@ fn try_resolve_library_facade_import(
     // Internal imports within the same library use normal file-based resolution.
     let importer_library = input.file_library_membership.get(input.importer_file);
     if importer_library.map(|s| s.as_str()) == Some(library_prefix) {
-        return Some(FacadeLookupResult::NotAFacadeImport);
+        return Some(PublicExportLookupResult::NotAPublicExportBoundary);
     }
 
     // Imports from outside the source library must request exactly one public symbol from the
     // public root. Extra path components are implementation details, not part of the public API.
     if components.len() != 2 {
-        return Some(FacadeLookupResult::NotExported {
-            facade_name: library_prefix.clone(),
-            facade_type: FacadeType::SourceLibrary,
+        return Some(PublicExportLookupResult::NotExported {
+            public_surface_name: library_prefix.clone(),
+            public_surface_type: PublicExportSurfaceType::SourceLibrary,
         });
     }
 
@@ -120,13 +120,13 @@ fn try_resolve_library_facade_import(
         if entry.export_name == symbol_name {
             match &entry.target {
                 PublicExportTarget::Source(path) => {
-                    return Some(FacadeLookupResult::ExportedSource {
+                    return Some(PublicExportLookupResult::ExportedSource {
                         path: path.clone(),
                         exported_entries: exports.clone(),
                     });
                 }
                 PublicExportTarget::External(symbol_id) => {
-                    return Some(FacadeLookupResult::ExportedExternal {
+                    return Some(PublicExportLookupResult::ExportedExternal {
                         symbol_id: *symbol_id,
                     });
                 }
@@ -134,9 +134,9 @@ fn try_resolve_library_facade_import(
         }
     }
 
-    Some(FacadeLookupResult::NotExported {
-        facade_name: library_prefix.clone(),
-        facade_type: FacadeType::SourceLibrary,
+    Some(PublicExportLookupResult::NotExported {
+        public_surface_name: library_prefix.clone(),
+        public_surface_type: PublicExportSurfaceType::SourceLibrary,
     })
 }
 
@@ -144,9 +144,9 @@ fn try_resolve_library_facade_import(
 ///
 /// WHAT: when an import path targets a regular module root under the entry root and the
 /// importer is outside that module, the symbol must be exported by the module root file.
-fn try_resolve_module_root_facade_import(
-    input: &FacadeResolutionInput<'_>,
-) -> Option<FacadeLookupResult> {
+fn try_resolve_module_root_public_export(
+    input: &PublicExportResolutionInput<'_>,
+) -> Option<PublicExportLookupResult> {
     if input.module_root_boundaries.is_empty() {
         return None;
     }
@@ -179,11 +179,11 @@ fn try_resolve_module_root_facade_import(
             // Internal imports within the same module root use normal resolution.
             let importer_root = input.file_module_membership.get(input.importer_file);
             if importer_root == Some(&boundary.module_root) {
-                return Some(FacadeLookupResult::NotAFacadeImport);
+                return Some(PublicExportLookupResult::NotAPublicExportBoundary);
             }
 
-            // Named module roots use the root path as their public API prefix. The entry-root
-            // entry root has no prefix, so its public re-exports stay addressable at their real
+            // Named module roots use the root path as their public API prefix. The entry root
+            // has no prefix, so its public re-exports stay addressable at their real
             // source paths, but arbitrary paths with the same final name must not match.
             let prefix_len = boundary.import_prefix.as_components().len();
             let effective_components = effective_path.as_components();
@@ -201,18 +201,18 @@ fn try_resolve_module_root_facade_import(
                             input.string_table,
                         )
                     {
-                        return Some(FacadeLookupResult::ExportedSource {
+                        return Some(PublicExportLookupResult::ExportedSource {
                             path: path.clone(),
                             exported_entries: exports.clone(),
                         });
                     }
                 }
 
-                return Some(FacadeLookupResult::NotExported {
-                    facade_name: boundary
+                return Some(PublicExportLookupResult::NotExported {
+                    public_surface_name: boundary
                         .import_prefix
                         .to_portable_string(input.string_table),
-                    facade_type: FacadeType::ModuleRoot,
+                    public_surface_type: PublicExportSurfaceType::ModuleRoot,
                 });
             }
 
@@ -222,11 +222,11 @@ fn try_resolve_module_root_facade_import(
                 None
             };
             let Some(symbol_name) = symbol_name else {
-                return Some(FacadeLookupResult::NotExported {
-                    facade_name: boundary
+                return Some(PublicExportLookupResult::NotExported {
+                    public_surface_name: boundary
                         .import_prefix
                         .to_portable_string(input.string_table),
-                    facade_type: FacadeType::ModuleRoot,
+                    public_surface_type: PublicExportSurfaceType::ModuleRoot,
                 });
             };
 
@@ -234,24 +234,24 @@ fn try_resolve_module_root_facade_import(
                 if entry.export_name == symbol_name {
                     match &entry.target {
                         PublicExportTarget::Source(path) => {
-                            return Some(FacadeLookupResult::ExportedSource {
+                            return Some(PublicExportLookupResult::ExportedSource {
                                 path: path.clone(),
                                 exported_entries: exports.clone(),
                             });
                         }
                         PublicExportTarget::External(symbol_id) => {
-                            return Some(FacadeLookupResult::ExportedExternal {
+                            return Some(PublicExportLookupResult::ExportedExternal {
                                 symbol_id: *symbol_id,
                             });
                         }
                     }
                 }
             }
-            return Some(FacadeLookupResult::NotExported {
-                facade_name: boundary
+            return Some(PublicExportLookupResult::NotExported {
+                public_surface_name: boundary
                     .import_prefix
                     .to_portable_string(input.string_table),
-                facade_type: FacadeType::ModuleRoot,
+                public_surface_type: PublicExportSurfaceType::ModuleRoot,
             });
         }
     }
@@ -274,7 +274,7 @@ pub(crate) struct SourceLibraryBoundaryCheckInput<'a> {
 ///
 /// WHAT: after normal source resolution reaches a file inside a source library, an importer
 /// outside that library may only import the library's prepared root file. Grouped public symbol
-/// imports should already have resolved through `resolve_facade_import`.
+/// imports should already have resolved through `resolve_public_export_boundary`.
 pub(crate) fn check_source_library_boundary(
     input: SourceLibraryBoundaryCheckInput<'_>,
 ) -> BoundaryCheckResult<()> {
@@ -290,18 +290,20 @@ pub(crate) fn check_source_library_boundary(
     if input
         .source_library_root_files
         .get(target_library)
-        .is_some_and(|facade_file| input.target_file == facade_file)
+        .is_some_and(|root_file| input.target_file == root_file)
     {
         return Ok(());
     }
 
-    let facade_name_id = input.string_table.intern(target_library);
-    Err(Box::new(CompilerDiagnostic::not_exported_by_facade(
-        input.requested_path.clone(),
-        facade_name_id,
-        ImportFacadeType::SourceLibrary,
-        input.location,
-    )))
+    let public_surface_name_id = input.string_table.intern(target_library);
+    Err(Box::new(
+        CompilerDiagnostic::not_exported_by_public_surface(
+            input.requested_path.clone(),
+            public_surface_name_id,
+            ImportPublicSurfaceType::SourceLibrary,
+            input.location,
+        ),
+    ))
 }
 
 /// Input bundle for module boundary checking.
@@ -350,7 +352,7 @@ pub(crate) fn check_module_boundary(
     }
 
     // Target module has no public root surface.
-    Err(Box::new(diagnostics::missing_module_facade(
+    Err(Box::new(diagnostics::missing_module_root_public_surface(
         input.symbol_path,
         input.location,
     )))

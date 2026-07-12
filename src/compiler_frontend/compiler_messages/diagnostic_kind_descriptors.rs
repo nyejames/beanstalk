@@ -634,14 +634,14 @@ fn import_descriptor(kind: ImportDiagnosticKind) -> DiagnosticDescriptor {
             "Not exported by source file",
             DiagnosticSeverity::Error,
         ),
-        ImportDiagnosticKind::NotExportedByFacade => DiagnosticDescriptor::new(
+        ImportDiagnosticKind::NotExportedByPublicSurface => DiagnosticDescriptor::new(
             "BST-IMPORT-0011",
-            "Not exported by facade",
+            "Not exported by public surface",
             DiagnosticSeverity::Error,
         ),
-        ImportDiagnosticKind::MissingModuleFacade => DiagnosticDescriptor::new(
+        ImportDiagnosticKind::MissingModuleRootPublicSurface => DiagnosticDescriptor::new(
             "BST-IMPORT-0012",
-            "Missing module facade",
+            "Missing module-root public surface",
             DiagnosticSeverity::Error,
         ),
         ImportDiagnosticKind::MissingPackageSymbol => DiagnosticDescriptor::new(

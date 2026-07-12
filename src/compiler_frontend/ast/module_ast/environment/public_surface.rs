@@ -1,11 +1,11 @@
-//! Public facade API surface validation.
+//! Public module-root export surface validation.
 //!
-//! WHAT: rejects explicit `export` declarations in module-root files whose authored type surfaces
-//! require a type name that is not part of the same public facade API, and exported trait
-//! metadata relations that expose private trait names.
-//! WHY: after facade exports become explicit, importers can only name declarations exposed by
-//! the facade. AST environment owns this check because it has canonical `TypeId`s, resolved
-//! trait identities, and the header-built facade export maps.
+//! WHAT: rejects explicit public exports whose authored type surfaces require a type name that is
+//! not part of the same module-root public export surface, and exported trait metadata relations
+//! that expose private trait names.
+//! WHY: importers can only name declarations exposed by the module-root public export surface.
+//! AST environment owns this check because it has canonical `TypeId`s, resolved trait identities,
+//! and the header-built public export maps.
 
 use super::builder::AstModuleEnvironmentBuilder;
 
@@ -35,16 +35,16 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// WHAT: walks the resolved type IDs for signatures, fields, payloads, aliases, and explicit
     /// constant annotations, then validates exported trait incompatibility relations. Type walks
     /// recurse through option/collection/function/generic shapes.
-    /// WHY: exported declarations and exported trait metadata are consumed from the facade alone,
-    /// so every named type or trait they expose must also be public through that facade surface.
-    pub(in crate::compiler_frontend::ast) fn validate_public_facade_surfaces(
+    /// WHY: exported declarations and exported trait metadata are consumed from the public export
+    /// surface alone, so every named type or trait they expose must also be public there.
+    pub(in crate::compiler_frontend::ast) fn validate_public_export_surfaces(
         &mut self,
         sorted_headers: &[Header],
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
-            if is_public_facade_trait_incompatibility_header(header) {
+            if is_public_export_trait_incompatibility_header(header) {
                 if let HeaderKind::TraitIncompatibility { incompatibility } = &header.kind {
                     self.validate_public_trait_incompatibility_surface(
                         incompatibility,
@@ -56,13 +56,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             }
 
-            if !header_is_public_facade_declaration(header) {
+            if !header_is_public_export_declaration(header) {
                 continue;
             }
 
             let exported_name = header.tokens.src_path.name().ok_or_else(|| {
                 self.error_messages(
-                    CompilerError::compiler_error("Public facade header had no source-path name."),
+                    CompilerError::compiler_error("Public export header had no source-path name."),
                     string_table,
                 )
             })?;
@@ -197,7 +197,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         exported_name: StringId,
         signature: &FunctionSignature,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
         return_location: SourceLocation,
         trait_environment: &TraitEnvironment,
         string_table: &StringTable,
@@ -206,7 +206,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             self.validate_public_type_id(
                 exported_name,
                 parameter.value.type_id,
-                public_facade_file,
+                public_root_file,
                 parameter.value.location.clone(),
                 trait_environment,
                 string_table,
@@ -221,7 +221,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             self.validate_public_type_id(
                 exported_name,
                 type_id,
-                public_facade_file,
+                public_root_file,
                 return_location.clone(),
                 trait_environment,
                 string_table,
@@ -235,7 +235,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         exported_name: StringId,
         type_id: TypeId,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
         location: SourceLocation,
         trait_environment: &TraitEnvironment,
         string_table: &StringTable,
@@ -245,7 +245,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let mut visited_types = FxHashSet::default();
         if self.public_type_id_is_nameable(
             type_id,
-            public_facade_file,
+            public_root_file,
             trait_environment,
             &mut visited_types,
         ) {
@@ -261,7 +261,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn public_type_id_is_nameable(
         &self,
         type_id: TypeId,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
         _trait_environment: &TraitEnvironment,
         visited_types: &mut FxHashSet<TypeId>,
     ) -> bool {
@@ -275,19 +275,19 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             | Some(TypeDefinition::GenericParameter(..)) => true,
 
             Some(TypeDefinition::Struct(definition)) => {
-                self.source_path_is_public_from_facade(&definition.path, public_facade_file)
+                self.source_path_is_public_from_root_file(&definition.path, public_root_file)
             }
 
             Some(TypeDefinition::Choice(definition)) => {
-                self.source_path_is_public_from_facade(&definition.path, public_facade_file)
+                self.source_path_is_public_from_root_file(&definition.path, public_root_file)
             }
 
             Some(TypeDefinition::Constructed(definition)) => {
-                self.type_constructor_is_public(&definition.constructor, public_facade_file)
+                self.type_constructor_is_public(&definition.constructor, public_root_file)
                     && definition.arguments.iter().all(|argument| {
                         self.public_type_id_is_nameable(
                             *argument,
-                            public_facade_file,
+                            public_root_file,
                             _trait_environment,
                             visited_types,
                         )
@@ -298,21 +298,21 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 definition.parameters.iter().all(|parameter| {
                     self.public_type_id_is_nameable(
                         parameter.type_id,
-                        public_facade_file,
+                        public_root_file,
                         _trait_environment,
                         visited_types,
                     )
                 }) && definition.returns.iter().all(|return_type| {
                     self.public_type_id_is_nameable(
                         *return_type,
-                        public_facade_file,
+                        public_root_file,
                         _trait_environment,
                         visited_types,
                     )
                 }) && definition.error_return.is_none_or(|error_type| {
                     self.public_type_id_is_nameable(
                         error_type,
-                        public_facade_file,
+                        public_root_file,
                         _trait_environment,
                         visited_types,
                     )
@@ -320,11 +320,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             }
 
             Some(TypeDefinition::GenericInstance(definition)) => {
-                self.nominal_id_is_public(definition.base, public_facade_file)
+                self.nominal_id_is_public(definition.base, public_root_file)
                     && definition.arguments.iter().all(|argument| {
                         self.public_type_id_is_nameable(
                             *argument,
-                            public_facade_file,
+                            public_root_file,
                             _trait_environment,
                             visited_types,
                         )
@@ -338,7 +338,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn type_constructor_is_public(
         &self,
         constructor: &TypeConstructor,
-        _public_facade_file: &InternedPath,
+        _public_root_file: &InternedPath,
     ) -> bool {
         match constructor {
             TypeConstructor::Builtin(_) => true,
@@ -348,31 +348,31 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn nominal_id_is_public(
         &self,
         nominal_id: NominalTypeId,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
     ) -> bool {
         self.type_environment
             .nominal_path_by_id(nominal_id)
-            .is_some_and(|path| self.source_path_is_public_from_facade(path, public_facade_file))
+            .is_some_and(|path| self.source_path_is_public_from_root_file(path, public_root_file))
     }
 
     pub(in crate::compiler_frontend::ast) fn public_trait_definition_is_nameable(
         &self,
         trait_definition: &crate::compiler_frontend::traits::definitions::ResolvedTraitDefinition,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
     ) -> bool {
         match trait_definition.visibility {
             TraitVisibility::Core => true,
-            TraitVisibility::Source { .. } => self.source_path_is_public_from_facade(
+            TraitVisibility::Source { .. } => self.source_path_is_public_from_root_file(
                 &trait_definition.canonical_path,
-                public_facade_file,
+                public_root_file,
             ),
         }
     }
 
-    pub(in crate::compiler_frontend::ast) fn source_path_is_public_from_facade(
+    pub(in crate::compiler_frontend::ast) fn source_path_is_public_from_root_file(
         &self,
         path: &InternedPath,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
     ) -> bool {
         if self
             .module_symbols
@@ -385,14 +385,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         if let Some(library_prefix) = self
             .module_symbols
             .file_library_membership
-            .get(public_facade_file)
+            .get(public_root_file)
             && let Some(entries) = self
                 .module_symbols
                 .source_library_public_exports
                 .get(library_prefix)
             && entries
                 .iter()
-                .any(|entry| facade_export_targets_source_path(entry, path))
+                .any(|entry| public_export_targets_source_path(entry, path))
         {
             return true;
         }
@@ -400,14 +400,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         if let Some(module_root) = self
             .module_symbols
             .file_module_membership
-            .get(public_facade_file)
+            .get(public_root_file)
             && let Some(entries) = self
                 .module_symbols
                 .module_root_public_exports
                 .get(module_root)
             && entries
                 .iter()
-                .any(|entry| facade_export_targets_source_path(entry, path))
+                .any(|entry| public_export_targets_source_path(entry, path))
         {
             return true;
         }
@@ -415,24 +415,24 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         false
     }
 
-    /// Validate exported `TRAIT must not TRAIT` relations in a module-root facade.
+    /// Validate exported `TRAIT must not TRAIT` relations in a module-root public export.
     ///
-    /// WHAT: an exported incompatibility relation is part of the facade's public trait metadata,
-    ///      so importers must be able to name both sides from that facade. The check rejects a
-    ///      relation when exactly one side is public/nameable from the facade and the other is
-    ///      not. Core traits are always public/nameable; private-private relations remain valid.
+    /// WHAT: an exported incompatibility relation is part of the module root's public trait metadata,
+    ///      so importers must be able to name both sides from that public export. The check rejects a
+    ///      relation when exactly one side is public/nameable from that export and the other is not.
+    ///      Core traits are always public/nameable; private-private relations remain valid.
     /// WHY: without this check, a public trait could reference a private trait name in exported
     ///      metadata, forcing importers to know a name they cannot legally spell.
     fn validate_public_trait_incompatibility_surface(
         &self,
         incompatibility: &TraitIncompatibilitySyntax,
-        public_facade_file: &InternedPath,
+        public_root_file: &InternedPath,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         let visibility = self
             .import_environment
-            .visibility_for(public_facade_file)
+            .visibility_for(public_root_file)
             .map_err(|error| self.error_messages(error, string_table))?
             .clone();
 
@@ -444,7 +444,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         )?;
 
         let subject_is_nameable = trait_environment.get(subject_id).is_some_and(|definition| {
-            self.public_trait_definition_is_nameable(definition, public_facade_file)
+            self.public_trait_definition_is_nameable(definition, public_root_file)
         });
 
         for incompatible_trait in &incompatibility.incompatible_traits {
@@ -459,7 +459,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 trait_environment
                     .get(incompatible_id)
                     .is_some_and(|definition| {
-                        self.public_trait_definition_is_nameable(definition, public_facade_file)
+                        self.public_trait_definition_is_nameable(definition, public_root_file)
                     });
 
             if subject_is_nameable != incompatible_is_nameable {
@@ -479,14 +479,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     }
 }
 
-fn facade_export_targets_source_path(entry: &PublicExportEntry, path: &InternedPath) -> bool {
+fn public_export_targets_source_path(entry: &PublicExportEntry, path: &InternedPath) -> bool {
     match &entry.target {
         PublicExportTarget::Source(exported_path) => exported_path == path,
         PublicExportTarget::External(_) => false,
     }
 }
 
-fn header_is_public_facade_declaration(header: &Header) -> bool {
+fn header_is_public_export_declaration(header: &Header) -> bool {
     header.file_role.is_export_capable()
         && header.export_mode.is_public()
         && matches!(
@@ -500,7 +500,7 @@ fn header_is_public_facade_declaration(header: &Header) -> bool {
         )
 }
 
-fn is_public_facade_trait_incompatibility_header(header: &Header) -> bool {
+fn is_public_export_trait_incompatibility_header(header: &Header) -> bool {
     header.file_role.is_export_capable()
         && header.export_mode.is_public()
         && matches!(header.kind, HeaderKind::TraitIncompatibility { .. })

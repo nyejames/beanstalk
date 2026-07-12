@@ -40,7 +40,7 @@ pub(crate) use diagnostic_label::{
 pub(crate) use diagnostic_payload::{
     BorrowAccessKind, CommonSyntaxMistakeReason, CompileTimeEvaluationErrorReason,
     DeferredFeatureReason, DiagnosticPayload, DiagnosticPlace, GenericApplicationErrorReason,
-    ImportClauseKind, ImportFacadeType, IncompatibleChoiceComparisonReason,
+    ImportClauseKind, ImportPublicSurfaceType, IncompatibleChoiceComparisonReason,
     InvalidAssignmentTargetReason, InvalidBuiltinCallReason, InvalidCallShapeReason,
     InvalidCastReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidCompileTimePathReason, InvalidConfigReason, InvalidControlFlowStatementReason,

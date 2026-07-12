@@ -20,7 +20,8 @@ pub(crate) const RESERVED_KEYWORD_SHADOWS: [&str; 37] = [
 pub(crate) fn keyword_token_kind(text: &str) -> Option<TokenKind> {
     match text {
         "import" => Some(TokenKind::Import),
-        // Facade-only API marker; valid only in #mod.bst to expose declarations through the module facade.
+        // Module-root API marker for the strict `export:` block; exposes declarations through the
+        // module's public export surface.
         "export" => Some(TokenKind::Export),
 
         // Control flow

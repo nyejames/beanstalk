@@ -453,7 +453,7 @@ pub(crate) fn invalid_beandown_api_scope_item_message(
     let path = path.to_portable_string(string_table);
     format!(
         "Direct Beandown compilation for `{path}` does not support caller-supplied scope constants yet.\n\
-         Remove the scope constants from the request, or expose compile-time constants through the compiler-integrated `@html` and same-directory `#mod.bst` facade paths."
+         Remove the scope constants from the request, or expose compile-time constants through the compiler-integrated `@html` and same-directory module-root public export paths."
     )
 }
 

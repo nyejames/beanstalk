@@ -169,7 +169,7 @@ pub(crate) fn builtin_cast_trait_name(trait_kind: CoreCastTrait) -> &'static str
 /// cast trait source spellings.
 ///
 /// WHAT: centralises the exact-name check so header symbol collection, import
-///      registration, and facade export validation can all reject user code
+///      registration, and public export validation can all reject user code
 ///      that tries to claim a core cast trait name.
 /// WHY: the trait name table is the single source of truth; every collision
 ///      check should consult the same list rather than maintaining a parallel

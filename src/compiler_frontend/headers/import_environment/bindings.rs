@@ -49,7 +49,7 @@ pub(crate) enum NamespaceRecordSource {
 /// WHY: namespace imports expose value and type members separately; mixing them
 /// in the wrong context produces targeted diagnostics. External package surfaces
 /// can additionally expose child namespace records for nested symbol paths.
-/// BOUNDARY: source and facade namespace records remain shallow; child namespaces
+/// BOUNDARY: source and public export namespace records remain shallow; child namespaces
 /// are only built from external package symbol paths.
 #[derive(Clone, Debug)]
 pub(crate) struct NamespaceRecord {
@@ -63,18 +63,18 @@ pub(crate) struct NamespaceRecord {
     /// creating runtime namespace values.
     /// WHY: external packages can register multi-component symbol paths; this tree
     /// mirrors those paths so later phases can walk them by dotted name.
-    /// BOUNDARY: source and facade namespace records remain shallow; child namespaces
+    /// BOUNDARY: source and public export namespace records remain shallow; child namespaces
     /// are only populated from external package symbol paths.
     pub(crate) child_namespaces: FxHashMap<StringId, NamespaceRecord>,
     /// Where this namespace record originated.
     ///
-    /// WHAT: records whether the record was built from a source file, a facade, or an
+    /// WHAT: records whether the record was built from a source file, a public export, or an
     /// external package surface. AST uses this to produce the correct diagnostic for
-    /// nested traversal attempts: source and facade records are shallow, so any
+    /// nested traversal attempts: source and public export records are shallow, so any
     /// second dot is rejected with the existing `nested_traversal` diagnostic, while
     /// external records may expose child namespaces.
     /// WHY: the record structure itself does not encode origin; keeping origin here lets
-    /// value-position traversal respect the source/facade shallow boundary without
+    /// value-position traversal respect the source/public export shallow boundary without
     /// rebuilding import visibility in the expression parser.
     pub(crate) record_source: NamespaceRecordSource,
 }
@@ -84,7 +84,7 @@ impl NamespaceRecord {
     ///
     /// WHAT: helper used by record builders and tests to start a fresh record.
     /// WHY: every record must carry its origin so AST traversal can distinguish
-    /// shallow source/facade records from recursive external package records.
+    /// shallow source/public export records from recursive external package records.
     pub(crate) fn empty(record_source: NamespaceRecordSource) -> Self {
         Self {
             value_members: FxHashMap::default(),

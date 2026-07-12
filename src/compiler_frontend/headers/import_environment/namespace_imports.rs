@@ -1,7 +1,8 @@
 //! Namespace import registration and namespace record construction.
 //!
-//! WHAT: resolves bare imports into namespace records, validates facade boundaries for namespace
-//! imports, and builds field-access-only records from source files, facades, and external packages.
+//! WHAT: resolves bare imports into namespace records, validates public export boundaries for namespace
+//! imports, and builds field-access-only records from source files, public export surfaces, and
+//! external packages.
 //! WHY: namespace imports are structurally different from grouped imports: they expose a record
 //! surface rather than individual symbols, so their registration and record building is separate.
 //! External package records are recursive so multi-component symbol paths such as `io.input.new`
@@ -13,7 +14,7 @@ use super::{
     NamespaceTypeMember, NamespaceValueMember, ResolvedNamespaceTarget, SourceImportAccess,
     VisibleNameBinding, VisibleNameRegistry,
 };
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportPublicSurfaceType};
 use crate::compiler_frontend::external_packages::{ExternalSymbolId, ExternalSymbolPath};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::module_symbols::{
@@ -172,8 +173,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             ResolvedNamespaceTarget::SourceFile(ref file_path) => {
                 self.validate_namespace_source_boundary(file_path, import, source_file)?;
                 match source_namespace_access.as_ref() {
-                    Some(SourceImportAccess::Facade { exported_entries }) => self
-                        .build_facade_namespace_record(
+                    Some(SourceImportAccess::PublicExport { exported_entries }) => self
+                        .build_public_export_namespace_record(
                             file_path,
                             exported_entries,
                             &import.location,
@@ -235,7 +236,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         location: SourceLocation,
     ) {
         match access {
-            SourceImportAccess::Facade { exported_entries } => {
+            SourceImportAccess::PublicExport { exported_entries } => {
                 for entry in exported_entries {
                     let PublicExportTarget::Source(type_path) = &entry.target else {
                         continue;
@@ -287,7 +288,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Receiver-method access model for a source namespace import.
     ///
-    /// WHAT: internal source namespaces retain all receiver methods from that file. Facade
+    /// WHAT: internal source namespaces retain all receiver methods from that file. Public export
     /// namespaces expose receiver-call visibility through exported receiver types, never through
     /// explicit method fields.
     fn source_namespace_receiver_access(
@@ -300,7 +301,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         self.public_export_entries_for_source_file(namespace_file)
-            .map(|exported_entries| SourceImportAccess::Facade { exported_entries })
+            .map(|exported_entries| SourceImportAccess::PublicExport { exported_entries })
     }
 
     /// Public export entries for a concrete root source file, if this source is a root.
@@ -328,12 +329,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .cloned()
     }
 
-    /// Resolve a bare import that names a public facade namespace.
+    /// Resolve a bare import that names a public export namespace.
     ///
     /// WHAT: `import @library` and cross-module `import @module` expose the target prepared export
     /// file surface as a namespace record.
-    /// WHY: namespace imports must obey the same facade boundary as grouped imports.
-    pub(super) fn resolve_facade_namespace_target(
+    /// WHY: namespace imports must obey the same public export boundary as grouped imports.
+    pub(super) fn resolve_public_export_namespace_target(
         &mut self,
         import: &FileImport,
         source_file: &InternedPath,
@@ -343,15 +344,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return None;
         }
 
-        if let Some(target) = self.resolve_source_library_namespace_facade(components, source_file)
-        {
+        if let Some(target) = self.resolve_source_library_public_export(components, source_file) {
             return Some(target);
         }
 
-        self.resolve_module_root_namespace_facade(&import.header_path, source_file)
+        self.resolve_module_root_public_export(&import.header_path, source_file)
     }
 
-    fn resolve_source_library_namespace_facade(
+    fn resolve_source_library_public_export(
         &mut self,
         components: &[StringId],
         source_file: &InternedPath,
@@ -386,7 +386,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .then_some(ResolvedNamespaceTarget::SourceFile(root_file))
     }
 
-    fn resolve_module_root_namespace_facade(
+    fn resolve_module_root_public_export(
         &mut self,
         import_path: &InternedPath,
         source_file: &InternedPath,
@@ -435,7 +435,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         InternedPath::from_components(combined)
     }
 
-    /// Enforce facade privacy for concrete source-file namespace imports.
+    /// Enforce public export privacy for concrete source-file namespace imports.
     fn validate_namespace_source_boundary(
         &mut self,
         target_file: &InternedPath,
@@ -454,16 +454,16 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     .module_symbols
                     .source_library_root_files
                     .get(&target_library)
-                    .is_some_and(|facade_file| target_file == facade_file)
+                    .is_some_and(|root_file| target_file == root_file)
                 {
                     return Ok(());
                 }
 
-                let facade_name_id = self.string_table.intern(&target_library);
-                return Err(Box::new(diagnostics::not_exported_by_facade(
+                let public_surface_name_id = self.string_table.intern(&target_library);
+                return Err(Box::new(diagnostics::not_exported_by_public_surface(
                     &import.header_path,
-                    facade_name_id,
-                    ImportFacadeType::SourceLibrary,
+                    public_surface_name_id,
+                    ImportPublicSurfaceType::SourceLibrary,
                     import.location.clone(),
                 )));
             }
@@ -498,7 +498,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             )));
         }
 
-        Err(Box::new(diagnostics::missing_module_facade(
+        Err(Box::new(diagnostics::missing_module_root_public_surface(
             &import.header_path,
             import.location.clone(),
         )))
@@ -607,7 +607,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// WHAT: namespace imports of a root file expose the same public API as grouped imports,
     /// including import-only roots and grouped re-export aliases. Receiver methods remain
     /// receiver-call-only and are registered through `add_source_namespace_receiver_methods`.
-    fn build_facade_namespace_record(
+    fn build_public_export_namespace_record(
         &self,
         root_file: &InternedPath,
         exported_entries: &FxHashSet<PublicExportEntry>,
@@ -679,7 +679,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// WHY: external packages are the first surface that needs nested namespace visibility
     ///   (`io.input.new`). Keeping the tree in the import environment lets later phases walk
     ///   dotted paths without rebuilding the surface.
-    /// BOUNDARY: source and facade namespace records remain shallow; this recursive build is
+    /// BOUNDARY: source and public export namespace records remain shallow; this recursive build is
     ///   only for external package surfaces.
     pub(super) fn build_external_namespace_record(
         &mut self,
@@ -759,7 +759,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Check for same-spelling value/type collisions within one namespace surface.
     ///
-    /// WHAT: source and facade namespace records are shallow, so this only needs to detect
+    /// WHAT: source and public export namespace records are shallow, so this only needs to detect
     /// a value member and a type member with the same name. External package records use
     /// `ExternalNamespaceRecordInserter`, which already rejects namespace/value/type slot
     /// collisions while building the tree.

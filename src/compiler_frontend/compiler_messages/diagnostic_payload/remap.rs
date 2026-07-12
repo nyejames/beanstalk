@@ -51,11 +51,11 @@ impl DiagnosticPayload {
             | DiagnosticPayload::BareFileImport { path }
             | DiagnosticPayload::DirectSpecialFileImport { path }
             | DiagnosticPayload::NotExportedBySourceFile { symbol_path: path }
-            | DiagnosticPayload::NotExportedByFacade {
+            | DiagnosticPayload::NotExportedByPublicSurface {
                 requested_path: path,
                 ..
             }
-            | DiagnosticPayload::MissingModuleFacade { symbol_path: path }
+            | DiagnosticPayload::MissingModuleRootPublicSurface { symbol_path: path }
             | DiagnosticPayload::CrossModuleImportNotExported { symbol_path: path }
             | DiagnosticPayload::InvalidBeandownApiScopeItem { path } => {
                 remap_path_import_payload(path, remap);
