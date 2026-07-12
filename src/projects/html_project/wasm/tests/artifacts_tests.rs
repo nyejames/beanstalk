@@ -24,7 +24,7 @@ fn compile_html_module_wasm_exports_bst_start_directly() {
         project_name: "",
         document_config: &HtmlDocumentConfig::default(),
         release_build: false,
-        entry_runtime_fragment_count: 0,
+        root_activity: &module.root_activity,
         external_package_registry: Arc::new(
             crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
         ),
@@ -108,7 +108,7 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
         project_name: "",
         document_config: &HtmlDocumentConfig::default(),
         release_build: false,
-        entry_runtime_fragment_count: 0,
+        root_activity: &module.root_activity,
         external_package_registry: Arc::new(
             crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
         ),

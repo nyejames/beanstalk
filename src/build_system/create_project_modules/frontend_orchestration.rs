@@ -4,7 +4,9 @@
 //! scheduled file preparation (tokenization + header parsing) → dependency sort → AST → HIR →
 //! borrow checking.
 
-use crate::build_system::build::{CompiledModuleResult, InputFile, Module, ResolvedConstFragment};
+use crate::build_system::build::{
+    CompiledModuleResult, InputFile, Module, ModuleRootActivity, ResolvedConstFragment,
+};
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
@@ -231,7 +233,11 @@ impl FrontendModuleBuildContext<'_> {
                 || Self::sort_headers(&mut compiler, module_headers, &warnings),
             )?;
 
-            let entry_runtime_fragment_count = sorted.entry_runtime_fragment_count;
+            let root_activity = ModuleRootActivity {
+                has_non_trivial_root_body: sorted.has_non_trivial_root_body,
+                const_fragment_count: sorted.const_fragment_count,
+                runtime_fragment_count: sorted.entry_runtime_fragment_count,
+            };
 
             // 4. Build the Abstract Syntax Tree (AST).
             let module_ast =
@@ -349,7 +355,7 @@ impl FrontendModuleBuildContext<'_> {
                 borrow_analysis,
                 warnings,
                 const_top_level_fragments,
-                entry_runtime_fragment_count,
+                root_activity,
                 external_package_registry: Arc::clone(&compiler.external_package_registry),
                 module_external_imports,
             })

@@ -70,6 +70,28 @@ pub(crate) struct ModuleExternalImport {
     pub(crate) required_runtime_imports: Vec<RequiredRuntimeImport>,
 }
 
+/// Header-derived root activity metadata passed to backend builders.
+///
+/// WHAT: records the builder-relevant activity of the active module root.
+/// WHY: header parsing already classifies root bodies and page fragments, so builders can apply
+///      artifact policy without scanning tokens or HIR for the same facts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ModuleRootActivity {
+    pub(crate) has_non_trivial_root_body: bool,
+    pub(crate) const_fragment_count: usize,
+    pub(crate) runtime_fragment_count: usize,
+}
+
+impl ModuleRootActivity {
+    /// Return whether the HTML builder has any root activity from which to assemble a page.
+    #[allow(dead_code)] // Consumed by the Phase 7B HTML artifact policy.
+    pub(crate) fn has_html_artifact_activity(&self) -> bool {
+        self.has_non_trivial_root_body
+            || self.const_fragment_count > 0
+            || self.runtime_fragment_count > 0
+    }
+}
+
 /// Frontend output for one module root ready for backend lowering.
 ///
 /// WHAT: bundles typed HIR plus borrow-analysis facts and warnings for a module entry file.
@@ -82,11 +104,8 @@ pub struct Module {
     pub(crate) warnings: Vec<CompilerDiagnostic>,
     /// Resolved const top-level fragments with their runtime insertion indices.
     pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
-    /// Number of runtime fragment slots owned by entry start().
-    ///
-    /// WHY: header parsing is the authoritative counter; builders use this directly
-    /// rather than scanning HIR for `PushRuntimeFragment` statements.
-    pub(crate) entry_runtime_fragment_count: usize,
+    /// Header-derived activity metadata for the active module root.
+    pub(crate) root_activity: ModuleRootActivity,
     /// Effective external package registry after provider resolution for this module.
     ///
     /// WHY: provider-backed import discovery mutates the registry during Stage 0; the module

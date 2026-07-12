@@ -3,7 +3,7 @@
 //! WHAT: runs full frontend entrypoints and asserts borrow-check failures surface through them.
 //! WHY: the borrow checker is only useful if orchestration preserves and reports its diagnostics.
 
-use crate::build_system::build::Module;
+use crate::build_system::build::{Module, ModuleRootActivity};
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -142,7 +142,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
         borrow_analysis,
         warnings: Vec::new(),
         const_top_level_fragments: Vec::new(),
-        entry_runtime_fragment_count: 0,
+        root_activity: ModuleRootActivity::default(),
         external_package_registry: Arc::clone(&external_package_registry),
         module_external_imports: Vec::new(),
     };

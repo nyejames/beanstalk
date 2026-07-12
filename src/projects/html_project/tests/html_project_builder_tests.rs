@@ -152,8 +152,8 @@ fn duplicate_output_paths_are_rejected() {
 #[test]
 fn emits_const_fragment_and_calls_start() {
     // WHAT: verify the builder embeds a compile-time const fragment and emits a start() call.
-    // WHY: slot count is now derived from HIR PushRuntimeFragment scanning; the test module has
-    //      none, so only the const fragment and start() invocation are asserted here.
+    // WHY: root activity metadata supplies the slot count; the test module has no runtime slots,
+    //      so only the const fragment and start() invocation are asserted here.
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
     let mut string_table = StringTable::new();

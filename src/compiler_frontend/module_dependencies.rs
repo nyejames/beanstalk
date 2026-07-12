@@ -39,6 +39,8 @@ pub(crate) struct SortedHeaders {
     pub(crate) headers: Vec<Header>,
     pub(crate) top_level_const_fragments: Vec<TopLevelConstFragment>,
     pub(crate) entry_runtime_fragment_count: usize,
+    pub(crate) const_fragment_count: usize,
+    pub(crate) has_non_trivial_root_body: bool,
     pub(crate) module_symbols: ModuleSymbols,
     pub(crate) import_environment: HeaderImportEnvironment,
 }
@@ -326,6 +328,8 @@ pub fn resolve_module_dependencies(
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count,
+        const_fragment_count,
+        has_non_trivial_root_body,
         mut module_symbols,
         import_environment,
         ..
@@ -415,6 +419,8 @@ pub fn resolve_module_dependencies(
         headers: sorted,
         top_level_const_fragments,
         entry_runtime_fragment_count,
+        const_fragment_count,
+        has_non_trivial_root_body,
         module_symbols,
         import_environment,
     })

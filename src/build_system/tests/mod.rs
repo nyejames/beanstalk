@@ -4,7 +4,7 @@
 
 use super::{WriteOptions, write_project_outputs as write_project_outputs_with_table};
 use crate::build_system::build::{
-    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, WriteMode,
+    BackendBuilder, CleanupPolicy, FileKind, ModuleRootActivity, OutputFile, Project, WriteMode,
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
@@ -58,6 +58,32 @@ fn html_cleanup_policy() -> CleanupPolicy {
 
 fn generic_cleanup_policy() -> CleanupPolicy {
     CleanupPolicy::generic([".html", ".js", ".wasm"])
+}
+
+#[test]
+fn module_root_activity_html_policy_requires_any_root_activity() {
+    assert!(!ModuleRootActivity::default().has_html_artifact_activity());
+    assert!(
+        ModuleRootActivity {
+            has_non_trivial_root_body: true,
+            ..ModuleRootActivity::default()
+        }
+        .has_html_artifact_activity()
+    );
+    assert!(
+        ModuleRootActivity {
+            const_fragment_count: 1,
+            ..ModuleRootActivity::default()
+        }
+        .has_html_artifact_activity()
+    );
+    assert!(
+        ModuleRootActivity {
+            runtime_fragment_count: 1,
+            ..ModuleRootActivity::default()
+        }
+        .has_html_artifact_activity()
+    );
 }
 
 fn write_project_outputs(

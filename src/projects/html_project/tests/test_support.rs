@@ -5,7 +5,7 @@
 //! WHY: the refactor split tests by module responsibility, so common scaffolding should
 //!      live in one place instead of being redefined in every test file.
 
-use crate::build_system::build::{FileKind, Module, OutputFile};
+use crate::build_system::build::{FileKind, Module, ModuleRootActivity, OutputFile};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -78,7 +78,7 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
         borrow_analysis: BorrowCheckReport::default(),
         warnings: vec![],
         const_top_level_fragments: vec![],
-        entry_runtime_fragment_count: 0,
+        root_activity: ModuleRootActivity::default(),
         external_package_registry: Arc::new(ExternalPackageRegistry::new()),
         module_external_imports: vec![],
     }

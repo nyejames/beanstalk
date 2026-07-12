@@ -414,7 +414,7 @@ impl HtmlProjectBuilder {
             project_name,
             document_config,
             release_build,
-            entry_runtime_fragment_count: module.entry_runtime_fragment_count,
+            root_activity: &module.root_activity,
             external_package_registry: Arc::clone(&module.external_package_registry),
         };
         if wasm_enabled {

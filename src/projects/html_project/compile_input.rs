@@ -4,7 +4,7 @@
 //! WHY: both paths take the same 7 module-level parameters — bundling them avoids a long
 //!      argument list at every call site and keeps the two paths in sync as fields evolve.
 
-use crate::build_system::build::ResolvedConstFragment;
+use crate::build_system::build::{ModuleRootActivity, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -21,6 +21,6 @@ pub(crate) struct HtmlModuleCompileInput<'a> {
     pub project_name: &'a str,
     pub document_config: &'a HtmlDocumentConfig,
     pub release_build: bool,
-    pub entry_runtime_fragment_count: usize,
+    pub root_activity: &'a ModuleRootActivity,
     pub external_package_registry: Arc<ExternalPackageRegistry>,
 }

@@ -127,7 +127,7 @@ pub(crate) fn compile_html_module_js(
             project_name: input.project_name,
             js_bundle: &bundle_with_imports,
             function_names: &js_module.function_name_by_id,
-            entry_runtime_fragment_count: input.entry_runtime_fragment_count,
+            entry_runtime_fragment_count: input.root_activity.runtime_fragment_count,
             uses_reactive_runtime_fragments,
             import_map_html: glue_result.import_map_html,
             use_module_script,

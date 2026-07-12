@@ -125,6 +125,19 @@ fn sorts_strict_top_level_dependencies_before_dependents_and_appends_start_last(
 }
 
 #[test]
+fn dependency_sort_preserves_root_activity_metadata() {
+    let (headers, mut string_table) =
+        parse_module_headers(&[("src/a.bst", "#[static]\n[runtime]\n")], "src/a.bst");
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("dependency sorting should preserve root activity metadata");
+
+    assert!(sorted.has_non_trivial_root_body);
+    assert_eq!(sorted.const_fragment_count, 1);
+    assert_eq!(sorted.entry_runtime_fragment_count, 1);
+}
+
+#[test]
 fn reports_circular_dependencies() {
     let (headers, mut string_table) = parse_module_headers(
         &[

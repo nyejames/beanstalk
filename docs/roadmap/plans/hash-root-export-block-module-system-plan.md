@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 7 add root activity metadata and builder artifact filtering
-LAST_ACCEPTED_COMMIT: `202b1b5fb` (`refactor: rename module public export data`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `202b1b5fb`; Phase 6B and its comment audit are accepted for the next checkpoint. The concurrent docs migration is committed separately and remains outside this plan's implementation commits.
+CURRENT_SLICE: Phase 7B filter HTML artifacts from explicit root activity metadata
+LAST_ACCEPTED_COMMIT: `dec78365d` (`refactor: rename module public surfaces`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `dec78365d`; Phase 7A is accepted for its next checkpoint. Concurrent docs migration and `tmp/docs-language-probes/**` remain user-owned and outside this plan's commits.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -182,6 +182,7 @@ VALIDATION_STATE:
 - Phase 5C legacy scanner removal: Codex CLI deleted the dedicated `export import` / `export @path` path collector and its sugar helper so strict export-block imports flow through the ordinary import scanner. Focused path coverage now proves strict block discovery and deliberate legacy-prefix skipping. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 114 path tests and 140 Stage 0 module-creation tests.
 - Phase 6A public export data ownership: Codex CLI replaced `facade_data.rs` with `public_exports.rs`, renamed the entry/target types and source-library/module-root maps and threaded the current names through header imports, dependency sorting and required AST references without compatibility aliases. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 174 header tests, 14 dependency tests and 8 AST environment tests.
 - Phase 6B public surface semantics and diagnostics: Codex CLI replaced the facade resolver with `public_export_resolution.rs`, renamed AST public-surface validation and renamed structured import diagnostics while preserving `BST-IMPORT-0011` and `BST-IMPORT-0012`. Imported-root conformance wording now describes its real role. A correction worker removed stale `#mod.bst` keyword/token comments. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 51 compiler-message tests, 174 header tests and 8 AST environment tests.
+- Phase 7A root activity handoff: Codex CLI added `ModuleRootActivity`, preserved all three existing header facts through dependency sorting and replaced the standalone backend runtime-fragment count with one `Module.root_activity` value. Existing JS/Wasm compilation reads its runtime member without changing artifact behavior. Worker full `just validate` passed 3331 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting plus focused propagation and helper-policy tests.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -189,11 +190,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Commit Phase 6B, then inspect the Phase 7 root-activity and HTML output owners before preparing the first bounded codex-cli task.
+- Commit Phase 7A, then delegate Phase 7B HTML artifact filtering, homepage handling and active-module asset planning through the verified `codex-cli-beanstalk` wrapper.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: inspect Phase 7 metadata flow and HTML output planning after the Phase 6B checkpoint
+NEXT_RESUME_ACTION: inspect the full HTML build loop and prepare the bounded Phase 7B codex-cli task
 
 ---
 
@@ -906,7 +907,7 @@ Root files can be API-only. Builders must decide output policy from explicit met
 
 ### Checklist
 
-- [ ] Add `ModuleRootActivity` or equivalent to backend handoff:
+- [x] Add `ModuleRootActivity` or equivalent to backend handoff:
 
 ```rust
 pub(crate) struct ModuleRootActivity {
@@ -916,7 +917,7 @@ pub(crate) struct ModuleRootActivity {
 }
 ```
 
-- [ ] Add helper:
+- [x] Add helper:
 
 ```rust
 impl ModuleRootActivity {
@@ -928,8 +929,8 @@ impl ModuleRootActivity {
 }
 ```
 
-- [ ] Populate metadata from header parsing / sorted headers / AST finalization without HIR rescans.
-- [ ] Add the metadata to `build.rs::Module`.
+- [x] Populate metadata from header parsing / sorted headers / AST finalization without HIR rescans.
+- [x] Add the metadata to `build.rs::Module`.
 - [ ] Update HTML builder:
   - [ ] review `src/projects/html_project/output_plan.rs` and `src/projects/html_project/path_policy.rs`, which currently special-case `#page`;
   - [ ] skip page artifact compilation for modules with no HTML artifact activity;

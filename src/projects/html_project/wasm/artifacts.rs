@@ -120,8 +120,10 @@ pub(crate) fn compile_html_module_wasm(
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let (entry_fragment_html, slot_ids) =
-        render_entry_fragments(input.const_fragments, input.entry_runtime_fragment_count);
+    let (entry_fragment_html, slot_ids) = render_entry_fragments(
+        input.const_fragments,
+        input.root_activity.runtime_fragment_count,
+    );
 
     let mut build_plan = build_html_wasm_plan(input.hir_module, slot_ids)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
