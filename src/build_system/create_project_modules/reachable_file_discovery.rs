@@ -343,7 +343,7 @@ impl<'a, 'b> ImportPolicy<'a, 'b> {
 ///
 /// WHAT: follows each Beanstalk file's declared imports, resolves them to canonical typed source
 ///       files, and returns the full ordered set of files reachable from the entry points.
-/// WHY: queue seeding, canonicalization, visited-set handling, facade queuing, Markdown skipping,
+/// WHY: queue seeding, canonicalization, visited-set handling, root queueing, Markdown skipping,
 ///      import scanning, source-cache insertion, and local import queueing are identical across all
 ///      Stage 0 discovery paths. Keeping them in one place prevents the provider-capable and
 ///      provider-free paths from drifting.
@@ -367,12 +367,12 @@ fn traverse_reachable_source_files(
         });
     }
 
-    // Seed all source library facade files so authored facade declarations are available.
+    // Seed every source library root file so its authored public surface is available.
     // WHY: imports may directly resolve to a target file after Stage 0 path scanning, but the
-    // facade still needs to be compiled so its public declaration surface can be checked later.
-    for facade_path in project_path_resolver.facade_files().values() {
+    // root file still needs to be compiled so its public declarations can be checked later.
+    for (_, root_path) in project_path_resolver.source_library_public_surface_files() {
         queue.push_back(ReachableSourceFile {
-            path: facade_path.clone(),
+            path: root_path.clone(),
             kind: SourceFileKind::Beanstalk,
         });
     }
@@ -397,9 +397,9 @@ fn traverse_reachable_source_files(
         match next_file.kind {
             SourceFileKind::Beandown => {
                 // Beandown is a Beanstalk template body with a small compile-time scope, so the
-                // same-directory facade may supply visible constants. Plain Markdown is raw
-                // content and has no Beanstalk scope; facades still re-export it normally because
-                // the facade file itself is scanned as ordinary Beanstalk source.
+                // same-directory root may supply visible constants. Plain Markdown is raw
+                // content and has no Beanstalk scope; the root still re-exports it normally
+                // because the root file itself is scanned as ordinary Beanstalk source.
                 queue_same_directory_root_for_beandown(
                     &canonical_file,
                     project_path_resolver,
@@ -519,7 +519,7 @@ pub(super) fn discover_reachable_source_files(
 
 /// Resolve a normal Beanstalk import to a filesystem path and enqueue reachable files.
 ///
-/// WHAT: handles cross-module facade queuing and implementation-file discovery for an import that
+/// WHAT: handles cross-module root queuing and implementation-file discovery for an import that
 ///       is not provider-backed and not a virtual/unsupported package import.
 /// WHY: this logic is identical between the provider-capable and provider-free discovery paths;
 ///      extracting it prevents the two BFS implementations from drifting.
@@ -532,29 +532,27 @@ fn resolve_and_queue_local_import(
     queue: &mut VecDeque<ReachableSourceFile>,
 ) -> Result<(), SourceDiscoveryError> {
     let resolved = project_path_resolver
-        .resolve_import_to_source_file_with_facade_fallback(
+        .resolve_import_to_source_file_with_public_surface_fallback(
             import_path,
             canonical_file,
             string_table,
         )
         .map_err(SourceDiscoveryError::from)?;
 
-    // Ensure target module root export files are compiled for cross-module imports.
+    // Ensure target module root files are compiled for cross-module imports.
     // WHY: when an import resolves to an implementation file in another module root,
-    //      the prepared export file must be available so AST can validate boundary enforcement.
+    //      the prepared root file must be available so AST can validate boundary enforcement.
     if let Some(importer_root) = project_path_resolver.module_root_for_file(canonical_file)
         && let Some(target_root) = project_path_resolver.module_root_for_file(&resolved.path)
         && importer_root != target_root
-        && let Some(export_path) = project_path_resolver
-            .module_root_export_files()
-            .get(&target_root)
+        && let Some(root_path) = project_path_resolver.module_root_file_for_directory(&target_root)
         && !reachable.contains(&ReachableSourceFile {
-            path: export_path.clone(),
+            path: root_path.clone(),
             kind: SourceFileKind::Beanstalk,
         })
     {
         queue.push_back(ReachableSourceFile {
-            path: export_path.clone(),
+            path: root_path,
             kind: SourceFileKind::Beanstalk,
         });
     }
@@ -1005,7 +1003,7 @@ fn resolve_provider_backed_import(
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     string_table: &mut StringTable,
 ) -> Result<(), SourceDiscoveryError> {
-    // Resolve the prefix to a canonical filesystem path without .bst extension or facade fallback.
+    // Resolve the prefix to a canonical filesystem path without .bst extension or public-surface fallback.
     let canonical_source_path = resolve_provider_prefix_to_canonical_path(
         request.prefix_path,
         request.importer_canonical_path,
@@ -1120,10 +1118,10 @@ fn insert_external_import_resolution(
 }
 
 /// Resolves a provider import prefix to a canonical filesystem path without appending `.bst` or
-/// using facade fallback.
+/// using public-surface fallback.
 ///
 /// WHAT: reuses the normal base/boundary/case rules from `ProjectPathResolver` but skips the
-/// `.bst` extension logic and facade fallback used for Beanstalk source imports.
+/// `.bst` extension logic and public-surface fallback used for Beanstalk source imports.
 fn resolve_provider_prefix_to_canonical_path(
     prefix_path: &InternedPath,
     importer_file: &Path,
@@ -1181,7 +1179,7 @@ fn source_file_logical_path(
 /// Enforce that a provider-backed import does not cross a module or source-library boundary.
 ///
 /// WHAT: .js files are private implementation details of the module or library that owns them.
-///       Cross-module or cross-library .js imports bypass the facade and are rejected.
+///       Cross-module or cross-library .js imports bypass the public surface and are rejected.
 /// WHY: provider-backed imports must obey the same visibility boundaries as .bst source imports.
 fn check_provider_import_module_boundary(
     importer_file: &Path,

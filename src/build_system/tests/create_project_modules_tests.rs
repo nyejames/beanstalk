@@ -271,9 +271,9 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
         fs::write(directory.join("#skipped.bst"), "").expect("should write skipped root");
     }
 
-    fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
     fs::write(entry_root.join("ordinary.bst"), "").expect("should write ordinary source");
-    fs::write(nested.join("#mod.bst"), "").expect("should write nested root");
+    fs::write(nested.join("#nested.bst"), "").expect("should write nested root");
 
     let mut config = Config::new(root.clone());
     config.dev_folder = PathBuf::from("scratch");
@@ -293,7 +293,7 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
 
     assert_eq!(index.entry_root(), canonical_entry_root);
     assert_eq!(index.entry_candidates().len(), 2);
-    assert!(index.entry_candidates()[0].ends_with("#page.bst"));
+    assert!(index.entry_candidates()[0].ends_with("#home.bst"));
     assert_eq!(index.stats().dirs_visited, 2);
     assert_eq!(index.stats().dirs_skipped, 10);
     assert_eq!(index.stats().files_seen, 3);
@@ -322,7 +322,7 @@ fn source_tree_index_rejects_duplicate_hash_root_files() {
     let root = temp_dir("source_tree_index_duplicate_roots");
     let entry_root = root.join("src");
     fs::create_dir_all(&entry_root).expect("should create entry root");
-    fs::write(entry_root.join("#page.bst"), "").expect("should write page root");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write page root");
     fs::write(entry_root.join("#layout.bst"), "").expect("should write layout root");
 
     let config = Config::new(root.clone());
@@ -361,8 +361,8 @@ fn project_path_resolver_consumes_source_tree_module_roots() {
     let entry_root = root.join("src");
     let nested = entry_root.join("nested");
     fs::create_dir_all(&nested).expect("should create nested module directory");
-    fs::write(entry_root.join("#page.bst"), "").expect("should write entry root");
-    fs::write(nested.join("#mod.bst"), "").expect("should write nested facade");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
+    fs::write(nested.join("#nested.bst"), "").expect("should write nested root");
 
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
@@ -380,15 +380,15 @@ fn project_path_resolver_consumes_source_tree_module_roots() {
     import_path.push_str("nested", &mut string_table);
     import_path.push_str("identity", &mut string_table);
     let resolved = resolver
-        .resolve_import_to_source_file_with_facade_fallback(
+        .resolve_import_to_source_file_with_public_surface_fallback(
             &import_path,
-            &entry_root.join("#page.bst"),
+            &entry_root.join("#home.bst"),
             &mut string_table,
         )
-        .expect("prepared nested module root should resolve its facade");
+        .expect("prepared nested module root should resolve its public surface");
     assert_eq!(
         resolved.path,
-        fs::canonicalize(nested.join("#mod.bst")).unwrap()
+        fs::canonicalize(nested.join("#nested.bst")).unwrap()
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -788,12 +788,12 @@ fn rejects_config_const_page_fragment() {
 }
 
 #[test]
-fn rejects_project_local_config_import_even_when_module_facade_exists() {
+fn rejects_project_local_config_import_even_when_module_root_exists() {
     let root = temp_dir("config_project_local_import_rejected");
     fs::create_dir_all(&root).expect("should create root dir");
     fs::create_dir_all(root.join("settings")).expect("should create settings module");
     fs::write(root.join("settings/#mod.bst"), "value #= \"src\"\n")
-        .expect("should write settings facade");
+        .expect("should write settings root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
     fs::write(&config_path, "import @settings { value }\n").expect("should write config");
@@ -889,7 +889,7 @@ fn accepts_config_imported_builder_source_library_constant() {
         library_root.join("#mod.bst"),
         "export:\n    default_entry_root #= \"src\"\n;\n",
     )
-    .expect("should write builder facade");
+    .expect("should write builder root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
@@ -926,7 +926,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
         library_root.join("#mod.bst"),
         "root_folder #= \"src\"\nexport:\n    default_entry_root #= root_folder\n;\n",
     )
-    .expect("should write builder facade");
+    .expect("should write builder root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
@@ -963,7 +963,7 @@ fn accepts_config_imported_constant_reexported_from_builder_source_library_file(
         library_root.join("#mod.bst"),
         "import @./values { root_folder as internal_root }\n\nexport:\n    default_entry_root #= internal_root\n;\n",
     )
-    .expect("should write builder facade");
+    .expect("should write builder root");
     fs::write(library_root.join("values.bst"), "root_folder #= \"src\"\n")
         .expect("should write builder support file");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -1002,7 +1002,7 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
         library_root.join("#mod.bst"),
         "export:\n    EntryRoot as String\n    Config = |\n        value String,\n    |\n    Mode ::\n        Ready,\n    ;\n    default_entry_root #= \"src\"\n;\n",
     )
-    .expect("should write builder facade");
+    .expect("should write builder root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
@@ -1039,7 +1039,7 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
         library_root.join("#mod.bst"),
         "default_entry_root #= \"src\"\ndefault_entry_root #= \"app\"\n",
     )
-    .expect("should write duplicate builder facade");
+    .expect("should write duplicate builder root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
@@ -1084,7 +1084,7 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
         library_root.join("#mod.bst"),
         "export:\n    default_entry_root || -> String:\n        return \"src\"\n    ;\n;\n",
     )
-    .expect("should write builder facade");
+    .expect("should write builder root");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
         &config_path,
@@ -1129,7 +1129,7 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
     fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write root");
     fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -2460,7 +2460,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write root");
     fs::write(root.join("lib/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
     fs::write(root.join("config.bst"), "").expect("should write config");
 
@@ -2501,7 +2501,7 @@ fn library_prefix_collision_with_builder_library_rejected() {
     fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/html/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/html/#mod.bst"), "foo #= 1\n").expect("should write root");
     fs::write(root.join("config.bst"), "").expect("should write config");
 
     let config = Config::new(root.clone());
@@ -2543,7 +2543,7 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     fs::create_dir_all(root.join("packages/helper")).expect("should create packages/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("packages/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("packages/helper/#mod.bst"), "foo #= 1\n").expect("should write root");
     fs::write(root.join("packages/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
     fs::write(
         root.join("config.bst"),
@@ -2705,7 +2705,6 @@ fn source_library_requires_one_generic_hash_root() {
     ));
     let error_text = rendered_first_error(&messages);
     assert!(error_text.contains("#*.bst"));
-    assert!(!error_text.contains("#mod.bst"));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -2744,8 +2743,12 @@ fn source_library_accepts_cosmetic_hash_root_name() {
     path.push_str("helper", &mut string_table);
     let importer = root.join("src/#page.bst");
     let resolved = resolver
-        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
-        .expect("source-library folder import should resolve through the facade pipeline");
+        .resolve_import_to_source_file_with_public_surface_fallback(
+            &path,
+            &importer,
+            &mut string_table,
+        )
+        .expect("source-library folder import should resolve through the root pipeline");
 
     assert_eq!(
         resolved.path,
@@ -2790,7 +2793,6 @@ fn source_library_rejects_multiple_generic_hash_roots() {
     let error_text = rendered_first_error(&messages);
     assert!(error_text.contains("#first.bst"));
     assert!(error_text.contains("#second.bst"));
-    assert!(!error_text.contains("#mod.bst facade"));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -2802,8 +2804,8 @@ fn library_prefix_collision_across_scan_roots_rejected() {
     fs::create_dir_all(root.join("vendor/helper")).expect("should create vendor/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
-    fs::write(root.join("vendor/helper/#mod.bst"), "bar #= 2\n").expect("should write facade");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write root");
+    fs::write(root.join("vendor/helper/#mod.bst"), "bar #= 2\n").expect("should write root");
     fs::write(
         root.join("config.bst"),
         "library_folders #= { \"lib\", \"vendor\" }\n",
@@ -3017,7 +3019,7 @@ fn rejects_bst_file_and_folder_collision_in_source_library() {
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper/ui")).expect("should create lib/helper/ui");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/#mod.bst"), "value #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/#mod.bst"), "value #= 1\n").expect("should write root");
     fs::write(root.join("lib/helper/ui.bst"), "value #= 2\n")
         .expect("should write colliding library file");
     fs::write(
@@ -3316,8 +3318,8 @@ fn beandown_files_are_reachable_without_import_scanning() {
 }
 
 #[test]
-fn reachable_beandown_queues_same_directory_mod_file() {
-    let root = temp_dir("beandown_same_directory_facade");
+fn reachable_beandown_queues_same_directory_root_file() {
+    let root = temp_dir("beandown_same_directory_root");
     let src = root.join("src");
     let docs = src.join("docs");
     fs::create_dir_all(&docs).expect("should create docs dir");
@@ -3330,7 +3332,7 @@ fn reachable_beandown_queues_same_directory_mod_file() {
 
     fs::write(src.join("#page.bst"), "import @docs/intro\n#[:ok]\n").expect("should write entry");
     fs::write(docs.join("intro.bd"), "hello\n").expect("should write beandown file");
-    fs::write(docs.join("#mod.bst"), "title #= \"Docs\"\n").expect("should write facade");
+    fs::write(docs.join("#docs.bst"), "title #= \"Docs\"\n").expect("should write root");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -3346,7 +3348,7 @@ fn reachable_beandown_queues_same_directory_mod_file() {
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
-        .expect("reachable .bd should discover same-directory #mod.bst");
+        .expect("reachable .bd should discover same-directory hash root");
 
     let input_paths: HashSet<_> = modules[0]
         .input_files
@@ -3355,7 +3357,7 @@ fn reachable_beandown_queues_same_directory_mod_file() {
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.bd")));
-    assert!(input_paths.contains(OsStr::new("#mod.bst")));
+    assert!(input_paths.contains(OsStr::new("#docs.bst")));
 
     let beandown_input = modules[0]
         .input_files
@@ -3367,13 +3369,13 @@ fn reachable_beandown_queues_same_directory_mod_file() {
         crate::libraries::SourceFileKind::Beandown
     );
 
-    let facade_input = modules[0]
+    let root_input = modules[0]
         .input_files
         .iter()
-        .find(|input| input.source_path.file_name() == Some(OsStr::new("#mod.bst")))
-        .expect("#mod.bst should be in discovered inputs");
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("#docs.bst")))
+        .expect("#docs.bst should be in discovered inputs");
     assert_eq!(
-        facade_input.source_kind,
+        root_input.source_kind,
         crate::libraries::SourceFileKind::Beanstalk
     );
 
@@ -3536,8 +3538,8 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
 }
 
 #[test]
-fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
-    let root = temp_dir("markdown_no_same_directory_facade");
+fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file() {
+    let root = temp_dir("markdown_no_unrelated_module_root");
     let src = root.join("src");
     fs::create_dir_all(src.join("other")).expect("should create other module dir");
 
@@ -3549,7 +3551,7 @@ fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
 
     fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
     fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
-    fs::write(src.join("other/#mod.bst"), "export:\n    x #= 1\n;\n")
+    fs::write(src.join("other/#other.bst"), "export:\n    x #= 1\n;\n")
         .expect("should write other module root");
 
     let mut config = Config::new(root.clone());
@@ -3567,7 +3569,7 @@ fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
-        .expect("reachable .md should not discover same-directory #mod.bst");
+        .expect("reachable .md should not queue an unrelated module root");
 
     let input_paths: HashSet<_> = modules[0]
         .input_files
@@ -3576,7 +3578,7 @@ fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
         .collect();
     assert!(input_paths.contains(OsStr::new("#page.bst")));
     assert!(input_paths.contains(OsStr::new("intro.md")));
-    assert!(!input_paths.contains(OsStr::new("#mod.bst")));
+    assert!(!input_paths.contains(OsStr::new("#other.bst")));
 
     let markdown_input = modules[0]
         .input_files
@@ -4201,8 +4203,8 @@ fn unsupported_external_extension_in_multi_entry_preserves_diagnostic_shape() {
 }
 
 #[test]
-fn provider_free_parallel_preserves_cross_module_facade_queuing() {
-    let root = temp_dir("provider_free_cross_module_facade");
+fn provider_free_parallel_preserves_cross_module_root_queuing() {
+    let root = temp_dir("provider_free_cross_module_root");
     let src = root.join("src");
     let module_a = src.join("module_a");
     let module_b = src.join("module_b");
@@ -4222,7 +4224,7 @@ fn provider_free_parallel_preserves_cross_module_facade_queuing() {
         "import @module_b/impl\n#[:pageA]\n",
     )
     .expect("should write pageA");
-    fs::write(module_b.join("#mod.bst"), "export:\n    b #= 1\n;\n")
+    fs::write(module_b.join("#api.bst"), "export:\n    b #= 1\n;\n")
         .expect("should write module_b root");
     fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
 
@@ -4237,7 +4239,7 @@ fn provider_free_parallel_preserves_cross_module_facade_queuing() {
     let resolver = configured_resolver(&config);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
-        .expect("cross-module facade discovery should pass");
+        .expect("cross-module root discovery should pass");
 
     assert_eq!(modules.len(), 2);
 
@@ -4255,8 +4257,8 @@ fn provider_free_parallel_preserves_cross_module_facade_queuing() {
         .collect::<Vec<_>>();
 
     assert!(
-        module_a_inputs.contains(&"#mod.bst".to_string()),
-        "module B facade should be queued for cross-module import in provider-free parallel path"
+        module_a_inputs.contains(&"#api.bst".to_string()),
+        "module B root should be queued for cross-module import in provider-free parallel path"
     );
     assert!(
         module_a_inputs.contains(&"impl.bst".to_string()),

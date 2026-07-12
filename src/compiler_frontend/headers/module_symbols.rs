@@ -68,15 +68,15 @@ pub struct PublicExportEntry {
 
 /// Prepared entry-root boundary identity used by header import resolution.
 ///
-/// WHAT: carries the logical import prefix, module-root identity and actual prepared export file
+/// WHAT: carries the logical import prefix, module-root identity and actual prepared root file
 ///       together for one entry-root boundary.
-/// WHY: namespace imports must use the Stage 0-selected export file instead of reconstructing a
+/// WHY: namespace imports must use the Stage 0-selected root file instead of reconstructing a
 ///      filename from the import prefix.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ModuleRootBoundary {
     pub(crate) import_prefix: InternedPath,
     pub(crate) module_root: InternedPath,
-    pub(crate) export_file: Option<InternedPath>,
+    pub(crate) root_file: InternedPath,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -177,7 +177,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) module_root_public_exports: FxHashMap<InternedPath, FxHashSet<PublicExportEntry>>,
     // Prepared entry-root boundary identities, sorted by import prefix longest first.
     // Used for intercepting cross-module imports before file resolution and for resolving the
-    // actual prepared export file for namespace imports.
+    // actual prepared root file for namespace imports.
     pub(crate) module_root_boundaries: Vec<ModuleRootBoundary>,
 }
 

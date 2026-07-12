@@ -168,7 +168,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
 struct BeandownScopeFixture {
     _temp_dir: TempDir,
     project_root: PathBuf,
-    html_facade_path: PathBuf,
+    html_root_file: PathBuf,
     entry_file_path: PathBuf,
     project_path_resolver: ProjectPathResolver,
     source_files: SourceFileTable,
@@ -188,12 +188,12 @@ impl BeandownScopeFixture {
             fs::canonicalize(project_root).expect("project root should canonicalize");
         let entry_root = fs::canonicalize(entry_root).expect("entry root should canonicalize");
         let html_root = fs::canonicalize(html_root).expect("HTML root should canonicalize");
-        let html_facade_path = html_root.join("#mod.bst");
+        let html_root_file = html_root.join("#mod.bst");
 
-        // The miniature `@html` facade deliberately includes non-constant exports so the
+        // The miniature `@html` root deliberately includes non-constant exports so the
         // Beandown implicit scope proves it is filtering by source declaration kind.
         fs::write(
-            &html_facade_path,
+            &html_root_file,
             r#"export:
     p #String = "<p>"
     collision #= "html"
@@ -205,9 +205,9 @@ impl BeandownScopeFixture {
 ;
 "#,
         )
-        .expect("HTML source library facade should be written");
+        .expect("HTML source library root should be written");
 
-        let mut canonical_files = vec![html_facade_path.clone()];
+        let mut canonical_files = vec![html_root_file.clone()];
         for (relative_path, source) in files {
             let path = project_root.join(relative_path);
             if let Some(parent) = path.parent() {
@@ -246,7 +246,7 @@ impl BeandownScopeFixture {
         Self {
             _temp_dir: temp_dir,
             project_root,
-            html_facade_path,
+            html_root_file,
             entry_file_path,
             project_path_resolver,
             source_files,
@@ -415,7 +415,7 @@ impl BeandownScopeFixture {
 
     fn source_path_for_fixture_path(&self, relative_path: &str) -> PathBuf {
         if relative_path == "@html/#mod.bst" {
-            return self.html_facade_path.clone();
+            return self.html_root_file.clone();
         }
 
         self.project_root_path().join(relative_path)
@@ -423,7 +423,7 @@ impl BeandownScopeFixture {
 }
 
 fn prepared_module_roots(entry_root: &Path, files: &[PathBuf]) -> ModuleRootTable {
-    let mut roots_by_directory = BTreeMap::<PathBuf, (Option<PathBuf>, Option<PathBuf>)>::new();
+    let mut roots_by_directory = BTreeMap::<PathBuf, PathBuf>::new();
 
     for file in files {
         if !file.starts_with(entry_root) {
@@ -443,25 +443,12 @@ fn prepared_module_roots(entry_root: &Path, files: &[PathBuf]) -> ModuleRootTabl
             .parent()
             .expect("fixture source file should have a parent")
             .to_path_buf();
-        let (root_file, export_file) = roots_by_directory.entry(directory).or_default();
-
-        if file_name == "#mod.bst" {
-            *export_file = Some(file.clone());
-        } else {
-            *root_file = Some(file.clone());
-        }
+        roots_by_directory.insert(directory, file.clone());
     }
 
     let records = roots_by_directory
         .into_iter()
-        .filter_map(|(directory, (root_file, export_file))| {
-            let root_file = root_file.or_else(|| export_file.clone())?;
-            Some(ModuleRootRecord::with_export_file(
-                directory,
-                root_file,
-                export_file,
-            ))
-        })
+        .map(|(directory, root_file)| ModuleRootRecord::new(directory, root_file))
         .collect();
 
     ModuleRootTable::from_records(records)
@@ -767,31 +754,31 @@ fn declaration_like_text_remains_markdown_body_text() {
 }
 
 #[test]
-fn module_facade_export_syntax_can_target_beandown_content() {
+fn module_root_export_syntax_can_target_beandown_content() {
     let mut string_table = StringTable::new();
-    let facade_path = PathBuf::from("src/#mod.bst");
+    let root_file_path = PathBuf::from("src/#mod.bst");
     let entry_path = PathBuf::from("src/#page.bst");
 
-    let facade_output = prepare_beanstalk_source(
+    let root_output = prepare_beanstalk_source(
         "export:\n    import @./intro { content as intro }\n;\n",
-        &facade_path,
+        &root_file_path,
         &entry_path,
         &mut string_table,
     );
 
-    assert_eq!(facade_output.file_imports.len(), 1);
+    assert_eq!(root_output.file_imports.len(), 1);
     assert_eq!(
-        facade_output.file_imports[0].export_mode,
+        root_output.file_imports[0].export_mode,
         HeaderExportMode::Public
     );
     assert_eq!(
-        facade_output.file_imports[0]
+        root_output.file_imports[0]
             .header_path
             .to_portable_string(&string_table),
         "src/intro/content"
     );
     assert_eq!(
-        facade_output.file_imports[0]
+        root_output.file_imports[0]
             .alias
             .map(|alias| string_table.resolve(alias)),
         Some("intro")
@@ -837,11 +824,11 @@ fn beandown_header_visibility_contains_implicit_html_constants() {
 }
 
 #[test]
-fn beandown_body_sees_exported_same_directory_facade_constants() {
+fn beandown_body_sees_exported_same_directory_root_constants() {
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",
-            "export:\n    local_label #= \"from facade\"\n;\n",
+            "export:\n    local_label #= \"from root\"\n;\n",
         ),
         ("src/docs/intro.bd", "[local_label]"),
     ]);
@@ -850,11 +837,11 @@ fn beandown_body_sees_exported_same_directory_facade_constants() {
         &["@html/#mod.bst", "src/docs/#mod.bst", "src/docs/intro.bd"],
     );
 
-    folded_content_contains(&ast, &string_table, "from facade");
+    folded_content_contains(&ast, &string_table, "from root");
 }
 
 #[test]
-fn beandown_without_same_directory_facade_sees_only_html_constants() {
+fn beandown_without_same_directory_root_sees_only_html_constants() {
     let fixture = BeandownScopeFixture::new(&[("src/docs/intro.bd", "[collision]")]);
     let (ast, string_table) = fixture.compile_beandown_ast_ok(
         "src/docs/intro.bd",
@@ -865,7 +852,7 @@ fn beandown_without_same_directory_facade_sees_only_html_constants() {
 }
 
 #[test]
-fn same_directory_facade_constants_override_html_constants() {
+fn same_directory_root_constants_override_html_constants() {
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",
@@ -963,7 +950,7 @@ fn exported_same_directory_functions_and_types_are_not_visible_to_beandown_body(
             diagnostic.kind,
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnescapedImplicitTemplateClose)
         ),
-        "non-constant facade exports should fail during semantic lookup, got {diagnostic:?}"
+        "non-constant root exports should fail during semantic lookup, got {diagnostic:?}"
     );
 }
 
@@ -977,7 +964,7 @@ fn beandown_const_record_field_access_folds_in_template_head() {
 }
 
 #[test]
-fn facade_supplied_content_constant_can_be_referenced_normally() {
+fn root_supplied_content_constant_can_be_referenced_normally() {
     let fixture = BeandownScopeFixture::new(&[
         (
             "src/docs/#mod.bst",

@@ -197,11 +197,7 @@ impl SourceTreeIndex {
 
                 entry_candidates.push(root_file.clone());
 
-                records.push(ModuleRootRecord::with_export_file(
-                    root_directory,
-                    root_file.clone(),
-                    Some(root_file),
-                ));
+                records.push(ModuleRootRecord::new(root_directory, root_file));
             }
 
             subdirectories.sort();

@@ -149,15 +149,9 @@ fn prepared_module_root_table(root_file: &std::path::Path) -> ModuleRootTable {
         .parent()
         .expect("root file should have a parent")
         .to_path_buf();
-    let export_file = canonical_root_file
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| *name == "#mod.bst")
-        .map(|_| canonical_root_file.clone());
-    ModuleRootTable::from_records(vec![ModuleRootRecord::with_export_file(
+    ModuleRootTable::from_records(vec![ModuleRootRecord::new(
         root_directory,
         canonical_root_file,
-        export_file,
     )])
 }
 
@@ -408,7 +402,7 @@ fn source_library_import_resolves_to_library_root() {
 }
 
 #[test]
-fn source_library_folder_import_uses_generic_hash_root_facade() {
+fn source_library_folder_import_uses_generic_hash_root_public_surface() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -433,7 +427,10 @@ fn source_library_folder_import_uses_generic_hash_root_facade() {
 
     let canonical_root_file = fs::canonicalize(&root_file).unwrap();
     assert_eq!(
-        resolver.facade_files().get("helper"),
+        resolver
+            .source_library_public_surface_files()
+            .find(|(prefix, _)| prefix.as_str() == "helper")
+            .map(|(_, path)| path),
         Some(&canonical_root_file)
     );
 
@@ -442,7 +439,7 @@ fn source_library_folder_import_uses_generic_hash_root_facade() {
     path.push_str("helper", &mut string_table);
 
     let resolved = resolver
-        .resolve_import_to_source_file_with_facade_fallback(
+        .resolve_import_to_source_file_with_public_surface_fallback(
             &path,
             &entry_root.join("index.bst"),
             &mut string_table,
@@ -623,7 +620,7 @@ fn beandown_and_folder_same_stem_are_ambiguous() {
 }
 
 #[test]
-fn facade_fallback_preserves_beandown_folder_ambiguity() {
+fn public_surface_fallback_preserves_beandown_folder_ambiguity() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -631,7 +628,7 @@ fn facade_fallback_preserves_beandown_folder_ambiguity() {
     fs::create_dir_all(entry_root.join("docs/intro")).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
     fs::write(entry_root.join("docs/intro.bd"), b"hello").unwrap();
-    fs::write(entry_root.join("docs/intro/#mod.bst"), b"").unwrap();
+    fs::write(entry_root.join("docs/intro/#content.bst"), b"").unwrap();
 
     let mut registry = SourceFileKindRegistry::new();
     registry.register("bd", SourceFileKind::Beandown);
@@ -651,8 +648,12 @@ fn facade_fallback_preserves_beandown_folder_ambiguity() {
 
     let importer = entry_root.join("index.bst");
     let error = resolver
-        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
-        .expect_err("facade fallback must not hide .bd/folder ambiguity");
+        .resolve_import_to_source_file_with_public_surface_fallback(
+            &path,
+            &importer,
+            &mut string_table,
+        )
+        .expect_err("public-surface fallback must not hide .bd/folder ambiguity");
     let diagnostic = typed_import_diagnostic(&error);
 
     assert_eq!(
@@ -1050,14 +1051,14 @@ fn import_escape_library_root_rejected() {
 }
 
 #[test]
-fn module_root_facade_fallback_resolves_plain_folder_import() {
+fn module_root_public_surface_fallback_resolves_plain_folder_import() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
 
     fs::create_dir_all(&entry_root).unwrap();
     fs::create_dir_all(entry_root.join("helper")).unwrap();
-    fs::write(entry_root.join("helper/#mod.bst"), b"").unwrap();
+    fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
@@ -1066,7 +1067,7 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
         entry_root.clone(),
         &source_libraries,
         &crate::libraries::SourceFileKindRegistry::default(),
-        prepared_module_root_table(&entry_root.join("helper/#mod.bst")),
+        prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
     .expect("resolver creation should succeed");
 
@@ -1075,7 +1076,7 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
     path.push_str("helper", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+    let result = resolver.resolve_import_to_source_file_with_public_surface_fallback(
         &path,
         &importer,
         &mut string_table,
@@ -1083,23 +1084,23 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
 
     assert!(
         result.is_ok(),
-        "plain folder import should resolve to module root facade"
+        "plain folder import should resolve to module root public surface"
     );
     assert_eq!(
         result.unwrap().path,
-        fs::canonicalize(entry_root.join("helper/#mod.bst")).unwrap()
+        fs::canonicalize(entry_root.join("helper/#home.bst")).unwrap()
     );
 }
 
 #[test]
-fn disabled_module_root_discovery_does_not_register_plain_folder_facades() {
+fn disabled_module_root_discovery_does_not_register_plain_folder_public_surfaces() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
 
     fs::create_dir_all(&entry_root).unwrap();
     fs::create_dir_all(entry_root.join("helper")).unwrap();
-    fs::write(entry_root.join("helper/#mod.bst"), b"").unwrap();
+    fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
@@ -1121,7 +1122,7 @@ fn disabled_module_root_discovery_does_not_register_plain_folder_facades() {
     path.push_str("helper", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+    let result = resolver.resolve_import_to_source_file_with_public_surface_fallback(
         &path,
         &importer,
         &mut string_table,
@@ -1129,19 +1130,19 @@ fn disabled_module_root_discovery_does_not_register_plain_folder_facades() {
 
     assert!(
         result.is_err(),
-        "single-file resolver policy should not use directory-project facade fallback"
+        "single-file resolver policy should not use directory-project public-surface fallback"
     );
 }
 
 #[test]
-fn plain_folder_import_to_module_root_without_facade_is_rejected() {
+fn plain_folder_import_to_module_root_uses_any_hash_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
 
     fs::create_dir_all(&entry_root).unwrap();
     fs::create_dir_all(entry_root.join("helper")).unwrap();
-    fs::write(entry_root.join("helper/#page.bst"), b"").unwrap();
+    fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
@@ -1150,7 +1151,7 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
         entry_root.clone(),
         &source_libraries,
         &crate::libraries::SourceFileKindRegistry::default(),
-        prepared_module_root_table(&entry_root.join("helper/#page.bst")),
+        prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
     .expect("resolver creation should succeed");
 
@@ -1159,22 +1160,17 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
     path.push_str("helper", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let err = resolver
-        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
-        .expect_err("plain folder import to module root without facade should fail");
-
-    let diagnostic = typed_import_diagnostic(&err);
-    assert_eq!(
-        diagnostic.kind,
-        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
-            ImportDiagnosticKind::MissingModuleRootPublicSurface
+    let result = resolver
+        .resolve_import_to_source_file_with_public_surface_fallback(
+            &path,
+            &importer,
+            &mut string_table,
         )
-    );
+        .expect("any hash root should be the module public surface");
 
-    let rendered_msg = rendered_error_msg(&err, &string_table);
-    assert!(
-        rendered_msg.contains("no public export surface"),
-        "expected missing public-surface suggestion, got: {rendered_msg}"
+    assert_eq!(
+        result.path,
+        fs::canonicalize(entry_root.join("helper/#home.bst")).unwrap()
     );
 }
 
@@ -1186,7 +1182,7 @@ fn concrete_file_import_inside_module_root_is_accepted() {
 
     fs::create_dir_all(&entry_root).unwrap();
     fs::create_dir_all(entry_root.join("helper")).unwrap();
-    fs::write(entry_root.join("helper/#page.bst"), b"").unwrap();
+    fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("helper/thing.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
@@ -1205,7 +1201,7 @@ fn concrete_file_import_inside_module_root_is_accepted() {
     path.push_str("thing", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+    let result = resolver.resolve_import_to_source_file_with_public_surface_fallback(
         &path,
         &importer,
         &mut string_table,

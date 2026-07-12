@@ -120,7 +120,7 @@ fn build_source_library_public_exports(
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> PublicExportDataResult<()> {
-    for (prefix, root_file) in resolver.facade_files() {
+    for (prefix, root_file) in resolver.source_library_public_surface_files() {
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
@@ -173,7 +173,7 @@ fn build_source_library_public_imports(
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> PublicExportDataResult<()> {
-    for (prefix, root_file) in resolver.facade_files() {
+    for (prefix, root_file) in resolver.source_library_public_surface_files() {
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
@@ -255,8 +255,9 @@ fn build_module_root_public_exports_pass1(
             .file_module_membership
             .insert(canonical, module_root_interned.clone());
 
-        if let Some(export_file) = resolver.module_root_export_files().get(&module_root)
-            && canonical_path == export_file
+        if resolver
+            .module_root_file_for_directory(&module_root)
+            .is_some_and(|root_file| canonical_path.as_path() == root_file.as_path())
             && is_authored_public_export(header)
             && let Some(export_name) = header.tokens.src_path.name()
         {
@@ -306,11 +307,11 @@ fn build_module_root_public_imports(
         let Some(module_root) = resolver.module_root_for_file(canonical_export_path) else {
             continue;
         };
-        let Some(module_export_path) = resolver.module_root_export_files().get(&module_root) else {
+        let Some(module_root_path) = resolver.module_root_file_for_directory(&module_root) else {
             continue;
         };
 
-        if module_export_path != canonical_export_path {
+        if module_root_path != *canonical_export_path {
             continue;
         }
 
@@ -651,28 +652,24 @@ fn build_module_root_boundaries(
     for module_root in resolver.module_roots() {
         let root_interned = InternedPath::from_path_buf(module_root, string_table);
 
-        let export_file = resolver
-            .module_root_export_files()
-            .get(module_root)
-            .map(|export_file| {
-                module_symbols
-                    .module_root_public_exports
-                    .entry(root_interned.clone())
-                    .or_default();
-
-                resolver
-                    .logical_path_for_canonical_file(export_file, string_table)
-                    .map(|logical_path| InternedPath::from_path_buf(&logical_path, string_table))
-                    .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))
-            })
-            .transpose()?;
+        let Some(root_file) = resolver.module_root_file_for_directory(module_root) else {
+            continue;
+        };
+        module_symbols
+            .module_root_public_exports
+            .entry(root_interned.clone())
+            .or_default();
+        let root_file = resolver
+            .logical_path_for_canonical_file(&root_file, string_table)
+            .map(|logical_path| InternedPath::from_path_buf(&logical_path, string_table))
+            .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
 
         if let Ok(relative) = module_root.strip_prefix(resolver.entry_root()) {
             let prefix_interned = InternedPath::from_path_buf(relative, string_table);
             module_root_boundaries.push(ModuleRootBoundary {
                 import_prefix: prefix_interned,
                 module_root: root_interned,
-                export_file,
+                root_file,
             });
         }
     }

@@ -336,11 +336,11 @@ fn source_receiver_methods_remain_absent_from_namespace_records() {
 }
 
 #[test]
-fn module_root_namespace_uses_prepared_export_file_identity() {
+fn module_root_namespace_uses_prepared_root_file_identity() {
     let mut string_table = StringTable::new();
     let source_file = intern_path(&["src", "#page.bst"], &mut string_table);
     let module_root = intern_path(&["helper-root"], &mut string_table);
-    let export_file = intern_path(&["helper", "#page.bst"], &mut string_table);
+    let root_file = intern_path(&["helper", "#home.bst"], &mut string_table);
     let import = test_import(
         intern_path(&["helper"], &mut string_table),
         &mut string_table,
@@ -348,20 +348,20 @@ fn module_root_namespace_uses_prepared_export_file_identity() {
 
     let mut module_symbols = ModuleSymbols::empty();
     module_symbols.module_file_paths.insert(source_file.clone());
-    module_symbols.module_file_paths.insert(export_file.clone());
+    module_symbols.module_file_paths.insert(root_file.clone());
     module_symbols.file_module_membership.insert(
         source_file.clone(),
         intern_path(&["entry-root"], &mut string_table),
     );
     module_symbols
         .file_module_membership
-        .insert(export_file.clone(), module_root.clone());
+        .insert(root_file.clone(), module_root.clone());
     module_symbols
         .module_root_boundaries
         .push(ModuleRootBoundary {
             import_prefix: intern_path(&["helper"], &mut string_table),
             module_root,
-            export_file: Some(export_file.clone()),
+            root_file: root_file.clone(),
         });
 
     let registry = ExternalPackageRegistry::new();
@@ -378,9 +378,9 @@ fn module_root_namespace_uses_prepared_export_file_identity() {
     let Some(ResolvedNamespaceTarget::SourceFile(path)) =
         builder.resolve_module_root_public_export(&import.header_path, &source_file)
     else {
-        panic!("module root namespace should use the prepared export file");
+        panic!("module root namespace should use the prepared root file");
     };
-    assert_eq!(path, export_file);
+    assert_eq!(path, root_file);
 }
 
 // ------------------------------------------------------------------

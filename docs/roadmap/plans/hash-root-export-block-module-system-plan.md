@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: blocked
-CURRENT_SLICE: Phase 7B accepted for checkpoint; Phase 8 waits on the external canvas validation blocker
-LAST_ACCEPTED_COMMIT: `d04dc106b` (`feat: carry module root activity`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 7B is ready for its checkpoint commit. Concurrent docs migration, generated docs, `tmp/**`, `libraries/html/#mod.bst` and the parent-owned template whitespace fix remain outside this plan's commit.
+STATUS: active
+CURRENT_SLICE: Phase 10 implementation cleanup audit. Phase 9 documentation remains deferred while the user-owned docs migration is active.
+LAST_ACCEPTED_COMMIT: `be16163a6` (`feat: filter API-only HTML modules`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `bc143430c`; Phase 7 is complete. Canvas cleanup and whitespace-only named-slot routing are committed separately at `bc143430c`. Concurrent docs migration remains user-owned and outside implementation worker scope.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -18,8 +18,8 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - this plan
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
-- docs: language overview, project-structure docs, libraries docs and progress matrix use canonical `config.bst`; module-root and inline `export` wording remains for later phases.
-- code: `source_tree_index.rs` enforces one hash root per module directory and passes prepared `ModuleRootTable` identity forward. `FileRole` is now `ActiveModuleRoot`, `ImportedModuleRoot` or `Normal`. Header parsing alone emits active-root start bodies, discards imported-root body tokens and records root activity facts. Generic root identity uses prepared hash-map indexes. Inline `export` remains temporarily accepted only on module roots until Phase 5 replaces it atomically.
+- docs: the ongoing language migration is user-owned. Compiler-design source-discovery and import pages still contain facade-era wording and are deferred to Phase 9.
+- code: Phase 8 removed the optional export-file side map and facade-specific traversal APIs. Source-library roots, cross-module public surfaces and same-directory Beandown roots now share generic module-root metadata and the existing provider-capable/provider-free traversal.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -184,6 +184,8 @@ VALIDATION_STATE:
 - Phase 6B public surface semantics and diagnostics: Codex CLI replaced the facade resolver with `public_export_resolution.rs`, renamed AST public-surface validation and renamed structured import diagnostics while preserving `BST-IMPORT-0011` and `BST-IMPORT-0012`. Imported-root conformance wording now describes its real role. A correction worker removed stale `#mod.bst` keyword/token comments. Worker full `just validate` passed 3329 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting, 51 compiler-message tests, 174 header tests and 8 AST environment tests.
 - Phase 7A root activity handoff: Codex CLI added `ModuleRootActivity`, preserved all three existing header facts through dependency sorting and replaced the standalone backend runtime-fragment count with one `Module.root_activity` value. Existing JS/Wasm compilation reads its runtime member without changing artifact behavior. Worker full `just validate` passed 3331 unit tests, 1749 integration cases and 28/28 benchmark checks. Parent reran formatting plus focused propagation and helper-policy tests.
 - Phase 7B HTML artifact policy: Codex CLI filters page compilation, runtime assets and tracked assets through `ModuleRootActivity`, makes directory routes depend only on module directories and selects the homepage by the active root directory rather than a `#page.bst` filename. Directory builds with only API roots retain the structured missing-homepage diagnostic while single-file API-only builds may emit an empty project. Focused HTML tests passed (253), build orchestration tests passed (17), compiler-message tests passed (53) and `just bench-frontend-check` passed (26 cases). The integration runner reached only five concurrent canvas failures. All-target tests reached only the matching canvas unit failure.
+- Phase 7 final gate and canvas cleanup: the parent updated obsolete canvas fixtures to named `id` and `style` inserts, removed positional canvas dimensions and made whitespace-only loose content around named inserts disappear without weakening meaningful loose-content diagnostics. `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -2 ms average. Cleanup commit: `bc143430c`.
+- Phase 8 generic traversal: Codex CLI removed the optional module-root export-file map and source-library facade map, made each discovered root file the authoritative public surface and renamed resolver/validation paths around module roots. Shared reachable-file traversal still owns provider-capable and provider-free imports, source-cache reuse and cross-module root queueing. Arbitrary-name source-library and Beandown root coverage was added. Focused Stage 0, path and header suites passed. Parent `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at 0 ms average.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -191,11 +193,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- After the concurrent canvas cleanup and fixture updates settle, rerun `just validate`. If it passes, refresh this state with the Phase 7B commit and delegate Phase 8 through codex-cli.
+- Delegate Phase 10 obsolete-path and duplicate-discovery cleanup through codex-cli while Phase 9 remains deferred for the user-owned docs migration.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
-STOP_REASON: validation exposes an out-of-scope blocker: concurrent `libraries/html/#mod.bst` changes removed positional canvas slots while one Rust test and five integration cases still pass width and height as loose contributions.
-NEXT_RESUME_ACTION: rerun `just validate` after the user-owned canvas change and its fixtures are consistent.
+STOP_REASON: none
+NEXT_RESUME_ACTION: launch the Phase 10 implementation cleanup audit through codex-cli without editing documentation.
 
 ---
 
@@ -948,7 +950,7 @@ impl ModuleRootActivity {
 - [x] Add integration test: module root with top-level runtime code emits output if current HTML semantics support it.
 - [x] Add integration test: imported API-only module contributes functions/types to a page root.
 - [x] Run HTML builder tests.
-- [ ] Run `just validate`.
+- [x] Run `just validate`.
 - [x] Run focused benchmark check for API-only module projects if fixtures are added.
 - [x] Update active context capsule.
 
@@ -962,27 +964,27 @@ Current reachable traversal queues source library facades and cross-module `#mod
 
 ### Checklist
 
-- [ ] Update source library root queueing:
-  - [ ] queue each source library root file from generic root metadata;
-  - [ ] stop looking specifically for `#mod.bst`.
-- [ ] Update cross-module import handling:
-  - [ ] when an import crosses module root boundary, queue the target module root file as `ImportedModuleRoot` surface;
-  - [ ] avoid queueing if already reachable;
-  - [ ] preserve source kind for Beandown/Markdown imports.
-- [ ] Ensure same-module imports do not require public export checks.
-- [ ] Preserve provider-capable and provider-free traversal paths.
-- [ ] Preserve source-cache reuse during import scanning.
-- [ ] Preserve Beandown same-directory root-file queueing for restricted same-directory compile-time constants, updated from facade naming to root-file naming.
-- [ ] Update `src/projects/html_project/beandown/scope.rs` and related Beandown tests if they still name same-directory `#mod.bst` constants.
+- [x] Update source library root queueing:
+  - [x] queue each source library root file from generic root metadata;
+  - [x] stop looking specifically for `#mod.bst`.
+- [x] Update cross-module import handling:
+  - [x] when an import crosses module root boundary, queue the target module root file as `ImportedModuleRoot` surface;
+  - [x] avoid queueing if already reachable;
+  - [x] preserve source kind for Beandown/Markdown imports.
+- [x] Ensure same-module imports do not require public export checks.
+- [x] Preserve provider-capable and provider-free traversal paths.
+- [x] Preserve source-cache reuse during import scanning.
+- [x] Preserve Beandown same-directory root-file queueing for restricted same-directory compile-time constants, updated from facade naming to root-file naming.
+- [x] Update `src/projects/html_project/beandown/scope.rs` and related Beandown tests if they still name same-directory `#mod.bst` constants.
 
 ### Review / audit / validation
 
-- [ ] Run reachable file discovery tests.
-- [ ] Run Beandown/Markdown import tests.
-- [ ] Run provider-backed external import tests if available.
-- [ ] Run `just validate`.
-- [ ] Run `just bench-frontend-check` to ensure traversal changes did not regress parallelism/source-loading cases.
-- [ ] Update active context capsule.
+- [x] Run reachable file discovery tests.
+- [x] Run Beandown/Markdown import tests.
+- [x] Run provider-backed external import tests if available.
+- [x] Run `just validate`.
+- [x] Run `just bench-frontend-check` to ensure traversal changes did not regress parallelism/source-loading cases.
+- [x] Update active context capsule.
 
 ---
 

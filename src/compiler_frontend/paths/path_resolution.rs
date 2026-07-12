@@ -1,4 +1,4 @@
-//! Project-aware path resolution facade.
+//! Project-aware path resolution and public-surface fallback.
 //!
 //! `ProjectPathResolver` keeps the public resolution surface for Stage 0, headers, AST folding,
 //! and builder-facing path tracking. The data contracts, module-root scanning, and path
@@ -61,9 +61,9 @@ pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
     source_library_roots: HashMap<String, PathBuf>,
+    /// Source-library hash-root discovery state. A unique root file is the library's public
+    /// surface; missing or ambiguous states remain available for Stage 0 validation.
     source_library_root_files: HashMap<String, HashRootFileDiscovery>,
-    /// Maps library prefix to the canonical path of its temporary facade file, if present.
-    facade_files: HashMap<String, PathBuf>,
     /// Module roots prepared by Stage 0. Resolver construction never discovers them.
     module_roots: ModuleRootTable,
     /// Import root policy enforced during import resolution.
@@ -107,9 +107,9 @@ impl ProjectPathResolver {
         for root in source_libraries.iter() {
             // Currently only filesystem roots are supported; embedded roots will be added later.
             let crate::libraries::ProvidedSourceRoot::Filesystem(path) = &root.root;
-            // Keep a non-canonical fallback so Stage 0 can still report typed source-library
-            // facade diagnostics for configured roots that exist logically but fail early
-            // canonicalization in test or project setup contexts.
+            // Keep a non-canonical fallback so Stage 0 can still report typed source-library root
+            // diagnostics for configured roots that exist logically but fail early canonicalization
+            // in test or project setup contexts.
             let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
             source_library_roots.insert(root.import_prefix.clone(), canonical_root);
         }
@@ -119,11 +119,10 @@ impl ProjectPathResolver {
         );
 
         // Discover one generic root candidate in each source library root. Missing or ambiguous
-        // candidates stay in the resolver for Stage 0 validation, while the unique candidate is
-        // canonicalized for the existing temporary facade map.
-        let source_library_facades_start = crate::timing::start_pipeline_timing();
+        // candidates stay in the resolver for Stage 0 validation. A unique candidate is stored as
+        // the canonical public-surface file used by import resolution and header preparation.
+        let source_library_roots_start = crate::timing::start_pipeline_timing();
         let mut source_library_root_files = HashMap::new();
-        let mut facade_files = HashMap::new();
         for (prefix, root) in &source_library_roots {
             let discovery = match discover_hash_root_file(root) {
                 Ok(discovery) => discovery,
@@ -135,12 +134,9 @@ impl ProjectPathResolver {
 
             let discovery = match discovery {
                 HashRootFileDiscovery::Unique(root_file) => match fs::canonicalize(&root_file) {
-                    Ok(canonical) => {
-                        facade_files.insert(prefix.clone(), canonical);
-                        HashRootFileDiscovery::Unique(root_file)
-                    }
+                    Ok(canonical) => HashRootFileDiscovery::Unique(canonical),
                     Err(error) => HashRootFileDiscovery::Unreadable(format!(
-                        "Failed to canonicalize source library root file '{}': {error}",
+                        "Failed to canonicalize source library public-surface file '{}': {error}",
                         root_file.display()
                     )),
                 },
@@ -150,8 +146,8 @@ impl ProjectPathResolver {
             source_library_root_files.insert(prefix.clone(), discovery);
         }
         log_path_resolver_timing(
-            "stage0.path_resolver.source_library_facades",
-            source_library_facades_start,
+            "stage0.path_resolver.source_library_roots",
+            source_library_roots_start,
         );
 
         let resolver = Self {
@@ -159,7 +155,6 @@ impl ProjectPathResolver {
             entry_root,
             source_library_roots,
             source_library_root_files,
-            facade_files,
             module_roots,
             import_root_policy: ImportRootPolicy::Normal,
             source_file_kinds: source_file_kinds.clone(),
@@ -189,18 +184,23 @@ impl ProjectPathResolver {
         &self.source_library_roots
     }
 
-    /// WHAT: returns the map of discovered facade files.
-    pub(crate) fn facade_files(&self) -> &HashMap<String, PathBuf> {
-        &self.facade_files
-    }
-
     /// Returns the generic hash-root discovery state for each source library.
     pub(crate) fn source_library_root_files(&self) -> &HashMap<String, HashRootFileDiscovery> {
         &self.source_library_root_files
     }
 
-    pub(crate) fn module_root_export_files(&self) -> &HashMap<PathBuf, PathBuf> {
-        self.module_roots.export_files()
+    /// Returns each source library's unique hash-root file as its public surface.
+    pub(crate) fn source_library_public_surface_files(
+        &self,
+    ) -> impl Iterator<Item = (&String, &PathBuf)> {
+        self.source_library_root_files
+            .iter()
+            .filter_map(|(prefix, discovery)| match discovery {
+                HashRootFileDiscovery::Unique(root_file) => Some((prefix, root_file)),
+                HashRootFileDiscovery::Missing
+                | HashRootFileDiscovery::Multiple(_)
+                | HashRootFileDiscovery::Unreadable(_) => None,
+            })
     }
 
     pub(crate) fn module_root_file_for_directory(&self, directory: &Path) -> Option<PathBuf> {
@@ -301,9 +301,9 @@ impl ProjectPathResolver {
         })
     }
 
-    /// WHAT: resolves an import path with facade fallback while preserving source kind.
-    /// WHY: Stage 0 needs source kind for implementation files and Beanstalk kind for facade files.
-    pub(crate) fn resolve_import_to_source_file_with_facade_fallback(
+    /// WHAT: resolves an import path with public-surface fallback while preserving source kind.
+    /// WHY: Stage 0 needs source kind for implementation files and Beanstalk kind for root files.
+    pub(crate) fn resolve_import_to_source_file_with_public_surface_fallback(
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
@@ -316,9 +316,11 @@ impl ProjectPathResolver {
                     return Err(original_error);
                 }
 
-                if let Some(facade_file) = self.resolve_facade_fallback(import_path, string_table) {
+                if let Some(root_file) =
+                    self.resolve_source_library_public_surface(import_path, string_table)
+                {
                     Ok(ResolvedImportFile {
-                        path: facade_file,
+                        path: root_file,
                         kind: SourceFileKind::Beanstalk,
                     })
                 } else {
@@ -328,13 +330,13 @@ impl ProjectPathResolver {
                         return Err(original_error);
                     }
 
-                    match self.resolve_module_root_facade_fallback(
+                    match self.resolve_module_root_public_surface_fallback(
                         import_path,
                         importer_file,
                         string_table,
                     ) {
-                        Ok(Some(export_file)) => Ok(ResolvedImportFile {
-                            path: export_file,
+                        Ok(Some(root_file)) => Ok(ResolvedImportFile {
+                            path: root_file,
                             kind: SourceFileKind::Beanstalk,
                         }),
                         Ok(None) => Err(original_error),
@@ -345,24 +347,29 @@ impl ProjectPathResolver {
         }
     }
 
-    /// WHAT: checks whether an import path targets a library with a facade, and if so,
-    /// returns the facade file path.
-    fn resolve_facade_fallback(
+    /// WHAT: checks whether an import path targets a source library and returns its root file.
+    fn resolve_source_library_public_surface(
         &self,
         import_path: &InternedPath,
         string_table: &StringTable,
     ) -> Option<PathBuf> {
         let first_component = import_path.as_components().first()?;
         let prefix = string_table.resolve(*first_component);
-        self.facade_files.get(prefix).cloned()
+        self.source_library_root_files
+            .get(prefix)
+            .and_then(|discovery| match discovery {
+                HashRootFileDiscovery::Unique(root_file) => Some(root_file.clone()),
+                HashRootFileDiscovery::Missing
+                | HashRootFileDiscovery::Multiple(_)
+                | HashRootFileDiscovery::Unreadable(_) => None,
+            })
     }
 
-    /// WHAT: checks whether an import path targets a regular module root with an export file,
-    /// and if so, returns the prepared export file path. If the target is a module root without
-    /// an export file, returns a diagnostic so the caller can report a clear missing-facade error.
-    /// WHY: regular module roots (under the entry root) use their prepared export file as the
-    ///      outward-facing surface. Plain folder imports resolve to it only when present.
-    fn resolve_module_root_facade_fallback(
+    /// WHAT: checks whether an import path targets a regular module root and returns its prepared
+    /// root file.
+    /// WHY: regular module roots (under the entry root) use their prepared root file as the
+    ///      outward-facing surface. Plain folder imports resolve to it after normal file lookup.
+    fn resolve_module_root_public_surface_fallback(
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
@@ -384,28 +391,17 @@ impl ProjectPathResolver {
             // so non-canonical paths won't match canonicalized module roots.
             let lookup_current = fs::canonicalize(&current).unwrap_or_else(|_| current.clone());
 
-            if self.module_roots.contains_directory(&lookup_current) {
+            if let Some(root_path) = self.module_root_file_for_directory(&lookup_current) {
                 let canonical_importer =
                     fs::canonicalize(importer_file).unwrap_or_else(|_| importer_file.to_path_buf());
                 let importer_root = self.module_root_for_file(&canonical_importer);
 
-                // Same-module imports do not need facade fallback.
+                // Same-module imports do not need public-surface fallback.
                 if importer_root.as_ref() == Some(&lookup_current) {
                     return Ok(None);
                 }
 
-                if let Some(export_path) = self.module_root_export_files().get(&lookup_current) {
-                    return Ok(Some(export_path.clone()));
-                }
-
-                // Target module root has no public export surface.
-                let location = SourceLocation::from_path(importer_file, string_table);
-                return Err(ImportPathResolutionError::Diagnostic(Box::new(
-                    CompilerDiagnostic::missing_module_root_public_surface(
-                        import_path.clone(),
-                        location,
-                    ),
-                )));
+                return Ok(Some(root_path));
             }
             if !current.pop() {
                 break;
@@ -574,8 +570,8 @@ impl ProjectPathResolver {
     }
 
     /// WHAT: checks whether a file already admitted to config parsing belongs to a source library.
-    /// WHY: `config.bst` cannot use relative imports, but builder/core source-library facades
-    /// often re-export support declarations through relative imports inside the library root.
+    /// WHY: `config.bst` cannot use relative imports, but builder/core source-library roots often
+    /// re-export support declarations through relative imports inside the library root.
     fn importer_is_inside_source_library(&self, importer_file: &Path) -> bool {
         let canonical_importer =
             fs::canonicalize(importer_file).unwrap_or_else(|_| importer_file.to_path_buf());
@@ -641,7 +637,7 @@ impl ProjectPathResolver {
 
     /// WHAT: exposes the normal path base calculation for provider-backed external files.
     /// WHY: Stage 0 external providers need the same relative/library/module boundary base as
-    /// Beanstalk imports, but they must not append `.bst` or use facade fallback.
+    /// Beanstalk imports, but they must not append `.bst` or use public-surface fallback.
     ///
     /// NOTE: `string_table` is only used on error paths to intern diagnostic file paths.
     pub(crate) fn resolve_path_base_for_provider(

@@ -17,34 +17,24 @@ pub(crate) struct ModuleRootId(usize);
 pub(crate) struct ModuleRootRecord {
     root_directory: PathBuf,
     root_file: PathBuf,
-    export_file: Option<PathBuf>,
 }
 
 impl ModuleRootRecord {
-    pub(crate) fn with_export_file(
-        root_directory: PathBuf,
-        root_file: PathBuf,
-        export_file: Option<PathBuf>,
-    ) -> Self {
+    pub(crate) fn new(root_directory: PathBuf, root_file: PathBuf) -> Self {
         Self {
             root_directory,
             root_file,
-            export_file,
         }
     }
 }
 
 /// Prepared module-root records and indexes used by path resolution.
 ///
-/// The export-file map is an index over the same records, not an independently discovered
-/// filesystem view. It remains available to the current facade/export consumers until their later
-/// roadmap phase replaces the filename-specific surface.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModuleRootTable {
     records: Vec<ModuleRootRecord>,
     by_directory: HashMap<PathBuf, ModuleRootId>,
     by_root_file: HashMap<PathBuf, ModuleRootId>,
-    export_files: HashMap<PathBuf, PathBuf>,
 }
 
 impl ModuleRootTable {
@@ -68,12 +58,6 @@ impl ModuleRootTable {
             let id = ModuleRootId(index);
             table.by_directory.insert(record.root_directory.clone(), id);
             table.by_root_file.insert(record.root_file.clone(), id);
-
-            if let Some(export_file) = &record.export_file {
-                table
-                    .export_files
-                    .insert(record.root_directory.clone(), export_file.clone());
-            }
         }
 
         table
@@ -81,10 +65,6 @@ impl ModuleRootTable {
 
     pub(crate) fn root_directories(&self) -> impl Iterator<Item = &PathBuf> {
         self.records.iter().map(|record| &record.root_directory)
-    }
-
-    pub(crate) fn export_files(&self) -> &HashMap<PathBuf, PathBuf> {
-        &self.export_files
     }
 
     pub(crate) fn root_file_for_directory(&self, directory: &Path) -> Option<&Path> {
@@ -108,9 +88,5 @@ impl ModuleRootTable {
         }
 
         None
-    }
-
-    pub(crate) fn contains_directory(&self, directory: &Path) -> bool {
-        self.by_directory.contains_key(directory)
     }
 }

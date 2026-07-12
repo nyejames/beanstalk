@@ -1,7 +1,7 @@
-//! Source-library facade preflight for Stage 0.
+//! Source-library root preflight for Stage 0.
 //!
 //! WHAT: verifies every discovered source-library root contains exactly one generic hash root.
-//! WHY: source-library imports are consumed through the existing facade pipeline during header
+//! WHY: source-library imports are consumed through the prepared root public surface during header
 //! parsing, so Stage 0 should reject missing or ambiguous roots before frontend compilation.
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -13,7 +13,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use super::project_structure_diagnostics::{path_id, project_structure_messages};
 
 /// Validate that every source-library root has exactly one direct-child hash root file.
-pub(super) fn validate_source_library_facades(
+pub(super) fn validate_source_library_roots(
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {

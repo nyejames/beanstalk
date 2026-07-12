@@ -375,7 +375,7 @@ fn build_config_source_set(
             }
 
             let resolved = match project_path_resolver
-                .resolve_import_to_source_file_with_facade_fallback(
+                .resolve_import_to_source_file_with_public_surface_fallback(
                     import_path,
                     &canonical_file,
                     string_table,

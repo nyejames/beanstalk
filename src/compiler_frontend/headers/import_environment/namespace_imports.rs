@@ -331,7 +331,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Resolve a bare import that names a public export namespace.
     ///
-    /// WHAT: `import @library` and cross-module `import @module` expose the target prepared export
+    /// WHAT: `import @library` and cross-module `import @module` expose the target prepared root
     /// file surface as a namespace record.
     /// WHY: namespace imports must obey the same public export boundary as grouped imports.
     pub(super) fn resolve_public_export_namespace_target(
@@ -403,9 +403,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 return None;
             }
 
-            let export_file = boundary.export_file.as_ref()?;
-            if self.module_symbols.module_file_paths.contains(export_file) {
-                return Some(ResolvedNamespaceTarget::SourceFile(export_file.clone()));
+            if self
+                .module_symbols
+                .module_file_paths
+                .contains(&boundary.root_file)
+            {
+                return Some(ResolvedNamespaceTarget::SourceFile(
+                    boundary.root_file.clone(),
+                ));
             }
         }
 
@@ -481,8 +486,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         if self
-            .module_root_export_file(target_root)
-            .is_some_and(|export_file| target_file == &export_file)
+            .module_root_public_surface_file(target_root)
+            .is_some_and(|root_file| target_file == &root_file)
         {
             return Ok(());
         }
@@ -504,12 +509,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         )))
     }
 
-    fn module_root_export_file(&self, module_root: &InternedPath) -> Option<InternedPath> {
+    fn module_root_public_surface_file(&self, module_root: &InternedPath) -> Option<InternedPath> {
         self.module_symbols
             .module_root_boundaries
             .iter()
             .find(|boundary| boundary.module_root == *module_root)
-            .and_then(|boundary| boundary.export_file.clone())
+            .map(|boundary| boundary.root_file.clone())
     }
 
     /// Derive the local namespace name from an import, validating the default name.
