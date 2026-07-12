@@ -86,7 +86,7 @@ pub(crate) fn validate_trait_evidence(
             continue;
         };
 
-        if header.file_role == FileRole::ModuleFacade {
+        if header.file_role == FileRole::ImportedModuleRoot {
             return Err(invalid_conformance(
                 conformance.target.name,
                 conformance.traits.first().map(|trait_ref| trait_ref.name),

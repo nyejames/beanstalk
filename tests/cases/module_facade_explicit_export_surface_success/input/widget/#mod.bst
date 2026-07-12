@@ -1,5 +1,7 @@
 import @./theme { accent }
 
+[: imported-root-runtime-must-not-execute ]
+
 private_prefix #= "facade"
 
 PrivateLabel = |

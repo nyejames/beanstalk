@@ -1,3 +1,3 @@
-import @./#home { symbol }
+import @./helper/#home { symbol }
 
 io.line([: [symbol]])

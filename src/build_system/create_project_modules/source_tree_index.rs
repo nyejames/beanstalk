@@ -15,6 +15,8 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::project_structure_diagnostics::{path_id, project_structure_messages};
+
 const FIXED_SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     ".git",
     "target",
@@ -34,24 +36,12 @@ pub(crate) struct SourceTreeDiscoveryStats {
     pub(crate) files_seen: usize,
     pub(crate) hash_root_files_seen: usize,
     pub(crate) module_roots_found: usize,
-    pub(crate) duplicate_hash_root_dirs: usize,
 }
 
 /// Directory names and configured output boundaries excluded from entry-root traversal.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SourceTreeSkipPolicy {
     configured_directories: Vec<PathBuf>,
-}
-
-/// One directory that contains multiple current hash-root files.
-///
-/// Phase 2 records this evidence without rejecting it because the live temporary `#mod.bst`
-/// export-file selection and multi-entry page model are removed only when root roles are unified
-/// in later phases.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DuplicateHashRootDirectory {
-    pub(crate) directory: PathBuf,
-    pub(crate) files: Vec<PathBuf>,
 }
 
 impl SourceTreeSkipPolicy {
@@ -99,7 +89,6 @@ pub(crate) struct SourceTreeIndex {
     entry_root: PathBuf,
     module_roots: ModuleRootTable,
     entry_candidates: Vec<PathBuf>,
-    duplicate_hash_root_directories: Vec<DuplicateHashRootDirectory>,
     stats: SourceTreeDiscoveryStats,
 }
 
@@ -117,7 +106,6 @@ impl SourceTreeIndex {
         let mut queue = VecDeque::from([entry_root.clone()]);
         let mut records = Vec::new();
         let mut entry_candidates = Vec::new();
-        let mut duplicate_directories = Vec::new();
 
         while let Some(directory) = queue.pop_front() {
             stats.dirs_visited += 1;
@@ -188,40 +176,31 @@ impl SourceTreeIndex {
                     .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
                 if hash_root_files.len() > 1 {
-                    stats.duplicate_hash_root_dirs += 1;
-                    duplicate_directories.push(DuplicateHashRootDirectory {
-                        directory: root_directory.clone(),
-                        files: hash_root_files.clone(),
-                    });
+                    let candidates = hash_root_files
+                        .iter()
+                        .map(|path| path_id(path, string_table))
+                        .collect();
+                    return Err(project_structure_messages(
+                        &root_directory,
+                        crate::compiler_frontend::compiler_messages::InvalidConfigReason::MultipleModuleRootFiles {
+                            directory: path_id(&root_directory, string_table),
+                            candidates,
+                        },
+                        string_table,
+                    ));
                 }
 
                 stats.module_roots_found += 1;
-                // Keep the current `#mod.bst` choice isolated until the later root-role
-                // transition. The selected path is carried as prepared export identity below.
-                let export_file = hash_root_files
-                    .iter()
-                    .find(|file| root_file_name_is_mod(file))
-                    .cloned();
-                let Some(root_file) = hash_root_files
-                    .iter()
-                    .find(|file| !root_file_name_is_mod(file))
-                    .cloned()
-                    .or_else(|| export_file.clone())
-                else {
-                    continue;
-                };
+                let root_file = hash_root_files
+                    .pop()
+                    .expect("non-empty hash-root list has one root after duplicate validation");
 
-                entry_candidates.extend(
-                    hash_root_files
-                        .iter()
-                        .filter(|file| !root_file_name_is_mod(file))
-                        .cloned(),
-                );
+                entry_candidates.push(root_file.clone());
 
                 records.push(ModuleRootRecord::with_export_file(
                     root_directory,
-                    root_file,
-                    export_file,
+                    root_file.clone(),
+                    Some(root_file),
                 ));
             }
 
@@ -236,7 +215,6 @@ impl SourceTreeIndex {
             entry_root,
             module_roots: ModuleRootTable::from_records(records),
             entry_candidates,
-            duplicate_hash_root_directories: duplicate_directories,
             stats,
         })
     }
@@ -290,11 +268,6 @@ impl SourceTreeIndex {
     }
 
     #[cfg(test)]
-    pub(crate) fn duplicate_hash_root_directories(&self) -> &[DuplicateHashRootDirectory] {
-        &self.duplicate_hash_root_directories
-    }
-
-    #[cfg(test)]
     pub(crate) fn stats(&self) -> &SourceTreeDiscoveryStats {
         &self.stats
     }
@@ -321,14 +294,6 @@ fn path_is_hash_root_file(path: &Path) -> bool {
         .is_some_and(file_name_is_hash_root_file)
 }
 
-// Temporary Phase 3 selector: `#mod.bst` remains the prepared export file when present until
-// the later root-role transition removes filename-specific identity.
-fn root_file_name_is_mod(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "#mod.bst")
-}
-
 fn record_discovery_metrics(
     stats: &SourceTreeDiscoveryStats,
     discovery_start: crate::timing::PipelineTimingStart,
@@ -348,9 +313,5 @@ fn record_discovery_metrics(
     crate::timing::record_counter(
         "source_tree_index.module_roots_found",
         stats.module_roots_found as f64,
-    );
-    crate::timing::record_counter(
-        "source_tree_index.duplicate_hash_root_dirs",
-        stats.duplicate_hash_root_dirs as f64,
     );
 }

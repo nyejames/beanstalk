@@ -1,4 +1,4 @@
-greet || -> String:
+export greet || -> String:
     return "hello"
 ;
 

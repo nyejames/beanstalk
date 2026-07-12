@@ -24,7 +24,9 @@ pub use crate::compiler_frontend::headers::types::{
     HeaderParseOptions, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::path_is_mod_file;
+use crate::compiler_frontend::source_libraries::root_file::{
+    file_name_is_config_file, file_name_is_hash_root_file,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
@@ -51,10 +53,28 @@ pub fn parse_file_headers_with_table(
         _ => file_tokens.src_path.to_path_buf(string_table) == entry_file_path,
     };
 
+    let source_path = file_tokens
+        .canonical_os_path
+        .as_deref()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| file_tokens.src_path.to_path_buf(string_table));
+    let is_hash_root_file = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(file_name_is_hash_root_file);
+    let is_config_file = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(file_name_is_config_file);
+    let is_prepared_module_root = options
+        .project_path_resolver
+        .as_ref()
+        .is_some_and(|resolver| resolver.is_module_root_file(&source_path));
+
     let file_role = if is_entry_file {
-        FileRole::Entry
-    } else if path_is_mod_file(&file_tokens.src_path, string_table) {
-        FileRole::ModuleFacade
+        FileRole::ActiveModuleRoot
+    } else if is_prepared_module_root || is_hash_root_file {
+        FileRole::ImportedModuleRoot
     } else {
         FileRole::Normal
     };
@@ -62,6 +82,7 @@ pub fn parse_file_headers_with_table(
     let mut parse_context = HeaderParseContext {
         external_package_registry,
         file_role,
+        is_config_file,
         string_table,
         const_template_offset,
         runtime_fragment_offset,
@@ -131,6 +152,7 @@ pub fn parse_headers(
     let mut headers: Vec<Header> = Vec::new();
     let mut top_level_const_fragments = Vec::new();
     let mut runtime_fragment_count = 0usize;
+    let mut has_non_trivial_root_body = false;
     let mut token_stats = TokenStats::default();
 
     for output in &prepared_files {
@@ -141,6 +163,7 @@ pub fn parse_headers(
         headers.extend(output.headers);
         top_level_const_fragments.extend(output.top_level_const_fragments);
         runtime_fragment_count += output.runtime_fragment_count;
+        has_non_trivial_root_body |= output.has_non_trivial_root_body;
     }
 
     if let Some(resolver) = project_path_resolver {
@@ -180,11 +203,14 @@ pub fn parse_headers(
     })?;
 
     let header_stats = HeaderStats::from_headers_and_symbols(&headers, &module_symbols);
+    let const_fragment_count = top_level_const_fragments.len();
 
     Ok(Headers {
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count: runtime_fragment_count,
+        const_fragment_count,
+        has_non_trivial_root_body,
         token_stats,
         header_stats,
         module_symbols,

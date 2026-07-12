@@ -1,8 +1,8 @@
 //! Source-library root-file identity.
 //!
 //! WHAT: exposes the shared root/config filename owner and its focused tests.
-//! WHY: Stage 0, path resolution and header import validation must classify root files through one
-//! policy while the remaining `#mod.bst` role is removed in later roadmap phases.
+//! WHY: Stage 0, path resolution and header import validation classify root files through one
+//! shared policy.
 
 pub(crate) mod root_file;
 

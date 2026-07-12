@@ -463,10 +463,6 @@ const COUNTER_SUMMARY_GROUPS: &[CounterSummaryGroup] = &[
             ("source_tree_index.files_seen", "files seen"),
             ("source_tree_index.module_roots_found", "roots"),
             (
-                "source_tree_index.duplicate_hash_root_dirs",
-                "duplicate root dirs",
-            ),
-            (
                 "stage0.reachable_discovery.reachable_files",
                 "reachable files",
             ),

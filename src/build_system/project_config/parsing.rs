@@ -230,6 +230,8 @@ pub(super) fn parse_config_file(
         headers: parsed_headers.headers,
         top_level_const_fragments: parsed_headers.top_level_const_fragments,
         entry_runtime_fragment_count: parsed_headers.entry_runtime_fragment_count,
+        const_fragment_count: parsed_headers.const_fragment_count,
+        has_non_trivial_root_body: parsed_headers.has_non_trivial_root_body,
         token_stats: parsed_headers.token_stats,
         header_stats: parsed_headers.header_stats,
         module_symbols: parsed_headers.module_symbols,

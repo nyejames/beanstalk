@@ -619,6 +619,7 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
         top_level_const_fragments: vec![fragment],
         const_template_count: 5,
         runtime_fragment_count: 3,
+        has_non_trivial_root_body: false,
         warnings: vec![warning],
     };
 
@@ -711,6 +712,7 @@ fn file_frontend_prepare_output_identity_remap_preserves_payload() {
         top_level_const_fragments: Vec::new(),
         const_template_count: 0,
         runtime_fragment_count: 0,
+        has_non_trivial_root_body: false,
         warnings: vec![warning],
     };
 

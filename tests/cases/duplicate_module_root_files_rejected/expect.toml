@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-CONFIG-0001"]
+message_contains = ["multiple hash-root files", "#home.bst", "#page.bst"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-CONFIG-0001"]
+message_contains = ["multiple hash-root files", "#home.bst", "#page.bst"]

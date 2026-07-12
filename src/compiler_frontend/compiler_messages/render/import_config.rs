@@ -203,6 +203,21 @@ pub(crate) fn invalid_config_message(
             "No root module entries were found under '{}'. Expected at least one '#*.bst' file under the configured entry root.",
             string_table.resolve(*entry_root),
         ),
+        InvalidConfigReason::MultipleModuleRootFiles {
+            directory,
+            candidates,
+        } => {
+            let candidates = candidates
+                .iter()
+                .map(|candidate| format!("'{}'", string_table.resolve(*candidate)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "Module directory '{}' contains multiple hash-root files: {}. Every module directory must contain exactly one non-config '#*.bst' root file.",
+                string_table.resolve(*directory),
+                candidates,
+            )
+        }
         InvalidConfigReason::BstFileFolderCollision {
             file_name,
             folder_name,

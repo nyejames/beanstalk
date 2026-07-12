@@ -292,14 +292,13 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
     .expect("source tree index should build");
 
     assert_eq!(index.entry_root(), canonical_entry_root);
-    assert_eq!(index.entry_candidates().len(), 1);
+    assert_eq!(index.entry_candidates().len(), 2);
     assert!(index.entry_candidates()[0].ends_with("#page.bst"));
     assert_eq!(index.stats().dirs_visited, 2);
     assert_eq!(index.stats().dirs_skipped, 10);
     assert_eq!(index.stats().files_seen, 3);
     assert_eq!(index.stats().hash_root_files_seen, 2);
     assert_eq!(index.stats().module_roots_found, 2);
-    assert_eq!(index.stats().duplicate_hash_root_dirs, 0);
 
     let root_directories = index
         .module_roots()
@@ -319,7 +318,7 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
 }
 
 #[test]
-fn source_tree_index_records_duplicate_hash_root_files_for_role_migration() {
+fn source_tree_index_rejects_duplicate_hash_root_files() {
     let root = temp_dir("source_tree_index_duplicate_roots");
     let entry_root = root.join("src");
     fs::create_dir_all(&entry_root).expect("should create entry root");
@@ -331,29 +330,27 @@ fn source_tree_index_records_duplicate_hash_root_files_for_role_migration() {
     let canonical_entry_root =
         fs::canonicalize(&entry_root).expect("entry root should canonicalize");
     let mut string_table = StringTable::new();
-    let index = super::source_tree_index::SourceTreeIndex::discover(
+    let messages = super::source_tree_index::SourceTreeIndex::discover(
         canonical_entry_root,
         &canonical_root,
         &config,
         &mut string_table,
     )
-    .expect("Phase 2 should record duplicates without changing current root roles");
+    .expect_err("a module directory may contain only one hash root");
 
-    assert_eq!(index.entry_candidates().len(), 2);
-    assert_eq!(index.stats().duplicate_hash_root_dirs, 1);
-    let duplicates = index.duplicate_hash_root_directories();
-    assert_eq!(duplicates.len(), 1);
+    let reason = first_invalid_config_reason(&messages);
+    let InvalidConfigReason::MultipleModuleRootFiles {
+        directory,
+        candidates,
+    } = reason
+    else {
+        panic!("expected duplicate module root diagnostic, got {reason:?}");
+    };
     assert_eq!(
-        duplicates[0].directory,
-        fs::canonicalize(&entry_root).unwrap()
+        *directory,
+        string_table.intern(&fs::canonicalize(&entry_root).unwrap().display().to_string())
     );
-    assert_eq!(duplicates[0].files.len(), 2);
-    assert!(
-        duplicates[0]
-            .files
-            .iter()
-            .all(|path| { path.ends_with("#page.bst") || path.ends_with("#layout.bst") })
-    );
+    assert_eq!(candidates.len(), 2);
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -1550,9 +1547,10 @@ fn discover_modules_uses_reachable_files_only() {
         "entry_root #= \"src\"\n",
     )
     .expect("should write config");
+    fs::create_dir_all(src.join("errors")).expect("should create errors folder");
     fs::write(src.join("#page.bst"), "import @libs/html/basic\n#[:ok]\n")
         .expect("should write entry");
-    fs::write(src.join("#404.bst"), "#[:404]\n").expect("should write 404");
+    fs::write(src.join("errors/#404.bst"), "#[:404]\n").expect("should write 404");
     fs::write(src.join("libs/html.bst"), "basic #= [:basic]\n").expect("should write lib");
     fs::write(src.join("styles/docs.bst"), "navbar #= [:nav]\n").expect("should write style");
     fs::write(src.join("docs/outdated.bst"), "this is invalid syntax")
@@ -1725,8 +1723,12 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
     )
     .expect("should write config");
     fs::write(src.join("#page.bst"), "io.line([: [\"page\"]])\n").expect("should write #page");
-    fs::write(src.join("#layout.bst"), "io.line([: [\"layout\"]])\n")
-        .expect("should write #layout");
+    fs::create_dir_all(src.join("layout")).expect("should create layout folder");
+    fs::write(
+        src.join("layout/#layout.bst"),
+        "io.line([: [\"layout\"]])\n",
+    )
+    .expect("should write #layout");
     fs::write(src.join("nested/#lib.bst"), "io.line([: [\"lib\"]])\n")
         .expect("should write nested #lib");
     fs::write(src.join("nested/file.bst"), "io.line([: [\"regular\"]])\n")
@@ -1744,11 +1746,7 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
-    assert_eq!(
-        modules.len(),
-        3,
-        "expected one module per '#*.bst' root entry"
-    );
+    assert_eq!(modules.len(), 3, "expected one module per root directory");
 
     let entry_names = modules
         .iter()
@@ -3541,7 +3539,7 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
 fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
     let root = temp_dir("markdown_no_same_directory_facade");
     let src = root.join("src");
-    fs::create_dir_all(&src).expect("should create src dir");
+    fs::create_dir_all(src.join("other")).expect("should create other module dir");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -3551,7 +3549,8 @@ fn reachable_file_discovery_markdown_does_not_queue_same_directory_mod_file() {
 
     fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
     fs::write(src.join("intro.md"), "hello\n").expect("should write markdown file");
-    fs::write(src.join("#mod.bst"), "export x #= 1\n").expect("should write same-directory facade");
+    fs::write(src.join("other/#mod.bst"), "export x #= 1\n")
+        .expect("should write other module root");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -3975,6 +3974,8 @@ fn provider_backed_imports_are_resolved_without_becoming_source_inputs() {
 fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path() {
     let root = temp_dir("provider_free_multi_entry_deterministic");
     let src = root.join("src");
+    fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
+    fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
     fs::create_dir_all(src.join("shared")).expect("should create shared dir");
 
     fs::write(
@@ -3985,13 +3986,13 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
 
     // Two entry points with overlapping and distinct dependency trees.
     fs::write(
-        src.join("#pageA.bst"),
-        "import @./shared/helper\nimport @./a_only\n#[:pageA]\n",
+        src.join("page_a/#pageA.bst"),
+        "import @shared/helper\nimport @a_only\n#[:pageA]\n",
     )
     .expect("should write pageA");
     fs::write(
-        src.join("#pageB.bst"),
-        "import @./shared/helper\nimport @./b_only\n#[:pageB]\n",
+        src.join("page_b/#pageB.bst"),
+        "import @shared/helper\nimport @b_only\n#[:pageB]\n",
     )
     .expect("should write pageB");
     fs::write(src.join("shared/helper.bst"), "helper #= 1\n").expect("should write helper");
@@ -4065,11 +4066,11 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
     // canonical path (file name within this test).
     assert_eq!(
         module_a_inputs,
-        vec!["#pageA.bst", "a_only.bst", "helper.bst"]
+        vec!["a_only.bst", "#pageA.bst", "helper.bst"]
     );
     assert_eq!(
         module_b_inputs,
-        vec!["#pageB.bst", "b_only.bst", "helper.bst"]
+        vec!["b_only.bst", "#pageB.bst", "helper.bst"]
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -4079,7 +4080,8 @@ fn provider_free_multi_entry_discovery_is_deterministic_and_uses_parallel_path()
 fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider() {
     let root = temp_dir("provider_backed_multi_entry_fallback");
     let src = root.join("src");
-    fs::create_dir_all(&src).expect("should create src dir");
+    fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
+    fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -4088,10 +4090,14 @@ fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider
     .expect("should write config");
 
     // Entry A is plain provider-free; entry B imports a .js file.
-    fs::write(src.join("#pageA.bst"), "a #= 1\n").expect("should write pageA");
-    fs::write(src.join("#pageB.bst"), "import @./drawing.js\n#[:pageB]\n")
-        .expect("should write pageB");
-    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+    fs::write(src.join("page_a/#pageA.bst"), "a #= 1\n").expect("should write pageA");
+    fs::write(
+        src.join("page_b/#pageB.bst"),
+        "import @./drawing.js\n#[:pageB]\n",
+    )
+    .expect("should write pageB");
+    fs::write(src.join("page_b/drawing.js"), "export function draw() {}\n")
+        .expect("should write js");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -4135,7 +4141,8 @@ fn provider_backed_import_in_multi_entry_falls_back_to_serial_and_calls_provider
 fn unsupported_external_extension_in_multi_entry_preserves_diagnostic_shape() {
     let root = temp_dir("unsupported_extension_multi_entry");
     let src = root.join("src");
-    fs::create_dir_all(&src).expect("should create src dir");
+    fs::create_dir_all(src.join("page_a")).expect("should create page_a module");
+    fs::create_dir_all(src.join("page_b")).expect("should create page_b module");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -4143,10 +4150,14 @@ fn unsupported_external_extension_in_multi_entry_preserves_diagnostic_shape() {
     )
     .expect("should write config");
 
-    fs::write(src.join("#pageA.bst"), "a #= 1\n").expect("should write pageA");
-    fs::write(src.join("#pageB.bst"), "import @./drawing.js\n#[:pageB]\n")
-        .expect("should write pageB");
-    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+    fs::write(src.join("page_a/#pageA.bst"), "a #= 1\n").expect("should write pageA");
+    fs::write(
+        src.join("page_b/#pageB.bst"),
+        "import @./drawing.js\n#[:pageB]\n",
+    )
+    .expect("should write pageB");
+    fs::write(src.join("page_b/drawing.js"), "export function draw() {}\n")
+        .expect("should write js");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -4205,12 +4216,13 @@ fn provider_free_parallel_preserves_cross_module_facade_queuing() {
     .expect("should write config");
 
     // Two entry points; entry A imports an implementation file in module B, which should queue
-    // module B's facade.
-    fs::write(src.join("#pageA.bst"), "import @module_b/impl\n#[:pageA]\n")
-        .expect("should write pageA");
-    fs::write(src.join("#pageB.bst"), "#[:pageB]\n").expect("should write pageB");
-    fs::write(module_a.join("#mod.bst"), "export a #= 1\n").expect("should write module_a facade");
-    fs::write(module_b.join("#mod.bst"), "export b #= 1\n").expect("should write module_b facade");
+    // module B's root.
+    fs::write(
+        module_a.join("#pageA.bst"),
+        "import @module_b/impl\n#[:pageA]\n",
+    )
+    .expect("should write pageA");
+    fs::write(module_b.join("#mod.bst"), "export b #= 1\n").expect("should write module_b root");
     fs::write(module_b.join("impl.bst"), "impl #= 1\n").expect("should write module_b impl");
 
     let mut config = Config::new(root.clone());

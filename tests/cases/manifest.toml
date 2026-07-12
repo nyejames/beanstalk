@@ -2174,6 +2174,11 @@ path = "disjoint_field_borrows"
 tags = ["integration","borrows"]
 
 [[case]]
+id = "duplicate_module_root_files_rejected"
+path = "duplicate_module_root_files_rejected"
+tags = ["integration","project-structure","diagnostics"]
+
+[[case]]
 id = "duplicate_function_names"
 path = "duplicate_function_names"
 tags = ["integration","functions","diagnostics"]

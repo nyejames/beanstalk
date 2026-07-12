@@ -748,10 +748,11 @@ fn single_file_rejects_optional_core_package_not_exposed_by_builder() {
 #[test]
 fn directory_project_discovers_multiple_entry_modules() {
     let dir = temp_dir("dir_multi_module");
-    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::create_dir_all(dir.join("page")).expect("should create page dir");
+    fs::create_dir_all(dir.join("layout")).expect("should create layout dir");
     fs::write(dir.join("config.bst"), "").expect("should write config");
-    fs::write(dir.join("#page.bst"), "x ~= 10\n").expect("should write page");
-    fs::write(dir.join("#layout.bst"), "y ~= 20\n").expect("should write layout");
+    fs::write(dir.join("page/#page.bst"), "x ~= 10\n").expect("should write page");
+    fs::write(dir.join("layout/#layout.bst"), "y ~= 20\n").expect("should write layout");
 
     let mut config = Config::new(dir.clone());
     let style_directives = StyleDirectiveRegistry::built_ins();
@@ -781,15 +782,16 @@ fn directory_project_discovers_multiple_entry_modules() {
 #[test]
 fn directory_project_remaps_delta_collisions_across_modules() {
     let dir = temp_dir("dir_delta_remap_collision");
-    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::create_dir_all(dir.join("first")).expect("should create first module dir");
+    fs::create_dir_all(dir.join("second")).expect("should create second module dir");
     fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
-        dir.join("#a.bst"),
+        dir.join("first/#a.bst"),
         "Item = |\n    shared Int,\n    first_only String,\n|\nitem = Item(1, \"first\")\n",
     )
     .expect("should write first entry");
     fs::write(
-        dir.join("#b.bst"),
+        dir.join("second/#b.bst"),
         "Item = |\n    shared Int,\n    second_only String,\n|\nitem = Item(1, \"second\")\n",
     )
     .expect("should write second entry");
@@ -817,7 +819,7 @@ fn directory_project_remaps_delta_collisions_across_modules() {
                 == Some("#b.bst")
         })
         .expect("expected #b.bst module");
-    let item_path = InternedPath::from_single_str("#b.bst", &mut string_table)
+    let item_path = InternedPath::from_path_buf(Path::new("second/#b.bst"), &mut string_table)
         .join_str("Item", &mut string_table);
     let nominal_id = second_module
         .type_environment

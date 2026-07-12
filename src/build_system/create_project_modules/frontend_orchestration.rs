@@ -422,8 +422,8 @@ impl FrontendModuleBuildContext<'_> {
         let fork_source = compiler.string_table.fork_source();
         let base_len = fork_source.base_len();
 
-        // Offsets are only relevant for entry files, and there is exactly one entry file per
-        // module. Non-entry files produce zero const templates and zero runtime fragments, so
+        // Offsets are only relevant for the active module root, and there is exactly one root per
+        // module. Imported and ordinary files produce zero const templates and runtime fragments, so
         // every file can safely start from offset zero without name collisions.
         let const_template_offset = 0usize;
         let runtime_fragment_offset = 0usize;
@@ -585,11 +585,11 @@ impl FrontendModuleBuildContext<'_> {
 
         debug_assert!(
             const_fragment_source_count <= 1,
-            "only the single entry file may contribute top-level const templates"
+            "only the active module root may contribute top-level const templates"
         );
         debug_assert!(
             runtime_fragment_source_count <= 1,
-            "only the single entry file may contribute runtime fragments"
+            "only the active module root may contribute runtime fragments"
         );
 
         if !diagnostics.is_empty() {
@@ -922,7 +922,7 @@ fn record_frontend_capacity_estimate(
     source_byte_count: usize,
     headers: &Headers,
 ) -> FrontendArenaCapacityEstimate {
-    let const_fragment_count = headers.top_level_const_fragments.len();
+    let const_fragment_count = headers.const_fragment_count;
     let capacity = FrontendArenaCapacityEstimate::new(
         source_file_count,
         source_byte_count,

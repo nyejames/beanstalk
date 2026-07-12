@@ -31,7 +31,7 @@ use crate::compiler_frontend::headers::import_environment::{
 use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, ModuleRootBoundary, ModuleSymbols,
 };
-use crate::compiler_frontend::headers::types::{FileRole, Header, HeaderExportMode, HeaderKind};
+use crate::compiler_frontend::headers::types::{Header, HeaderExportMode, HeaderKind};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -66,9 +66,9 @@ fn is_authored_facade_declaration(kind: &HeaderKind) -> bool {
 
 /// Whether a header is a public authored facade export.
 ///
-/// WHAT: only explicit `export` declarations in `#mod.bst` become public facade entries.
+/// WHAT: only explicit `export` declarations in module-root files become public facade entries.
 fn is_authored_facade_export(header: &Header) -> bool {
-    header.file_role == FileRole::ModuleFacade
+    header.file_role.is_export_capable()
         && header.export_mode == HeaderExportMode::Public
         && is_authored_facade_declaration(&header.kind)
 }
@@ -286,7 +286,10 @@ fn build_module_root_facade_imports(
         .file_imports_by_source
         .keys()
         .filter(|source_file| {
-            module_symbols.file_roles_by_source.get(*source_file) == Some(&FileRole::ModuleFacade)
+            module_symbols
+                .file_roles_by_source
+                .get(*source_file)
+                .is_some_and(|role| role.is_export_capable())
         })
         .cloned()
         .collect();

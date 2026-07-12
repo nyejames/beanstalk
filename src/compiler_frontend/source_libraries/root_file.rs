@@ -2,16 +2,13 @@
 //!
 //! WHAT: classifies canonical root/config filenames and their extensionless import components.
 //! WHY: Stage 0, header import validation, and diagnostic rendering must share one filename
-//!      policy while existing facade discovery keeps its temporary `#mod.bst` behavior.
+//!      policy for generic module roots and the canonical project config.
 
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::CONFIG_FILE_NAME;
 use std::io;
 use std::path::{Path, PathBuf};
-
-/// Temporary cosmetic root name used by the current facade role.
-pub(crate) const MOD_FILE_NAME: &str = "#mod.bst";
 
 /// The direct-child hash-root state for one source-library directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,17 +63,6 @@ pub(crate) fn discover_hash_root_file(directory: &Path) -> io::Result<HashRootFi
 /// Whether a filesystem filename is the canonical project configuration file.
 pub(crate) fn file_name_is_config_file(file_name: &str) -> bool {
     file_name == CONFIG_FILE_NAME
-}
-
-/// Whether a root filename has the temporary current facade name.
-pub(crate) fn file_name_is_mod_file(file_name: &str) -> bool {
-    file_name == MOD_FILE_NAME
-}
-
-/// Whether an interned source path has the temporary current facade name.
-pub(crate) fn path_is_mod_file(path: &InternedPath, string_table: &StringTable) -> bool {
-    path.name_str(string_table)
-        .is_some_and(file_name_is_mod_file)
 }
 
 /// Whether an extensionless import component identifies a hash-root file.

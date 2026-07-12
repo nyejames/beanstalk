@@ -175,12 +175,13 @@ fn receiver_method_receiver_name(
 }
 
 fn is_importable_for_symbol_collection(header: &Header) -> bool {
-    if header.file_role == FileRole::ModuleFacade {
-        // In a facade file, only explicit `export` declarations are visible outside the file.
+    if header.file_role == FileRole::ImportedModuleRoot {
+        // Imported roots are compiled only as public module surfaces; private declarations stay
+        // available for resolving the root's own exported signatures, not for importer lookup.
         return header.export_mode == HeaderExportMode::Public;
     }
 
-    // Non-facade files expose all authored declarations within the module.
+    // Active roots and ordinary source files expose authored declarations within the module.
     true
 }
 

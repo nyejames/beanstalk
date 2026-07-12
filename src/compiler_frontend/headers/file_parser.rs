@@ -117,13 +117,7 @@ fn parse_headers_in_file_inner(
             }
 
             HeaderFileItem::RuntimeTemplate => {
-                handle_runtime_template_item(
-                    token_stream,
-                    state,
-                    context,
-                    current_token,
-                    current_location,
-                )?;
+                handle_runtime_template_item(token_stream, state, context, current_token)?;
             }
 
             HeaderFileItem::Eof => {
@@ -147,8 +141,8 @@ fn handle_export_item(
     _export_token: Token,
     export_location: SourceLocation,
 ) -> FileParserResult<()> {
-    // `export` is a facade-only keyword; ordinary files cannot use it.
-    if context.file_role != FileRole::ModuleFacade {
+    // `export` is a module-root-only keyword; ordinary files cannot use it.
+    if !context.file_role.is_export_capable() || context.is_config_file {
         return Err(Box::new(CompilerDiagnostic::export_outside_module_facade(
             export_location,
         )));
@@ -416,17 +410,10 @@ fn handle_runtime_template_item(
     state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     current_token: Token,
-    current_location: SourceLocation,
 ) -> FileParserResult<()> {
     // Runtime top-level templates stay in the start-function body and are evaluated in source
     // order by entry start(). The runtime fragment count lets later const fragments record their
     // insertion point relative to already-seen runtime fragments.
-    if context.file_role == FileRole::ModuleFacade {
-        return Err(Box::new(
-            CompilerDiagnostic::runtime_template_in_module_facade(current_location),
-        ));
-    }
-
     push_runtime_template_tokens_to_start_function(
         current_token,
         token_stream,
@@ -434,7 +421,7 @@ fn handle_runtime_template_item(
         context.string_table,
     )?;
 
-    if context.file_role == FileRole::Entry {
+    if context.file_role == FileRole::ActiveModuleRoot {
         state.runtime_fragment_count += 1;
     }
 
@@ -446,9 +433,9 @@ fn finish_file_output(
     context: &HeaderParseContext<'_>,
     state: HeaderFileParseState,
 ) -> Result<FileFrontendPrepareOutput, FileFrontendPrepareError> {
-    // Non-entry files have no semantic consumer for an implicit start. Any non-trivial top-level
-    // executable token is therefore rejected before output assembly.
-    if context.file_role != FileRole::Entry && state.has_non_trivial_start_body() {
+    // Ordinary source files have no semantic consumer for an implicit start. Imported roots are
+    // intentionally parsed for declarations and exports only; their root body is discarded.
+    if context.file_role == FileRole::Normal && state.has_non_trivial_start_body() {
         let location = state
             .first_executable_start_body_location()
             .unwrap_or_default();
@@ -459,7 +446,7 @@ fn finish_file_output(
         );
     }
 
-    if context.file_role == FileRole::Entry {
+    if context.file_role == FileRole::ActiveModuleRoot {
         Ok(state.into_entry_output(token_stream, context.file_role))
     } else {
         Ok(state.into_non_entry_output(token_stream, context.file_role))

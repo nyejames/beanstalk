@@ -1,6 +1,6 @@
 //! Public facade API surface validation.
 //!
-//! WHAT: rejects explicit `export` declarations in `#mod.bst` whose authored type surfaces
+//! WHAT: rejects explicit `export` declarations in module-root files whose authored type surfaces
 //! require a type name that is not part of the same public facade API, and exported trait
 //! metadata relations that expose private trait names.
 //! WHY: after facade exports become explicit, importers can only name declarations exposed by
@@ -18,7 +18,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
 use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
-use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -30,7 +30,7 @@ use crate::compiler_frontend::traits::syntax::TraitIncompatibilitySyntax;
 use rustc_hash::FxHashSet;
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
-    /// Validate all explicit public authored declarations and trait metadata in `#mod.bst`.
+    /// Validate all explicit public authored declarations and trait metadata in a module root.
     ///
     /// WHAT: walks the resolved type IDs for signatures, fields, payloads, aliases, and explicit
     /// constant annotations, then validates exported trait incompatibility relations. Type walks
@@ -412,7 +412,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         false
     }
 
-    /// Validate exported `TRAIT must not TRAIT` relations in a `#mod.bst` facade.
+    /// Validate exported `TRAIT must not TRAIT` relations in a module-root facade.
     ///
     /// WHAT: an exported incompatibility relation is part of the facade's public trait metadata,
     ///      so importers must be able to name both sides from that facade. The check rejects a
@@ -484,7 +484,7 @@ fn facade_export_targets_source_path(entry: &FacadeExportEntry, path: &InternedP
 }
 
 fn header_is_public_facade_declaration(header: &Header) -> bool {
-    header.file_role == FileRole::ModuleFacade
+    header.file_role.is_export_capable()
         && header.export_mode.is_public()
         && matches!(
             header.kind,
@@ -498,7 +498,7 @@ fn header_is_public_facade_declaration(header: &Header) -> bool {
 }
 
 fn is_public_facade_trait_incompatibility_header(header: &Header) -> bool {
-    header.file_role == FileRole::ModuleFacade
+    header.file_role.is_export_capable()
         && header.export_mode.is_public()
         && matches!(header.kind, HeaderKind::TraitIncompatibility { .. })
 }

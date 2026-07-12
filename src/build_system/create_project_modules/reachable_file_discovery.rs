@@ -15,7 +15,6 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::paths::path_normalization::join_and_normalize_path;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -401,7 +400,12 @@ fn traverse_reachable_source_files(
                 // same-directory facade may supply visible constants. Plain Markdown is raw
                 // content and has no Beanstalk scope; facades still re-export it normally because
                 // the facade file itself is scanned as ordinary Beanstalk source.
-                queue_same_directory_facade_for_beandown(&canonical_file, &reachable, &mut queue);
+                queue_same_directory_root_for_beandown(
+                    &canonical_file,
+                    project_path_resolver,
+                    &reachable,
+                    &mut queue,
+                );
                 continue;
             }
             SourceFileKind::PlainMarkdown => {
@@ -918,8 +922,9 @@ fn resolved_source_file(path: &Path, kind: SourceFileKind) -> ReachableSourceFil
     }
 }
 
-fn queue_same_directory_facade_for_beandown(
+fn queue_same_directory_root_for_beandown(
     beandown_path: &Path,
+    project_path_resolver: &ProjectPathResolver,
     reachable: &BTreeSet<ReachableSourceFile>,
     queue: &mut VecDeque<ReachableSourceFile>,
 ) {
@@ -927,17 +932,16 @@ fn queue_same_directory_facade_for_beandown(
         return;
     };
 
-    let facade_path = directory.join(MOD_FILE_NAME);
-    if !facade_path.is_file() {
+    let Some(root_path) = project_path_resolver.module_root_file_for_directory(directory) else {
         return;
-    }
+    };
 
-    let facade_source_file = ReachableSourceFile {
-        path: fs::canonicalize(&facade_path).unwrap_or(facade_path),
+    let root_source_file = ReachableSourceFile {
+        path: root_path,
         kind: SourceFileKind::Beanstalk,
     };
-    if !reachable.contains(&facade_source_file) {
-        queue.push_back(facade_source_file);
+    if !reachable.contains(&root_source_file) {
+        queue.push_back(root_source_file);
     }
 }
 

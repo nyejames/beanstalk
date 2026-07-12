@@ -7,10 +7,10 @@
 
 use super::*;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
-    DiagnosticKind, DiagnosticPayload, InvalidChoiceVariantReason, InvalidDeclarationReason,
-    InvalidFunctionSignatureReason, InvalidSignatureMemberReason, InvalidThisUsageReason,
-    InvalidTypeAnnotationReason, ReservedNameOwner, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    CompilerDiagnostic, DeferredFeatureReason, DiagnosticBag, DiagnosticKind, DiagnosticPayload,
+    InvalidChoiceVariantReason, InvalidDeclarationReason, InvalidFunctionSignatureReason,
+    InvalidSignatureMemberReason, InvalidThisUsageReason, InvalidTypeAnnotationReason,
+    ReservedNameOwner, RuleDiagnosticKind, SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayloadSyntax;
@@ -1714,6 +1714,7 @@ fn entry_runtime_fragment_count_is_zero_for_const_only_templates() {
         headers.entry_runtime_fragment_count, 0,
         "const templates should not increment the runtime fragment count"
     );
+    assert_eq!(headers.const_fragment_count, 1);
 }
 
 #[test]
@@ -1724,6 +1725,7 @@ fn entry_runtime_fragment_count_reflects_runtime_template_count() {
         headers.entry_runtime_fragment_count, 1,
         "one runtime top-level template should yield runtime fragment count of 1"
     );
+    assert!(headers.has_non_trivial_root_body);
 }
 
 #[test]
@@ -1737,8 +1739,8 @@ fn entry_runtime_fragment_count_accumulates_across_multiple_runtime_templates() 
 
 #[test]
 fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
-    // A library file (non-entry) with only declarations reports runtime fragment count 0.
-    // WHY: only `FileRole::Entry` increments runtime_fragment_count.
+    // An imported root with only declarations reports runtime fragment count 0.
+    // WHY: only the active module root contributes runtime fragments.
     let headers = parse_single_file_headers_with_entry(
         "f || -> Int:\n    1\n;\n",
         "src/lib.bst",
@@ -1747,7 +1749,51 @@ fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
     .expect("headers should parse");
     assert_eq!(
         headers.entry_runtime_fragment_count, 0,
-        "entry_runtime_fragment_count must be 0 when the file is not the entry file"
+        "runtime_fragment_count must be 0 when the file is not the active root"
+    );
+}
+
+#[test]
+fn imported_module_root_discards_root_body_but_keeps_exportable_headers() {
+    let headers = parse_single_file_headers_with_entry(
+        "export Button = | label String |\n[ Button(\"ignored\") ]\n",
+        "src/#components.bst",
+        "src/#page.bst",
+    )
+    .expect("imported module roots should parse their declaration surface");
+
+    assert_eq!(
+        headers
+            .headers
+            .iter()
+            .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
+            .count(),
+        0,
+        "imported roots must not produce an implicit start header"
+    );
+    assert_eq!(headers.entry_runtime_fragment_count, 0);
+    assert!(!headers.has_non_trivial_root_body);
+    assert!(headers.headers.iter().any(|header| {
+        matches!(header.kind, HeaderKind::Struct { .. })
+            && header.export_mode == HeaderExportMode::Public
+    }));
+}
+
+#[test]
+fn imported_module_root_discards_const_root_fragments() {
+    let headers = parse_single_file_headers_with_entry(
+        "#[html.head: [\"ignored\"]]\n",
+        "src/#components.bst",
+        "src/#page.bst",
+    )
+    .expect("imported roots should skip const root fragments");
+
+    assert!(headers.top_level_const_fragments.is_empty());
+    assert!(
+        headers
+            .headers
+            .iter()
+            .all(|header| !matches!(header.kind, HeaderKind::ConstTemplate { .. }))
     );
 }
 
@@ -2144,7 +2190,7 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     let sources = [
         (
             "Foo #= \"a\"\n#[facade_fragment]\n".to_owned(),
-            "src/#mod.bst".to_owned(),
+            "src/helper_a.bst".to_owned(),
         ),
         (
             "Bar #= \"b\"\n#[const_fragment]\n".to_owned(),
@@ -2184,41 +2230,9 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     }
 
     assert!(
-        feature_names.contains(&"top-level const templates in module facades".to_owned()),
-        "first file's generated feature name must resolve correctly"
-    );
-    assert!(
-        feature_names.contains(&"top-level const templates in non-entry files".to_owned()),
-        "second file's generated feature name must resolve correctly after non-identity remap"
-    );
-}
-
-#[test]
-fn module_facade_rejects_top_level_const_template() {
-    let source = "#[hello]\n";
-    let file_path = PathBuf::from("src/#mod.bst");
-    let entry_file_path = PathBuf::from("src/#page.bst");
-    let result = parse_single_file_headers_with_entry(
-        source,
-        &file_path.to_string_lossy(),
-        &entry_file_path.to_string_lossy(),
-    );
-
-    let diagnostics = match result {
-        Ok(_) => panic!("expected header parsing to fail for const template in module facade"),
-        Err(err) => err.diagnostics,
-    };
-
-    let diag = diagnostics
-        .first()
-        .expect("expected at least one diagnostic");
-    assert!(
-        matches!(
-            diag.kind,
-            DiagnosticKind::DeferredFeature(DeferredFeatureDiagnosticKind::DeferredFeature)
-        ),
-        "expected deferred feature diagnostic, got {:?}",
-        diag.kind
+        feature_names
+            .iter()
+            .all(|feature| { feature == "top-level const templates in ordinary source files" })
     );
 }
 
@@ -2300,7 +2314,7 @@ fn per_file_prepare_output_preserves_file_role_and_imports_on_output() {
 }
 
 #[test]
-fn module_facade_prepare_output_has_module_facade_role() {
+fn imported_module_root_prepare_output_has_imported_root_role() {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from("src/#mod.bst");
     let entry_file_path = PathBuf::from("src/#page.bst");
@@ -2311,7 +2325,7 @@ fn module_facade_prepare_output_has_module_facade_role() {
         &mut string_table,
     );
 
-    assert_eq!(output.file_role, FileRole::ModuleFacade);
+    assert_eq!(output.file_role, FileRole::ImportedModuleRoot);
     assert!(output.file_imports.is_empty());
 }
 

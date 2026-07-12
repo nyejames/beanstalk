@@ -1,6 +1,6 @@
 entry = "."
 
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0077"]
+rendered_output_contains = ["export_outside_page_file_rejected"]

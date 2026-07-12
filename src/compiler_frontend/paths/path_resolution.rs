@@ -203,6 +203,16 @@ impl ProjectPathResolver {
         self.module_roots.export_files()
     }
 
+    pub(crate) fn module_root_file_for_directory(&self, directory: &Path) -> Option<PathBuf> {
+        self.module_roots
+            .root_file_for_directory(directory)
+            .map(|path| path.to_path_buf())
+    }
+
+    pub(crate) fn is_module_root_file(&self, file: &Path) -> bool {
+        self.module_roots.is_root_file(file)
+    }
+
     pub(crate) fn module_roots(&self) -> impl Iterator<Item = &PathBuf> {
         self.module_roots.root_directories()
     }

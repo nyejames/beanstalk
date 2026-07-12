@@ -1,14 +1,14 @@
 //! Implicit entry-start body capture.
 //!
-//! WHAT: collects non-header top-level tokens into the module entry file's implicit `start` body.
-//! WHY: only the entry file executes top-level runtime code; non-entry executable code must be
-//! rejected before AST lowering.
+//! WHAT: collects non-header top-level tokens into the active module root's implicit `start` body.
+//! WHY: only the active root executes top-level runtime code; ordinary source executable code must
+//! be rejected before AST lowering, while imported-root tokens are discarded after balancing.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token};
 
-pub(super) fn push_runtime_template_tokens_to_start_function(
+pub(crate) fn push_runtime_template_tokens_to_start_function(
     opening_template_token: Token,
     token_stream: &mut FileTokens,
     start_function_body: &mut Vec<Token>,

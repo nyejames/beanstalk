@@ -43,6 +43,7 @@ impl ModuleRootRecord {
 pub(crate) struct ModuleRootTable {
     records: Vec<ModuleRootRecord>,
     by_directory: HashMap<PathBuf, ModuleRootId>,
+    by_root_file: HashMap<PathBuf, ModuleRootId>,
     export_files: HashMap<PathBuf, PathBuf>,
 }
 
@@ -66,6 +67,7 @@ impl ModuleRootTable {
         for (index, record) in table.records.iter().enumerate() {
             let id = ModuleRootId(index);
             table.by_directory.insert(record.root_directory.clone(), id);
+            table.by_root_file.insert(record.root_file.clone(), id);
 
             if let Some(export_file) = &record.export_file {
                 table
@@ -83,6 +85,15 @@ impl ModuleRootTable {
 
     pub(crate) fn export_files(&self) -> &HashMap<PathBuf, PathBuf> {
         &self.export_files
+    }
+
+    pub(crate) fn root_file_for_directory(&self, directory: &Path) -> Option<&Path> {
+        let module_root_id = self.by_directory.get(directory)?;
+        Some(self.records[module_root_id.0].root_file.as_path())
+    }
+
+    pub(crate) fn is_root_file(&self, file: &Path) -> bool {
+        self.by_root_file.contains_key(file)
     }
 
     pub(crate) fn module_root_for_file(&self, file: &Path) -> Option<PathBuf> {

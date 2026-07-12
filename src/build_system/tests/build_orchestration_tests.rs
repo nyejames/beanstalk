@@ -414,6 +414,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     let src = root.join("src");
     fs::create_dir_all(src.join("about")).expect("should create about folder");
     fs::create_dir_all(src.join("docs/basics")).expect("should create docs folder");
+    fs::create_dir_all(src.join("errors")).expect("should create errors folder");
     fs::create_dir_all(&src).expect("should create source folder");
 
     fs::write(
@@ -422,7 +423,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     )
     .expect("should write config");
     fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write #page");
-    fs::write(src.join("#404.bst"), "#[:<h1>404</h1>]\n").expect("should write #404");
+    fs::write(src.join("errors/#404.bst"), "#[:<h1>404</h1>]\n").expect("should write #404");
     fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
         .expect("should write about");
     fs::write(
@@ -457,7 +458,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     .expect("should write project outputs");
 
     assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("404/index.html").exists());
+    assert!(output_root.join("errors/404/index.html").exists());
     assert!(output_root.join("about/index.html").exists());
     assert!(output_root.join("docs/basics/index.html").exists());
 

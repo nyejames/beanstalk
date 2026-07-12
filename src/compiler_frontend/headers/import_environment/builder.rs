@@ -12,7 +12,6 @@ use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::headers::types::FileRole;
 use crate::compiler_frontend::source_libraries::root_file::{
     import_path_references_config_file, import_path_references_hash_root_file,
 };
@@ -522,7 +521,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .file_roles_by_source
             .iter()
             .find_map(|(candidate_source, role)| {
-                if role != &FileRole::ModuleFacade {
+                if !role.is_export_capable() {
                     return None;
                 }
 

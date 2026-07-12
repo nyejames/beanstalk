@@ -1,6 +1,6 @@
 entry = "."
 
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0026"]
+rendered_output_contains = ["hello"]

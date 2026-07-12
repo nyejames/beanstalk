@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: active
-CURRENT_SLICE: Phase 4 active/imported module-root role transition
-LAST_ACCEPTED_COMMIT: `845b8e180` (`refactor: carry module root export identity`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The accepted entry-root identity slice is committed and this plan checkpoint is the only tracked change. Concurrent user-owned plan and documentation edits must remain unstaged.
+STATUS: blocked
+CURRENT_SLICE: Phase 4 accepted but uncommitted; Phase 5 pending
+LAST_ACCEPTED_COMMIT: `943542afe` (`docs: checkpoint module root export identity`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 4 implementation is accepted and uncommitted because the parent sandbox cannot create `.git/index.lock`. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: language overview, project-structure docs, libraries docs and progress matrix use canonical `config.bst`; module-root and inline `export` wording remains for later phases.
-- code: `project_config.rs`, `projects/settings.rs`, dev-server watch/config tests, HTML scaffold, output routing, fixtures and benchmarks use only `config.bst`. `create_project_modules/source_tree_index.rs` owns the single entry-root scan and passes prepared `ModuleRootTable` data plus entry candidates forward. `source_libraries/root_file.rs` owns generic hash/config filename identity plus deterministic direct-child source-library root discovery. Source-library preflight requires exactly one generic root. Entry-root `ModuleRootTable` and `ProjectPathResolver` now expose export-file identity, while header import resolution carries one `ModuleRootBoundary` with the actual prepared export file instead of synthesizing `#mod.bst`. The temporary `MOD_FILE_NAME` uses remain isolated to current Beandown/source-library file-role consumers.
+- code: `source_tree_index.rs` enforces one hash root per module directory and passes prepared `ModuleRootTable` identity forward. `FileRole` is now `ActiveModuleRoot`, `ImportedModuleRoot` or `Normal`. Header parsing alone emits active-root start bodies, discards imported-root body tokens and records root activity facts. Generic root identity uses prepared hash-map indexes. Inline `export` remains temporarily accepted only on module roots until Phase 5 replaces it atomically.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -59,7 +59,7 @@ BLOCKERS / RISKS:
 - Phase 0A fixed the initially reported Stage 0 source-discovery `result_large_err` boundary by boxing `SourceDiscoveryError::Diagnostic`.
 - Phase 0 diagnostic-baseline cleanup is complete. The squash integration preserved current `templates-refactor` TIR ownership while retaining the compatible boxed-diagnostic boundaries.
 - Phase 1 review on 2026-07-11 confirmed `settings.rs` and Stage 0 use only `config.bst`, while `source_libraries/mod.rs` still owns the temporary `#mod.bst`/`#page.bst`/config special-file helpers. `path_resolution.rs` still discovers module roots internally, `module_inventory.rs` still runs `discover_root_entry_files`, and header/AST visibility still use `FileRole::ModuleFacade` plus facade-named diagnostics.
-- Phase 2 records directories containing multiple current hash files but does not reject them yet. The live docs and route model still legitimately place `#page.bst`, `#404.bst` and `#mod.bst` together. Enforcing the final one-root invariant before Phase 3 removes filename roles would regress current behavior and hide the transition boundary.
+- Phase 4 removed the temporary duplicate-root evidence path and now rejects multiple `#*.bst` roots in one module directory with structured `BST-CONFIG-0001` diagnostics.
 
 VALIDATION_STATE:
 - `git diff --check`: passed for plan review
@@ -176,6 +176,7 @@ VALIDATION_STATE:
 - Phase 3 generic import identity: Codex CLI added the generic root/config classifier, arbitrary hash-root direct-import rejection and exact dynamic diagnostic rendering. Parent moved the remaining temporary `#mod.bst` helpers into the same owner with no forwarding shim. Focused root-file (4), header (165) and Stage 0 (138) tests passed. Full `just validate` passed cross-target Clippy, 3314 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 3 generic source-library roots: Codex CLI added deterministic direct-child `#*.bst` discovery, threaded unique cosmetic roots through the existing temporary facade map and added structured missing/multiple-root diagnostics with sorted candidate paths. Parent reviewed stage ownership and temporary-map duplication, updated the progress matrix and ran full `just validate`: cross-target Clippy, 3319 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 3 entry-root export identity: Codex CLI renamed prepared entry-root facade maps to export-file identity and added `ModuleRootBoundary` so namespace resolution consumes the Stage 0-selected export path. Parent corrected the worker's dropped no-export-root boundary regression by making the carried export file optional, preserving missing-facade enforcement. Full `just validate` passed cross-target Clippy, 3320 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
+- Phase 4 root-role cutover: Codex CLI replaced entry/facade roles with active/imported/normal module-root roles, suppressed imported-root start output, preserved public surfaces and added header activity facts. The parent replaced a linear root-file identity scan with a prepared hash index, removed the obsolete duplicate-root counter and added end-to-end duplicate-root diagnostics coverage. `cargo fmt --check`, 3321 unit tests, 113 path tests, 140 Stage 0 tests and 1738 integration cases passed. `just validate` reached the docs check after code gates passed, then failed because concurrent user-owned `docs/src/**` edits already use Phase 5 `export:` syntax. This docs-only block is accepted temporarily by explicit user direction.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -183,11 +184,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Begin Phase 4 with a bounded active/imported module-root role data-model slice, preserving execution behavior until the role is threaded through header parsing and reachable compilation. Coordinate the remaining Phase 3 duplicate-root diagnostic with the atomic role cutover so the repository never enters a broken mixed state.
-DELEGATION_DECISION: codex-cli - accepted the entry-root identity slice using the isolated runtime; the ordinary wrapper path still needs the user-level isolation and launch fixes recorded in the parent handoff
-NEXT_WORKER_ORDER: codex-cli after wrapper update
-STOP_REASON: the reviewed user-level wrapper and orchestrator skill are read-only in this parent sandbox and still require durable isolated-home, standalone-binary, CA and Desktop-variable sanitization changes before the next worker should be launched normally
-NEXT_RESUME_ACTION: verify the updated one-command wrapper path, then prepare the bounded Phase 4 active/imported role worker envelope
+- Delegate Phase 5 strict `export:` block parsing and legacy inline-export removal to the verified `codex-cli-beanstalk` wrapper. The parser cutover should make the concurrent docs root syntactically valid without editing those user-owned files.
+DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
+NEXT_WORKER_ORDER: codex-cli only
+STOP_REASON: parent filesystem permissions allow reading `.git` but deny `.git/index.lock`, so the orchestrator cannot stage or commit the accepted Phase 4 checkpoint
+NEXT_RESUME_ACTION: stage `src`, `tests` and this plan only, commit Phase 4, then resume with Phase 5
 
 ---
 
@@ -677,11 +678,11 @@ After Phase 2, path resolution should consume module-root data instead of discov
 
 ### Checklist
 
-- [ ] Enforce one non-config hash root per directory while replacing the current filename roles:
-  - [ ] add a structured diagnostic with all conflicting files where practical;
-  - [ ] assign a stable diagnostic code;
-  - [ ] add an integration failure fixture;
-  - [ ] remove the temporary duplicate-evidence-only path once the diagnostic consumes it.
+- [x] Enforce one non-config hash root per directory while replacing the current filename roles:
+  - [x] add a structured diagnostic with all conflicting files where practical;
+  - [x] assign a stable diagnostic code;
+  - [x] add an integration failure fixture;
+  - [x] remove the temporary duplicate-evidence-only path once the diagnostic consumes it.
 
 - [x] Replace the broad `src/compiler_frontend/source_libraries/mod.rs` special-file helpers with `src/compiler_frontend/source_libraries/root_file.rs`.
 - [x] Provide generic helpers:
@@ -755,37 +756,37 @@ Meaning:
 
 ### Checklist
 
-- [ ] Update role assignment in header preparation:
-  - [ ] active entry file path + root table => `ActiveModuleRoot`;
-  - [ ] non-active hash root file in the reachable file set => `ImportedModuleRoot`;
-  - [ ] ordinary `.bst` source => `Normal`.
-- [ ] Update header parser behavior:
-  - [ ] active/imported module root roles are export-capable; Phase 5 changes the syntax from inline export to `export:`;
-  - [ ] top-level root/start body emitted only for `ActiveModuleRoot`;
-  - [ ] top-level root/start body in `ImportedModuleRoot` is captured and discarded or skipped without becoming `StartFunction`;
-  - [ ] top-level runtime in `Normal` remains invalid.
-- [ ] Capture header-level root activity facts needed by the later builder handoff without adding the final backend-facing type yet:
-  - [ ] `has_non_trivial_root_body`
-  - [ ] `runtime_fragment_count`
-  - [ ] `const_fragment_count`
-  - [ ] final `ModuleRootActivity` handoff remains Phase 7.
-- [ ] Ensure imported root files still parse private declarations required by exported signatures.
-- [ ] Ensure imported root files still build public export maps.
-- [ ] Ensure AST never receives a `StartFunction` header from `ImportedModuleRoot` files.
-- [ ] Update `HeaderParseOptions` to pass root table/active root identity instead of only entry ID where necessary.
+- [x] Update role assignment in header preparation:
+  - [x] active entry file path + root table => `ActiveModuleRoot`;
+  - [x] non-active hash root file in the reachable file set => `ImportedModuleRoot`;
+  - [x] ordinary `.bst` source => `Normal`.
+- [x] Update header parser behavior:
+  - [x] active/imported module root roles are export-capable; Phase 5 changes the syntax from inline export to `export:`;
+  - [x] top-level root/start body emitted only for `ActiveModuleRoot`;
+  - [x] top-level root/start body in `ImportedModuleRoot` is captured and discarded or skipped without becoming `StartFunction`;
+  - [x] top-level runtime in `Normal` remains invalid.
+- [x] Capture header-level root activity facts needed by the later builder handoff without adding the final backend-facing type yet:
+  - [x] `has_non_trivial_root_body`
+  - [x] `runtime_fragment_count`
+  - [x] `const_fragment_count`
+  - [x] final `ModuleRootActivity` handoff remains Phase 7.
+- [x] Ensure imported root files still parse private declarations required by exported signatures.
+- [x] Ensure imported root files still build public export maps.
+- [x] Ensure AST never receives a `StartFunction` header from `ImportedModuleRoot` files.
+- [x] Update `HeaderParseOptions` to pass root table/active root identity instead of only entry ID where necessary.
 
 ### Review / audit / validation
 
-- [ ] Add tests for importing a module root that also has top-level templates/code; importer must not execute or emit imported root output.
-- [ ] Add tests for active root output still emitting normally.
-- [ ] Run header parser tests.
-- [ ] Run integration module import tests.
-- [ ] Run `just validate`.
-- [ ] Manual stage-boundary review:
-  - [ ] header parser owns start-body separation;
-  - [ ] AST does not rediscover root role from raw tokens;
-  - [ ] imported root body suppression is documented and explicit.
-- [ ] Update active context capsule.
+- [x] Add tests for importing a module root that also has top-level templates/code; importer must not execute or emit imported root output.
+- [x] Add tests for active root output still emitting normally.
+- [x] Run header parser tests.
+- [x] Run integration module import tests.
+- [x] Run `just validate`; code gates passed and the docs gate is temporarily blocked by user-owned Phase 5 syntax.
+- [x] Manual stage-boundary review:
+  - [x] header parser owns start-body separation;
+  - [x] AST does not rediscover root role from raw tokens;
+  - [x] imported root body suppression is documented and explicit.
+- [x] Update active context capsule.
 
 ---
 

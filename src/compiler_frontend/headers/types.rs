@@ -29,7 +29,7 @@ use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use std::collections::HashSet;
 use std::fmt::Display;
 
-/// Parsed headers for one module plus const-fragment placement metadata for the entry file.
+/// Parsed headers for one module plus const-fragment placement metadata for the active module root.
 ///
 /// WHY: const fragments carry runtime insertion indices so the builder can merge them with the
 /// runtime fragment list returned by entry `start()`. Runtime fragments are not tracked here —
@@ -40,11 +40,18 @@ use std::fmt::Display;
 pub struct Headers {
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
-    /// Number of top-level runtime templates in the entry file.
+    /// Number of top-level runtime templates in the active module root.
     ///
-    /// WHY: only the entry file produces runtime slots; header parsing is the single authoritative
+    /// WHY: only the active module root produces runtime slots; header parsing is the single authoritative
     /// counter so builders do not need to re-scan HIR for `PushRuntimeFragment` statements.
     pub entry_runtime_fragment_count: usize,
+    /// Number of top-level const fragments in the active module root.
+    pub const_fragment_count: usize,
+    /// Whether the active module root contains non-trivial top-level root/start code.
+    ///
+    /// WHY: header parsing is the first stage that can classify root activity without asking
+    /// AST or a builder to rediscover it from tokens or HIR.
+    pub has_non_trivial_root_body: bool,
     /// Aggregate cheap token classification for this module.
     ///
     /// WHAT: the sum of per-file `TokenStats` gathered during tokenization.
@@ -68,7 +75,7 @@ pub struct Headers {
     pub import_environment: HeaderImportEnvironment,
 }
 
-/// Placement metadata for one compile-time top-level template in the entry file.
+/// Placement metadata for one compile-time top-level template in the active module root.
 ///
 /// WHAT: records where a const fragment should be inserted relative to runtime fragments
 /// in the final merged output.
@@ -118,11 +125,12 @@ pub enum HeaderKind {
         condition_references: Vec<InitializerReference>,
     },
 
-    /// The entry-file start function for non-header top-level statements.
+    /// The active-root start function for non-header top-level statements.
     ///
     /// WHAT: captures top-level executable statements that are not declarations.
-    /// WHY: only the module entry file produces a start function. Non-entry files with
-    /// non-trivial top-level executable code are rejected as a rule error.
+    /// WHY: only the active module root produces a start function. Ordinary source files with
+    /// non-trivial top-level executable code are rejected as a rule error; imported roots discard
+    /// their root body before this output is assembled.
     /// Start functions are build-system-only; they are not importable or callable from modules.
     StartFunction,
 
@@ -159,13 +167,13 @@ pub enum HeaderKind {
 /// Explicit export mode for a parsed header or file import.
 ///
 /// WHAT: distinguishes private source-file items from public facade API surface.
-/// WHY: `#mod.bst` uses explicit `export` to mark public declarations and re-exports.
+/// WHY: module-root files use explicit `export` to mark public declarations and re-exports.
 /// All other files keep every declaration as `Private` in this phase.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeaderExportMode {
     /// Private to the source file or importing file.
     Private,
-    /// Public facade API entry exposed through `#mod.bst`.
+    /// Public module API entry exposed through a module-root file.
     Public,
 }
 
@@ -180,13 +188,13 @@ pub struct Header {
     pub kind: HeaderKind,
     /// The role of the source file that produced this header.
     ///
-    /// WHAT: distinguishes entry files, normal source files, and module facades.
+    /// WHAT: distinguishes active roots, imported roots, and normal source files.
     /// WHY: visibility and export decisions now depend on file role and declaration kind,
     /// not just the old `exported` boolean.
     pub file_role: FileRole,
     /// Whether this header is part of the public facade API.
     ///
-    /// WHAT: `Public` only for explicit `export` items in `#mod.bst`; `Private` everywhere else.
+    /// WHAT: `Public` only for explicit `export` items in module-root files; `Private` everywhere else.
     /// WHY: import preparation builds module APIs from explicit facade metadata, not from file role
     /// alone.
     pub export_mode: HeaderExportMode,
@@ -396,24 +404,35 @@ pub struct FileImport {
     pub from_grouped: bool,
     /// Whether this import is part of the public facade API.
     ///
-    /// WHAT: `Public` for `export import` or `export @path` items in `#mod.bst`;
+    /// WHAT: `Public` for `export import` or `export @path` items in module-root files;
     /// `Private` for ordinary imports.
     pub export_mode: HeaderExportMode,
 }
 
-/// Classification of a source file's role within the module.
+/// Classification of a source file's role within the current module compilation.
 ///
-/// WHAT: distinguishes entry files, normal source files, and module facade files.
-/// WHY: each role has different rules for runtime code, exports, and visibility.
+/// WHAT: distinguishes the active module root, an imported module root used as an export surface,
+///       and ordinary source.
+/// WHY: root identity and compilation context are independent: a root can expose declarations
+///       when imported without contributing its own top-level runtime body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileRole {
-    /// The module entry file. Has an implicit start function.
-    Entry,
-    /// A normal source file. No top-level runtime code allowed.
+    /// The root file for the module currently being compiled.
+    ActiveModuleRoot,
+    /// A foreign root file compiled only to validate its public declaration surface.
+    ImportedModuleRoot,
+    /// An ordinary source file.
     Normal,
-    /// A module facade file (`#mod.bst`). Defines the public export surface.
-    /// No top-level runtime code allowed. Exported declarations are visible externally.
-    ModuleFacade,
+}
+
+impl FileRole {
+    pub(crate) fn is_module_root(self) -> bool {
+        matches!(self, Self::ActiveModuleRoot | Self::ImportedModuleRoot)
+    }
+
+    pub(crate) fn is_export_capable(self) -> bool {
+        self.is_module_root()
+    }
 }
 
 /// Per-file output produced by header parsing before module-wide aggregation.
@@ -440,7 +459,7 @@ pub struct FileFrontendPrepareOutput {
     pub token_stats: TokenStats,
     /// The role of this source file within the module.
     ///
-    /// WHAT: distinguishes entry files, normal source files, and module facades.
+    /// WHAT: distinguishes active roots, imported roots and normal source files.
     /// WHY: module-wide symbol collection needs file roles for every prepared file,
     /// including import-only files that may produce no headers.
     pub file_role: FileRole,
@@ -465,10 +484,12 @@ pub struct FileFrontendPrepareOutput {
     /// parsing reports its contribution separately from module aggregation.
     // Phase 6 parallel preparation keeps this contribution explicit for validation and future
     // fragment instrumentation, even though Alpha currently permits const templates only in the
-    // single entry file.
+    // single active module root.
     pub const_template_count: usize,
     /// Number of runtime fragments contributed by this file.
     pub runtime_fragment_count: usize,
+    /// Whether this file is the active root and contains non-trivial top-level root/start code.
+    pub has_non_trivial_root_body: bool,
     /// Warnings emitted while parsing this file.
     ///
     /// WHY: per-file preparation must be self-contained; warnings are merged into the caller's
@@ -547,6 +568,7 @@ impl FileFrontendPrepareError {
 pub(super) struct HeaderParseContext<'a> {
     pub external_package_registry: &'a ExternalPackageRegistry,
     pub file_role: FileRole,
+    pub is_config_file: bool,
     pub string_table: &'a mut StringTable,
     /// Module-wide base offset for const-template synthetic names in this file.
     ///
@@ -555,7 +577,7 @@ pub(super) struct HeaderParseContext<'a> {
     pub const_template_offset: usize,
     /// Entry-file base offset for runtime-fragment insertion indices in this file.
     ///
-    /// WHY: only entry files produce runtime fragments, but passing the offset keeps
+    /// WHY: only active module roots produce runtime fragments, but passing the offset keeps
     /// per-file preparation deterministic even if the caller changes ordering later.
     pub runtime_fragment_offset: usize,
 }

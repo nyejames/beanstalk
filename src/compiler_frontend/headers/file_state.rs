@@ -100,6 +100,8 @@ impl HeaderFileParseState {
         token_stream: &FileTokens,
         file_role: FileRole,
     ) -> FileFrontendPrepareOutput {
+        let has_non_trivial_root_body =
+            file_role == FileRole::ActiveModuleRoot && self.has_non_trivial_start_body();
         FileFrontendPrepareOutput {
             source_file: token_stream.src_path.to_owned(),
             file_id: token_stream.file_id,
@@ -112,6 +114,7 @@ impl HeaderFileParseState {
             top_level_const_fragments: self.top_level_const_fragments,
             const_template_count: self.const_template_count,
             runtime_fragment_count: self.runtime_fragment_count,
+            has_non_trivial_root_body,
             warnings: self.warnings,
         }
     }
@@ -121,9 +124,10 @@ impl HeaderFileParseState {
         token_stream: &FileTokens,
         file_role: FileRole,
     ) -> FileFrontendPrepareOutput {
+        let has_non_trivial_root_body = self.has_non_trivial_start_body();
         use crate::compiler_frontend::headers::types::HeaderExportMode;
 
-        // Entry file: build the start function header for later AST body parsing.
+        // Active module root: build the start function header for later AST body parsing.
         // `start` is never a dependency-graph participant, so this header keeps no graph edges.
         let mut start_tokens = FileTokens::new_with_file_id(
             token_stream.src_path.to_owned(),
@@ -155,6 +159,7 @@ impl HeaderFileParseState {
             top_level_const_fragments: self.top_level_const_fragments,
             const_template_count: self.const_template_count,
             runtime_fragment_count: self.runtime_fragment_count,
+            has_non_trivial_root_body,
             warnings: self.warnings,
         }
     }

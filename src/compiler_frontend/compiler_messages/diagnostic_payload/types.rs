@@ -185,6 +185,10 @@ pub enum InvalidConfigReason {
     NoRootModuleEntries {
         entry_root: StringId,
     },
+    MultipleModuleRootFiles {
+        directory: StringId,
+        candidates: Vec<StringId>,
+    },
     ConfigImportRootViolation,
     BstFileFolderCollision {
         file_name: StringId,
@@ -246,6 +250,16 @@ impl InvalidConfigReason {
             Self::ConfiguredEntryRootMissing { entry_root }
             | Self::NoRootModuleEntries { entry_root } => {
                 *entry_root = remap.get(*entry_root);
+            }
+
+            Self::MultipleModuleRootFiles {
+                directory,
+                candidates,
+            } => {
+                *directory = remap.get(*directory);
+                for candidate in candidates {
+                    *candidate = remap.get(*candidate);
+                }
             }
 
             Self::ConfiguredLibraryFolderMissing { folder }

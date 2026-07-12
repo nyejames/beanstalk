@@ -1,6 +1,6 @@
 //! Top-level `#` item handling for header parsing.
 //!
-//! WHAT: handles boundary `#` items, including valid entry-file const templates and removed
+//! WHAT: handles boundary `#` items, including valid active-root const templates and removed
 //! legacy prefix forms such as `#import` and `#name`.
 //! WHY: the parser should keep valid and invalid hash-prefixed top-level forms in one place so
 //! `file_parser` can remain a high-level loop over classified items.
@@ -63,18 +63,23 @@ fn handle_top_level_const_template(
         return Err(Box::new(CompilerDiagnostic::deferred_feature(
             context
                 .string_table
-                .intern("top-level const templates in non-entry files"),
+                .intern("top-level const templates in ordinary source files"),
             current_location,
         )));
     }
 
-    if context.file_role == FileRole::ModuleFacade {
-        return Err(Box::new(CompilerDiagnostic::deferred_feature(
-            context
-                .string_table
-                .intern("top-level const templates in module facades"),
-            current_location,
-        )));
+    if context.file_role == FileRole::ImportedModuleRoot {
+        let template_token = token_stream.current_token();
+        token_stream.advance();
+
+        let mut discarded_body = Vec::new();
+        crate::compiler_frontend::headers::start_capture::push_runtime_template_tokens_to_start_function(
+            template_token,
+            token_stream,
+            &mut discarded_body,
+            context.string_table,
+        )?;
+        return Ok(());
     }
 
     let template_token = token_stream.current_token();
