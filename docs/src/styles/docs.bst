@@ -442,7 +442,7 @@ section #= [$html:
 ]
 
 -- The default slot contains the Basic explanation.
--- Named slots provide the stable key, title and canonical Advanced explanation.
+-- Named slots provide the stable key, title and detailed Advanced explanation.
 doc_level #= [$html:
     <fieldset class="doc-level">
         <legend class="visually-hidden">

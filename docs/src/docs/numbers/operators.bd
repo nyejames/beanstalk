@@ -1,0 +1,54 @@
+Beanstalk keeps equality and logical operators readable.
+
+[codeblock, $code("bst"):
+    same = left is right
+    different = left is not right
+    ready = has_input and is_valid
+    blocked = not ready
+]
+
+Symbolic equality and symbolic logical-not forms are not language operators.
+
+### Arithmetic results
+
+- `Int + Int`, `Int - Int`, `Int * Int` and `Int % Int` produce `Int`.
+- `/` is real division. `Int / Int` produces `Float`.
+- `//` is integer division. `Int // Int` produces `Int` and truncates toward zero.
+- Mixed `Int` and `Float` arithmetic produces `Float`.
+- `^` performs exponentiation and follows checked numeric rules.
+- Numeric comparisons such as `<`, `<=`, `>` and `>=` produce `Bool`.
+
+### Spacing
+
+Symbolic binary operators require spaces on both sides.
+
+[codeblock, $code("bst"):
+    total = left + right
+    count = 1
+]
+
+These forms are invalid:
+
+[codeblock, $code("bst"):
+    total=left+right
+    count=1
+]
+
+Compound assignments follow the same rule:
+
+[codeblock, $code("bst"):
+    count += 1
+    count //= 2
+]
+
+`count+=1`, `count +=1` and `count+= 1` are invalid.
+
+`~=` is tokenized as the mutable marker plus assignment, so its tokens also
+need spacing:
+
+[codeblock, $code("bst"):
+    count ~= 1
+]
+
+Operator overloading is outside Beanstalk's language design. Operators remain
+compiler-owned and predictable.

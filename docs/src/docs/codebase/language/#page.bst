@@ -17,23 +17,26 @@ page_head #= codebase_theme_head
 #[section, $md:
     ## Focused references
 
-    The language documentation is being split into smaller references without changing the active authority during the migration.
+    Smaller detailed references are being prepared without changing the active authority during the migration.
 
-    Loops is the first completed replacement set:
+    Foundational language routes:
 
-    - @../../loops (Loops): public Basic and Advanced documentation
-    - `docs/src/docs/loops/conditional-loops.bd`
-    - `docs/src/docs/loops/collection-loops.bd`
-    - `docs/src/docs/loops/range-loops.bd`
-    - `docs/src/docs/loops/loop-control.bd`
+    - @../../language-overview (Language basics)
+    - @../../bindings (Values and bindings)
+    - @../../numbers (Numbers)
+    - @../../casts (Casts)
 
-    The unsuffixed files contain detailed semantic replacements under parity review. They do not supersede `docs/language-overview.md` yet.
+    Control flow:
+
+    - @../../loops (Loops)
+
+    Each route combines a Basic teaching layer with detailed Advanced references. The unsuffixed Beandown files remain replacements under parity review and do not supersede `docs/language-overview.md` yet.
 ]
 
 #[section, $md:
     ## Reference map
 
-    `docs/src/docs/codebase/language/overview.bd` lists each focused replacement completed so far and points back to the consolidated authority.
+    `docs/src/docs/codebase/language/overview.bd` lists the detailed files completed so far and points back to the consolidated authority.
 ]
 
 #[section, $md:

@@ -1,0 +1,29 @@
+Use double quotes for normal text:
+
+[codeblock, $code("bst"):
+    greeting = "Hello"
+]
+
+Use backticks when the text should stay raw:
+
+[codeblock, $code("bst"):
+    windows_path = `C:\docs\site`
+]
+
+Use single quotes for one character:
+
+[codeblock, $code("bst"):
+    seedling = '🌱'
+]
+
+Use a template when text needs values or a larger structure:
+
+[codeblock, $code("bst"):
+    name = "Ada"
+
+    greeting = [:
+        Hello, [name]
+    ]
+]
+
+Square brackets belong to templates. Collections use curly braces instead.

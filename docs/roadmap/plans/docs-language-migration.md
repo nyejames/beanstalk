@@ -2185,11 +2185,28 @@ The prototype established several requirements for later patches:
 - the monolith and `AGENTS.md` remain protected
 - generated release artifacts may remain in the workspace
 
-### 21.3 Next route work
+### 21.3 Foundational language batch
 
-Do not start another broad migration route until the shared foundation corrections have passed review.
+The next accepted batch covers:
 
-After the foundation is stable, continue with the route order in Section 16.3.
+- Language Basics
+- Values and Bindings
+- Numbers
+- Casts
+- navigation from Getting Started through Functions
+- the focused-reference index for those completed replacement sets
+
+Each route keeps the monolith authoritative and uses paired Basic and detailed
+unsuffixed files.
+
+### 21.4 Next route work
+
+After the foundational batch passes review, continue with Functions and
+Branching.
+
+Those routes should be migrated before Errors because function calls, return
+slots, value-producing blocks and control flow are prerequisites for the error
+model.
 
 ---
 

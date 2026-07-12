@@ -1,0 +1,55 @@
+Cast availability is proven by compiler-owned static traits.
+
+Examples include:
+
+```text
+CASTABLE_TO_STRING
+TRY_CASTABLE_TO_INT
+```
+
+The compiler registers builtin evidence for supported source-target pairs.
+
+### Source-authored evidence
+
+A same-file nominal struct, choice or aligned generic nominal constructor may
+add evidence for a supported builtin target.
+
+It must provide the required receiver method and declare explicit conformance.
+
+[codeblock, $code("bst"):
+    Label = |
+        text String,
+    |
+
+    to_string |this Label| -> String:
+        return this.text
+    ;
+
+    Label must CASTABLE_TO_STRING
+
+    label = Label(text = "hello")
+    text String = cast label
+]
+
+### Contract
+
+- Core cast traits resolve without imports.
+- They cannot be redeclared.
+- They cannot be imported, exported, aliased or shadowed.
+- They are static contracts, not ordinary value types.
+- Same-file nominal source types may provide explicit evidence.
+- Aligned generic nominal constructors may provide evidence for their concrete instances.
+- Infallible and fallible trait pairs for the same target are incompatible through compiler-owned `must not` metadata.
+- Evidence is resolved before HIR and backend lowering.
+
+### Outside cast design scope
+
+- user-defined cast target types
+- generic cast target parameters
+- external opaque cast targets
+- generic cast traits
+- broad return-type-directed conversion
+- implicit conversion chosen from distant context
+
+Cast traits prove source evidence only. They do not create a general user
+conversion framework.

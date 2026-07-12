@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Language basics | Beanstalk</title>
-    <meta name="description" content="Blocks, comments, naming, core values, strings and characters in Beanstalk.">
+    <title>Numbers | Beanstalk</title>
+    <meta name="description" content="Numeric types, literals, operators and checked arithmetic in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -661,17 +661,17 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Documentation</a> / Language basics</p><h1>Language basics</h1><p>Beanstalk keeps the surface small, but it doesn&#39;t pretend punctuation is invisible. A colon opens a block, a semicolon closes it and every value has a clear shape.</p><p>Start here for the syntax you will see everywhere. The following pages take the same ideas further into bindings, numbers, casts and control flow.</p></section>
+    <section class="container"><p><a href="../">Documentation</a> / Numbers</p><h1>Numbers</h1><p>Beanstalk has two numeric types. That sounds small because it is. The rules around literals, spacing and failure are strict so a number behaves consistently across compiler stages and backends.</p></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Blocks and statements
+            Choose the explanation level: Numeric types
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="blocks-and-statements-level"
-                id="blocks-and-statements-basic"
+        name="numeric-types-level"
+                id="numeric-types-basic"
                 value="basic"
                 checked
             >
@@ -679,27 +679,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="blocks-and-statements-level"
-                id="blocks-and-statements-advanced"
+                name="numeric-types-level"
+                id="numeric-types-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="blocks-and-statements">
-                    Blocks and statements
+                <h2 class="doc-level__title" id="numeric-types">
+                    Numeric types
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="blocks-and-statements-basic"
+            for="numeric-types-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="blocks-and-statements-advanced"
+                        for="numeric-types-advanced"
                     >
                         Advanced
                     </label>
@@ -711,39 +711,32 @@ body {
 
 
 
-            <p>Most Beanstalk blocks have a colon at the start and a semicolon at the end.</p><pre style=""><code class='codeblock'>
-    greet <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><p>The colon opens the function body. The semicolon closes it.</p><p>Semicolons do not end every line. Add one only when the surrounding block is finished.</p><p>Use indentation to make nesting easy to see:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ready!&quot;</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre>
+            <p>Beanstalk uses <code>Int</code> for whole numbers and <code>Float</code> for decimal numbers.</p><pre style=""><code class='codeblock'>
+    lives <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
+    progress <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.75</span>
+    </code></pre><p>An <code>Int</code> can be used where a <code>Float</code> is expected:</p><pre style=""><code class='codeblock'>
+    lives <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
+    display_value <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> lives
+    </code></pre><p>A <code>Float</code> never silently becomes an <code>Int</code>. That conversion can lose information, so it needs an explicit cast.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk uses explicit block delimiters.</p><p>A colon opens a block. A semicolon closes that block.</p><pre style=""><code class='codeblock'>
-    clamp_to_zero <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> value <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
-        ;
-
-        <span class='bst-code-keyword'>return</span> value
-    ;
-    </code></pre><h3>Contract</h3><ul><li><code>:</code> opens a function body, branch, loop or another block-form construct.</li><li><code>;</code> closes the active block.</li><li>A semicolon does not terminate an ordinary statement.</li><li>Statements inside a block are evaluated in source order unless control flow exits or redirects the block.</li><li>Child blocks create child scopes.</li><li>Indentation is for readability. Explicit delimiters define block boundaries.</li></ul><h3>Reading the shape</h3><p>The final semicolon in the example closes the function. The earlier semicolon closes the <code>if</code> block.</p><p>Nested language features may add their own structural rules. Branching, loops, functions and template control flow document those forms in detail.</p>
+        <p>Beanstalk has two core numeric types.</p><h3><code>Int</code></h3><p><code>Int</code> is a signed 32-bit integer.</p><p>Its range is:</p><p>```text -2147483648 through 2147483647 ```</p><h3><code>Float</code></h3><p><code>Float</code> is a finite <code>f64</code>.</p><p><code>NaN</code>, positive infinity and negative infinity are not valid Beanstalk <code>Float</code> values. Boundaries that can introduce a non-finite result must reject it.</p><h3>Promotion</h3><p><code>Int</code> may promote to <code>Float</code> at a contextual numeric boundary.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
+    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> count
+    </code></pre><p>Mixed <code>Int</code> and <code>Float</code> arithmetic produces <code>Float</code>.</p><p>There is no implicit <code>Float -&gt; Int</code> conversion. Use a fallible explicit cast at an <code>Int</code> target.</p><p><code>Bool</code> and <code>Char</code> are not numeric types.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Comments and naming
+            Choose the explanation level: Numeric literals
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="comments-and-naming-level"
-                id="comments-and-naming-basic"
+        name="numeric-literals-level"
+                id="numeric-literals-basic"
                 value="basic"
                 checked
             >
@@ -751,27 +744,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="comments-and-naming-level"
-                id="comments-and-naming-advanced"
+                name="numeric-literals-level"
+                id="numeric-literals-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="comments-and-naming">
-                    Comments and naming
+                <h2 class="doc-level__title" id="numeric-literals">
+                    Numeric literals
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="comments-and-naming-basic"
+            for="numeric-literals-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="comments-and-naming-advanced"
+                        for="numeric-literals-advanced"
                     >
                         Advanced
                     </label>
@@ -783,49 +776,46 @@ body {
 
 
 
-            <p>Comments begin with two minus signs:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- This line is ignored by the compiler.</span>
-    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-    </code></pre><p>Use <code>regular_snake_case</code> for values and functions:</p><pre style=""><code class='codeblock'>
-    player_score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-
-    double_score <span class='bst-code-operator'>|</span>score <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> score <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
-    ;
-    </code></pre><p>Use <code>PascalCase</code> for named types:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-struct'>PlayerScore</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>Int,</span>
-    <span class='bst-code-operator'>|</span>
-    </code></pre><p>Clear names beat short names. <code>player_score</code> is easier to understand than <code>ps</code>, especially when the code grows.</p>
+            <p>Whole numbers are <code>Int</code> values:</p><pre style=""><code class='codeblock'>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    </code></pre><p>Numbers with a decimal point are <code>Float</code> values:</p><pre style=""><code class='codeblock'>
+    progress <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
+    </code></pre><p>Large and tiny values can use lowercase <code>e</code> notation:</p><pre style=""><code class='codeblock'>
+    population <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>e<span class='bst-code-number'>6</span>
+    tolerance <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>e<span class='bst-code-operator'>-</span><span class='bst-code-number'>6</span>
+    </code></pre><p>Keep a minus sign attached to the value:</p><pre style=""><code class='codeblock'>
+    temperature <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>-</span><span class='bst-code-number'>5</span>
+    opposite <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>-</span>count
+    </code></pre><p><code>1E6</code>, <code>+1</code> and <code>- count</code> are not valid numeric forms.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p><code>--</code> starts a single-line comment.</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- Explain why this value exists.</span>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-    </code></pre><p>Everything after <code>--</code> on that source line is comment text.</p><h3>Naming conventions</h3><ul><li>Variables and functions use <code>regular_snake_case</code>.</li><li>Structs, choices, type aliases and generic parameters use <code>PascalCase</code>.</li><li>Trait names use all-caps identifiers such as <code>DISPLAY_TEXT</code>.</li><li>Names should describe their role rather than their storage or implementation detail.</li></ul><pre style=""><code class='codeblock'>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
+        <p>The source spelling of a number determines its natural type.</p><pre style=""><code class='codeblock'>
+    whole <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    decimal <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
+    large <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>e<span class='bst-code-number'>6</span>
+    small <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>e<span class='bst-code-operator'>-</span><span class='bst-code-number'>6</span>
+    precise <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1.0</span>e<span class='bst-code-operator'>+</span><span class='bst-code-number'>21</span>
+    </code></pre><h3>Contract</h3><ul><li>A whole-number literal is naturally <code>Int</code>.</li><li>A decimal-point literal is naturally <code>Float</code>.</li><li>Exponents use lowercase <code>e</code>.</li><li>Uppercase <code>E</code> is rejected.</li><li>Unary <code>+</code> is rejected.</li><li>A leading <code>-</code> must be attached to the literal or expression it negates.</li><li><code>-1</code>, <code>-1e6</code> and <code>-count</code> are valid prefix forms.</li><li><code>- count</code> is invalid.</li><li>Integer literals must fit the <code>Int</code> range.</li><li>Float literals must materialize to a finite <code>Float</code>.</li></ul><pre style=""><code class='codeblock'>
+    valid_literal <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>-</span><span class='bst-code-number'>42</span>
+    valid_expression <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>-</span>count
 
-    load_profile <span class='bst-code-operator'>|</span>user_id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;profile&quot;</span>
-    ;
-
-    <span class='bst-code-struct'>UserProfile</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        display_name <span class='bst-code-struct'>String,</span>
-    <span class='bst-code-operator'>|</span>
-    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings">Values and bindings</a>. Import aliases and facade API names have additional collision rules in the Libraries documentation.</p>
+    invalid_exponent <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span><span class='bst-code-struct'>E</span><span class='bst-code-number'>6</span>
+    invalid_plus <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>+</span><span class='bst-code-number'>1</span>
+    invalid_spacing <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>-</span> count
+    </code></pre><p>The invalid lines above demonstrate rejected syntax. They are not valid program forms.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Core values
+            Choose the explanation level: Operators
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="core-values-level"
-                id="core-values-basic"
+        name="operators-level"
+                id="operators-basic"
                 value="basic"
                 checked
             >
@@ -833,27 +823,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="core-values-level"
-                id="core-values-advanced"
+                name="operators-level"
+                id="operators-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="core-values">
-                    Core values
+                <h2 class="doc-level__title" id="operators">
+                    Operators
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="core-values-basic"
+            for="operators-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="core-values-advanced"
+                        for="operators-advanced"
                     >
                         Advanced
                     </label>
@@ -865,45 +855,50 @@ body {
 
 
 
-            <p>Beanstalk can usually work out a value&#39;s type from the value itself.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>You can write the type when it helps the reader or gives the compiler needed context:</p><pre style=""><code class='codeblock'>
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    name <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>The most common core types are:</p><ul><li><code>Bool</code> for <code>true</code> and <code>false</code></li><li><code>Int</code> for whole numbers</li><li><code>Float</code> for decimal numbers</li><li><code>Char</code> for one character</li><li><code>String</code> for text</li></ul><p>Collections, structs, choices and options build larger values from these ideas.</p>
+            <p>Put spaces around symbolic operators.</p><pre style=""><code class='codeblock'>
+    total <span class='bst-code-operator'>=</span> left <span class='bst-code-operator'>+</span> right
+    count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><p>Beanstalk uses words for equality and logic:</p><pre style=""><code class='codeblock'>
+    same <span class='bst-code-operator'>=</span> left is right
+    different <span class='bst-code-operator'>=</span> left is not right
+    ready <span class='bst-code-operator'>=</span> loaded and valid
+    blocked <span class='bst-code-operator'>=</span> not ready
+    </code></pre><p>Division has two forms:</p><pre style=""><code class='codeblock'>
+    real_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
+    whole_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
+    </code></pre><p><code>/</code> produces a real <code>Float</code> result. <code>//</code> performs integer division and produces an <code>Int</code> when both values are <code>Int</code>.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Values have a semantic type. A binding may infer that type from its initializer or state it explicitly.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-struct'>Char</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices, raw slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the three string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
-
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello</span> from a template.
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Structs, choices, collections, maps and generic instances add richer value shapes without changing the basic annotation form.</p><p>Binding mutability and access mode are separate from semantic type identity. See <a href="../bindings">Values and bindings</a> for that contract.</p>
+        <p>Beanstalk keeps equality and logical operators readable.</p><pre style=""><code class='codeblock'>
+    same <span class='bst-code-operator'>=</span> left is right
+    different <span class='bst-code-operator'>=</span> left is not right
+    ready <span class='bst-code-operator'>=</span> has_input and is_valid
+    blocked <span class='bst-code-operator'>=</span> not ready
+    </code></pre><p>Symbolic equality and symbolic logical-not forms are not language operators.</p><h3>Arithmetic results</h3><ul><li><code>Int + Int</code>, <code>Int - Int</code>, <code>Int * Int</code> and <code>Int % Int</code> produce <code>Int</code>.</li><li><code>/</code> is real division. <code>Int / Int</code> produces <code>Float</code>.</li><li><code>//</code> is integer division. <code>Int // Int</code> produces <code>Int</code> and truncates toward zero.</li><li>Mixed <code>Int</code> and <code>Float</code> arithmetic produces <code>Float</code>.</li><li><code>^</code> performs exponentiation and follows checked numeric rules.</li><li>Numeric comparisons such as <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> produce <code>Bool</code>.</li></ul><h3>Spacing</h3><p>Symbolic binary operators require spaces on both sides.</p><pre style=""><code class='codeblock'>
+    total <span class='bst-code-operator'>=</span> left <span class='bst-code-operator'>+</span> right
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><p>These forms are invalid:</p><pre style=""><code class='codeblock'>
+    total<span class='bst-code-operator'>=</span>left<span class='bst-code-operator'>+</span>right
+    count<span class='bst-code-operator'>=</span><span class='bst-code-number'>1</span>
+    </code></pre><p>Compound assignments follow the same rule:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    count <span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>2</span>
+    </code></pre><p><code>count+=1</code>, <code>count +=1</code> and <code>count+= 1</code> are invalid.</p><p><code>~=</code> is tokenized as the mutable marker plus assignment, so its tokens also need spacing:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><p>Operator overloading is outside Beanstalk&#39;s language design. Operators remain compiler-owned and predictable.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Strings and characters
+            Choose the explanation level: Checked arithmetic
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="strings-and-characters-level"
-                id="strings-and-characters-basic"
+        name="checked-arithmetic-level"
+                id="checked-arithmetic-basic"
                 value="basic"
                 checked
             >
@@ -911,27 +906,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="strings-and-characters-level"
-                id="strings-and-characters-advanced"
+                name="checked-arithmetic-level"
+                id="checked-arithmetic-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="strings-and-characters">
-                    Strings and characters
+                <h2 class="doc-level__title" id="checked-arithmetic">
+                    Checked arithmetic
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="strings-and-characters-basic"
+            for="checked-arithmetic-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="strings-and-characters-advanced"
+                        for="checked-arithmetic-advanced"
                     >
                         Advanced
                     </label>
@@ -943,51 +938,42 @@ body {
 
 
 
-            <p>Use double quotes for normal text:</p><pre style=""><code class='codeblock'>
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello&quot;</span>
-    </code></pre><p>Use backticks when the text should stay raw:</p><pre style=""><code class='codeblock'>
-    windows_path <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    </code></pre><p>Use single quotes for one character:</p><pre style=""><code class='codeblock'>
-    seedling <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    </code></pre><p>Use a template when text needs values or a larger structure:</p><pre style=""><code class='codeblock'>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Square brackets belong to templates. Collections use curly braces instead.</p>
+            <p>Beanstalk checks arithmetic instead of quietly wrapping or producing invalid floating-point values.</p><p>These operations can fail:</p><ul><li>overflowing an <code>Int</code></li><li>dividing by zero</li><li>using an invalid integer exponent</li><li>producing <code>NaN</code> or infinity</li></ul><p>A function with an <code>Error!</code> return can pass that failure through its normal error path:</p><pre style=""><code class='codeblock'>
+    divide <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>Int,</span> right <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> left <span class='bst-code-operator'>/</span> right
+    ;
+    </code></pre><p>Outside that kind of function, an unexpected runtime numeric failure stops the current program path.</p><p>A failure the compiler can prove in advance is reported during compilation.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk has three main string source forms and one character form.</p><pre style=""><code class='codeblock'>
-    escaped_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello\nworld&quot;</span>
-    raw_slice <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
+        <p>Runtime numeric operations are checked.</p><p>Failures include:</p><ul><li>integer overflow</li><li>division or modulo by zero</li><li>invalid integer exponents</li><li>non-finite <code>Float</code> results</li></ul><h3>Failure mode</h3><p>When the enclosing function has builtin <code>Error!</code> as its error return slot, checked numeric failures use that error channel.</p><pre style=""><code class='codeblock'>
+    divide <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>Int,</span> right <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> left <span class='bst-code-operator'>/</span> right
+    ;
 
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><h3>Quoted string slices</h3><p>Double quotes create escaped string slices. Escape sequences are interpreted by the string literal parser.</p><h3>Raw string slices</h3><p>Backticks create raw string slices in expression position. Their text is kept without normal quoted-string escaping.</p><p>Inside a template body, backticks are ordinary body text available to the active formatter.</p><h3>Characters</h3><p>Single quotes create <code>Char</code> values.</p><h3>String templates</h3><p>Square brackets create string templates. Templates produce owned strings and may fold at compile time or lower to runtime string construction.</p><p>Templates own interpolation, formatting, slots, wrappers and structured content. See <a href="../templates">Templates</a> for the complete system.</p><p>Quoted slices, raw slices and templates all participate in the language&#39;s <code>String</code> surface. Their storage and folding behaviour differs, but they do not create three unrelated source-level string types.</p>
+    ratio <span class='bst-code-operator'>=</span> divide<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0.0</span>
+    ;
+    </code></pre><p>Custom fallible channels, non-fallible functions and entry-file top-level runtime code use trap mode for checked numeric failure.</p><p>Numeric operators remain ordinary source expressions. The compiler lowers their failure path. They are not source-visible <code>Error!</code> values that can be handled in the middle of an arbitrary expression.</p><h3>Compile-time failures</h3><p>A statically known numeric failure is a compile-time diagnostic.</p><p>This remains true inside a function with builtin <code>Error!</code>.</p><h3>Related behaviour</h3><p>Range-loop counter updates use the same checked numeric operations.</p><p>Conversions that may lose information, such as <code>Float -&gt; Int</code>, belong to the Casts documentation rather than implicit arithmetic coercion.</p>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--previous"
-            href="../getting-started/"
+            href="../bindings/"
                 rel="prev"
             >
                 <span class="doc-pager__direction">← Previous</span>
-                <span class="doc-pager__title">Getting Started</span>
+                <span class="doc-pager__title">Values and bindings</span>
             </a>
 
             <a
                 class="doc-pager__link doc-pager__link--next"
-                href="../bindings/"
+                href="../casts/"
                 rel="next"
             >
                 <span class="doc-pager__direction">Next →</span>
-                <span class="doc-pager__title">Values and bindings</span>
+                <span class="doc-pager__title">Casts</span>
             </a>
 
             

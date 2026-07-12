@@ -1,0 +1,27 @@
+Comments begin with two minus signs:
+
+[codeblock, $code("bst"):
+    -- This line is ignored by the compiler.
+    score = 10
+]
+
+Use `regular_snake_case` for values and functions:
+
+[codeblock, $code("bst"):
+    player_score = 10
+
+    double_score |score Int| -> Int:
+        return score * 2
+    ;
+]
+
+Use `PascalCase` for named types:
+
+[codeblock, $code("bst"):
+    PlayerScore = |
+        value Int,
+    |
+]
+
+Clear names beat short names. `player_score` is easier to understand than
+`ps`, especially when the code grows.

@@ -1,0 +1,30 @@
+A cast needs a clear destination type.
+
+These are supported cast targets:
+
+- `Bool`
+- `Int`
+- `String`
+- `Char`
+- `Float`
+- `Error`
+
+An annotation gives the cast its target:
+
+[codeblock, $code("bst"):
+    parse_count |text String| -> Int, Error!:
+        count Int = cast! text
+        return count
+    ;
+]
+
+Without that annotation, the compiler cannot know which conversion you want:
+
+[codeblock, $code("bst"):
+    count = cast text
+]
+
+The second form is invalid.
+
+Casts can also receive a target from a function parameter, return slot, field or
+another immediate typed destination.

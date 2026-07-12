@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Language basics | Beanstalk</title>
-    <meta name="description" content="Blocks, comments, naming, core values, strings and characters in Beanstalk.">
+    <title>Casts | Beanstalk</title>
+    <meta name="description" content="Explicit cast syntax, target contexts, fallible conversion and cast evidence in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -661,17 +661,17 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Documentation</a> / Language basics</p><h1>Language basics</h1><p>Beanstalk keeps the surface small, but it doesn&#39;t pretend punctuation is invisible. A colon opens a block, a semicolon closes it and every value has a clear shape.</p><p>Start here for the syntax you will see everywhere. The following pages take the same ideas further into bindings, numbers, casts and control flow.</p></section>
+    <section class="container"><p><a href="../">Documentation</a> / Casts</p><h1>Casts</h1><p>Casts are explicit and target-driven. The receiving type says where the value is going. <code>cast</code>, <code>cast!</code> or <code>catch</code> says how conversion failure is handled.</p><p>This keeps conversion local. You can see the source, target and failure path without asking the compiler to guess from distant code.</p></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Blocks and statements
+            Choose the explanation level: Cast syntax
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="blocks-and-statements-level"
-                id="blocks-and-statements-basic"
+        name="cast-syntax-level"
+                id="cast-syntax-basic"
                 value="basic"
                 checked
             >
@@ -679,27 +679,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="blocks-and-statements-level"
-                id="blocks-and-statements-advanced"
+                name="cast-syntax-level"
+                id="cast-syntax-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="blocks-and-statements">
-                    Blocks and statements
+                <h2 class="doc-level__title" id="cast-syntax">
+                    Cast syntax
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="blocks-and-statements-basic"
+            for="cast-syntax-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="blocks-and-statements-advanced"
+                        for="cast-syntax-advanced"
                     >
                         Advanced
                     </label>
@@ -711,39 +711,57 @@ body {
 
 
 
-            <p>Most Beanstalk blocks have a colon at the start and a semicolon at the end.</p><pre style=""><code class='codeblock'>
-    greet <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+            <p>A cast converts a value to the type expected by its destination.</p><pre style=""><code class='codeblock'>
+    parse_count <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> cast<span class='bst-code-operator'>!</span> text
     ;
-    </code></pre><p>The colon opens the function body. The semicolon closes it.</p><p>Semicolons do not end every line. Add one only when the surrounding block is finished.</p><p>Use indentation to make nesting easy to see:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ready!&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-number'>3</span>
+    </code></pre><p>Read the first conversion as:</p><p>&gt; Convert <code>text</code> to the <code>Int</code> required by the function&#39;s return slot.</p><p>Use:</p><ul><li><code>cast</code> when the conversion cannot fail</li><li><code>cast!</code> when failure should leave through the function&#39;s error return</li><li><code>cast ... catch:</code> when failure should be handled here</li></ul><p>Beanstalk does not use <code>Int(value)</code> or <code>String(value)</code> as conversion syntax.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>cast</code> performs an explicit conversion to a compiler-supported builtin target.</p><p>The target comes from the immediate typed receiving boundary.</p><pre style=""><code class='codeblock'>
+    parse_count <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> cast<span class='bst-code-operator'>!</span> text
     ;
+
+    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-number'>3</span>
+    label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast ratio
+    </code></pre><h3>Forms</h3><pre style=""><code class='codeblock'>
+    value <span class='bst-code-struct'>Target</span> <span class='bst-code-operator'>=</span> cast expression
+    value <span class='bst-code-struct'>Target</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> expression
+
+    value <span class='bst-code-struct'>Target</span> <span class='bst-code-operator'>=</span> cast expression catch<span class='bst-code-operator'>:</span>
+        then fallback
+    ;
+
+    value <span class='bst-code-struct'>Target</span> <span class='bst-code-operator'>=</span> cast expression catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        then fallback
+    ;
+    </code></pre><ul><li>Plain <code>cast</code> requires infallible evidence.</li><li><code>cast!</code> requires fallible evidence and propagates through the current function&#39;s builtin <code>Error!</code> slot.</li><li><code>cast ... catch:</code> requires fallible evidence and recovers locally.</li><li>Cast syntax does not contain the target in parentheses or after the expression.</li></ul><h3>Removed conversion constructors</h3><p>These scalar conversion forms are invalid:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-type'>Float</span><span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-type'>Bool</span><span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-struct'>Char</span><span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>Error(...)</code> remains a real builtin constructor:</p><pre style=""><code class='codeblock'>
+    err <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing number&quot;</span>, <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Conversion to <code>Error</code> still uses <code>cast</code> when conversion rather than construction is intended:</p><pre style=""><code class='codeblock'>
+    err <span class='bst-code-struct'>Error</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-string'>&quot;Missing number&quot;</span>
     </code></pre>
     </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk uses explicit block delimiters.</p><p>A colon opens a block. A semicolon closes that block.</p><pre style=""><code class='codeblock'>
-    clamp_to_zero <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> value <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
-        ;
-
-        <span class='bst-code-keyword'>return</span> value
-    ;
-    </code></pre><h3>Contract</h3><ul><li><code>:</code> opens a function body, branch, loop or another block-form construct.</li><li><code>;</code> closes the active block.</li><li>A semicolon does not terminate an ordinary statement.</li><li>Statements inside a block are evaluated in source order unless control flow exits or redirects the block.</li><li>Child blocks create child scopes.</li><li>Indentation is for readability. Explicit delimiters define block boundaries.</li></ul><h3>Reading the shape</h3><p>The final semicolon in the example closes the function. The earlier semicolon closes the <code>if</code> block.</p><p>Nested language features may add their own structural rules. Branching, loops, functions and template control flow document those forms in detail.</p>
-    </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Comments and naming
+            Choose the explanation level: Cast targets
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="comments-and-naming-level"
-                id="comments-and-naming-basic"
+        name="cast-targets-level"
+                id="cast-targets-basic"
                 value="basic"
                 checked
             >
@@ -751,27 +769,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="comments-and-naming-level"
-                id="comments-and-naming-advanced"
+                name="cast-targets-level"
+                id="cast-targets-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="comments-and-naming">
-                    Comments and naming
+                <h2 class="doc-level__title" id="cast-targets">
+                    Cast targets
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="comments-and-naming-basic"
+            for="cast-targets-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="comments-and-naming-advanced"
+                        for="cast-targets-advanced"
                     >
                         Advanced
                     </label>
@@ -783,211 +801,205 @@ body {
 
 
 
-            <p>Comments begin with two minus signs:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- This line is ignored by the compiler.</span>
-    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-    </code></pre><p>Use <code>regular_snake_case</code> for values and functions:</p><pre style=""><code class='codeblock'>
-    player_score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-
-    double_score <span class='bst-code-operator'>|</span>score <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> score <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+            <p>A cast needs a clear destination type.</p><p>These are supported cast targets:</p><ul><li><code>Bool</code></li><li><code>Int</code></li><li><code>String</code></li><li><code>Char</code></li><li><code>Float</code></li><li><code>Error</code></li></ul><p>An annotation gives the cast its target:</p><pre style=""><code class='codeblock'>
+    parse_count <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> text
+        <span class='bst-code-keyword'>return</span> count
     ;
-    </code></pre><p>Use <code>PascalCase</code> for named types:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-struct'>PlayerScore</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>Int,</span>
+    </code></pre><p>Without that annotation, the compiler cannot know which conversion you want:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> cast text
+    </code></pre><p>The second form is invalid.</p><p>Casts can also receive a target from a function parameter, return slot, field or another immediate typed destination.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Explicit casts target compiler-supported builtin types:</p><p>```text Bool Int String Char Float Error ```</p><h3>Target source</h3><p>The target must come from the immediate typed boundary.</p><p>Valid target boundaries include:</p><ul><li>an annotated declaration or assignment</li><li>an explicit return slot</li><li>a concrete function parameter</li><li>a struct or choice field</li><li>a default value</li><li>a typed collection or map entry</li><li>a <code>then</code> arm whose enclosing value-producing block has an explicit receiver</li></ul><p>Generic parameter slots are not cast targets. Generic inference does not look through <code>cast</code>.</p><p>These positions do not supply cast targets:</p><ul><li>conditions</li><li>loop conditions</li><li>assertions</li><li>template interpolation</li><li>operator operands</li><li>expression statements</li><li>untyped declarations</li></ul><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> cast source
+
+    <span class='bst-code-keyword'>if</span> cast value<span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;invalid&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>cast value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The forms above are invalid because no immediate builtin target exists.</p><h3>Optional receiving contexts</h3><p>A <code>T?</code> receiving context casts to inner <code>T</code>, then applies normal contextual wrapping to <code>T?</code>.</p><p>Optional source values are not automatically unwrapped.</p><p>In:</p><pre style=""><code class='codeblock'>
+    target <span class='bst-code-struct'>T</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> cast source catch<span class='bst-code-operator'>:</span>
+        then fallback
+    ;
+    </code></pre><p>the recovery handler produces inner <code>T</code>. <code>then none</code> is invalid because recovery happens before optional wrapping.</p><h3>Conversion behaviour</h3><ul><li><code>String -&gt; Int</code> parses the whole string with Beanstalk numeric text grammar.</li><li><code>String -&gt; Float</code> parses the whole string and rejects non-finite results.</li><li>Surrounding whitespace, uppercase exponent markers, unary plus, malformed separators, malformed exponents, <code>NaN</code> and infinity spellings are rejected.</li><li><code>Float -&gt; Int</code> accepts only values that materialize inside the signed 32-bit <code>Int</code> range.</li><li><code>String -&gt; Int</code> uses the same signed 32-bit range.</li><li><code>Float -&gt; String</code> uses Beanstalk&#39;s formatter, normalizes <code>-0.0</code> to <code>0</code> and uses stable lowercase exponent formatting when needed.</li><li>Same-type casts are invalid.</li><li>Contextual <code>Int -&gt; Float</code> promotion remains separate from explicit casts, but explicit <code>cast</code> is allowed from a naturally <code>Int</code> source to a <code>Float</code> target.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Fallible casts
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="fallible-casts-level"
+                id="fallible-casts-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="fallible-casts-level"
+                id="fallible-casts-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="fallible-casts">
+                    Fallible casts
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="fallible-casts-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="fallible-casts-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Some conversions can fail. Text might not contain a number and a <code>Float</code> might not fit inside <code>Int</code>.</p><p>Use <code>cast!</code> when the current function already returns <code>Error!</code>:</p><pre style=""><code class='codeblock'>
+    parse_count <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> cast<span class='bst-code-operator'>!</span> text
+    ;
+    </code></pre><p>Use <code>catch</code> when this part of the program has a sensible fallback:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast text catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>Choose one path. A cast cannot use <code>!</code> and <code>catch</code> at the same time.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A fallible cast can propagate through builtin <code>Error!</code> or recover locally.</p><h3>Propagation</h3><pre style=""><code class='codeblock'>
+    parse_count <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> cast<span class='bst-code-operator'>!</span> text
+    ;
+    </code></pre><p><code>cast!</code> requires fallible cast evidence and a compatible builtin <code>Error!</code> return path.</p><h3>Local recovery</h3><pre style=""><code class='codeblock'>
+    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast text catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+
+    other_count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast text catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>A recovery handler must produce the success value required by the receiving site or leave explicitly with <code>return</code> or <code>return!</code>.</p><h3>Rules</h3><ul><li><code>cast! expression catch:</code> is invalid.</li><li>Propagation and local recovery are mutually exclusive.</li><li><code>cast!</code> and <code>cast ... catch:</code> handle only cast failures.</li><li>If the operand itself produces <code>Error!</code>, handle or propagate that operand before applying the cast.</li><li>Optional receiving contexts recover inner <code>T</code>, then wrap the successful or recovered value into <code>T?</code>.</li><li><code>then none</code> is invalid in a cast recovery handler targeting <code>T?</code>.</li></ul><p>Plain <code>cast</code> is not a promise that every source-target pair is infallible. It requires infallible evidence for the selected pair.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Cast evidence
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="cast-evidence-level"
+                id="cast-evidence-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="cast-evidence-level"
+                id="cast-evidence-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="cast-evidence">
+                    Cast evidence
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="cast-evidence-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="cast-evidence-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>The compiler already knows the built-in conversions.</p><p>A user-defined struct or choice can opt into a supported target by providing the required method and declaring explicit conformance.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><p>Clear names beat short names. <code>player_score</code> is easier to understand than <code>ps</code>, especially when the code grows.</p>
-    </div>
 
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p><code>--</code> starts a single-line comment.</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- Explain why this value exists.</span>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-    </code></pre><p>Everything after <code>--</code> on that source line is comment text.</p><h3>Naming conventions</h3><ul><li>Variables and functions use <code>regular_snake_case</code>.</li><li>Structs, choices, type aliases and generic parameters use <code>PascalCase</code>.</li><li>Trait names use all-caps identifiers such as <code>DISPLAY_TEXT</code>.</li><li>Names should describe their role rather than their storage or implementation detail.</li></ul><pre style=""><code class='codeblock'>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-
-    load_profile <span class='bst-code-operator'>|</span>user_id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;profile&quot;</span>
+    to_string <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
     ;
 
-    <span class='bst-code-struct'>UserProfile</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        display_name <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
+    </code></pre><p>Now a <code>Label</code> can be cast to <code>String</code> at a typed destination.</p><p>This stays explicit. Matching method names alone do not create cast support.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Cast availability is proven by compiler-owned static traits.</p><p>Examples include:</p><p>```text CASTABLE_TO_STRING TRY_CASTABLE_TO_INT ```</p><p>The compiler registers builtin evidence for supported source-target pairs.</p><h3>Source-authored evidence</h3><p>A same-file nominal struct, choice or aligned generic nominal constructor may add evidence for a supported builtin target.</p><p>It must provide the required receiver method and declare explicit conformance.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings">Values and bindings</a>. Import aliases and facade API names have additional collision rules in the Libraries documentation.</p>
-    </div>
-    </fieldset></section>
-    <section class="container"><fieldset class="doc-level">
-        <legend class="visually-hidden">
-            Choose the explanation level: Core values
-    </legend>
 
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="core-values-level"
-                id="core-values-basic"
-                value="basic"
-                checked
-            >
+    to_string <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
 
-            <input
-                class="doc-level__input doc-level__input--advanced"
-                type="radio"
-                name="core-values-level"
-                id="core-values-advanced"
-                value="advanced"
-            >
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
 
-            <header class="doc-level__header">
-                <h2 class="doc-level__title" id="core-values">
-                    Core values
-    </h2>
-
-    <div class="doc-level__switch">
-        <label
-            class="doc-level__option doc-level__option--basic"
-            for="core-values-basic"
-                    >
-                        Basic
-                    </label>
-
-                    <label
-                        class="doc-level__option doc-level__option--advanced"
-                        for="core-values-advanced"
-                    >
-                        Advanced
-                    </label>
-                </div>
-            </header>
-
-            <div class="doc-level__panel doc-level__panel--basic">
-                
-
-
-
-            <p>Beanstalk can usually work out a value&#39;s type from the value itself.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>You can write the type when it helps the reader or gives the compiler needed context:</p><pre style=""><code class='codeblock'>
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    name <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>The most common core types are:</p><ul><li><code>Bool</code> for <code>true</code> and <code>false</code></li><li><code>Int</code> for whole numbers</li><li><code>Float</code> for decimal numbers</li><li><code>Char</code> for one character</li><li><code>String</code> for text</li></ul><p>Collections, structs, choices and options build larger values from these ideas.</p>
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Values have a semantic type. A binding may infer that type from its initializer or state it explicitly.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-struct'>Char</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices, raw slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the three string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
-
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello</span> from a template.
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Structs, choices, collections, maps and generic instances add richer value shapes without changing the basic annotation form.</p><p>Binding mutability and access mode are separate from semantic type identity. See <a href="../bindings">Values and bindings</a> for that contract.</p>
-    </div>
-    </fieldset></section>
-    <section class="container"><fieldset class="doc-level">
-        <legend class="visually-hidden">
-            Choose the explanation level: Strings and characters
-    </legend>
-
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="strings-and-characters-level"
-                id="strings-and-characters-basic"
-                value="basic"
-                checked
-            >
-
-            <input
-                class="doc-level__input doc-level__input--advanced"
-                type="radio"
-                name="strings-and-characters-level"
-                id="strings-and-characters-advanced"
-                value="advanced"
-            >
-
-            <header class="doc-level__header">
-                <h2 class="doc-level__title" id="strings-and-characters">
-                    Strings and characters
-    </h2>
-
-    <div class="doc-level__switch">
-        <label
-            class="doc-level__option doc-level__option--basic"
-            for="strings-and-characters-basic"
-                    >
-                        Basic
-                    </label>
-
-                    <label
-                        class="doc-level__option doc-level__option--advanced"
-                        for="strings-and-characters-advanced"
-                    >
-                        Advanced
-                    </label>
-                </div>
-            </header>
-
-            <div class="doc-level__panel doc-level__panel--basic">
-                
-
-
-
-            <p>Use double quotes for normal text:</p><pre style=""><code class='codeblock'>
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello&quot;</span>
-    </code></pre><p>Use backticks when the text should stay raw:</p><pre style=""><code class='codeblock'>
-    windows_path <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    </code></pre><p>Use single quotes for one character:</p><pre style=""><code class='codeblock'>
-    seedling <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    </code></pre><p>Use a template when text needs values or a larger structure:</p><pre style=""><code class='codeblock'>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Square brackets belong to templates. Collections use curly braces instead.</p>
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk has three main string source forms and one character form.</p><pre style=""><code class='codeblock'>
-    escaped_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello\nworld&quot;</span>
-    raw_slice <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><h3>Quoted string slices</h3><p>Double quotes create escaped string slices. Escape sequences are interpreted by the string literal parser.</p><h3>Raw string slices</h3><p>Backticks create raw string slices in expression position. Their text is kept without normal quoted-string escaping.</p><p>Inside a template body, backticks are ordinary body text available to the active formatter.</p><h3>Characters</h3><p>Single quotes create <code>Char</code> values.</p><h3>String templates</h3><p>Square brackets create string templates. Templates produce owned strings and may fold at compile time or lower to runtime string construction.</p><p>Templates own interpolation, formatting, slots, wrappers and structured content. See <a href="../templates">Templates</a> for the complete system.</p><p>Quoted slices, raw slices and templates all participate in the language&#39;s <code>String</code> surface. Their storage and folding behaviour differs, but they do not create three unrelated source-level string types.</p>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span>text <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    text <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast label
+    </code></pre><h3>Contract</h3><ul><li>Core cast traits resolve without imports.</li><li>They cannot be redeclared.</li><li>They cannot be imported, exported, aliased or shadowed.</li><li>They are static contracts, not ordinary value types.</li><li>Same-file nominal source types may provide explicit evidence.</li><li>Aligned generic nominal constructors may provide evidence for their concrete instances.</li><li>Infallible and fallible trait pairs for the same target are incompatible through compiler-owned <code>must not</code> metadata.</li><li>Evidence is resolved before HIR and backend lowering.</li></ul><h3>Outside cast design scope</h3><ul><li>user-defined cast target types</li><li>generic cast target parameters</li><li>external opaque cast targets</li><li>generic cast traits</li><li>broad return-type-directed conversion</li><li>implicit conversion chosen from distant context</li></ul><p>Cast traits prove source evidence only. They do not create a general user conversion framework.</p>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--previous"
-            href="../getting-started/"
+            href="../numbers/"
                 rel="prev"
             >
                 <span class="doc-pager__direction">← Previous</span>
-                <span class="doc-pager__title">Getting Started</span>
+                <span class="doc-pager__title">Numbers</span>
             </a>
 
             <a
                 class="doc-pager__link doc-pager__link--next"
-                href="../bindings/"
+                href="../functions/"
                 rel="next"
             >
                 <span class="doc-pager__direction">Next →</span>
-                <span class="doc-pager__title">Values and bindings</span>
+                <span class="doc-pager__title">Functions</span>
             </a>
 
             

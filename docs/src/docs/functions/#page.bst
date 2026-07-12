@@ -1,14 +1,22 @@
-import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head}
+import @styles/docs {
+    navbar,
+    section,
+    codeblock,
+    language_theme_head,
+    doc_pager,
+}
 
 page_title #= "Functions"
 page_description #= "Function declarations, returns, calls, and Alpha-scope result handling in Beanstalk."
-page_head #= theme_head
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: FUNCTIONS]
 
 #[section, $md:
+    @../ (Documentation) / Functions
+
+    # Functions
+
     [codeblock, $code("bst"):
         -- The simplest possible function
         main ||:
@@ -90,7 +98,18 @@ page_head #= theme_head
         ;
     ]
 
-    ## Closures
-    Closures and `Fn(...)` function-value types are deferred for Alpha.
-    Do not use closure examples as current compiler support yet.
+    ## Function values
+
+    General closures, anonymous function values, generic function values and higher-order polymorphism are outside the current language design scope.
+
+    Reactivity is the constrained UI-oriented mechanism for cases that would otherwise lean on closures.
+]
+
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../casts/]
+        [$insert("previous_title"):Casts]
+        [$insert("next_path"):../branching/]
+        [$insert("next_title"):Branching]
+    ]
 ]

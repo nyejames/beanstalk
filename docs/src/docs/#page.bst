@@ -1,59 +1,55 @@
-import @html {center, img, large}
-import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
+import @styles/docs {navbar, section, theme_head}
 
 page_title #= "Documentation"
-page_description #= "Beanstalk documentation index."
+page_description #= "Beanstalk language, project and compiler documentation."
 page_head #= theme_head
 
 #[navbar]
-#[title, center: THE DOCS]
 
 #[section, $md:
-    [large: Welcome to the Beanstalk documentation] 
-    [$todo: 
-        [$img, @assets/seedling_icon.png: Beanstalk logo]
-    ]
+    # Documentation
 
-    This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
+    Welcome to Beanstalk. Start with the project tool, learn the core language in order and drop into the focused pages when you need a precise rule.
 
-    You can find the source code for this website on @https://github.com/nyejames/beanstalk/tree/main/docs (Github).
+    The @./progress (progress matrix) tracks current implementation and backend coverage.
 
-    ## Documentation
-    These pages document the current language surface.
-    See the @./progress (progress matrix) for the current implementation and coverage status.
+    ## Start here
 
-    ### Introduction
-    - @./language-overview (Language Basics)
-    - @./getting-started (Getting Started)
+    1. @./getting-started (Getting Started)
+    2. @./language-overview (Language basics)
+    3. @./bindings (Values and bindings)
+    4. @./numbers (Numbers)
+    5. @./casts (Casts)
+    6. @./functions (Functions)
+    7. @./branching (Branching)
+    8. @./loops (Loops)
+    9. @./structs (Structs)
+    10. @./choices (Choices)
+    11. @./errors (Errors, options and assertions)
+    12. @./collections (Collections and maps)
+    13. @./templates (Templates)
+    14. @./aliases (Aliases)
+    15. @./generics (Generics)
+    16. @./traits (Traits)
+    17. @./reactivity (Reactivity)
 
-    ### Core Language Features
-    - @./templates (Templates)
-    - @./functions (Functions)
-    - @./branching (If statements and pattern matching)
-    - @./loops (Loops)
-    - @./collections (Collections)
-    - @./structs (Structs)
-    - @./choices (Choices)
-    - @./errors (Error Handling)
+    ## Projects and content
 
-    ### Advanced Language Features
-    - @./generics (Generics)
-    - @./traits (Traits)
-    - @./aliases (Aliases)
-    - @./reactivity (Reactivity)
-
-    ### Compiler and codebase internals
-    - @./codebase (Start here for codebase info)
-    - @./codebase/memory-management (Memory management)
-    - @./codebase/design-scope (Language and compiler design scope)
-
-    ## Project Structure
-    - @./project-structure (The shape of Beanstalk projects)
-    - @./libraries (Libraries and modules)
+    - @./project-structure (Project structure)
+    - @./libraries (Libraries and imports)
     - @./libraries/core (Core libraries)
-    - @./markdown (Plain Markdown imports)
     - @./beandown (Beandown content files)
+    - @./markdown (Plain Markdown imports)
 
-    ### Future Design Drafts
+    ## Compiler and codebase internals
+
+    - @./codebase (Codebase overview)
+    - @./codebase/compiler-design (Compiler design)
+    - @./codebase/memory-management (Memory management)
+    - @./codebase/design-scope (Design scope)
+    - @./codebase/style-guide (Development standards)
+
+    ## Future design drafts
+
     - @./async (Async)
 ]

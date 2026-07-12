@@ -14,20 +14,63 @@ replacement can be checked against one stable baseline.
 
 ## Focused references under review
 
-### Loops
+### Language basics
 
-Detailed replacements:
+- `docs/src/docs/language-overview/blocks-and-statements.bd`
+- `docs/src/docs/language-overview/comments-and-naming.bd`
+- `docs/src/docs/language-overview/core-values.bd`
+- `docs/src/docs/language-overview/strings-and-characters.bd`
+
+Public route:
+
+`docs/src/docs/language-overview/#page.bst`
+
+### Values and bindings
+
+- `docs/src/docs/bindings/bindings.bd`
+- `docs/src/docs/bindings/mutable-bindings.bd`
+- `docs/src/docs/bindings/shared-access.bd`
+- `docs/src/docs/bindings/explicit-copies.bd`
+- `docs/src/docs/bindings/shadowing.bd`
+
+Public route:
+
+`docs/src/docs/bindings/#page.bst`
+
+### Numbers
+
+- `docs/src/docs/numbers/numeric-types.bd`
+- `docs/src/docs/numbers/numeric-literals.bd`
+- `docs/src/docs/numbers/operators.bd`
+- `docs/src/docs/numbers/checked-arithmetic.bd`
+
+Public route:
+
+`docs/src/docs/numbers/#page.bst`
+
+### Casts
+
+- `docs/src/docs/casts/cast-syntax.bd`
+- `docs/src/docs/casts/cast-targets.bd`
+- `docs/src/docs/casts/fallible-casts.bd`
+- `docs/src/docs/casts/cast-evidence.bd`
+
+Public route:
+
+`docs/src/docs/casts/#page.bst`
+
+### Loops
 
 - `docs/src/docs/loops/conditional-loops.bd`
 - `docs/src/docs/loops/collection-loops.bd`
 - `docs/src/docs/loops/range-loops.bd`
 - `docs/src/docs/loops/loop-control.bd`
 
-Their paired `-basic.bd` files provide simplified teaching versions.
-
-The public route combines both levels:
+Public route:
 
 `docs/src/docs/loops/#page.bst`
+
+Each unsuffixed file has a paired `-basic.bd` teaching version.
 
 These files are written in the intended final shape. They do not supersede
 `docs/language-overview.md` until the complete language migration and parity

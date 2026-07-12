@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Language basics | Beanstalk</title>
-    <meta name="description" content="Blocks, comments, naming, core values, strings and characters in Beanstalk.">
+    <title>Values and bindings | Beanstalk</title>
+    <meta name="description" content="Bindings, mutability, shared access, explicit copies and shadowing in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -661,17 +661,17 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Documentation</a> / Language basics</p><h1>Language basics</h1><p>Beanstalk keeps the surface small, but it doesn&#39;t pretend punctuation is invisible. A colon opens a block, a semicolon closes it and every value has a clear shape.</p><p>Start here for the syntax you will see everywhere. The following pages take the same ideas further into bindings, numbers, casts and control flow.</p></section>
+    <section class="container"><p><a href="../">Documentation</a> / Values and bindings</p><h1>Values and bindings</h1><p>Names are cheap. Copies aren&#39;t automatic. Existing values are shared by default, mutability is explicit and <code>copy</code> is the line between another view and an independent value.</p><p>These rules apply to every type. The memory-management pages explain how the compiler validates and lowers them.</p></section>
     <section class="container"><fieldset class="doc-level">
         <legend class="visually-hidden">
-            Choose the explanation level: Blocks and statements
+            Choose the explanation level: Bindings
     </legend>
 
     <input
         class="doc-level__input doc-level__input--basic"
         type="radio"
-        name="blocks-and-statements-level"
-                id="blocks-and-statements-basic"
+        name="bindings-level"
+                id="bindings-basic"
                 value="basic"
                 checked
             >
@@ -679,27 +679,27 @@ body {
             <input
                 class="doc-level__input doc-level__input--advanced"
                 type="radio"
-                name="blocks-and-statements-level"
-                id="blocks-and-statements-advanced"
+                name="bindings-level"
+                id="bindings-advanced"
                 value="advanced"
             >
 
             <header class="doc-level__header">
-                <h2 class="doc-level__title" id="blocks-and-statements">
-                    Blocks and statements
+                <h2 class="doc-level__title" id="bindings">
+                    Bindings
     </h2>
 
     <div class="doc-level__switch">
         <label
             class="doc-level__option doc-level__option--basic"
-            for="blocks-and-statements-basic"
+            for="bindings-basic"
                     >
                         Basic
                     </label>
 
                     <label
                         class="doc-level__option doc-level__option--advanced"
-                        for="blocks-and-statements-advanced"
+                        for="bindings-advanced"
                     >
                         Advanced
                     </label>
@@ -711,283 +711,356 @@ body {
 
 
 
-            <p>Most Beanstalk blocks have a colon at the start and a semicolon at the end.</p><pre style=""><code class='codeblock'>
-    greet <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><p>The colon opens the function body. The semicolon closes it.</p><p>Semicolons do not end every line. Add one only when the surrounding block is finished.</p><p>Use indentation to make nesting easy to see:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ready!&quot;</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre>
+            <p>A binding is a name for a value.</p><pre style=""><code class='codeblock'>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
+    player_name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    </code></pre><p>Beanstalk usually infers the type from the value.</p><p>Write the type when it makes the code clearer or gives the compiler needed context:</p><pre style=""><code class='codeblock'>
+    score <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
+    player_name <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    </code></pre><p>Bindings are immutable unless you mark them as mutable. An immutable binding cannot be assigned a different value later.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk uses explicit block delimiters.</p><p>A colon opens a block. A semicolon closes that block.</p><pre style=""><code class='codeblock'>
-    clamp_to_zero <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> value <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
-        ;
+        <p>A binding gives a value a visible name.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
+    </code></pre><h3>Declaration forms</h3><pre style=""><code class='codeblock'>
+    name <span class='bst-code-operator'>=</span> value
+    name <span class='bst-code-struct'>Type</span> <span class='bst-code-operator'>=</span> value
+    </code></pre><ul><li>A binding must have an initializer.</li><li>Without an annotation, the initializer supplies the natural type.</li><li>An explicit annotation supplies a receiving type and may apply normal contextual coercion.</li><li>Ordinary bindings are immutable by default.</li><li><code>=</code> creates a binding when the name is new.</li><li><code>=</code> reassigns an existing binding only when that binding is mutable.</li></ul><p>Compile-time constants use <code>#</code> and are documented separately by Constants and compile-time behaviour.</p><h3>Binding mode and type</h3><p>Binding mode is not semantic type identity.</p><p>An immutable <code>String</code> binding and a mutable <code>String</code> binding still have the same semantic <code>String</code> type. The binding decides which later operations are permitted.</p><h3>Scope</h3><p>A binding is visible in its scope and child scopes unless a language rule creates a narrower visibility boundary.</p><p>Beanstalk does not allow a visible name to be redeclared. See the Shadowing section for the exact rule.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Mutable bindings
+    </legend>
 
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="mutable-bindings-level"
+                id="mutable-bindings-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="mutable-bindings-level"
+                id="mutable-bindings-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="mutable-bindings">
+                    Mutable bindings
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="mutable-bindings-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="mutable-bindings-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Most bindings should stay immutable. Add <code>~</code> when the value needs to change.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><p>The <code>~</code> appears only when the binding is declared. Later assignments use normal <code>=</code>.</p><p>Collections also need a mutable binding before they can change:</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ;
+    </code></pre><p>The <code>~</code> before <code>names.push</code> requests exclusive access for that call. It is separate from the <code>~</code> that made the binding mutable.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>~</code> on a declaration marks the binding as mutation-capable.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><h3>Declaration and reassignment</h3><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><ul><li><code>name ~= value</code> declares a mutable binding with an inferred type.</li><li><code>name ~Type = value</code> declares a mutable binding with an explicit type.</li><li>Reassignment still uses ordinary <code>=</code>.</li><li><code>~=</code> is the mutable marker followed by assignment syntax. Spacing around both tokens is required.</li><li>Mutability belongs to the binding, not the semantic type.</li></ul><h3>Exclusive access</h3><p>Declaration mutability and call-site exclusive access are separate operations.</p><pre style=""><code class='codeblock'>
+    add_name <span class='bst-code-operator'>|</span>names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>, name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        ;
+    ;
+
+    names <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    add_name<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>names, <span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A mutable parameter accepts:</p><ul><li><code>~place</code> for an existing mutable place</li><li>a plain fresh rvalue such as a literal, template, constructor call or computed value</li></ul><p><code>~</code> is place-only syntax. It is invalid on immutable bindings and is not written on fresh rvalues.</p><p><code>~</code> requests exclusive access for that operation. It is not explicit move syntax and is not part of type identity.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Shared access
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="shared-access-level"
+                id="shared-access-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="shared-access-level"
+                id="shared-access-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="shared-access">
+                    Shared access
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="shared-access-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="shared-access-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A new name for an existing value does not automatically copy that value.</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    same_names <span class='bst-code-operator'>=</span> names
+    </code></pre><p><code>same_names</code> is another read-only view of the existing value.</p><p>This keeps ordinary code cheap. You can pass values around without copying them first.</p><p>Shared access cannot be used to change the value. Mutation needs a mutable binding and an explicit exclusive operation.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Existing values use shared read-only access by default.</p><p>Binding an existing value to another name does not silently copy it.</p><pre style=""><code class='codeblock'>
+    items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;a&quot;</span>, <span class='bst-code-string'>&quot;b&quot;</span><span class='bst-code-parenthesis'>}</span>
+    shared_items <span class='bst-code-operator'>=</span> items
+    </code></pre><h3>Contract</h3><ul><li>Any number of shared accesses may coexist.</li><li>Shared access is read-only.</li><li>Shared access does not imply ownership transfer.</li><li>The rule applies uniformly to stack and heap values.</li><li>Beanstalk has no source <code>&amp;</code> or <code>&amp;mut</code> operators.</li><li>A backend may optimize representation, but observable source semantics must stay the same.</li></ul><p>Binding mutability is separate from access. A mutable binding can still be shared read-only. An exclusive operation must satisfy the borrow rules before it can proceed.</p><h3>Alias conflicts</h3><p>A later use of a shared alias can prevent overlapping mutation:</p><pre style=""><code class='codeblock'>
+    items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;a&quot;</span>, <span class='bst-code-string'>&quot;b&quot;</span><span class='bst-code-parenthesis'>}</span>
+    shared_items <span class='bst-code-operator'>=</span> items
+
+    <span class='bst-code-comment'>-- Invalid because shared_items is used again after the mutation.</span>
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;c&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ;
+
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>shared_items.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span> items<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Use <code>copy</code> when the second name needs an independent value.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Explicit copies
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="explicit-copies-level"
+                id="explicit-copies-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="explicit-copies-level"
+                id="explicit-copies-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="explicit-copies">
+                    Explicit copies
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="explicit-copies-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="explicit-copies-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Use <code>copy</code> when two values need to change independently.</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
+    copied_names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> names
+
+    <span class='bst-code-operator'>~</span>names.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Linus&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ;
+    </code></pre><p>Changing <code>names</code> does not add <code>&quot;Linus&quot;</code> to <code>copied_names</code>.</p><p>This is different from a normal assignment:</p><pre style=""><code class='codeblock'>
+    shared_names <span class='bst-code-operator'>=</span> names
+    </code></pre><p>A normal assignment creates another shared view. <code>copy</code> creates an independent value.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>copy</code> requests an independent value.</p><pre style=""><code class='codeblock'>
+    items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;a&quot;</span>, <span class='bst-code-string'>&quot;b&quot;</span><span class='bst-code-parenthesis'>}</span>
+    independent_items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> items
+
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;c&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ;
+
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> original length<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>items.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> copied length<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>independent_items.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Contract</h3><ul><li>Source code does not silently copy an existing value when another name is created.</li><li>When a value is copyable and an independent value is required, write <code>copy</code>.</li><li>The copied value keeps the same semantic type.</li><li>The receiving binding chooses its own mutability.</li><li>Copying is separate from ownership transfer and separate from exclusive access.</li></ul><p>Expressions that construct a new result from existing inputs are not implicit copies of one input.</p><pre style=""><code class='codeblock'>
+    total <span class='bst-code-operator'>=</span> left <span class='bst-code-operator'>+</span> right
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>first_name<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span>last_name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Those expressions create new result values through their own language rules.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Shadowing
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="shadowing-level"
+                id="shadowing-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="shadowing-level"
+                id="shadowing-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="shadowing">
+                    Shadowing
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="shadowing-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="shadowing-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A visible name cannot be declared again.</p><pre style=""><code class='codeblock'>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
+
+    <span class='bst-code-keyword'>if</span> score <span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-comment'>-- Invalid: score already exists.</span>
+        score <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>20</span>
+    ;
+    </code></pre><p>Choose a different name instead:</p><pre style=""><code class='codeblock'>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
+
+    <span class='bst-code-keyword'>if</span> score <span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+        doubled_score <span class='bst-code-operator'>=</span> score <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+    ;
+    </code></pre><p>Reassigning a mutable binding is different. That changes the existing binding instead of creating another one.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Beanstalk does not allow a visible name to be redeclared.</p><pre style=""><code class='codeblock'>
+    ready <span class='bst-code-operator'>=</span> true
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;outer&quot;</span>
+
+    <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
+        <span class='bst-code-comment'>-- Invalid: label is already visible.</span>
+        label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;inner&quot;</span>
+    ;
+    </code></pre><h3>Contract</h3><ul><li>A declaration cannot reuse a value name that is still visible.</li><li>A declaration cannot collide with a visible type, alias, import, builtin or reserved name.</li><li>Function parameters and loop bindings follow the same rule.</li><li>A nested child scope cannot shadow a name from its parent scope.</li><li>Assignment to an existing mutable binding is not a redeclaration.</li><li>Separate scopes may reuse a name when neither declaration is visible from the other.</li></ul><pre style=""><code class='codeblock'>
+    first <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
         <span class='bst-code-keyword'>return</span> value
     ;
-    </code></pre><h3>Contract</h3><ul><li><code>:</code> opens a function body, branch, loop or another block-form construct.</li><li><code>;</code> closes the active block.</li><li>A semicolon does not terminate an ordinary statement.</li><li>Statements inside a block are evaluated in source order unless control flow exits or redirects the block.</li><li>Child blocks create child scopes.</li><li>Indentation is for readability. Explicit delimiters define block boundaries.</li></ul><h3>Reading the shape</h3><p>The final semicolon in the example closes the function. The earlier semicolon closes the <code>if</code> block.</p><p>Nested language features may add their own structural rules. Branching, loops, functions and template control flow document those forms in detail.</p>
-    </div>
-    </fieldset></section>
-    <section class="container"><fieldset class="doc-level">
-        <legend class="visually-hidden">
-            Choose the explanation level: Comments and naming
-    </legend>
 
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="comments-and-naming-level"
-                id="comments-and-naming-basic"
-                value="basic"
-                checked
-            >
-
-            <input
-                class="doc-level__input doc-level__input--advanced"
-                type="radio"
-                name="comments-and-naming-level"
-                id="comments-and-naming-advanced"
-                value="advanced"
-            >
-
-            <header class="doc-level__header">
-                <h2 class="doc-level__title" id="comments-and-naming">
-                    Comments and naming
-    </h2>
-
-    <div class="doc-level__switch">
-        <label
-            class="doc-level__option doc-level__option--basic"
-            for="comments-and-naming-basic"
-                    >
-                        Basic
-                    </label>
-
-                    <label
-                        class="doc-level__option doc-level__option--advanced"
-                        for="comments-and-naming-advanced"
-                    >
-                        Advanced
-                    </label>
-                </div>
-            </header>
-
-            <div class="doc-level__panel doc-level__panel--basic">
-                
-
-
-
-            <p>Comments begin with two minus signs:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- This line is ignored by the compiler.</span>
-    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-    </code></pre><p>Use <code>regular_snake_case</code> for values and functions:</p><pre style=""><code class='codeblock'>
-    player_score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-
-    double_score <span class='bst-code-operator'>|</span>score <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> score <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+    second <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>2</span>
+        <span class='bst-code-keyword'>return</span> value
     ;
-    </code></pre><p>Use <code>PascalCase</code> for named types:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-struct'>PlayerScore</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>Int,</span>
-    <span class='bst-code-operator'>|</span>
-    </code></pre><p>Clear names beat short names. <code>player_score</code> is easier to understand than <code>ps</code>, especially when the code grows.</p>
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p><code>--</code> starts a single-line comment.</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- Explain why this value exists.</span>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-    </code></pre><p>Everything after <code>--</code> on that source line is comment text.</p><h3>Naming conventions</h3><ul><li>Variables and functions use <code>regular_snake_case</code>.</li><li>Structs, choices, type aliases and generic parameters use <code>PascalCase</code>.</li><li>Trait names use all-caps identifiers such as <code>DISPLAY_TEXT</code>.</li><li>Names should describe their role rather than their storage or implementation detail.</li></ul><pre style=""><code class='codeblock'>
-    retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-
-    load_profile <span class='bst-code-operator'>|</span>user_id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;profile&quot;</span>
-    ;
-
-    <span class='bst-code-struct'>UserProfile</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        display_name <span class='bst-code-struct'>String,</span>
-    <span class='bst-code-operator'>|</span>
-    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings">Values and bindings</a>. Import aliases and facade API names have additional collision rules in the Libraries documentation.</p>
+    </code></pre><p>Import, facade and namespace collisions add more specific rules, but they build on the same no-shadowing principle.</p>
     </div>
     </fieldset></section>
-    <section class="container"><fieldset class="doc-level">
-        <legend class="visually-hidden">
-            Choose the explanation level: Core values
-    </legend>
-
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="core-values-level"
-                id="core-values-basic"
-                value="basic"
-                checked
-            >
-
-            <input
-                class="doc-level__input doc-level__input--advanced"
-                type="radio"
-                name="core-values-level"
-                id="core-values-advanced"
-                value="advanced"
-            >
-
-            <header class="doc-level__header">
-                <h2 class="doc-level__title" id="core-values">
-                    Core values
-    </h2>
-
-    <div class="doc-level__switch">
-        <label
-            class="doc-level__option doc-level__option--basic"
-            for="core-values-basic"
-                    >
-                        Basic
-                    </label>
-
-                    <label
-                        class="doc-level__option doc-level__option--advanced"
-                        for="core-values-advanced"
-                    >
-                        Advanced
-                    </label>
-                </div>
-            </header>
-
-            <div class="doc-level__panel doc-level__panel--basic">
-                
-
-
-
-            <p>Beanstalk can usually work out a value&#39;s type from the value itself.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>You can write the type when it helps the reader or gives the compiler needed context:</p><pre style=""><code class='codeblock'>
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    name <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><p>The most common core types are:</p><ul><li><code>Bool</code> for <code>true</code> and <code>false</code></li><li><code>Int</code> for whole numbers</li><li><code>Float</code> for decimal numbers</li><li><code>Char</code> for one character</li><li><code>String</code> for text</li></ul><p>Collections, structs, choices and options build larger values from these ideas.</p>
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Values have a semantic type. A binding may infer that type from its initializer or state it explicitly.</p><pre style=""><code class='codeblock'>
-    enabled <span class='bst-code-operator'>=</span> true
-    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
-    ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
-    letter <span class='bst-code-struct'>Char</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices, raw slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the three string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
-    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
-
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello</span> from a template.
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Structs, choices, collections, maps and generic instances add richer value shapes without changing the basic annotation form.</p><p>Binding mutability and access mode are separate from semantic type identity. See <a href="../bindings">Values and bindings</a> for that contract.</p>
-    </div>
-    </fieldset></section>
-    <section class="container"><fieldset class="doc-level">
-        <legend class="visually-hidden">
-            Choose the explanation level: Strings and characters
-    </legend>
-
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="strings-and-characters-level"
-                id="strings-and-characters-basic"
-                value="basic"
-                checked
-            >
-
-            <input
-                class="doc-level__input doc-level__input--advanced"
-                type="radio"
-                name="strings-and-characters-level"
-                id="strings-and-characters-advanced"
-                value="advanced"
-            >
-
-            <header class="doc-level__header">
-                <h2 class="doc-level__title" id="strings-and-characters">
-                    Strings and characters
-    </h2>
-
-    <div class="doc-level__switch">
-        <label
-            class="doc-level__option doc-level__option--basic"
-            for="strings-and-characters-basic"
-                    >
-                        Basic
-                    </label>
-
-                    <label
-                        class="doc-level__option doc-level__option--advanced"
-                        for="strings-and-characters-advanced"
-                    >
-                        Advanced
-                    </label>
-                </div>
-            </header>
-
-            <div class="doc-level__panel doc-level__panel--basic">
-                
-
-
-
-            <p>Use double quotes for normal text:</p><pre style=""><code class='codeblock'>
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello&quot;</span>
-    </code></pre><p>Use backticks when the text should stay raw:</p><pre style=""><code class='codeblock'>
-    windows_path <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    </code></pre><p>Use single quotes for one character:</p><pre style=""><code class='codeblock'>
-    seedling <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-    </code></pre><p>Use a template when text needs values or a larger structure:</p><pre style=""><code class='codeblock'>
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-
-    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Square brackets belong to templates. Collections use curly braces instead.</p>
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk has three main string source forms and one character form.</p><pre style=""><code class='codeblock'>
-    escaped_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello\nworld&quot;</span>
-    raw_slice <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
-    letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
-
-    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-    message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><h3>Quoted string slices</h3><p>Double quotes create escaped string slices. Escape sequences are interpreted by the string literal parser.</p><h3>Raw string slices</h3><p>Backticks create raw string slices in expression position. Their text is kept without normal quoted-string escaping.</p><p>Inside a template body, backticks are ordinary body text available to the active formatter.</p><h3>Characters</h3><p>Single quotes create <code>Char</code> values.</p><h3>String templates</h3><p>Square brackets create string templates. Templates produce owned strings and may fold at compile time or lower to runtime string construction.</p><p>Templates own interpolation, formatting, slots, wrappers and structured content. See <a href="../templates">Templates</a> for the complete system.</p><p>Quoted slices, raw slices and templates all participate in the language&#39;s <code>String</code> surface. Their storage and folding behaviour differs, but they do not create three unrelated source-level string types.</p>
-    </div>
-    </fieldset></section>
+    <section class="container"><h2>Related design</h2><p>See <a href="../codebase/memory-management">Memory management</a> for borrow validation, ownership analysis and backend lowering.</p></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--previous"
-            href="../getting-started/"
+            href="../language-overview/"
                 rel="prev"
             >
                 <span class="doc-pager__direction">← Previous</span>
-                <span class="doc-pager__title">Getting Started</span>
+                <span class="doc-pager__title">Language basics</span>
             </a>
 
             <a
                 class="doc-pager__link doc-pager__link--next"
-                href="../bindings/"
+                href="../numbers/"
                 rel="next"
             >
                 <span class="doc-pager__direction">Next →</span>
-                <span class="doc-pager__title">Values and bindings</span>
+                <span class="doc-pager__title">Numbers</span>
             </a>
 
             

@@ -1,0 +1,78 @@
+Explicit casts target compiler-supported builtin types:
+
+```text
+Bool
+Int
+String
+Char
+Float
+Error
+```
+
+### Target source
+
+The target must come from the immediate typed boundary.
+
+Valid target boundaries include:
+
+- an annotated declaration or assignment
+- an explicit return slot
+- a concrete function parameter
+- a struct or choice field
+- a default value
+- a typed collection or map entry
+- a `then` arm whose enclosing value-producing block has an explicit receiver
+
+Generic parameter slots are not cast targets. Generic inference does not look
+through `cast`.
+
+These positions do not supply cast targets:
+
+- conditions
+- loop conditions
+- assertions
+- template interpolation
+- operator operands
+- expression statements
+- untyped declarations
+
+[codeblock, $code("bst"):
+    value = cast source
+
+    if cast value:
+        io.line("invalid")
+    ;
+
+    [: [cast value]]
+]
+
+The forms above are invalid because no immediate builtin target exists.
+
+### Optional receiving contexts
+
+A `T?` receiving context casts to inner `T`, then applies normal contextual
+wrapping to `T?`.
+
+Optional source values are not automatically unwrapped.
+
+In:
+
+[codeblock, $code("bst"):
+    target T? = cast source catch:
+        then fallback
+    ;
+]
+
+the recovery handler produces inner `T`. `then none` is invalid because
+recovery happens before optional wrapping.
+
+### Conversion behaviour
+
+- `String -> Int` parses the whole string with Beanstalk numeric text grammar.
+- `String -> Float` parses the whole string and rejects non-finite results.
+- Surrounding whitespace, uppercase exponent markers, unary plus, malformed separators, malformed exponents, `NaN` and infinity spellings are rejected.
+- `Float -> Int` accepts only values that materialize inside the signed 32-bit `Int` range.
+- `String -> Int` uses the same signed 32-bit range.
+- `Float -> String` uses Beanstalk's formatter, normalizes `-0.0` to `0` and uses stable lowercase exponent formatting when needed.
+- Same-type casts are invalid.
+- Contextual `Int -> Float` promotion remains separate from explicit casts, but explicit `cast` is allowed from a naturally `Int` source to a `Float` target.

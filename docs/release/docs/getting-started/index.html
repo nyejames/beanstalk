@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,8 +661,7 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> GETTING STARTED WITH BEAN</h1>
-    <section class="container"><p><code>bean</code> is the Beanstalk compiler and project tool. It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.</p><p>The tooling is still early. Command names, generated project structure, config options, and backend flags may change at this stage in development.</p><p>it&#39;s main purpose right now is to: create a project, check it, build it, and run the hot-reloading dev server.</p><p>If you are running the compiler from the repository instead of an installed <code>bean</code> binary, use <code>cargo run --</code> before the same commands:</p><pre style="
+    <section class="container"><p><a href="../">Documentation</a> / Getting Started</p><h1>Getting Started with bean</h1><p><code>bean</code> is the Beanstalk compiler and project tool. It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.</p><p>The tooling is still early. Command names, generated project structure, config options, and backend flags may change at this stage in development.</p><p>Its main purpose right now is to create a project, check it, build it and run the hot-reloading dev server.</p><p>If you are running the compiler from the repository instead of an installed <code>bean</code> binary, use <code>cargo run --</code> before the same commands:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -332,7 +673,7 @@ body {
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> check .
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> build .
     </code></pre></section>
-    <section class="container"><h1>Current commands</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h2>Current commands</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -387,7 +728,7 @@ body {
             
 
     </table></section>
-    <section class="container"><h1>Current flags</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h2>Current flags</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -442,7 +783,7 @@ body {
             
 
     </table></section>
-    <section class="container"><h1>Create a new HTML project</h1><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../project-structure">the project structure guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
+    <section class="container"><h2>Create a new HTML project</h2><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../project-structure">the project structure guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -510,7 +851,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>Add</span> a .gitignore with <span class='bst-code-struct'>Beanstalk</span> defaults<span class='bst-code-operator'>?</span> <span class='bst-code-struct'>Y</span><span class='bst-code-operator'>/</span>n<span class='bst-code-operator'>:</span>
-    </code></pre><p>If .gitignore already exists, bean asks whether to append missing defaults instead of overwriting.</p><h2>Generated project structure</h2><p>A scaffolded project looks like this:</p><pre style="
+    </code></pre><p>If .gitignore already exists, bean asks whether to append missing defaults instead of overwriting.</p><h3>Generated project structure</h3><p>A scaffolded project looks like this:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -528,7 +869,7 @@ body {
     ├── release<span class='bst-code-operator'>/</span>
     │   └── .beanstalk_manifest
     └── .gitignore
-    </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source libraries.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the default HTML page entry with a starter page.</li></ul><h2>Using --force</h2><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
+    </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source libraries.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the default HTML page entry with a starter page.</li></ul><h3>Using --force</h3><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -549,7 +890,7 @@ body {
     bean check .
     bean dev .
     </code></pre></section>
-    <section class="container"><h1>Run the dev server</h1><p><code>dev</code> is currently the most useful command for normal Beanstalk project work. It builds the project, serves the generated files locally, watches for source changes, and sends reload events to the browser.</p><pre style="
+    <section class="container"><h2>Run the dev server</h2><p><code>dev</code> is currently the most useful command for normal Beanstalk project work. It builds the project, serves the generated files locally, watches for source changes, and sends reload events to the browser.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -579,7 +920,7 @@ body {
     bean dev . <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>host <span class='bst-code-number'>0.0.0.0</span>
     bean dev . <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>poll<span class='bst-code-operator'>-</span>interval<span class='bst-code-operator'>-</span>ms <span class='bst-code-number'>100</span>
     </code></pre><p>When a build fails, fix the reported error and save again. The dev server is designed around fast feedback rather than a manual rebuild loop.</p></section>
-    <section class="container"><h1>Build a project</h1><p>Use <code>build</code> when you want files written to disk without running the dev server.</p><pre style="
+    <section class="container"><h2>Build a project</h2><p>Use <code>build</code> when you want files written to disk without running the dev server.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -598,7 +939,7 @@ body {
     "><code class='codeblock'>
     bean build . <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
     </code></pre><p>For HTML projects, generated files are written under the configured output folder. The default scaffold currently uses <code>dev</code> for development output and <code>release</code> for release output.</p></section>
-    <section class="container"><h1>Check without building</h1><p><code>check</code> is the fastest correctness command for editor loops and CI-style validation. It does not write output artifacts, but it still runs the shared frontend diagnostics used by all backends.</p><pre style="
+    <section class="container"><h2>Check without building</h2><p><code>check</code> is the fastest correctness command for editor loops and CI-style validation. It does not write output artifacts, but it still runs the shared frontend diagnostics used by all backends.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -627,7 +968,7 @@ body {
     <span class='bst-code-struct'>E</span><span class='bst-code-operator'>|</span>type<span class='bst-code-operator'>|</span>src<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst<span class='bst-code-operator'>|</span><span class='bst-code-number'>4</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>12</span><span class='bst-code-operator'>|</span><span class='bst-code-struct'>Expected</span> <span class='bst-code-struct'>Bool,</span> found <span class='bst-code-struct'>Int</span><span class='bst-code-operator'>|</span>help<span class='bst-code-operator'>=</span><span class='bst-code-struct'>Use</span> a <span class='bst-code-struct'>Bool</span> expression here.
     <span class='bst-code-struct'>W</span><span class='bst-code-operator'>|</span>identifier_naming_convention<span class='bst-code-operator'>|</span>src<span class='bst-code-operator'>/</span>button.bst<span class='bst-code-operator'>|</span><span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span><span class='bst-code-number'>1</span><span class='bst-code-operator'>|</span><span class='bst-code-struct'>Import</span> alias case mismatch
     </code></pre></section>
-    <section class="container"><h1>Reading compiler errors</h1><p>Beanstalk uses the same formatted diagnostic system across the compiler front end and backend builders. That means syntax errors, type errors, config errors, file errors, borrow-checker errors, dev-server errors, and backend errors use the same basic shape.</p><p>A normal diagnostic contains:</p><ul><li>the error kind</li><li>the main message</li><li>the source file path, line, and column</li><li>the source line when available</li><li>a caret underline for the offending span</li><li>guidance lines when the compiler has a useful suggestion</li></ul><p>Example shape:</p><pre style="
+    <section class="container"><h2>Reading compiler errors</h2><p>Beanstalk uses the same formatted diagnostic system across the compiler front end and backend builders. That means syntax errors, type errors, config errors, file errors, borrow-checker errors, dev-server errors, and backend errors use the same basic shape.</p><p>A normal diagnostic contains:</p><ul><li>the error kind</li><li>the main message</li><li>the source file path, line, and column</li><li>the source line when available</li><li>a caret underline for the offending span</li><li>guidance lines when the compiler has a useful suggestion</li></ul><p>Example shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -644,7 +985,7 @@ body {
         <span class='bst-code-operator'>|</span>             <span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>^</span>
       <span class='bst-code-struct'>Use</span> an <span class='bst-code-struct'>Int</span> value here, or change the declaration type.
     </code></pre><p>Read diagnostics from top to bottom:</p><ol><li>The kind tells you which part of the compiler rejected the program.</li><li>The message tells you the actual rule that failed.</li><li>The file/line/column points to the primary source location.</li><li>The caret shows the token or expression the compiler is complaining about.</li><li>The guidance lines are suggestions, not a separate error.</li></ol></section>
-    <section class="container"><h1>Error kinds</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h2>Error kinds</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -705,7 +1046,7 @@ body {
             
 
     </table></section>
-    <section class="container"><h1>Warnings and future suggestions</h1><p>Warnings are for code that can still compile but deserves attention. Current warnings include things like malformed CSS/HTML template content, large tracked assets, naming convention issues, and import alias case mismatches.</p><p>Beanstalk deliberately separates correctness from style pressure. The future <code>suggest</code> command is planned to become the pedantic style and cleanup pass: closer to a full Clippy-style assistant for Beanstalk code. That is where noisy suggestions such as unused variables, unused imports, unused declarations, and more specific style improvements should live.</p><p>The intended workflow will be:</p><pre style="
+    <section class="container"><h2>Warnings and future suggestions</h2><p>Warnings are for code that can still compile but deserves attention. Current warnings include things like malformed CSS/HTML template content, large tracked assets, naming convention issues, and import alias case mismatches.</p><p>Beanstalk deliberately separates correctness from style pressure. The future <code>suggest</code> command is planned to become the pedantic style and cleanup pass: closer to a full Clippy-style assistant for Beanstalk code. That is where noisy suggestions such as unused variables, unused imports, unused declarations, and more specific style improvements should live.</p><p>The intended workflow will be:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -717,7 +1058,20 @@ body {
     bean suggest .
     bean fmt .
     </code></pre><p>For now, use <code>check</code> and the compiler&#39;s normal warnings as the practical baseline.</p></section>
-    <section class="container"><h1>Planned bean extensions</h1><p><code>bean</code> is expected to become the main Beanstalk project tool, not just a thin compiler launcher. Planned additions include:</p><ul><li>a package manager for Beanstalk libraries and project dependencies</li><li>a formatter for stable project-wide formatting</li><li><code>suggest</code>, a pedantic style and cleanup command to use alongside <code>check</code></li><li>richer <code>new</code> project options, including more complete config templates</li><li>stronger project maintenance commands as the build system matures</li></ul><p>The short-term rule is simple: <code>dev</code> for fast browser feedback, <code>check</code> for correctness, and <code>build</code> when you want output files.</p></section>
+    <section class="container"><h2>Planned bean extensions</h2><p><code>bean</code> is expected to become the main Beanstalk project tool, not just a thin compiler launcher. Planned additions include:</p><ul><li>a package manager for Beanstalk libraries and project dependencies</li><li>a formatter for stable project-wide formatting</li><li><code>suggest</code>, a pedantic style and cleanup command to use alongside <code>check</code></li><li>richer <code>new</code> project options, including more complete config templates</li><li>stronger project maintenance commands as the build system matures</li></ul><p>The short-term rule is simple: <code>dev</code> for fast browser feedback, <code>check</code> for correctness, and <code>build</code> when you want output files.</p></section>
+    <section class="container"><nav class="doc-pager doc-pager--single" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--next"
+            href="../language-overview/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Language basics</span>
+            </a>
+
+            
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

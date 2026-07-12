@@ -1,21 +1,32 @@
-import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
+import @styles/docs {
+    navbar,
+    section,
+    styled_table,
+    header,
+    data,
+    codeblock,
+    language_theme_head,
+    doc_pager_next,
+}
 
 page_title #= "Getting Started with bean"
 page_description #= "How to use the Beanstalk compiler CLI, create a project, run the dev server, and read compiler diagnostics."
-page_head #= theme_head
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: GETTING STARTED WITH BEAN]
 
 #[section, $md:
+    @../ (Documentation) / Getting Started
+
+    # Getting Started with bean
+
     `bean` is the Beanstalk compiler and project tool.
     It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.
 
     The tooling is still early.
     Command names, generated project structure, config options, and backend flags may change at this stage in development.
-    
-    it's main purpose right now is to: create a project, check it, build it, and run the hot-reloading dev server.
+
+    Its main purpose right now is to create a project, check it, build it and run the hot-reloading dev server.
 
     If you are running the compiler from the repository instead of an installed `bean` binary, use `cargo run --` before the same commands:
 
@@ -27,7 +38,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Current commands
+    ## Current commands
 
     [styled_table:
         [header: [: Command] [: Use] [: Notes] ]
@@ -77,7 +88,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Current flags
+    ## Current flags
 
     [styled_table:
         [header: [: Flag] [: Applies to] [: Effect] ]
@@ -127,7 +138,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Create a new HTML project
+    ## Create a new HTML project
 
     The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore.
     The HTML project builder itself has more rules than this page needs to cover; see @../project-structure (the project structure guide) for page layout, routing, assets, fragments, and generated output details.
@@ -184,7 +195,7 @@ page_head #= theme_head
 
     If .gitignore already exists, bean asks whether to append missing defaults instead of overwriting.
 
-    ## Generated project structure
+    ### Generated project structure
 
     A scaffolded project looks like this:
 
@@ -206,7 +217,7 @@ page_head #= theme_head
     - .beanstalk_manifest files are build-system metadata for safe stale-output cleanup.
     - `src/#page.bst` is the default HTML page entry with a starter page.
 
-    ## Using --force
+    ### Using --force
 
     --force allows replacing scaffold-owned files when they already exist:
 
@@ -226,7 +237,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Run the dev server
+    ## Run the dev server
 
     `dev` is currently the most useful command for normal Beanstalk project work.
     It builds the project, serves the generated files locally, watches for source changes, and sends reload events to the browser.
@@ -254,7 +265,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Build a project
+    ## Build a project
 
     Use `build` when you want files written to disk without running the dev server.
 
@@ -273,7 +284,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Check without building
+    ## Check without building
 
     `check` is the fastest correctness command for editor loops and CI-style validation.
     It does not write output artifacts, but it still runs the shared frontend diagnostics used by all backends.
@@ -297,7 +308,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Reading compiler errors
+    ## Reading compiler errors
 
     Beanstalk uses the same formatted diagnostic system across the compiler front end and backend builders.
     That means syntax errors, type errors, config errors, file errors, borrow-checker errors, dev-server errors, and backend errors use the same basic shape.
@@ -334,7 +345,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Error kinds
+    ## Error kinds
 
     [styled_table:
         [header: [: Kind] [: Meaning] [: Usual fix] ]
@@ -390,7 +401,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Warnings and future suggestions
+    ## Warnings and future suggestions
 
     Warnings are for code that can still compile but deserves attention.
     Current warnings include things like malformed CSS/HTML template content, large tracked assets, naming convention issues, and import alias case mismatches.
@@ -411,7 +422,7 @@ page_head #= theme_head
 ]
 
 #[section, $md:
-    # Planned bean extensions
+    ## Planned bean extensions
 
     `bean` is expected to become the main Beanstalk project tool, not just a thin compiler launcher.
     Planned additions include:
@@ -423,4 +434,11 @@ page_head #= theme_head
     - stronger project maintenance commands as the build system matures
 
     The short-term rule is simple: `dev` for fast browser feedback, `check` for correctness, and `build` when you want output files.
+]
+
+#[section:
+    [doc_pager_next:
+        [$insert("next_path"):../language-overview/]
+        [$insert("next_title"):Language basics]
+    ]
 ]

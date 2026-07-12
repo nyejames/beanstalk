@@ -1,0 +1,35 @@
+`--` starts a single-line comment.
+
+[codeblock, $code("bst"):
+    -- Explain why this value exists.
+    retry_count = 3
+]
+
+Everything after `--` on that source line is comment text.
+
+### Naming conventions
+
+- Variables and functions use `regular_snake_case`.
+- Structs, choices, type aliases and generic parameters use `PascalCase`.
+- Trait names use all-caps identifiers such as `DISPLAY_TEXT`.
+- Names should describe their role rather than their storage or implementation detail.
+
+[codeblock, $code("bst"):
+    retry_count = 3
+
+    load_profile |user_id String| -> String:
+        return "profile"
+    ;
+
+    UserProfile = |
+        display_name String,
+    |
+]
+
+### Name collisions
+
+A visible name cannot be redeclared while it remains in scope.
+
+The complete no-shadowing contract is documented by
+@../bindings (Values and bindings). Import aliases and facade API
+names have additional collision rules in the Libraries documentation.
