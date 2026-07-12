@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3 remaining entry-root facade identity and duplicate-policy transition
+CURRENT_SLICE: Phase 3 entry-root export-surface identity plumbing
 LAST_ACCEPTED_COMMIT: `2413c538a` (`refactor: discover generic source library roots`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The accepted source-library slice is committed and the plan checkpoint is the only remaining change. Concurrent user-owned plan and documentation edits must remain unstaged.
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The entry-root worker made no source changes before the provider blocker. This plan checkpoint is the only tracked change and `main` is two commits ahead of `origin/main`. Concurrent user-owned plan and documentation edits must remain unstaged.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -182,11 +182,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Review and delegate the smallest coherent Phase 3 entry-root transition that replaces `module_root_facades` and hard-coded `#mod.bst` synthesis without leaving the repository in a broken mixed `#page.bst` / `#mod.bst` state or prematurely entering active/imported root execution semantics.
-DELEGATION_DECISION: codex-cli - completed and accepted the generic source-library discovery/preflight slice; continue with Codex CLI after the parent bounds the coupled entry-root transition
-NEXT_WORKER_ORDER: codex-cli, then parent-direct
-STOP_REASON: none
-NEXT_RESUME_ACTION: inspect the remaining Phase 3 entry-root facade synthesis owners and prepare the bounded Codex CLI worker envelope
+- Delegate a behavior-preserving entry-root export-surface identity slice: rename prepared facade maps to export-file naming and carry the actual prepared export file through module-root import-boundary records so header namespace resolution no longer synthesizes `#mod.bst`. Keep Stage 0's temporary `#mod.bst` selection and all file roles unchanged for the later atomic role transition.
+DELEGATION_DECISION: codex-cli - blocked before edits by the account usage limit; do not substitute another provider because the user explicitly requested Codex CLI
+NEXT_WORKER_ORDER: codex-cli after usage reset
+STOP_REASON: Codex CLI usage limit reached before the worker read or edited source; the provider reported retry availability at 03:15 local time
+NEXT_RESUME_ACTION: rerun `.codex-worker/tasks/phase3-entry-root-export-surface-identity.md` through the reviewed Codex CLI launcher after the usage reset
 
 ---
 
