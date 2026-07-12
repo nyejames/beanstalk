@@ -7,7 +7,7 @@ warnings = "forbid"
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["bst_builtin_canvas", "<canvas"]
+must_contain = ["<canvas"]
 must_not_contain = [
     "_beanstalk/js/canvas-",
     "_beanstalk/js/glue/module-",

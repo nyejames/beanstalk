@@ -363,7 +363,7 @@ fn build_html_project_unreachable_html_canvas_helper_import_does_not_emit_runtim
             _ => None,
         })
         .expect("build should emit HTML");
-    assert!(html.contains("bst_builtin_canvas"));
+    assert!(html.contains("<canvas"));
     assert!(!html.contains("<script type=\"module\">"));
     assert!(!html.contains("<script type=\"importmap\">"));
 
@@ -480,7 +480,7 @@ fn build_html_project_html_canvas_helper_emits_builtin_js_asset_and_glue() {
     fs::write(root.join("config.bst"), "project #= \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @html { get_canvas_context }\ndraw || -> String, Error!:\n    context = get_canvas_context()!\n    return \"ok\"\n;\nresult = draw() catch:\n    then \"error\"\n;\nio.line([: [result]])\n",
+        "import @html { get_canvas_context }\ndraw || -> String, Error!:\n    context = get_canvas_context(\"game_canvas\")!\n    return \"ok\"\n;\nresult = draw() catch:\n    then \"error\"\n;\nio.line([: [result]])\n",
     )
     .expect("should write page");
 

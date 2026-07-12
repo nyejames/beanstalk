@@ -94,12 +94,11 @@ export:
     larger #String = [$insert("style"):font-size: larger;]
 
     -- Basic Canvas component
-    CANVAS_ID #= "bst_builtin_canvas"
-    canvas #String = [$html:<canvas id="[CANVAS_ID]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
+    canvas #String = [$html:<canvas id="[$slot("id")]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
 
     -- Get the basic canvas element and 2D context for drawing (opaque JS interop)
-    get_canvas_context || -> Canvas2d, Error!:
-        canvas_element = raw_get_canvas(CANVAS_ID)!
+    get_canvas_context |id String| -> Canvas2d, Error!:
+        canvas_element = raw_get_canvas(id)!
         return raw_context_2d(canvas_element)!
     ;
 
@@ -108,8 +107,8 @@ export:
         context Canvas2d,
     |
 
-    get_canvas || -> Canvas, Error!:
-        context = get_canvas_context()!
+    get_canvas |id String| -> Canvas, Error!:
+        context = get_canvas_context(id)!
         return Canvas(context)
     ;
 ;

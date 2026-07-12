@@ -501,7 +501,7 @@ fn builder_runtime_metadata_ignores_unreachable_source_library_wrappers() {
     fs::write(dir.join("config.bst"), "").expect("should write config");
     fs::write(
         dir.join("#page.bst"),
-        "import @html { CANVAS_ID }\npage_canvas_id #= CANVAS_ID\nvalue = 1\n",
+        "import @html { canvas }\npage_canvas_id #= canvas\nvalue = 1\n",
     )
     .expect("should write page");
 

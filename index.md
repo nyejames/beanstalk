@@ -6,7 +6,9 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 
 - [bean CLI entry](src/main.rs)
 - [crate module surface](src/lib.rs)
-- [Beanstalk source library packages](libraries/): #mod.bst roots. kw: html, core packages.
+- [Beanstalk source library packages](libraries/): #mod.bst roots.
+    - [@html builder source library](libraries/html/#mod.bst): HTML helper templates (`canvas`, `p`, `h1`–`h6`, `div`, `table`, etc.) and the `Canvas`/`get_canvas` wrapper. Internal helpers live in [libraries/html/private_helpers.bst](libraries/html/private_helpers.bst).
+    - [Core packages and prelude libraries](libraries/): shared language-adjacent source libraries.
 - [validate/bench/docs workflow](justfile)
 - [contributor workflow and validation commands](CONTRIBUTING.md)
 
@@ -29,12 +31,14 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
         - [frontend_orchestration.rs](src/build_system/create_project_modules/frontend_orchestration.rs): per-module frontend pipeline.
         - [module_inventory.rs](src/build_system/create_project_modules/module_inventory.rs), [reachable_file_discovery.rs](src/build_system/create_project_modules/reachable_file_discovery.rs), [import_scanning.rs](src/build_system/create_project_modules/import_scanning.rs): module graph.
         - [source_library_discovery.rs](src/build_system/create_project_modules/source_library_discovery.rs), [facade_validation.rs](src/build_system/create_project_modules/facade_validation.rs): library roots/#mod.bst.
-        - [entry_discovery.rs](src/build_system/create_project_modules/entry_discovery.rs), [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): entry roots and source load.
+        - [source_tree_index.rs](src/build_system/create_project_modules/source_tree_index.rs), [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): entry roots and source load.
         - [collision_detection.rs](src/build_system/create_project_modules/collision_detection.rs), [project_structure_diagnostics.rs](src/build_system/create_project_modules/project_structure_diagnostics.rs): layout/name conflicts.
         - [project_roots.rs](src/build_system/create_project_modules/project_roots.rs): project/entry roots.
         - [source_discovery_error.rs](src/build_system/create_project_modules/source_discovery_error.rs): diagnostic boundary.
     - [output_cleanup.rs](src/build_system/output_cleanup.rs): stale output manifest cleanup.
-- [backend-declared library set](src/libraries/): core packages, external import providers.
+- [backend-declared library set](src/libraries/): core packages, external import providers, source/library registries.
+    - [core/](src/libraries/core/): prelude, io, math, collections, text, random, time.
+    - [external_import_providers/](src/libraries/external_import_providers/): JS import provider, provider registry, resolution table.
 
 ## Frontend stage map
 
@@ -88,8 +92,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
     - [template_control_flow](src/compiler_frontend/ast/templates/template_control_flow/): const eval/folding/validation/remap.
     - [template_slots](src/compiler_frontend/ast/templates/template_slots/): slot schema, contributions, runtime plan construction.
     - [styles](src/compiler_frontend/ast/templates/styles/): directive-owned formatters (markdown, raw, whitespace).
-    - [template_types.rs](src/compiler_frontend/ast/templates/template_types.rs), [template_composition.rs](src/compiler_frontend/ast/templates/template_composition.rs), [template_folding.rs](src/compiler_frontend/ast/templates/template_folding.rs), [template_formatting.rs](src/compiler_frontend/ast/templates/template_formatting.rs).
-    - [template_render_units.rs](src/compiler_frontend/ast/templates/template_render_units.rs), [template_render_plan.rs](src/compiler_frontend/ast/templates/template_render_plan.rs), [template_renderability.rs](src/compiler_frontend/ast/templates/template_renderability.rs).
+    - [template_types.rs](src/compiler_frontend/ast/templates/template_types.rs), [template_folding.rs](src/compiler_frontend/ast/templates/template_folding.rs).
+    - [template_render_units.rs](src/compiler_frontend/ast/templates/template_render_units.rs), [template_renderability.rs](src/compiler_frontend/ast/templates/template_renderability.rs).
     - [create_template_node.rs](src/compiler_frontend/ast/templates/create_template_node.rs), [top_level_templates.rs](src/compiler_frontend/ast/templates/top_level_templates.rs), [doc_fragments.rs](src/compiler_frontend/ast/templates/doc_fragments.rs), [error.rs](src/compiler_frontend/ast/templates/error.rs).
     - [runtime_handoff.rs](src/compiler_frontend/ast/templates/runtime_handoff.rs), [runtime_template_expression.rs](src/compiler_frontend/ast/templates/runtime_template_expression.rs), [reactive_template_metadata.rs](src/compiler_frontend/ast/templates/reactive_template_metadata.rs).
     - [tir](src/compiler_frontend/ast/templates/tir/): Template IR — AST-local authoritative template representation. kw: TemplateIrStore.
@@ -99,8 +103,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
         - [expression_payload_walker.rs](src/compiler_frontend/ast/templates/tir/expression_payload_walker.rs): shared read-only expression-payload traversal.
         - [classification.rs](src/compiler_frontend/ast/templates/tir/classification.rs): store-aware TIR shape queries.
         - [fold.rs](src/compiler_frontend/ast/templates/tir/fold.rs), [formatter_view.rs](src/compiler_frontend/ast/templates/tir/formatter_view.rs), [render_unit.rs](src/compiler_frontend/ast/templates/tir/render_unit.rs): TIR-native fold/format/render-unit prep.
-        - [slot_plan.rs](src/compiler_frontend/ast/templates/tir/slot_plan.rs), [slot_composition.rs](src/compiler_frontend/ast/templates/tir/slot_composition.rs), [wrapper_sets.rs](src/compiler_frontend/ast/templates/tir/wrapper_sets.rs): slot routing and wrapper reuse.
-        - [hir_handoff.rs](src/compiler_frontend/ast/templates/tir/hir_handoff.rs): owned runtime-template trees for HIR lowering.
+        - [slot_plan.rs](src/compiler_frontend/ast/templates/tir/slot_plan.rs), [slot_composition/](src/compiler_frontend/ast/templates/tir/slot_composition/), [wrapper_sets.rs](src/compiler_frontend/ast/templates/tir/wrapper_sets.rs): slot routing and wrapper reuse.
+        - [handoff_materialization.rs](src/compiler_frontend/ast/templates/tir/handoff_materialization.rs): owned runtime-template trees for HIR lowering.
 - [generic_functions](src/compiler_frontend/ast/generic_functions/): generic templates, calls, inference, instances, diagnostics.
 - [const_values](src/compiler_frontend/ast/const_values/): const fact resolver.
 - [generic_bounds.rs](src/compiler_frontend/ast/generic_bounds.rs): static bound evidence checks.
@@ -125,9 +129,10 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [external call/package backend support](src/backends/external_package_validation.rs)
 - [shared backend error surface](src/backends/error_types.rs)
 - [JS backend](src/backends/js/): HIR → JS. kw — readable JS, GC baseline, reachable emission.
-    - [emitter.rs](src/backends/js/emitter.rs), [js_expr.rs](src/backends/js/js_expr.rs), [js_statement.rs](src/backends/js/js_statement.rs), [js_function.rs](src/backends/js/js_function.rs), [js_calls.rs](src/backends/js/js_calls.rs)
+    - [emitter.rs](src/backends/js/emitter.rs), [js_expr.rs](src/backends/js/js_expr.rs), [js_statement.rs](src/backends/js/js_statement.rs), [js_function.rs](src/backends/js/js_function.rs), [js_calls.rs](src/backends/js/js_calls.rs), [output.rs](src/backends/js/output.rs), [reachability.rs](src/backends/js/reachability.rs)
     - [runtime](src/backends/js/runtime/): helpers for strings/maps/casts.
 - [Wasm backend](src/backends/wasm/): experimental core Wasm. kw — HIR→LIR, linear memory, emit.
+    - [backend.rs](src/backends/wasm/backend.rs): Wasm backend driver and request handling.
     - [hir_to_lir](src/backends/wasm/hir_to_lir/): semantic lowering to Wasm LIR.
     - [lir](src/backends/wasm/lir/): Wasm-neutral low IR.
     - [emit](src/backends/wasm/emit/): binary emission/sections/validation.
@@ -141,7 +146,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [compile_input.rs](src/projects/html_project/compile_input.rs), [diagnostics.rs](src/projects/html_project/diagnostics.rs), [js_path.rs](src/projects/html_project/js_path.rs), [path_policy.rs](src/projects/html_project/path_policy.rs), [style_directives.rs](src/projects/html_project/style_directives.rs): build inputs/policy.
 - [styles](src/projects/html_project/styles/): $html/$css/$escape_html/$code validation/rendering.
 - [external_js](src/projects/html_project/external_js/): provider-backed JS imports, runtime modules/assets/glue.
-- [external_libraries](src/projects/html_project/external_libraries/): external library resolution for HTML projects.
+- [external_libraries](src/projects/html_project/external_libraries/): builder-owned runtime libraries for HTML projects.
+    - [@web/canvas builder runtime library](src/projects/html_project/external_libraries/web/canvas/): built-in JS canvas asset (`canvas.js`) and `@web/canvas` package registration. Used by the `@html` canvas helpers.
 - [beandown](src/projects/html_project/beandown/): direct .bd compile/extract support.
 - [tracked_assets.rs](src/projects/html_project/tracked_assets.rs): copied assets.
 - [new_html_project](src/projects/html_project/new_html_project/): scaffold command.
