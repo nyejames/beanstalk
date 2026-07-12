@@ -46,6 +46,15 @@ Use a free function for a type owned elsewhere.
 Compiler-owned collection operations and builder-owned builtin operations are
 not user extension methods.
 
+### Constants and receiver methods
+
+A struct instance folded into a constant becomes a data-only const record.
+Its folded fields remain available under the constant rules, but runtime
+receiver methods are not available on the const record itself.
+
+Use one projected field when runtime code needs the value. See
+@../constants/#const-records (Const records) for the const-record contract.
+
 ### Visibility
 
 Receiver-method visibility follows receiver-type visibility.

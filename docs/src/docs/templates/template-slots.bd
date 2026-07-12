@@ -14,7 +14,7 @@ Slots let one template receive content from another.
     ]
 ]
 
-The three slot forms are:
+The default and named forms are:
 
 [codeblock, $code("text"):
     [$slot]                 -- default slot
@@ -22,8 +22,9 @@ The three slot forms are:
     [$insert("name"): ...]  -- contribution to named slot
 ]
 
-The first declares the default slot. The second declares a named slot. The
-third contributes to that named slot.
+The default slot is declared with dollar-slot. A named slot is declared with
+dollar-slot and a string name. A named insert contributes with dollar-insert
+and the same name.
 
 ### Positional slots
 
@@ -50,6 +51,12 @@ The remaining loose body content fills the default slot.
 - Repeated slots replay the same contribution.
 - Named inserts target only their named slot.
 - One application may combine named, positional and default contributions.
+
+### Stored named inserts
+
+The language intends to support preparing a named insert in a binding and
+passing it as a loose contribution. The current compiler does not yet accept
+this form.
 
 ### Runtime contributions
 

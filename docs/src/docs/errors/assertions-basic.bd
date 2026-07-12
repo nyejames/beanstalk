@@ -1,9 +1,11 @@
 Use `assert` for a condition that must already be true.
 
 [codeblock, $code("bst"):
-    assert(index < items.length)
-    assert(index < items.length, "index must be in bounds")
+    assert(index < items.length())
+    assert(index < items.length(), "index must be in bounds")
 ]
+
+The message is optional. When you add one it must be a quoted string literal.
 
 A failed assertion stops the current program path.
 

@@ -56,6 +56,28 @@ unguarded `none` arm and an unguarded present-value capture.
 
 Direct fallback syntax such as `maybe_name else then "guest"` is invalid.
 
+### Absence inspection
+
+Statement `if` can test for absence:
+
+[codeblock, $code("bst"):
+    if maybe_name is none:
+        io.line("missing")
+    ;
+]
+
+### Equality and ordering
+
+Options support equality comparisons:
+
+[codeblock, $code("bst"):
+    present = maybe_name is "Ada"
+    absent = maybe_name is none
+    same = a is b
+]
+
+Ordering operators such as `<` on optional values are not supported.
+
 ### Postfix propagation
 
 Postfix `?` unwraps a present value or returns `none` from the enclosing

@@ -80,6 +80,11 @@ The duplicate semantic coverage between the monolith and the new detailed files 
 
 The unsuffixed files must be complete enough to replace the monolith later. They remain replacement candidates until the whole migration has passed review.
 
+The monolith is stable evidence, not an infallible description of the current
+compiler surface. When focused compiler probes and implementation review show
+that a useful, coherent form is deliberately supported, the focused references
+should document current language behavior and record the monolith disparity.
+
 ### 3.2 Final authority model
 
 After every language area has been migrated and the complete parity audit has passed, the user may approve a separate authority-switch patch.
@@ -538,7 +543,25 @@ Examples include:
 
 Compiler-internal representation never belongs in language semantics merely because it is current implementation.
 
-### 8.7 Conflict resolution order
+### 8.7 Compiler-surface verification loop
+
+Before documenting an ambiguous or disputed source form:
+
+1. Create one temporary probe file per focused question under
+   `tmp/docs-language-probes/`.
+2. Run `bean check` on a minimal expected-valid file and a nearby expected-invalid
+   file when the boundary matters.
+3. Record the command, result, diagnostic code, failure stage, implementation
+   owner and focused tests found.
+4. Inspect the parser, semantic owner and tests to distinguish parsing-only
+   acceptance from full support.
+5. Classify the finding using the evidence table in the current correction plan.
+6. Apply the matching documentation action.
+7. Delete all probe files before final validation.
+
+Never modify compiler or test source during a documentation migration slice.
+
+### 8.8 Conflict resolution order
 
 For each concept, review evidence in this order:
 
@@ -850,14 +873,17 @@ Keep the repair tied to the exact diagnostic. Do not use export churn as an excu
 
 In `.bd` files:
 
+- the file body is an implicit compile-time `$md` template
+- use Beanstalk Markdown and Beandown helpers, not full CommonMark
 - avoid raw HTML
-- use Markdown and Beandown helpers
-- use full code blocks for multiline source
 - keep headings at H3 or deeper
 - do not rely on page-local imports
 - do not use Markdown pipe tables
+- do not use fenced code blocks
 
-Beanstalk's `$md` formatter does not currently render Markdown pipe tables.
+Use `[codeblock, $code("language"): ...]` for multiline source examples where that
+helper is available in the importing page. Use `$code("text")` for literal grammar
+displays. Put template syntax in full code blocks, not inline.
 
 Use a structured list when detailed semantic data would otherwise be tabular.
 
@@ -867,6 +893,10 @@ preserve the complete information in directly readable list form.
 
 Do not add route-local facades or exports solely to force table helpers into
 Beandown.
+
+Nested templates in `.bd` default to `$md` unless they declare an explicit
+directive. Any explicit directive overrides the Beandown Markdown default for
+that nested template.
 
 ---
 
@@ -2277,14 +2307,27 @@ The next batch covers:
 It also codifies that Markdown pipe tables are unsupported in `.bd` and that
 generated inspection reports must describe their actual coverage.
 
-### 21.5 Unresolved implementation/design discrepancies
+### 21.5 Implementation/design discrepancy ledger
 
-Keep these visible until separately resolved:
+Keep these visible until separately resolved. Classification:
 
-1. Parameter-alias return syntax such as `-> first or fallback` exists in the parser but is absent from the monolith.
-2. Option payload equality is accepted by the monolith but the current nested choice-payload equality query rejects constructed option types.
-3. Template-backed `String` payload equality may not be distinguishable from ordinary `String` through current semantic type identity alone.
-4. An unconditional general capture is treated as making later arms unreachable, but the final full-match exhaustiveness checker does not count it as satisfying ordinary, option or choice coverage.
+| # | Surface | Monolith | Compiler | Classification |
+|---|---|---|---|---|
+| 1 | Parameter-alias return syntax `-> first or fallback` | Absent | Parser accepts | Parser-only / incomplete |
+| 2 | Inline bound catch `catch \|err\| then expr` | Absent | Full frontend support | Confirmed current language |
+| 3 | Inline choice predicate `if status is Ready then ...` | Absent | Full frontend support, invalid cross-choice variant not rejected | Confirmed current language with validation gap |
+| 4 | Option payload equality | Accepted | Rejected by nested choice-payload equality query | Probable implementation gap |
+| 5 | Template-backed `String` payload equality | Accepted | May be indistinguishable from ordinary `String` | Unresolved design |
+| 6 | General capture exhaustiveness | Accepted as catch-all | Marks later arms unreachable but does not satisfy exhaustiveness | Probable implementation gap |
+| 7 | Inline map nesting beyond two levels | Not discussed | Rejected with explicit diagnostic | Confirmed Alpha restriction |
+| 8 | Raw string slices with backticks | Accepted | Rejected | Probable stale monolith |
+| 9 | Error-only `return!` inside nested blocks | Accepted | Rejected | Probable implementation gap |
+| 10 | Block value-producing `if` with `then` | Accepted | Infrastructure failure | Probable implementation gap |
+| 11 | Stored named inserts passed as loose contributions | Accepted | Rejected | Probable implementation gap |
+| 12 | Assert optional message arity | Required | Optional literal accepted | Confirmed current language |
+| 13 | Option ordering operators | Not discussed | Rejected | Confirmed rejection |
+| 14 | Function parameter default cross-parameter dependency | Not discussed | Rejected | Confirmed rejection |
+| 15 | Unused generic parameter policy | Accepted | Compiler behavior unclear | Unresolved design |
 
 Ordinary documentation migration patches do not authorise compiler changes for
 these discrepancies.

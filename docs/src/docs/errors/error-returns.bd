@@ -32,6 +32,25 @@ error type can be used when the function contract requires it.
 - `return!` is terminal for the current path.
 - Normal success values use `return`.
 
+### Error-only functions
+
+A function may declare only an error slot:
+
+[codeblock, $code("bst"):
+    validate |ready Bool| -> Error!:
+        if not ready:
+            return! Error("not ready")
+        ;
+    ;
+]
+
+- The arrow is required: `-> Error!`.
+- No success return value is required.
+- Normal fallthrough is valid when no error is returned.
+- In the current compiler `return!` inside a nested block of an error-only
+  function is not yet supported; use a direct top-level `return!` or a function
+  that also returns a success value.
+
 [codeblock, $code("bst"):
     Failure = |
         message String,

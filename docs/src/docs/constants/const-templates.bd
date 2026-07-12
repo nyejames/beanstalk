@@ -57,7 +57,18 @@ The selected result must fold completely.
     ]
 ]
 
-Const range and collection loops may use structural break and continue controls.
+Const range and collection loops may use structural break and continue
+controls:
+
+[codeblock, $code("bst"):
+    #[loop items |item|:
+        [if item.done:
+            [break]
+        ]
+
+        [item]
+    ]
+]
 
 They use the project config guard:
 
@@ -68,6 +79,9 @@ They use the project config guard:
 The default is `10_000`.
 
 The maximum accepted configured value is `1_000_000`.
+
+The configured value must be a positive folded `Int`. Zero, negative values and
+values above `1_000_000` are rejected.
 
 A const conditional loop folds to no-output only when its condition is
 compile-time `false`.

@@ -8,6 +8,16 @@ A value-producing `if` sends values to an immediate receiving site.
 
 The inline `then` and `else` form stays on one logical line.
 
+### Inline option and choice predicates
+
+The inline form also supports option-present capture and choice-variant
+predicates:
+
+[codeblock, $code("bst"):
+    label = if maybe_name is |name| then name else "guest"
+    score = if status is Ready then 1 else 0
+]
+
 ### Block form
 
 [codeblock, $code("bst"):
@@ -19,6 +29,9 @@ The inline `then` and `else` form stays on one logical line.
 ]
 
 `then` sends one or more values from the active branch to the receiver.
+
+The current compiler has a known issue with block value-producing `if` that
+uses `then`; use the inline form for now.
 
 ### Receiving sites
 

@@ -44,5 +44,25 @@ Named arguments can skip an earlier default:
 A positional call cannot skip a slot in the middle. Use a named argument when
 the call needs to reach a later parameter.
 
+### Default value constraints
+
+A parameter default must be a compile-time value.
+
+Accepted:
+
+[codeblock, $code("bst"):
+    DEFAULT_PREFIX #= "item"
+
+    describe |prefix String = DEFAULT_PREFIX, subject String| -> String:
+        return prefix + ": " + subject
+    ;
+]
+
+Rejected:
+
+- runtime bindings
+- runtime function calls
+- references to other parameters
+
 Struct fields share the same `= default` syntax, but struct defaults have their
 own compile-time rule. Choice payload fields do not support defaults.

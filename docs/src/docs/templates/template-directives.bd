@@ -12,6 +12,7 @@ Directive availability comes from one merged registry:
 
 - applies one wrapper to each direct child
 - accepts a template or string-slice wrapper
+- the wrapper template must close before the directive closes
 
 `$fresh`:
 
@@ -36,7 +37,7 @@ Directive availability comes from one merged registry:
 
 `$raw`:
 
-- preserves authored body content without a formatter
+- preserves authored body content and whitespace without a formatter
 
 `$md`:
 

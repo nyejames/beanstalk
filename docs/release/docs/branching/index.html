@@ -741,11 +741,15 @@ body {
             io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;fallback&quot;</span><span class='bst-code-parenthesis'>)</span>
         ;
     ;
-    </code></pre><p>Use a full match when one value is being compared against several patterns.</p><h3>Option-present statement capture</h3><p>A statement can test an optional value and bind its present payload:</p><pre style=""><code class='codeblock'>
+    </code></pre><p>Use a full match when one value is being compared against several patterns.</p><h3>Option statement capture</h3><p>A statement can test an optional value and bind its present payload:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         io.line<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Without <code>else</code>, the absent case does nothing.</p>
+    </code></pre><p>It can also test for absence:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> maybe_name is none<span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Without <code>else</code>, the unmatched case does nothing.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -799,25 +803,30 @@ body {
 
             <p>An <code>if</code> can choose a value.</p><p>The short form fits on one line:</p><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> ready then <span class='bst-code-string'>&quot;ready&quot;</span> <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;waiting&quot;</span>
+    </code></pre><p>The inline form also handles option capture:</p><pre style=""><code class='codeblock'>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
     </code></pre><p>Use block form when a branch needs more room:</p><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
         then <span class='bst-code-string'>&quot;ready&quot;</span>
     <span class='bst-code-keyword'>else</span>
         then <span class='bst-code-string'>&quot;waiting&quot;</span>
     ;
-    </code></pre><p><code>then</code> provides the value for the surrounding assignment.</p><p>Both branches must provide the value or leave the function in another valid way.</p>
+    </code></pre><p><code>then</code> provides the value for the surrounding assignment.</p><p>Both branches must provide the value or leave the function in another valid way.</p><p>The current compiler has a known issue with block value-producing <code>if</code> that uses <code>then</code>; use the inline form for now.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
         <p>A value-producing <code>if</code> sends values to an immediate receiving site.</p><h3>Inline form</h3><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> ready then <span class='bst-code-string'>&quot;ready&quot;</span> <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;waiting&quot;</span>
-    </code></pre><p>The inline <code>then</code> and <code>else</code> form stays on one logical line.</p><h3>Block form</h3><pre style=""><code class='codeblock'>
+    </code></pre><p>The inline <code>then</code> and <code>else</code> form stays on one logical line.</p><h3>Inline option and choice predicates</h3><p>The inline form also supports option-present capture and choice-variant predicates:</p><pre style=""><code class='codeblock'>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> status is <span class='bst-code-struct'>Ready</span> then <span class='bst-code-number'>1</span> <span class='bst-code-keyword'>else</span> <span class='bst-code-number'>0</span>
+    </code></pre><h3>Block form</h3><pre style=""><code class='codeblock'>
     label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> ready<span class='bst-code-operator'>:</span>
         then <span class='bst-code-string'>&quot;ready&quot;</span>
     <span class='bst-code-keyword'>else</span>
         then <span class='bst-code-string'>&quot;waiting&quot;</span>
     ;
-    </code></pre><p><code>then</code> sends one or more values from the active branch to the receiver.</p><h3>Receiving sites</h3><p>Value-producing control flow is accepted at closed receiving sites:</p><ul><li>declarations</li><li>assignments</li><li>multi-bind</li><li>returns</li><li>nested <code>then</code></li></ul><p>It is not a general expression form.</p><p>A value-producing block is invalid directly inside:</p><ul><li>function arguments</li><li>operator operands</li><li>constructor arguments</li><li>collection literals</li><li>template interpolation</li><li>expression statements</li></ul><h3>Completeness</h3><ul><li>A value-producing <code>if</code> requires <code>else</code>.</li><li>Every reachable branch must produce the required values or terminate.</li><li>At least one reachable branch must produce values.</li><li>Every producing path must match the receiver&#39;s arity.</li><li>Produced values must be compatible with the receiver&#39;s types.</li></ul><pre style=""><code class='codeblock'>
+    </code></pre><p><code>then</code> sends one or more values from the active branch to the receiver.</p><p>The current compiler has a known issue with block value-producing <code>if</code> that uses <code>then</code>; use the inline form for now.</p><h3>Receiving sites</h3><p>Value-producing control flow is accepted at closed receiving sites:</p><ul><li>declarations</li><li>assignments</li><li>multi-bind</li><li>returns</li><li>nested <code>then</code></li></ul><p>It is not a general expression form.</p><p>A value-producing block is invalid directly inside:</p><ul><li>function arguments</li><li>operator operands</li><li>constructor arguments</li><li>collection literals</li><li>template interpolation</li><li>expression statements</li></ul><h3>Completeness</h3><ul><li>A value-producing <code>if</code> requires <code>else</code>.</li><li>Every reachable branch must produce the required values or terminate.</li><li>At least one reachable branch must produce values.</li><li>Every producing path must match the receiver&#39;s arity.</li><li>Produced values must be compatible with the receiver&#39;s types.</li></ul><pre style=""><code class='codeblock'>
     left, right <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> swap<span class='bst-code-operator'>:</span>
         then second, first
     <span class='bst-code-keyword'>else</span>

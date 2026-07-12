@@ -26,7 +26,8 @@ A source function is a named top-level declaration.
 - Parameters are enclosed by `|...|`.
 - `||` declares a function with no parameters.
 - `->` introduces one or more return slots.
-- Omit the arrow when the function has no success return values.
+- Omit the arrow only when the function has no return slots at all.
+- A function with only an error slot still writes `-> Error!`.
 - `Void` is not written as a return type.
 - `:` opens the body and `;` closes it.
 - Function names use `regular_snake_case`.

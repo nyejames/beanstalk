@@ -32,7 +32,7 @@ A simple recovery may stay on one logical line.
 
 [codeblock, $code("bst"):
     value = parse_number(text) catch then 0
-    other = parse_number(text) catch |err| then 0
+    other = parse_number(text) catch |err| then err.code
 ]
 
 Inline catch:
@@ -40,7 +40,9 @@ Inline catch:
 - uses `then`
 - stays on one logical line
 - may produce the receiver's required value list
+- binds the error only inside the fallback expression
 - does not contain a statement body
+- cannot combine with postfix `!`
 
 ### Value requirements
 
@@ -57,6 +59,15 @@ A handler that can fall through without producing or terminating is invalid.
     value = parse_number(text) catch |err|:
         io.line(err.message)
         return 0
+    ;
+]
+
+A multi-success recovery uses `then` with the matching arity:
+
+[codeblock, $code("bst"):
+    name, score = load_user(id) catch |err|:
+        io.line(err.message)
+        then "guest", 0.0
     ;
 ]
 

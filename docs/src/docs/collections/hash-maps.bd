@@ -12,8 +12,9 @@ Hash maps are insertion-ordered key/value groups.
 - Any top-level `=` entry makes a non-empty brace literal a map literal.
 - Every entry must then be a key/value pair.
 - Collection items and map entries cannot be mixed.
-- An empty map literal needs an explicit map type.
+- An empty map literal needs an explicit or immediate contextual map type.
 - A bare identifier in key position is a variable reference, not string shorthand.
+- Map values follow the same runtime-storable rules as collection elements.
 
 ### Key contract
 
@@ -127,6 +128,11 @@ that shared access is no longer used.
 - user-defined key types
 
 More sophisticated maps belong in ordinary library structs.
+
+### Inline nesting limit
+
+Map types nested more than two levels deep inline are rejected by the parser.
+Use a named type alias for deeper nesting.
 
 The current builtin map runtime path is HTML-JS. Targets without map lowering
 reject reachable map use before backend lowering. Use the progress matrix for

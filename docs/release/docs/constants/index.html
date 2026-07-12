@@ -954,9 +954,17 @@ body {
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Const range and collection loops may use structural break and continue controls.</p><p>They use the project config guard:</p><pre style=""><code class='codeblock'>
+    </code></pre><p>Const range and collection loops may use structural break and continue controls:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> item.done<span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>break</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+
+        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>They use the project config guard:</p><pre style=""><code class='codeblock'>
     template_const_loop_iteration_limit
-    </code></pre><p>The default is <code>10_000</code>.</p><p>The maximum accepted configured value is <code>1_000_000</code>.</p><p>A const conditional loop folds to no-output only when its condition is compile-time <code>false</code>.</p><p>A compile-time <code>true</code> condition and a runtime or unknown condition are rejected because the compiler does not prove loop termination.</p><p>Runtime template control flow remains owned by <a href="../templates/#template-control-flow">Template control flow</a>.</p>
+    </code></pre><p>The default is <code>10_000</code>.</p><p>The maximum accepted configured value is <code>1_000_000</code>.</p><p>The configured value must be a positive folded <code>Int</code>. Zero, negative values and values above <code>1_000_000</code> are rejected.</p><p>A const conditional loop folds to no-output only when its condition is compile-time <code>false</code>.</p><p>A compile-time <code>true</code> condition and a runtime or unknown condition are rejected because the compiler does not prove loop termination.</p><p>Runtime template control flow remains owned by <a href="../templates/#template-control-flow">Template control flow</a>.</p>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">

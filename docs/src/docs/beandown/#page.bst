@@ -42,12 +42,18 @@ page_head #= theme_head
         ]
     ]
 
-    Beandown starts inside a template body, so `--`, backticks, and backslashes are normal text.
-    It also uses the same `$md` inline-code rules as `.bst` markdown templates.
+    Beandown starts inside a template body, so `--` and backslashes are normal text.
+    It uses the same `$md` Markdown flavour as `.bst` markdown templates, which is
+    intentionally smaller than CommonMark.
 
     Nested templates with no explicit directive default to `$md` too. Add any explicit directive,
     such as `$raw`, `$fresh`, `$html`, `$code`, `$css`, or `$escape_html`, to override that
     Beandown default for the nested template.
+
+    Beandown does not support fenced code blocks or Markdown pipe tables. For multiline source
+    examples use a `codeblock` helper with a `code` directive such as `$code("bst")` or
+    `$code("text")` where that helper is available in the importing page. For tabular data use a
+    structured list in the `.bd` file or a page-owned Beanstalk table component on the website.
 
     Literal template delimiters use normal string insertion:
 

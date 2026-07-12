@@ -10,6 +10,15 @@ It is intentionally not a full CommonMark implementation.
     ]
 ]
 
+### Supported block forms
+
+- headings: `#` through `######`
+- paragraphs separated by blank lines
+- unordered lists: `-` items
+- ordered lists: `1.` items
+- links: `@./path (link text)`
+- emphasis: `**bold**` and `*italic*`
+
 ### Inline code
 
 Inline code uses paired isolated single backticks on one Markdown line.
@@ -33,7 +42,7 @@ Not supported:
 - fenced code blocks
 - Markdown-level backtick escaping
 
-Use `$code(language)` for larger code examples.
+Use `$code(language)` for highlighted code blocks.
 
 ### Dynamic content boundaries
 

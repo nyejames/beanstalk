@@ -1,8 +1,8 @@
 `assert` is an always-checked statement intrinsic for invariants.
 
 [codeblock, $code("bst"):
-    assert(index < items.length)
-    assert(index < items.length, "index must be in bounds")
+    assert(index < items.length())
+    assert(index < items.length(), "index must be in bounds")
     assert(false, "unimplemented backend path")
 ]
 
@@ -15,11 +15,13 @@
 
 - The condition must resolve to `Bool`.
 - The condition is required.
-- The optional message must be a quoted string literal.
+- The message is optional.
+- When present the message must be one quoted string literal.
 - Exactly one condition and at most one message are accepted.
 - Named arguments are invalid.
 - Mutable access markers are invalid.
 - Parentheses are required.
+- Trailing comma without a message is invalid.
 
 ### Failure behaviour
 

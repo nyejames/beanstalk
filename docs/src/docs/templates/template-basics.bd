@@ -44,6 +44,18 @@ Inside a template body:
 
 Double-quoted string slices still use normal escaping in expression position.
 
+### Literal delimiters in output
+
+To render a literal open or close square bracket inside a template body, insert
+a string slice:
+
+[codeblock, $code("bst"):
+    content = [: ["[literal]"]]
+]
+
+The current compiler does not support backtick raw string slices, so string
+insertion is the supported way to emit literal square brackets.
+
 ### Compile-time and runtime forms
 
 A template may:

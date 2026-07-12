@@ -37,7 +37,7 @@ Use a nested `if` inside the `else` body:
 
 Use a full match when one value is being compared against several patterns.
 
-### Option-present statement capture
+### Option statement capture
 
 A statement can test an optional value and bind its present payload:
 
@@ -47,4 +47,12 @@ A statement can test an optional value and bind its present payload:
     ;
 ]
 
-Without `else`, the absent case does nothing.
+It can also test for absence:
+
+[codeblock, $code("bst"):
+    if maybe_name is none:
+        io.line("missing")
+    ;
+]
+
+Without `else`, the unmatched case does nothing.
