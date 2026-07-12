@@ -32,7 +32,7 @@ Web development is the current focus with the home-grown HTML project builder.
 
 ![Beanstalk code example 1](./docs/assets/code-snippet-2.webp)
 
-`@html` is a core library gets you started with writing and generating HTML.
+`@html` is a core library that gets you started with writing and generating HTML.
 
 The HTML build system will generate an HTML page from this code:
 
@@ -52,14 +52,14 @@ Markdown lives inside normal templates, so content can capture values, compose s
 
 This makes content-heavy pages quick to build and easy to format. 
 
-No more TypeScript framework lasagne, build-tool linguini or 17 package dependency spagetti for padding a string.
+No more TypeScript framework lasagne, build-tool linguini or 17 package dependency spaghetti for padding a string.
 
 ## Getting Started
 
 `bean` is the project tool for creating, checking, building and running Beanstalk projects.
 It's the CLI bundled with the compiler and build system.
 
-Installation scripts will arrive for Beta, for now its best to install manually from a tagged release.
+Installation scripts will arrive for Beta, for now it's best to install manually from a tagged release.
 
 ### Create a project
 
@@ -103,11 +103,11 @@ This compiles the project using the configured Beanstalk builder and writes outp
 
 - One batteries-included project tool for checking, building and running the development server.
 
-- A small static type system plus borrow validation memory-safe code free of data races and iterator invalidation by default.
+- A small static type system plus borrow validation for memory-safe code that's free of data races and iterator invalidation by default.
 
 - A GC fallback with ownership analysis that can remove runtime collection in ideal cases.
 
-- A backend-neutral frontend. Wasm as the main, platform-agnostic workhorse output target (Wasm backend in developemnt).
+- A backend-neutral frontend. Wasm as the main, platform-agnostic workhorse output target (Wasm backend in development).
 
 - As few dependencies as possible. A language project shouldn't need a PhD dissertation for a lockfile.
 
@@ -134,15 +134,21 @@ Beanstalk has very little legacy training data. That is inconvenient today and u
 </div>
 <strong>
 <li>
-<a href="https://nyejames.github.io/beanstalk/docs/">The language</a>
+    <ul>
+        <a href="https://nyejames.github.io/beanstalk/docs/">The language</a>
+    </ul>
 </li>
 <br>
 <li>
-<a href="https://nyejames.github.io/beanstalk/docs/codebase/compiler-design/">Compiler design</a>
+    <ul>
+        <a href="https://nyejames.github.io/beanstalk/docs/codebase/compiler-design/">Compiler design</a>
+    </ul>
 </li>
 <br>
 <li>
-<a href="https://nyejames.github.io/beanstalk/docs/codebase/memory-management/">Memory management</a>
+    <ul>
+        <a href="https://nyejames.github.io/beanstalk/docs/codebase/memory-management/">Memory management</a>
+    </ul>
 </li>
 <br>
 </strong>
