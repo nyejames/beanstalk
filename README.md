@@ -117,15 +117,15 @@ This compiles the project using the configured Beanstalk builder and writes outp
 
 </div>
 
-Beanstalk assumes developers are using coding agents increasingly as part of their workflow.
+Developers are using coding agents increasingly as part of their workflow.
 
 Programmers should own the final design and architecture. Agents can handle repetitive churn, provided the compiler gives them a strict, fast feedback environment for producing reliable code.
 
-Readability is not decoration. A small syntax, strict rules, fast tooling and stable diagnostics make generated changes easier to inspect and easier to reject when they are wrong.
+A small syntax, strict rules, fast tooling and stable diagnostics make generated changes easier to inspect and validate.
 
-Compiler diagnostics carry stable codes, structured facts and source metadata for editors, development servers and coding agents.
+Compiler diagnostics should carry stable codes, structured facts and source metadata for editors, development servers and coding agents.
 
-Beanstalk has very little legacy training data. That is inconvenient today and useful later: examples can grow around the language that exists. No legacy frameworks bloating the picture.
+Beanstalk has very little training data, but this may be useful later: examples can grow around the language that exists and the agent will have to follow your codebase style more strictly when there's no legacy patterns to hallucinate.
 
 <div align="center">
   
