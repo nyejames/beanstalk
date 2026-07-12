@@ -12,6 +12,10 @@ page_head #= codebase_theme_head
     # Memory management
 
     Beanstalk keeps the source model small. Reads are shared, copies are explicit and mutation has to announce itself.
+
+    Borrow validation enforces exclusive mutation and move safety. 
+    
+    A GC semantic baseline keeps execution practical while ownership analysis leaves room for future allocation and deterministic-drop optimisations.
 ]
 
 #[section, $md:

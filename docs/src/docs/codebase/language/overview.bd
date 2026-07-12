@@ -1,19 +1,37 @@
 # Compiler-facing language reference
 
-Compiler changes should start from the language contract. This reference
-connects user-visible semantics to the design documents that constrain their
-implementation.
+Language semantics are moving from the consolidated language overview into
+focused canonical Beandown references. Use this map to find the current owner
+for each concept.
 
-## Language semantics authority
+## Migrated concepts
 
-`docs/language-overview.md` is the canonical compiler-facing language
-reference. It owns syntax, semantic invariants, edge cases and deferred
-language surface.
+### Loops
 
-## User-facing documentation
+- `docs/src/docs/loops/conditional-loops.bd`
+- `docs/src/docs/loops/collection-loops.bd`
+- `docs/src/docs/loops/range-loops.bd`
+- `docs/src/docs/loops/loop-control.bd`
 
-`docs/src/docs/**` contains explanations, examples and topic pages for language
-users.
+The unsuffixed files above own exact loop semantics.
+
+Their paired `-basic.bd` files provide simplified teaching versions. The public
+route combines both levels:
+
+`docs/src/docs/loops/#page.bst`
+
+## Remaining language authority
+
+`docs/language-overview.md` remains the canonical compiler-facing reference for
+every language concept not listed under Migrated concepts.
+
+A migrated section in the consolidated overview points to its new canonical
+files instead of retaining a second copy of the rules.
+
+## Public documentation
+
+`docs/src/docs/**` contains website pages, teaching references, examples and
+topic navigation.
 
 ## Design boundaries
 
@@ -27,5 +45,5 @@ covers shared reads, explicit copies and `~` access.
 
 ## Compiler ownership
 
-`docs/src/docs/codebase/compiler-design/overview.bd` routes each language
-feature to the stage or topic that owns its implementation.
+`docs/src/docs/codebase/compiler-design/overview.bd` routes language features
+to the compiler stages and subsystems that implement them.

@@ -2,6 +2,8 @@
 
 Resolve every relative path in this file from the current worktree root. Do not read project references from another worktree unless the user explicitly asks you to.
 
+## Reading list
+
 Before any Beanstalk task, read:
 - this file
 - `docs/src/docs/codebase/overview.bd`
@@ -23,11 +25,11 @@ For memory, ownership, borrow checking, allocation, GC, drops, or runtime-handle
 2. Use its task-reading guide
 3. Read the selected memory leaf documents
 
-For language syntax, semantics, and user-visible behavior, read:
-- `docs/language-overview.md`
-- the relevant user-facing pages under `docs/src/docs/**`
-
-`docs/language-overview.md` is the remaining monolithic source of truth. Compiler architecture, memory design, code style, testing, and validation are owned by the Beandown documents under `docs/src/docs/codebase/**`.
+For language syntax, semantics and user-visible behavior, read:
+1. `docs/src/docs/codebase/language/overview.bd`
+2. The canonical unsuffixed Beandown files it selects
+3. `docs/language-overview.md` for concepts that have not migrated yet
+4. Paired `-basic.bd` files and `#page.bst` only when teaching, presentation or website structure is in scope
 
 Use:
 - `docs/src/docs/progress/#page.bst` for current implementation status and coverage
@@ -147,15 +149,9 @@ If implementation work makes documentation inaccurate, report the affected files
 If context was compacted, reset or may be incomplete, always re-read:
 
 1. This file
-2. The codebase overview
-3. The style guide and validation gates
-4. The testing standards when behavior or tests are in scope
-5. The compiler or memory overview when relevant
-6. The task-selected leaf documents
-7. `docs/language-overview.md` when language semantics are involved
-8. The progress matrix when implementation status or coverage is in scope
-9. The current plan
-10. The current implementation and diff
+2. Follow the `Reading list` at the top of this document and reread all relevant documents
+3. The current plan
+4. The current implementation and diff
 
 Do not continue implementation from compressed memory alone.
 

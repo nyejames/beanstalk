@@ -320,7 +320,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> PROJECTS, MODULES AND HTML BUILDER</h1>
-    <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <code>#config.bst</code> file</li><li>an entry root, usually <code>src</code></li><li>module entry files named like <code>#page.bst</code></li><li>module API boundaries defined by <code>#mod.bst</code></li><li>normal <code>.bst</code> files that provide declarations for module entries</li><li>builder-owned output folders such as <code>dev</code> and <code>release</code></li></ul><p><code>#mod.bst</code>  = module API / visibility boundary <code>#page.bst</code> = HTML builder entry/configuration convention <code>#config.bst</code>   = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
+    <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <code>config.bst</code> file</li><li>an entry root, usually <code>src</code></li><li>module entry files named like <code>#page.bst</code></li><li>module API boundaries defined by <code>#mod.bst</code></li><li>normal <code>.bst</code> files that provide declarations for module entries</li><li>builder-owned output folders such as <code>dev</code> and <code>release</code></li></ul><p><code>#mod.bst</code>  = module API / visibility boundary <code>#page.bst</code> = HTML builder entry/configuration convention <code>config.bst</code>    = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
     <section class="container"><h1>The modular build system</h1><p>The Beanstalk compiler frontend is shared by every project builder. It discovers modules, parses files, type checks code, lowers to HIR, and runs borrow validation. A project builder then decides how those compiled modules become real output files.</p><p>The current user-facing project builder is the HTML project builder. It consumes each compiled module and emits one HTML page per module entry file.</p><p>This split matters because Beanstalk is not designed as a single hard-coded web compiler. The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
@@ -349,7 +349,7 @@ body {
             
 
     </table></section>
-    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <code>#config.bst</code> file at the project root. Config entries are known top-level <code>#</code> constants whose values fold at compile time.</p><pre style="
+    <section class="container"><h1>Project root and config.bst</h1><p>A normal HTML project has a <code>config.bst</code> file at the project root. Config entries are known top-level <code>#</code> constants whose values fold at compile time.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -374,7 +374,7 @@ body {
     library_folders <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-string'>&quot;lib&quot;</span>,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>#config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported when the <code>#=</code> config expression fully folds.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Config-key constants may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Plain top-level bindings are runtime/start-body syntax and are rejected in config. Config-local helper constants, traits, conformance metadata, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported when the <code>#=</code> config expression fully folds.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -431,7 +431,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
-    ├── <span class='bst-code-operator'>#</span>config.bst
+    ├── config.bst
     ├── src<span class='bst-code-operator'>/</span>
     │   └── <span class='bst-code-operator'>#</span>page.bst
     ├── lib<span class='bst-code-operator'>/</span>
@@ -441,7 +441,7 @@ body {
     │   └── .beanstalk_manifest
     └── .gitignore
     </code></pre><p>Clarifications:</p><ul><li><code>lib/</code> is created empty by default. It is the conventional place for project-local source libraries.</li><li><code>dev/</code> and <code>release/</code> are output folders, not source folders.</li><li>.beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the default HTML page entry and includes a starter page.</li></ul></section>
-    <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <code>#</code>. In directory projects, the compiler searches the configured entry root for <code>#*.bst</code> files. <code>#config.bst</code> is not a module entry.</p><p>Examples:</p><pre style="
+    <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <code>#</code>. In directory projects, the compiler searches the configured entry root for <code>#*.bst</code> files. <code>config.bst</code> is not module source.</p><p>Examples:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -453,7 +453,7 @@ body {
     src<span class='bst-code-operator'>/</span>docs<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
     src<span class='bst-code-operator'>/</span>docs<span class='bst-code-operator'>/</span>basics<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst  <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
     src<span class='bst-code-operator'>/</span>styles<span class='bst-code-operator'>/</span>docs.bst        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> normal source file
-    <span class='bst-code-operator'>#</span>config.bst                <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> project config, not a module entry
+    config.bst                 <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> project config, not a module entry
     </code></pre><p>Only module entry files have top-level runtime execution. The compiler treats the entry file&#39;s top-level runtime code as an implicit <code>start</code> function for that module.</p><p>Normal source files can contain imports, functions, structs, choices, type aliases, and constants. They should not rely on top-level runtime statements being executed by themselves.</p></section>
     <section class="container"><h1>Builder-owned meaning of # file names</h1><p>The compiler discovers <code>#*.bst</code> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
@@ -623,7 +623,7 @@ body {
         <span class='bst-code-parenthesis'>[</span>render_card<span class='bst-code-parenthesis'>(</span>card<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
     </code></pre></section>
-    <section class="container"><h1>Module boundaries and imports</h1><p>Imports are how a page entry reaches helper declarations, module facades, source libraries, core packages, and JavaScript packages. This page only covers the project-shape part of that model. For full import syntax, source libraries, core packages, JavaScript imports, and builder-provided libraries, see <a href="../libraries">Libraries and modules</a>.</p><p>Project-shape rules to remember:</p><ul><li>files in the same module can import ordinary sibling source files directly</li><li>imports that cross into another module root must go through that module&#39;s <code>#mod.bst</code> facade</li><li>source-library prefixes come from <code>library_folders</code> or from the builder</li><li>direct imports of <code>#mod.bst</code>, <code>#page.bst</code>, and <code>#config.bst</code> are rejected</li><li>sibling <code>name.bst</code> / <code>name/</code> import-name collisions are rejected during project discovery</li></ul><p>In this shape:</p><pre style="
+    <section class="container"><h1>Module boundaries and imports</h1><p>Imports are how a page entry reaches helper declarations, module facades, source libraries, core packages, and JavaScript packages. This page only covers the project-shape part of that model. For full import syntax, source libraries, core packages, JavaScript imports, and builder-provided libraries, see <a href="../libraries">Libraries and modules</a>.</p><p>Project-shape rules to remember:</p><ul><li>files in the same module can import ordinary sibling source files directly</li><li>imports that cross into another module root must go through that module&#39;s <code>#mod.bst</code> facade</li><li>source-library prefixes come from <code>library_folders</code> or from the builder</li><li>direct imports of <code>#mod.bst</code>, <code>#page.bst</code>, and <code>config.bst</code> are rejected</li><li>sibling <code>name.bst</code> / <code>name/</code> import-name collisions are rejected during project discovery</li></ul><p>In this shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -648,7 +648,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     docs<span class='bst-code-operator'>/</span>
-    ├── <span class='bst-code-operator'>#</span>config.bst
+    ├── config.bst
     ├── src<span class='bst-code-operator'>/</span>
     │   ├── <span class='bst-code-operator'>#</span>mod.bst
     │   ├── <span class='bst-code-operator'>#</span>page.bst

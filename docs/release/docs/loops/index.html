@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Loops | Beanstalk</title>
-    <meta name="description" content="Loops in Beanstalk">
+    <meta name="description" content="Conditional, collection and range loops with break and continue in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,258 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,126 +571,402 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> LOOPS</h1>
-    <section class="container"><h2>Loops Syntax</h2><p>Beanstalk uses a <strong>single</strong> loop keyword: <code> loop</code>.</p><ul><li><strong><code class='codeblock'><span class='bst-code-keyword'>to</span></code> / <code class='codeblock'><span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span></code></strong> select range semantics (exclusive vs inclusive)</li><li>Range loops can bind the current counter</li><li>Collection loops can bind the current item</li><li>An optional second binding provides the zero-based iteration index</li><li>Loop bindings are written after the loop condition</li><li>When bindings exist, they always use <code class='codeblock'><span class='bst-code-operator'>|</span>...<span class='bst-code-operator'>|</span></code> syntax</li><li>No <strong><code class='codeblock'>reverse</code></strong> keyword; direction is inferred from the bounds</li><li><strong><code class='codeblock'><span class='bst-code-keyword'>by</span></code></strong> controls step size and works with both directions</li></ul><p>Loops come in two forms:</p><ol><li><strong>Conditional loops</strong> (repeat while a condition is true)</li><li><strong>Iteration loops</strong> (iterate over a collection or a numeric range)</li></ol><h3>Conditional loops</h3><p>A conditional loop repeats for as long as its condition stays true.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> is_connected<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;still connected&quot;</span><span class='bst-code-parenthesis'>)</span>
+    <section class="container"><p><a href="../">Documentation</a> / Loops</p><h1>Loops</h1><p>Loops repeat work without hiding what kind of repetition is happening. Beanstalk uses one <code>loop</code> keyword for conditions, collections and numeric ranges. The header tells you which form you are looking at.</p><p>Each section starts with a practical explanation. Switch only that section to Advanced when you need the exact rules and edge cases.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Conditional loops
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="conditional-loops-level"
+                id="conditional-loops-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="conditional-loops-level"
+                id="conditional-loops-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="conditional-loops">
+                    Conditional loops
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="conditional-loops-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="conditional-loops-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A conditional loop keeps repeating while a condition is <code>true</code>.</p><p>The condition is checked before each trip through the loop. This means the body might not run at all.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-keyword'>loop</span> count <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     ;
-    </code></pre><p>Conditional loops usually do not need bindings.</p><h3>Iteration loops</h3><p>Iteration loops evaluate the loop header as an iterable source and can optionally bind values for each iteration.</p><p>Iteration can step through either:</p><ul><li>a <strong>collection</strong> (yielding the current item), or</li><li>a <strong>range</strong> (yielding the current counter)</li></ul><p>Bindings are written after the loop condition using <code>|...|</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p>This prints three lines. Once <code>count &lt; 3</code> becomes <code>false</code>, the loop ends and the program continues after it.</p><h3>Make sure the condition can change</h3><p>A condition that never becomes <code>false</code> keeps the loop running forever.</p><pre style=""><code class='codeblock'>
+    running <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> true
+
+    <span class='bst-code-keyword'>loop</span> running<span class='bst-code-operator'>:</span>
+        do_some_work<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+
+        <span class='bst-code-keyword'>if</span> work_is_finished<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            running <span class='bst-code-operator'>=</span> false
+        ;
+    ;
+    </code></pre><p>Use a conditional loop when repetition depends on a changing state rather than a collection or a known numeric range.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A conditional loop evaluates a <code>Bool</code> condition before each iteration and runs its body while that condition remains <code>true</code>.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-keyword'>loop</span> count <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    ;
+    </code></pre><h3>Contract</h3><ul><li>The form is <code>loop condition: ... ;</code>.</li><li>The condition must resolve to <code>Bool</code>.</li><li>The condition is checked before the first iteration, so the body may run zero times.</li><li>It is checked again after each completed iteration.</li><li>Conditional loops do not declare item or index bindings.</li><li>There is no separate <code>while</code> keyword.</li><li><code>break</code> exits the nearest active loop.</li><li><code>continue</code> skips the rest of the current body and starts the next condition check.</li></ul><h3>Header classification</h3><p>A top-level <code>to</code> marker makes the header a range loop.</p><p>Without a range marker, an explicit <code>|...|</code> suffix makes the header a collection loop. Without bindings, a collection-typed header is still a collection loop. Every other header must type-check as a <code>Bool</code> condition.</p><h3>Scope</h3><p>The body is a child scope. Names declared inside it are not visible after the loop. A loop binding from an outer scope cannot be redeclared inside the loop header because Beanstalk does not allow visible-name shadowing.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Collection loops
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="collection-loops-level"
+                id="collection-loops-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="collection-loops-level"
+                id="collection-loops-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="collection-loops">
+                    Collection loops
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="collection-loops-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="collection-loops-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A collection loop visits each value in a collection, from the first item to the last.</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span>, <span class='bst-code-string'>&quot;Linus&quot;</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-keyword'>loop</span> names <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The name inside <code>|...|</code> is created for the loop body. On each iteration it refers to the current item.</p><h3>Add an index when you need one</h3><p>A second name receives the zero-based position of the item.</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span>, <span class='bst-code-string'>&quot;Linus&quot;</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-keyword'>loop</span> names <span class='bst-code-operator'>|</span>name, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The first item has index <code>0</code>.</p><h3>Ignore the item when only the repetition matters</h3><p>Bindings are optional.</p><pre style=""><code class='codeblock'>
+    items <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>20</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>}</span>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-keyword'>loop</span> items<span class='bst-code-operator'>:</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    ;
+    </code></pre><p>After this loop, <code>count</code> is <code>3</code>.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A collection loop visits the values in a Beanstalk collection in collection order.</p><pre style=""><code class='codeblock'>
+    names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span>, <span class='bst-code-string'>&quot;Linus&quot;</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-keyword'>loop</span> names <span class='bst-code-operator'>|</span>name, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Forms</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> items<span class='bst-code-operator'>:</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    ;
+
     <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>item.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+        inspect<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>A second binding can be added to receive the current zero-based index:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+
     <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+        inspect<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>The form is determined entirely by the loop header:</p><ul><li>If the header contains <strong><code>to</code></strong>, it is a <strong>range loop</strong>.</li><li>Otherwise, if the header ends with loop bindings, it is a <strong>collection loop</strong>.</li><li>Otherwise, it is treated as a <strong>conditional loop</strong>.</li></ul><h3>Range loops</h3><ul><li><code>to</code> uses an <strong>exclusive</strong> end bound</li><li><code>to &amp;</code> uses an <strong>inclusive</strong> end bound</li><li>You can omit the leading <code>0</code> before <code>to</code> as sugar</li></ul><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Contract</h3><ul><li>The source expression must have a collection type.</li><li>Collection loops do not use a general iterable protocol.</li><li>Hash maps are not collection-loop sources.</li><li>Bindings are optional.</li><li>The first binding receives the current item and has the collection&#39;s element type.</li><li>The optional second binding receives the zero-based iteration index and has type <code>Int</code>.</li><li>Binding names are written inside one <code>|...|</code> suffix.</li><li>A binding list may contain one or two names.</li><li>An empty binding list, a third binding or duplicate binding names are invalid.</li><li>Loop bindings are immutable body-local names.</li><li>A binding name must not collide with another visible name.</li><li>An empty collection runs the body zero times.</li></ul><h3>Removed syntax</h3><p>The old <code>in</code> form is not valid.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> item <span class='bst-code-keyword'>in</span> items<span class='bst-code-operator'>:</span>
+        inspect<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9</span>
+    </code></pre><p>Write the collection source first, then place bindings after it:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        inspect<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Range loops
+    </legend>
 
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    <span class='bst-code-comment'>-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="range-loops-level"
+                id="range-loops-basic"
+                value="basic"
+                checked
+            >
 
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="range-loops-level"
+                id="range-loops-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="range-loops">
+                    Range loops
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="range-loops-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="range-loops-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A range loop counts through numbers.</p><p><code>to</code> stops before the end value:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- equivalent to: loop 0 to 5 |i|:</span>
-    </code></pre><p>Range loops can also bind a zero-based iteration index:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>15</span> <span class='bst-code-operator'>|</span>value, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This produces <code>0</code>, <code>1</code>, <code>2</code>, <code>3</code> and <code>4</code>.</p><p>Use <code>to &amp;</code> when the end value should be included:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- yields: 0: 10</span>
-    <span class='bst-code-comment'>-- yields: 1: 11</span>
-    <span class='bst-code-comment'>-- yields: 2: 12</span>
-    <span class='bst-code-comment'>-- yields: 3: 13</span>
-    <span class='bst-code-comment'>-- yields: 4: 14</span>
-    </code></pre><p>You can specify a step using <code>by</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This also produces <code>5</code>.</p><h3>Start from zero</h3><p>You can leave out the first <code>0</code>.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- yields: 0, 2, 4, 6, 8</span>
-    </code></pre><h3>Direction is inferred from bounds</h3><p>Beanstalk automatically determines the iteration direction from the bounds:</p><ul><li>If <code>start &lt; end</code>, the default direction is ascending.</li><li>If <code>start &gt; end</code>, the default direction is descending.</li></ul><p>With no <code>by</code>, the default step is <code>+1</code> for ascending ranges and <code>-1</code> for descending ranges.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Change the step</h3><p>Use <code>by</code> to skip between values:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- yields: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1</span>
-    </code></pre><p>You can also supply an explicit step:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This produces <code>0</code>, <code>2</code>, <code>4</code>, <code>6</code> and <code>8</code>.</p><h3>Count downward</h3><p>The direction comes from the bounds. You do not need a <code>reverse</code> keyword.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>5</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    <span class='bst-code-comment'>-- yields: 10, 8, 6, 4, 2, 0</span>
-    </code></pre><ul><li>When bounds imply descending iteration, <code>by</code> is treated as a magnitude and the compiler applies the correct sign automatically.</li><li>A step of <code>0</code> is invalid.</li></ul><p>Float ranges are supported, but <strong><code>by</code> should be considered required</strong> to prevent ambiguous or non-terminating loops.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0.0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>1.0</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>0.1</span> <span class='bst-code-operator'>|</span>t<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>t.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Float ranges need an explicit step:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0.0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>1.0</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>0.1</span> <span class='bst-code-operator'>|</span>amount<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>amount<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre></section>
+    </code></pre>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A range loop generates numeric values directly from its loop header.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>value, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Forms</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> start <span class='bst-code-keyword'>to</span> end<span class='bst-code-operator'>:</span>
+        ...
+    ;
+
+    <span class='bst-code-keyword'>loop</span> start <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> end <span class='bst-code-operator'>|</span>value<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+
+    <span class='bst-code-keyword'>loop</span> start <span class='bst-code-keyword'>to</span> end <span class='bst-code-keyword'>by</span> step <span class='bst-code-operator'>|</span>value, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-keyword'>to</span> end <span class='bst-code-operator'>|</span>value<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+    </code></pre><h3>Bounds</h3><ul><li><code>to</code> uses an exclusive end bound.</li><li><code>to &amp;</code> uses an inclusive end bound.</li><li><code>loop to end</code> uses <code>0</code> as the start.</li><li>Ascending bounds count upward.</li><li>Descending bounds count downward.</li><li>There is no <code>reverse</code> keyword.</li><li>When start and end are equal, an exclusive range has no iterations and an inclusive range has one.</li></ul><h3>Step</h3><ul><li>Without <code>by</code>, integer ranges use a step magnitude of <code>1</code>.</li><li><code>by</code> supplies a magnitude. The compiler applies the direction implied by the bounds.</li><li>A step of zero is invalid.</li><li>Any range using <code>Float</code> requires an explicit <code>by</code> step.</li><li>Start, end and step expressions must have numeric types.</li></ul><h3>Bindings</h3><p>Bindings are optional.</p><p>The first binding receives the current range value. It has type <code>Float</code> when any range operand is <code>Float</code>. Otherwise it has type <code>Int</code>.</p><p>The optional second binding receives the zero-based iteration index and always has type <code>Int</code>.</p><p>Bindings use the same one-or-two-name <code>|...|</code> rules as collection loops.</p><h3>Checked updates</h3><p>Runtime range counter updates use checked numeric operations. Their failures follow the numeric failure mode of the enclosing function or entry code.</p><p>Const range loops diagnose statically known counter failures while folding.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Loop control
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="loop-control-level"
+                id="loop-control-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="loop-control-level"
+                id="loop-control-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="loop-control">
+                    Loop control
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="loop-control-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="loop-control-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Use <code>break</code> when a loop should end early.</p><p>Use <code>continue</code> when the current iteration should stop but the loop itself should keep going.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>if</span> number is <span class='bst-code-number'>2</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>continue</span>
+        ;
+
+        <span class='bst-code-keyword'>if</span> number is <span class='bst-code-number'>7</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>break</span>
+        ;
+
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The loop skips <code>2</code>. It ends when it reaches <code>7</code>, so <code>7</code> and the later numbers are not printed.</p><h3>Nested loops</h3><p><code>break</code> and <code>continue</code> affect the closest loop around them.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>3</span> <span class='bst-code-operator'>|</span>row<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>3</span> <span class='bst-code-operator'>|</span>column<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>if</span> column is <span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span>
+                <span class='bst-code-keyword'>continue</span>
+            ;
+
+            io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> row <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-parenthesis'>]</span>, column <span class='bst-code-parenthesis'>[</span>column<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+        ;
+    ;
+    </code></pre><p>In this example, <code>continue</code> skips one column. The outer row loop keeps running.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>break</code> and <code>continue</code> are statement-only controls for the nearest active loop.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>if</span> number is <span class='bst-code-number'>2</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>continue</span>
+        ;
+
+        <span class='bst-code-keyword'>if</span> number is <span class='bst-code-number'>7</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>break</span>
+        ;
+
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3><code>break</code></h3><p><code>break</code> exits the nearest active loop immediately. Statements later in that loop body do not run for the current iteration.</p><h3><code>continue</code></h3><p><code>continue</code> skips the rest of the nearest active loop body.</p><p>The next action depends on the loop form:</p><ul><li>a conditional loop checks its condition again</li><li>a collection loop advances to its next item</li><li>a range loop advances its counter, then checks the next bound</li></ul><h3>Rules</h3><ul><li><code>break</code> and <code>continue</code> are valid only inside a loop.</li><li>They may appear inside a branch or nested block that is itself inside a loop.</li><li>They target the nearest enclosing loop.</li><li>Beanstalk does not have labelled loop control.</li><li>Neither statement produces a value.</li><li><code>return</code> and <code>return!</code> leave the function rather than only leaving the loop.</li></ul><p>Template loops use structural template forms for loop control. Those are specified by the Templates documentation rather than this statement-loop reference.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../branching/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Branching</span>
+            </a>
+
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../structs/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Structs</span>
+            </a>
+
+            
+
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

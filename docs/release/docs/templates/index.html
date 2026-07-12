@@ -320,7 +320,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> TEMPLATES</h1>
-    <section class="container"><p>Beanstalk has unique, superpowered templating strings. Templates use <code>[]</code> exclusively - never confuse with collections `{}``.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <code> &quot;head body&quot;</code></p><pre style="
+    <section class="container"><p>Beanstalk has unique, superpowered templating strings. </p><p>Templates can be used to generate complex text, Markdown, HTML, or any kind of string-based structure you want.  They fold at compile time or lower to runtime string construction, with structured slots, wrappers and formatter directives. They replace the same underpowered string formatter functions/macros languages have been stuck using forever.</p><p>Templates use <code>[]</code> exclusively - not to be confused with collections `{}``.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <code> &quot;head body&quot;</code></p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

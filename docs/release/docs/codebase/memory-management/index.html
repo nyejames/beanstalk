@@ -379,7 +379,7 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Codebase</a> / Memory management</p><h1>Memory management</h1><p>Beanstalk keeps the source model small. Reads are shared, copies are explicit and mutation has to announce itself.</p></section>
+    <section class="container"><p><a href="../">Codebase</a> / Memory management</p><h1>Memory management</h1><p>Beanstalk keeps the source model small. Reads are shared, copies are explicit and mutation has to announce itself.</p><p>Borrow validation enforces exclusive mutation and move safety. </p><p>A GC semantic baseline keeps execution practical while ownership analysis leaves room for future allocation and deterministic-drop optimisations.</p></section>
     <section class="container"><h2>Shared access vs copy</h2><p>Existing values use shared, read-only access by default. Binding a new name to an existing value doesn&#39;t copy it. Use <code>copy</code> when you need an independent value.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;

@@ -383,63 +383,63 @@ body {
     <section class="container"><h2>The central bias</h2><ul><li>Keep the source language small, explicit and statically inspectable.</li><li>Compiler complexity is acceptable when it makes source code simpler.</li><li>Prefer constrained built-in mechanisms over general metaprogramming.</li><li>Prefer static resolution over runtime dynamism.</li><li>Keep backend optimisations hidden behind stable source semantics.</li><li>Avoid features that need pervasive solver-heavy reasoning.</li></ul></section>
     <section class="container"><h2>Deferred implementation versus outside scope</h2><p>A surface can be unimplemented for two different reasons.</p><p><strong>Deferred implementation</strong> fits the accepted design but has not landed yet or is incomplete. The progress matrix reports whether a deferred surface works today.</p><p><strong>Outside scope</strong> conflicts with the intended language model. It needs an explicit design change before it can be implemented.</p><p>This page explains whether a surface belongs in the language at all.</p></section>
     <section class="container"><h2>Preferred constrained mechanisms</h2><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Need</strong></p></th>
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Need</strong></p></th>
     <th scope="col" style=""><p> <strong>Preferred Beanstalk mechanism</strong></p></th>
-        
+            
     </tr>
 
 
 
-            
+                
 
     <tr style="">
-             <td style=""><p> Compile-time generation</p></td>
+                 <td style=""><p> Compile-time generation</p></td>
      <td style=""><p> Templates, constants and builder directives</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Static reuse</p></td>
+                 <td style=""><p> Static reuse</p></td>
      <td style=""><p> Generic functions and explicit trait bounds</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Runtime heterogeneity</p></td>
+                 <td style=""><p> Runtime heterogeneity</p></td>
      <td style=""><p> Choices</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Expected failure</p></td>
+                 <td style=""><p> Expected failure</p></td>
      <td style=""><p> <code>Error!</code>, postfix propagation and <code>catch</code></p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Platform integration</p></td>
+                 <td style=""><p> Platform integration</p></td>
      <td style=""><p> Builder packages, external packages and source libraries</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Memory safety</p></td>
+                 <td style=""><p> Memory safety</p></td>
      <td style=""><p> GC baseline plus mandatory borrow validation</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Mutation</p></td>
+                 <td style=""><p> Mutation</p></td>
      <td style=""><p> Explicit exclusive access rather than implicit mutation</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Ownership</p></td>
+                 <td style=""><p> Ownership</p></td>
      <td style=""><p> Compiler-inferred transfer rather than source-visible move or lifetime syntax</p></td>
-        </tr>
+            </tr>
 
     <tr style="">
-             <td style=""><p> Performance</p></td>
+                 <td style=""><p> Performance</p></td>
      <td style=""><p> Hidden compiler and backend optimisation</p></td>
-        </tr>
-        
+            </tr>
+            
     </table></section>
     <section class="container"><h2>Static reuse</h2><p>Use generic trait bounds when code should be reused statically across types.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);

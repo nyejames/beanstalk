@@ -729,7 +729,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level <code>#</code> constants in <code>#config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level <code>#</code> constants in <code>config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -745,7 +745,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted config-defined library folders, import resolution, and facade-gating coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <code>library_folders</code>, with `/lib` as the default convention. Each direct child folder becomes an import prefix. Public cross-module access goes through <code>#mod.bst</code>.</td>
+     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <code>library_folders</code>, with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. Public export/file-role handling still goes through <code>#mod.bst</code> until the generic module-root role migration lands.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

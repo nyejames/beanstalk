@@ -381,33 +381,33 @@ body {
     </nav>
     <section class="container"><p><a href="../">Memory management</a> / Access and aliasing</p><h1>Access and aliasing</h1><p>Existing values are shared by default. Copies are explicit. <code>~</code> requests exclusive access to a mutable place.</p></section>
     <section class="container"><h2>Design contract</h2><p>Existing values use shared, read-only access by default. Independent copies require explicit <code>copy</code>. Mutation requires explicit exclusive access to an existing mutable place.</p><p>These are source-semantic rules. Backends may use different scalar, handle, pointer or GC representations as long as they preserve the same observable behaviour.</p><h2>Main compiler paths</h2><ul><li><code>src/compiler_frontend/value_mode.rs</code></li><li><code>src/compiler_frontend/ast/expressions/</code></li><li><code>src/compiler_frontend/ast/statements/</code></li><li><code>src/compiler_frontend/ast/field_access/</code></li><li><code>src/compiler_frontend/hir/</code></li></ul><p>This is a navigation map, not a status declaration.</p><h2>Vocabulary</h2><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Term</strong></p></th><th scope="col" style=""><p> <strong>Definition</strong></p></th>
-        
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Term</strong></p></th><th scope="col" style=""><p> <strong>Definition</strong></p></th>
+            
     </tr>
 
 
 
-            <tr style="">
-             <td style=""><p> Value</p></td> <td style=""><p> A Beanstalk language value. Not necessarily heap allocated.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Place</p></td> <td style=""><p> Existing storage that can be read or mutated.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Shared access</p></td> <td style=""><p> Read-only access to one or more underlying roots.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Alias binding</p></td> <td style=""><p> A binding that observes existing storage rather than creating an independent copy.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Copy</p></td> <td style=""><p> A new independent value created through explicit copy semantics.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Exclusive access</p></td> <td style=""><p> Mutation-capable access to one existing place.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Move</p></td> <td style=""><p> Compiler-inferred ownership transfer at a legal consumption point.</p></td>
-        </tr><tr style="">
-             <td style=""><p> Fresh value</p></td> <td style=""><p> A newly produced literal, template, constructor result or computed aggregate.</p></td>
-        </tr>
-        
+                <tr style="">
+                 <td style=""><p> Value</p></td> <td style=""><p> A Beanstalk language value. Not necessarily heap allocated.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Place</p></td> <td style=""><p> Existing storage that can be read or mutated.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Shared access</p></td> <td style=""><p> Read-only access to one or more underlying roots.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Alias binding</p></td> <td style=""><p> A binding that observes existing storage rather than creating an independent copy.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Copy</p></td> <td style=""><p> A new independent value created through explicit copy semantics.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Exclusive access</p></td> <td style=""><p> Mutation-capable access to one existing place.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Move</p></td> <td style=""><p> Compiler-inferred ownership transfer at a legal consumption point.</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Fresh value</p></td> <td style=""><p> A newly produced literal, template, constructor result or computed aggregate.</p></td>
+            </tr>
+            
     </table><p>&quot;Reference&quot; is useful explanatory vocabulary but not a first-class source type.</p><h2>Shared access</h2><p>Reads of existing values are shared. Ordinary immutable arguments are shared. Multiple shared reads may coexist. Shared access is read-only, doesn&#39;t imply ownership and can prevent mutation while live. Scalar values may be represented directly by a backend.</p><pre style=""><code class='codeblock'>
     first <span class='bst-code-operator'>=</span> load_items<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     second <span class='bst-code-operator'>=</span> first

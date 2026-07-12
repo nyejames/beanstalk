@@ -483,31 +483,31 @@ body {
     <span class='bst-code-parenthesis'>)</span>;
     </code></pre><h3>Codebase documentation</h3><p>Codebase pages and Beandown references have different jobs.</p><ul><li><code>#page.bst</code> owns the website page, title, introduction, navigation and layout</li><li><code>overview.bd</code> provides a compact routing and contract reference and must not be imported by <code>#page.bst</code></li><li>Topic-named <code>.bd</code> files own detailed design content</li><li>Website pages may import topic-named <code>.bd</code> files</li><li>Topic-named <code>.bd</code> files should remain useful when read directly</li><li>Website pages should make the subject easy to explore</li><li>Compact references should reach the contract quickly</li></ul><p>Writing rules:</p><ul><li>Avoid semicolons in prose</li><li>Avoid Oxford commas</li><li>Don&#39;t use em dashes</li><li>Use straight <code>&#39;</code> apostrophes, never <code>U+2019</code></li><li>Use contractions naturally</li><li>Mix short, punchy sentences with longer conversational ones</li><li>Skip generic transitions such as <code>however</code>, <code>therefore</code> and <code>consequently</code></li><li>Avoid explaining the document structure unless the reader needs that explanation</li><li>Keep hard <code>must</code> and <code>must not</code> language when a rule is normative</li><li>Keep code syntax exact even when it contains punctuation that prose avoids</li></ul><h3>Style checklist</h3><p>Before considering an implementation slice structurally complete, check:</p><ul><li>The module has one clear owner responsibility.</li><li>The file-level documentation says what the module owns and must not own.</li><li>The main function reads as a sequence of named steps.</li><li>Complex blocks have concise intent comments.</li><li>Imports remain readable and are not needlessly fully inline.</li><li>Match arms are grouped by meaning.</li><li>Unrelated blocks have visual spacing.</li><li>Function arguments are not noisy or repetitive.</li><li>Named states are used instead of boolean-heavy APIs.</li><li>Error construction isn&#39;t duplicated across branches.</li><li>The code avoids cleverness that slows review.</li><li>No stale comments describe an older design.</li><li>No compatibility wrappers preserve obsolete paths.</li><li>Lint suppression is justified and documented.</li></ul></section>
     <section class="container"><h2>Testing standards</h2><p>This document owns test selection, test structure, assertions, fixture design and test pruning for compiler work.</p><p>It does not define the final validation command. For completion gates, read <code>docs/src/docs/codebase/style-guide/validation.bd</code>.</p><p>The primary goal is end-to-end language and artifact correctness. Prefer real usage patterns and complete Beanstalk snippets over narrow implementation-shaped tests.</p><h3>Default testing preference</h3><p>Integration tests written in Beanstalk are the default for user-visible language behaviour. They exercise the real compiler path and usually provide the strongest regression coverage.</p><ul><li>Prefer integration coverage for user-visible language behaviour</li><li>Add or update unit tests only where subsystem-local behaviour genuinely benefits from them</li><li>Avoid redundant fixtures that assert the same behaviour in slightly different forms</li><li>Prefer meaningful end-to-end cases over brittle implementation-shaped assertions</li><li>When backend or runtime behaviour matters, strengthen artifact assertions where goldens alone are too vague</li></ul><h3>Supporting rules</h3><ul><li>Prefer externally observable behaviour over implementation detail.</li><li>Use unit tests for hidden invariants that integration output cannot inspect.</li><li>Use one clear primary test owner per behaviour.</li><li>Do not create multiple fixtures that prove the same contract without a distinct stage or backend reason.</li><li>Prefer realistic end-to-end snippets.</li><li>Tests should remain understandable without reading the implementation first.</li><li>Do not make exact internal layout contractual unless that layout is the invariant.</li></ul><h3>Test ownership</h3><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Behavior</strong></p></th><th scope="col" style=""><p> <strong>Owner</strong></p></th>
-        
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Behavior</strong></p></th><th scope="col" style=""><p> <strong>Owner</strong></p></th>
+            
     </tr>
 
 
 
-            <tr style="">
-             <td style=""><p> Pure data or invariant behavior</p></td> <td style=""><p> Focused unit test near the owning subsystem</p></td>
-        </tr><tr style="">
-             <td style=""><p> Compiler-stage invariant</p></td> <td style=""><p> Stage-local unit test naming the invariant</p></td>
-        </tr><tr style="">
-             <td style=""><p> Stage-boundary orchestration</p></td> <td style=""><p> Minimal pipeline/build smoke test</p></td>
-        </tr><tr style="">
-             <td style=""><p> User-facing language behavior</p></td> <td style=""><p> Integration case under <code>tests/cases/</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Backend artifact behavior</p></td> <td style=""><p> Backend-specific artifact assertions or contractual goldens</p></td>
-        </tr><tr style="">
-             <td style=""><p> Side-table or hidden compiler fact</p></td> <td style=""><p> Focused unit test if external output cannot expose it</p></td>
-        </tr><tr style="">
-             <td style=""><p> Cross-backend semantic parity</p></td> <td style=""><p> One integration input with backend-specific assertions</p></td>
-        </tr>
-        
+                <tr style="">
+                 <td style=""><p> Pure data or invariant behavior</p></td> <td style=""><p> Focused unit test near the owning subsystem</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Compiler-stage invariant</p></td> <td style=""><p> Stage-local unit test naming the invariant</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Stage-boundary orchestration</p></td> <td style=""><p> Minimal pipeline/build smoke test</p></td>
+            </tr><tr style="">
+                 <td style=""><p> User-facing language behavior</p></td> <td style=""><p> Integration case under <code>tests/cases/</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Backend artifact behavior</p></td> <td style=""><p> Backend-specific artifact assertions or contractual goldens</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Side-table or hidden compiler fact</p></td> <td style=""><p> Focused unit test if external output cannot expose it</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Cross-backend semantic parity</p></td> <td style=""><p> One integration input with backend-specific assertions</p></td>
+            </tr>
+            
     </table><p>Each behavior should have one primary owner. Secondary coverage is justified only when it protects a distinct boundary, target, diagnostic lane or internal invariant.</p><h3>Test location and module layout</h3><ul><li>Tests do not live in production implementation files.</li><li>Module-specific tests belong under the module&#39;s test directory, for example:</li></ul><pre style=""><code class='codeblock'>
     src<span class='bst-code-operator'>/</span>compiler_frontend<span class='bst-code-operator'>/</span>hir<span class='bst-code-operator'>/</span>tests<span class='bst-code-operator'>/</span>
     </code></pre><ul><li>End-to-end or multi-module Rust harness tests belong under:</li></ul><pre style=""><code class='codeblock'>
@@ -551,73 +551,73 @@ body {
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> check docs
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>quiet <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
     </code></pre><h3>Choose the final gate by scope</h3><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Slice</strong></p></th><th scope="col" style=""><p> <strong>Required final gate</strong></p></th>
-        
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Slice</strong></p></th><th scope="col" style=""><p> <strong>Required final gate</strong></p></th>
+            
     </tr>
 
 
 
-            <tr style="">
-             <td style=""><p> Code-bearing or mixed change</p></td> <td style=""><p> <code>just validate</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Strictly documentation-only change</p></td> <td style=""><p> <code>bean build docs --release</code> or the equivalent Cargo invocation</p></td>
-        </tr>
-        
+                <tr style="">
+                 <td style=""><p> Code-bearing or mixed change</p></td> <td style=""><p> <code>just validate</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Strictly documentation-only change</p></td> <td style=""><p> <code>bean build docs --release</code> or the equivalent Cargo invocation</p></td>
+            </tr>
+            
     </table><p>The <code>justfile</code> is the executable authority for the full code-bearing gate.</p><h3>Code-bearing final gate</h3><p>A slice is code-bearing if it changes Rust, compiler or build-system sources, libraries, tests, benchmarks, manifests, scripts, configuration or any other non-documentation implementation file.</p><p>Before declaring a non-trivial code-bearing slice complete, run:</p><pre style=""><code class='codeblock'>
     just validate
     </code></pre><h4>What just validate runs</h4><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Gate</strong></p></th><th scope="col" style=""><p> <strong>Current command</strong></p></th><th scope="col" style=""><p> <strong>Purpose</strong></p></th>
-        
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Gate</strong></p></th><th scope="col" style=""><p> <strong>Current command</strong></p></th><th scope="col" style=""><p> <strong>Purpose</strong></p></th>
+            
     </tr>
 
 
 
-            <tr style="">
-             <td style=""><p> Cross-target Clippy</p></td> <td style=""><p> <code>just ci-clippy</code></p></td> <td style=""><p> Native, Linux x64 and Windows x64 linting with warnings denied</p></td>
-        </tr><tr style="">
-             <td style=""><p> Rust unit tests</p></td> <td style=""><p> <code>cargo test --quiet -- --format terse</code></p></td> <td style=""><p> Rust unit and subsystem tests</p></td>
-        </tr><tr style="">
-             <td style=""><p> Compiler integration tests</p></td> <td style=""><p> <code>cargo run --quiet -- tests</code></p></td> <td style=""><p> End-to-end compiler cases</p></td>
-        </tr><tr style="">
-             <td style=""><p> Documentation check</p></td> <td style=""><p> <code>cargo run --quiet -- check docs</code></p></td> <td style=""><p> Beanstalk docs-source checking inside the full gate</p></td>
-        </tr><tr style="">
-             <td style=""><p> Benchmark sanity check</p></td> <td style=""><p> <code>cargo run --package xtask --bin xtask -- bench-check</code></p></td> <td style=""><p> Non-recording performance sanity check</p></td>
-        </tr>
-        
+                <tr style="">
+                 <td style=""><p> Cross-target Clippy</p></td> <td style=""><p> <code>just ci-clippy</code></p></td> <td style=""><p> Native, Linux x64 and Windows x64 linting with warnings denied</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Rust unit tests</p></td> <td style=""><p> <code>cargo test --quiet -- --format terse</code></p></td> <td style=""><p> Rust unit and subsystem tests</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Compiler integration tests</p></td> <td style=""><p> <code>cargo run --quiet -- tests</code></p></td> <td style=""><p> End-to-end compiler cases</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Documentation check</p></td> <td style=""><p> <code>cargo run --quiet -- check docs</code></p></td> <td style=""><p> Beanstalk docs-source checking inside the full gate</p></td>
+            </tr><tr style="">
+                 <td style=""><p> Benchmark sanity check</p></td> <td style=""><p> <code>cargo run --package xtask --bin xtask -- bench-check</code></p></td> <td style=""><p> Non-recording performance sanity check</p></td>
+            </tr>
+            
     </table><ul><li><code>ci-clippy</code> uses the pinned Rust toolchain configured in the <code>justfile</code>.</li><li>Warnings are denied.</li><li>It checks the native host, Linux x64 and Windows x64 targets.</li><li>Benchmark checking must not update tracked benchmark history.</li></ul><h3>Documentation-only release-build gate</h3><p>A slice is documentation-only only when every modified file is documentation source or generated documentation.</p><p>Allowed examples include:</p><ul><li>files under <code>docs/**</code></li><li>an explicitly requested root documentation file such as <code>README.md</code>, <code>CONTRIBUTING.md</code> or <code>AGENTS.md</code></li><li>generated files under <code>docs/release/**</code></li></ul><p>A documentation-only slice must not change Rust, tests, libraries, build configuration, manifests, scripts, benchmark code or fixtures, compiler configuration or other executable project sources.</p><p>For a strictly documentation-only slice, run one documentation release build using a current compiler.</p><p>The direct release-binary form is:</p><pre style=""><code class='codeblock'>
     bean build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
     </code></pre><p>If no suitable release build is available, use <code>cargo run --quiet -- build docs --release</code> instead.</p><p>Then:</p><ul><li>inspect every changed route</li><li>inspect the generated diff</li><li>verify links, tables and code examples</li><li>confirm generated output came from source changes</li><li>confirm the changed-file list contains documentation only.</li></ul><p>Do not additionally run <code>just validate</code>, Clippy, unit tests, integration tests or benchmark checks for a documentation-only slice. A Cargo invocation of the compiler is an alternative way to run the same documentation gate, not an extra gate.</p><p>If any non-documentation file changed, the documentation-only exception does not apply. Use the full code-bearing gate.</p><h3>Fast iteration commands</h3><table style="">
-        
-        <tr style="">
             
-            <th scope="col" style=""><p> <strong>Task</strong></p></th><th scope="col" style=""><p> <strong>Command</strong></p></th>
-        
+            <tr style="">
+                
+                <th scope="col" style=""><p> <strong>Task</strong></p></th><th scope="col" style=""><p> <strong>Command</strong></p></th>
+            
     </tr>
 
 
 
-            <tr style="">
-             <td style=""><p> Unit-test iteration</p></td> <td style=""><p> <code>cargo test --quiet -- --format terse</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Integration iteration</p></td> <td style=""><p> <code>bean tests</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Clippy iteration</p></td> <td style=""><p> <code>just ci-clippy</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Docs-source iteration</p></td> <td style=""><p> <code>bean check docs</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Benchmark sanity</p></td> <td style=""><p> <code>just bench-check</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Documentation release-build iteration</p></td> <td style=""><p> <code>bean build docs --release</code></p></td>
-        </tr><tr style="">
-             <td style=""><p> Complete code-bearing gate</p></td> <td style=""><p> <code>just validate</code></p></td>
-        </tr>
-        
+                <tr style="">
+                 <td style=""><p> Unit-test iteration</p></td> <td style=""><p> <code>cargo test --quiet -- --format terse</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Integration iteration</p></td> <td style=""><p> <code>bean tests</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Clippy iteration</p></td> <td style=""><p> <code>just ci-clippy</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Docs-source iteration</p></td> <td style=""><p> <code>bean check docs</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Benchmark sanity</p></td> <td style=""><p> <code>just bench-check</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Documentation release-build iteration</p></td> <td style=""><p> <code>bean build docs --release</code></p></td>
+            </tr><tr style="">
+                 <td style=""><p> Complete code-bearing gate</p></td> <td style=""><p> <code>just validate</code></p></td>
+            </tr>
+            
     </table><p>Passing one targeted command does not imply a code-bearing slice passes the complete gate.</p><h3>Formatting</h3><ul><li>Run <code>cargo fmt</code> when Rust files changed.</li><li><code>just validate</code> does not currently format source automatically.</li><li>Do not solve formatting failures through lint suppression.</li><li>Documentation-only changes do not require Rust formatting.</li></ul><p>The <code>ship</code> recipe formats before validation, while <code>validate</code> itself does not.</p><h3>Generated documentation</h3><p>Do not edit files under <code>docs/release/**</code> directly.</p><p>The documentation release build is:</p><pre style=""><code class='codeblock'>
     bean build docs <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>release
     </code></pre><p>A generated diff must result from documentation source changes, not manual HTML edits.</p><h3>Manual architecture audits</h3><p>When a code-bearing slice changes stage ownership, frontend boundaries, HIR, diagnostics, types or backend handoff, perform a manual architecture audit in addition to the automated gate.</p><p>Audit that:</p><ul><li>stage ownership remains narrow</li><li>AST and HIR type representation still respect <code>TypeEnvironment</code> and <code>TypeId</code></li><li>user-facing failures use <code>CompilerDiagnostic</code></li><li>internal and infrastructure failures use <code>CompilerError</code></li><li>no obsolete API or duplicated path remains</li><li>no backend reparses source syntax</li><li>no analysis mutates HIR when its contract is side-table based</li><li>comments and documentation name the current owner</li><li>no compatibility shim preserves an obsolete path</li></ul><p>This full architecture audit is not required for a prose-only documentation change.</p><h3>Progress-matrix review</h3><p>Review the progress matrix whenever behavior, support, rejection, backend coverage or test coverage changes.</p><p>Update it when current status changed. Do not make a meaningless edit for a pure refactor or prose-only correction.</p><h3>Benchmark safety</h3><ul><li><code>just validate</code> uses non-recording <code>bench-check</code>.</li><li>Do not run or commit recording benchmark output unless performance history is intentionally being updated.</li><li>A benchmark fluctuation does not replace correctness evidence.</li><li>Generated benchmark history is outside this standards split.</li></ul><h3>Failure handling</h3><ul><li>Do not ignore or suppress a failed required gate.</li><li>Do not remove tests merely to make validation pass.</li><li>Do not use lint allowances without documented justification.</li><li>If a required command fails for environmental reasons, report the exact command, failure, completed checks and remaining uncertainty.</li><li>Do not claim full validation when only targeted commands or the documentation-only gate ran.</li></ul><h3>Code-bearing completion checklist</h3><p>Before declaring a non-trivial code-bearing slice complete, check:</p><ul><li>Rust source was formatted where applicable.</li><li>The changed code follows <code>style-guide.bd</code>.</li><li>Test selection and assertions follow <code>testing.bd</code>.</li><li>Relevant architecture boundaries were reviewed.</li><li>Diagnostics remain structured and stage appropriate.</li><li>The progress matrix was reviewed and updated when status changed.</li><li>Documentation was rebuilt when required.</li><li>Generated output was not edited manually.</li><li>Benchmark history was not changed accidentally.</li><li><code>just validate</code> passes.</li></ul><h3>Documentation-only completion checklist</h3><p>Before declaring a documentation-only slice complete, check:</p><ul><li>The changed-file list contains documentation only.</li><li>The documentation release build succeeds.</li><li>Changed routes, links, tables and examples were inspected.</li><li>Generated output was produced from source changes.</li><li>No generated HTML was edited manually.</li><li>No code, test, build, library, manifest, script, benchmark or configuration file changed.</li></ul></section>

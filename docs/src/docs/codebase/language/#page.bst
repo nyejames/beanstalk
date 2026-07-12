@@ -1,7 +1,7 @@
 import @styles/docs {navbar, section, codebase_theme_head}
 
 page_title #= "Compiler-facing language reference"
-page_description #= "Language semantics and the compiler design references that implement them."
+page_description #= "Routing for canonical language semantics, public explanations and related compiler design references."
 page_head #= codebase_theme_head
 
 #[navbar]
@@ -11,15 +11,29 @@ page_head #= codebase_theme_head
 
     # Compiler-facing language reference
 
-    Compiler changes should start from the language contract. This page connects user-visible syntax and semantics to the compiler, memory model and design boundaries that implement them.
+    Compiler changes should start from the language contract. Canonical language references now live beside their public routes as concepts are migrated out of the consolidated overview.
 ]
 
 #[section, $md:
-    ## Language semantics
+    ## Migrated language references
 
-    The canonical compiler-facing reference is `docs/language-overview.md`.
+    Loops are the first migrated language area.
 
-    Read @../../language-overview (Language overview) for syntax, type rules, templates, collections, imports, traits, generics, errors and other user-visible behaviour.
+    - @../../loops (Loops): public Basic and Advanced documentation
+    - `docs/src/docs/loops/conditional-loops.bd`
+    - `docs/src/docs/loops/collection-loops.bd`
+    - `docs/src/docs/loops/range-loops.bd`
+    - `docs/src/docs/loops/loop-control.bd`
+
+    The unsuffixed Beandown files own exact loop semantics.
+]
+
+#[section, $md:
+    ## Remaining language reference
+
+    `docs/language-overview.md` remains canonical for every language concept that has not moved into a focused unsuffixed Beandown reference.
+
+    The complete authority map is `docs/src/docs/codebase/language/overview.bd`.
 ]
 
 #[section, $md:

@@ -9,7 +9,13 @@ page_head #= theme_head
 #[title, center: TEMPLATES]
 
 #[section, $md:
-    Beanstalk has unique, superpowered templating strings. Templates use `["[]"]` exclusively - never confuse with collections `{}``.
+    Beanstalk has unique, superpowered templating strings. 
+
+    Templates can be used to generate complex text, Markdown, HTML, or any kind of string-based structure you want. 
+    They fold at compile time or lower to runtime string construction, with structured slots, wrappers and formatter directives.
+    They replace the same underpowered string formatter functions/macros languages have been stuck using forever.
+    
+    Templates use `["[]"]` exclusively - not to be confused with collections `{}``.
 
     These are the only way to create mutable strings, as double quotes are only used for string slices.
 
