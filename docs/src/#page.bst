@@ -24,3 +24,23 @@ page_head #= theme_head
     ## Documentation
     The @./docs (Alpha language docs) cover the current supported compiler surface.
 ]
+
+export: 
+    import @styles/docs {
+        Palette,
+        theme_css,
+        palette,
+        theme_head,
+        codebase_theme_css,
+        codebase_theme_head,
+        section,
+        navbar,
+        footer,
+        header,
+        styled_table,
+        data,
+        codeblock,
+        title,
+    }
+;
+
