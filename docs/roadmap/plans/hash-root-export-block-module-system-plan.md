@@ -5,8 +5,8 @@
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
 CURRENT_SLICE: Phase 5C remove obsolete legacy-export import-path scanning and finish the Phase 5 grep audit
-LAST_ACCEPTED_COMMIT: `c754a4f95` (`feat: parse strict module export blocks`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `a0b050edc`; Phase 5A is committed and the Phase 5B fixture migration is accepted for its next checkpoint. Concurrent user-owned docs source, generated docs and docs-migration plan edits remain unstaged and uncommitted and must be ignored.
+LAST_ACCEPTED_COMMIT: `f1fd97fbd` (`test: migrate module export fixtures`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `f1fd97fbd`; Phase 5B is committed. Concurrent user-owned docs source, generated docs and docs-migration plan edits remain unstaged and uncommitted and must be ignored.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -186,11 +186,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Commit the accepted Phase 5B fixture migration, then delegate removal of legacy-export import-path scanning and its obsolete tests through the verified `codex-cli-beanstalk` wrapper.
+- Delegate removal of legacy-export import-path scanning and its obsolete tests through the verified `codex-cli-beanstalk` wrapper.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: create and launch the bounded Phase 5C codex-cli task after the Phase 5B checkpoint
+NEXT_RESUME_ACTION: launch `.codex-worker/tasks/hash-root-phase-5c.md` through codex-cli
 
 ---
 

@@ -967,30 +967,45 @@ body {
     ;
     </code></pre><p>The capture name must match the field name.</p><p>Use <code>as</code> when the local name should be different:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_text<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_text<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>A normal value match needs <code>else =&gt;</code> because the compiler cannot list every possible value for types such as <code>Int</code> or <code>String</code>.</p>
+    </code></pre><p>Options have two complete shapes: absent and present.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> maybe_name is<span class='bst-code-operator'>:</span>
+        none <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Most other value matches need <code>else =&gt;</code> because the compiler cannot list every possible <code>Int</code>, <code>String</code> or other scalar value.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Match patterns describe the values an arm accepts.</p><h3>Supported patterns</h3><p>Literal patterns:</p><pre style=""><code class='codeblock'>
+        <p>Match patterns describe the values an arm accepts.</p><h3>Literal patterns</h3><p>A literal pattern must be compatible with the scrutinee type.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> value is<span class='bst-code-operator'>:</span>
         <span class='bst-code-number'>1</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;one&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-string'>&quot;ok&quot;</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;text&quot;</span><span class='bst-code-parenthesis'>)</span>
-        true <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;true&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-number'>2</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;two&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-number'>3</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;three&quot;</span><span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
     ;
-    </code></pre><p>Choice variants:</p><pre style=""><code class='codeblock'>
+    </code></pre><p>One statically typed match cannot mix unrelated <code>Int</code>, <code>String</code> and <code>Bool</code> literal patterns.</p><h3>Choice variants</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> status is<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ready&quot;</span><span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Waiting</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;waiting&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Choice payload captures:</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Choice payload captures</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
             io.line<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Option patterns:</p><ul><li><code>none</code></li><li>literal or relational present-value patterns</li><li><code>|name|</code> to capture any present value</li></ul><p>General capture:</p><p>A bare pattern name that is not a known choice variant binds the complete scrutinee value for that arm.</p><p>Relational patterns:</p><p>```text &lt; value &lt;= value &gt; value &gt;= value ```</p><p>Relational patterns support <code>Int</code>, <code>Float</code>, <code>Char</code> and <code>String</code>. String ordering is backend-defined in the current Alpha surface.</p><h3>Choice payload captures</h3><ul><li>Payload captures must list every declared field.</li><li>Captures stay in declaration order.</li><li>The source name before <code>as</code> must exactly match the declared field name.</li><li><code>as local_name</code> changes only the arm-local binding.</li><li>Duplicate local bindings are invalid.</li><li>Wildcard payload captures are not supported.</li><li>Named assignment syntax such as <code>Err(message = text)</code> is not payload-pattern syntax.</li><li>Nested payload patterns are deferred.</li></ul><h3>Exhaustiveness</h3><ul><li>A non-choice full match requires <code>else =&gt;</code>.</li><li>A choice match may omit <code>else =&gt;</code> only when every variant is covered.</li><li>Any guarded choice arm requires <code>else =&gt;</code>.</li><li>The same choice variant cannot be matched more than once.</li><li>Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.</li><li>A statement match may use bodyless <code>else =&gt;</code>.</li><li>A value-producing match must produce the required values on every selected path.</li></ul><p>An unconditional general capture covers every remaining value. A later arm or default is unreachable.</p><p>Capture bindings are arm-local and follow the no-shadowing rule.</p>
+    </code></pre><h3>Option patterns</h3><p>Options support:</p><ul><li><code>none</code></li><li>literal present-value patterns</li><li>relational present-value patterns</li><li><code>|name|</code> to capture any present value</li></ul><p>An option match may omit <code>else =&gt;</code> only when it has both:</p><ul><li>an unguarded <code>none</code> arm</li><li>an unguarded <code>|name|</code> present-value capture</li></ul><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> maybe_name is<span class='bst-code-operator'>:</span>
+        none <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Literal or relational option arms do not replace the unguarded present-value capture when <code>else =&gt;</code> is omitted.</p><h3>General capture</h3><p>A bare pattern name that is not a known choice variant binds the complete scrutinee value for that arm.</p><p>The binding is arm-local and may be used by the arm guard and body.</p><p>Use <code>else =&gt;</code> as the explicit full-match catch-all.</p><h3>Relational patterns</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-operator'>&lt;</span> value
+    <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>=</span> value
+    <span class='bst-code-operator'>&gt;</span> value
+    <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> value
+    </code></pre><p>Relational patterns support <code>Int</code>, <code>Float</code>, <code>Char</code> and <code>String</code>.</p><p>String ordering is backend-defined in the current Alpha surface.</p><h3>Choice payload capture contract</h3><ul><li>Payload captures must list every declared field.</li><li>Captures stay in declaration order.</li><li>The source name before <code>as</code> must exactly match the declared field name.</li><li><code>as local_name</code> changes only the arm-local binding.</li><li>Duplicate local bindings are invalid.</li><li>Wildcard payload captures are not supported.</li><li>Named assignment syntax such as <code>Err(message = text)</code> is not payload-pattern syntax.</li><li>Nested payload patterns are deferred.</li></ul><h3>Exhaustiveness</h3><ul><li>An ordinary non-choice full match requires <code>else =&gt;</code>.</li><li>An option match may instead use unguarded <code>none</code> plus unguarded <code>|name|</code>.</li><li>A choice match may omit <code>else =&gt;</code> only when every variant is covered.</li><li>Any guarded choice arm requires <code>else =&gt;</code>.</li><li>The same choice variant cannot be matched more than once.</li><li>Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.</li><li>A statement match may use bodyless <code>else =&gt;</code>.</li><li>A value-producing match must produce the required values on every selected path.</li></ul><p>Capture bindings are arm-local and follow the no-shadowing rule.</p>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">
@@ -1309,10 +1324,10 @@ body {
     }
 
     function b_fn6() {
-    let b_l22 = __bs_binding(undefined);
+    let b_l24 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l22, []);
-    return __bs_read(b_l22);
+    __bs_assign_value(b_l24, []);
+    return __bs_read(b_l24);
     }
 
     </script>

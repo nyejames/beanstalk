@@ -727,7 +727,11 @@ body {
         <span class='bst-code-struct'>Waiting,</span>
         <span class='bst-code-struct'>Failed</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
     ;
-    </code></pre><h3>Variant forms</h3><p>A unit variant has no payload:</p><p>```beanstalk Ready ```</p><p>A payload variant uses a record body:</p><p>```beanstalk Failed | message String | ```</p><h3>Contract</h3><ul><li>The declaration form is <code>Name :: variants ;</code>.</li><li>Choice and variant names use <code>PascalCase</code>.</li><li>A choice must declare at least one variant.</li><li>Variant names must be unique.</li><li>A payload record must contain at least one field.</li><li>Payload field names must be unique.</li><li>Payload fields require explicit types.</li><li>Payload fields are immutable.</li><li>Payload fields do not support defaults.</li><li>Mutable payload field declarations are invalid.</li><li>Shorthand payload declarations such as <code>Failed String</code> are invalid.</li><li>Constructor-style declarations such as <code>Failed(String)</code> are invalid.</li><li>Recursive choice declarations are deferred.</li><li>A choice has nominal identity. Matching variants and payload shapes do not make two choices interchangeable.</li></ul><h3>Generic choices</h3><p>Choices may introduce declaration-site generic parameters.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Variant forms</h3><p>A unit variant has no payload:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Ready</span>
+    </code></pre><p>A payload variant uses a record body:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Failed</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>
+    </code></pre><h3>Contract</h3><ul><li>The declaration form is <code>Name :: variants ;</code>.</li><li>Choice and variant names use <code>PascalCase</code>.</li><li>A choice must declare at least one variant.</li><li>Variant names must be unique.</li><li>A payload record must contain at least one field.</li><li>Payload field names must be unique.</li><li>Payload fields require explicit types.</li><li>Payload fields are immutable.</li><li>Payload fields do not support defaults.</li><li>Mutable payload field declarations are invalid.</li><li>Shorthand payload declarations such as <code>Failed String</code> are invalid.</li><li>Constructor-style declarations such as <code>Failed(String)</code> are invalid.</li><li>Recursive choice declarations are deferred.</li><li>A choice has nominal identity. Matching variants and payload shapes do not make two choices interchangeable.</li></ul><h3>Generic choices</h3><p>Choices may introduce declaration-site generic parameters.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>,
         <span class='bst-code-struct'>None,</span>
@@ -1274,10 +1278,10 @@ body {
     }
 
     function b_fn6() {
-    let b_l22 = __bs_binding(undefined);
+    let b_l24 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l22, []);
-    return __bs_read(b_l22);
+    __bs_assign_value(b_l24, []);
+    return __bs_read(b_l24);
     }
 
     </script>

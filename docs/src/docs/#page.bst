@@ -28,10 +28,11 @@ page_head #= theme_head
     11. @./errors (Errors, options and assertions)
     12. @./collections (Collections and maps)
     13. @./templates (Templates)
-    14. @./aliases (Aliases)
-    15. @./generics (Generics)
-    16. @./traits (Traits)
-    17. @./reactivity (Reactivity)
+    14. @./constants (Constants and compile-time behaviour)
+    15. @./aliases (Aliases)
+    16. @./generics (Generics)
+    17. @./traits (Traits)
+    18. @./reactivity (Reactivity)
 
     ## Projects and content
 

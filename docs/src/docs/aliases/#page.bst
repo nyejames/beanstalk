@@ -1,14 +1,23 @@
-import @html {center}
-import @styles/docs {navbar, title, section, codeblock, theme_head}
+import @styles/docs {
+    navbar,
+    title,
+    section,
+    codeblock,
+    language_theme_head,
+    doc_pager,
+}
 
 page_title #= "Aliases"
 page_description #= "Type aliases, import aliases, and local renaming with as in Beanstalk."
-page_head #= theme_head
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: ALIASES]
 
 #[section, $md:
+    @../ (Documentation) / Aliases
+
+    # Aliases
+
     Aliases give a local name to something that already exists.
 
     Beanstalk uses `as` for three narrow, deliberate renaming surfaces:
@@ -497,4 +506,13 @@ page_head #= theme_head
     - Choice payload capture alias: better arm-local name for an extracted field.
     - Struct: new domain type with its own identity.
     - Choice: one of several named variants.
+]
+
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../constants/]
+        [$insert("previous_title"):Constants and compile-time behaviour]
+        [$insert("next_path"):../generics/]
+        [$insert("next_title"):Generics]
+    ]
 ]

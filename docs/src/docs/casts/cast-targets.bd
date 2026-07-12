@@ -1,13 +1,13 @@
 Explicit casts target compiler-supported builtin types:
 
-```text
-Bool
-Int
-String
-Char
-Float
-Error
-```
+[codeblock, $code("text"):
+    Bool
+    Int
+    String
+    Char
+    Float
+    Error
+]
 
 A type being a valid target does not mean every source type can convert to it.
 
@@ -80,11 +80,11 @@ Optional source values are not automatically unwrapped.
 
 In:
 
-```beanstalk
-target T? = cast source catch:
-    then fallback
-;
-```
+[codeblock, $code("bst"):
+    target T? = cast source catch:
+        then fallback
+    ;
+]
 
 the recovery handler produces inner `T`. `then none` is invalid because
 recovery happens before optional wrapping.

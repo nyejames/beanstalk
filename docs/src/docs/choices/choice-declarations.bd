@@ -14,15 +14,15 @@ Each value contains one declared variant.
 
 A unit variant has no payload:
 
-```beanstalk
-Ready
-```
+[codeblock, $code("bst"):
+    Ready
+]
 
 A payload variant uses a record body:
 
-```beanstalk
-Failed | message String |
-```
+[codeblock, $code("bst"):
+    Failed | message String |
+]
 
 ### Contract
 

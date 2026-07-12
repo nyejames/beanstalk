@@ -1,19 +1,22 @@
 Match patterns describe the values an arm accepts.
 
-### Supported patterns
+### Literal patterns
 
-Literal patterns:
+A literal pattern must be compatible with the scrutinee type.
 
 [codeblock, $code("bst"):
     if value is:
         1 => io.line("one")
-        "ok" => io.line("text")
-        true => io.line("true")
+        2 => io.line("two")
+        3 => io.line("three")
         else =>
     ;
 ]
 
-Choice variants:
+One statically typed match cannot mix unrelated `Int`, `String` and `Bool`
+literal patterns.
+
+### Choice variants
 
 [codeblock, $code("bst"):
     if status is:
@@ -22,7 +25,7 @@ Choice variants:
     ;
 ]
 
-Choice payload captures:
+### Choice payload captures
 
 [codeblock, $code("bst"):
     if response is:
@@ -33,30 +36,53 @@ Choice payload captures:
     ;
 ]
 
-Option patterns:
+### Option patterns
+
+Options support:
 
 - `none`
-- literal or relational present-value patterns
+- literal present-value patterns
+- relational present-value patterns
 - `|name|` to capture any present value
 
-General capture:
+An option match may omit `else =>` only when it has both:
+
+- an unguarded `none` arm
+- an unguarded `|name|` present-value capture
+
+[codeblock, $code("bst"):
+    if maybe_name is:
+        none => io.line("missing")
+        |name| => io.line(name)
+    ;
+]
+
+Literal or relational option arms do not replace the unguarded present-value
+capture when `else =>` is omitted.
+
+### General capture
 
 A bare pattern name that is not a known choice variant binds the complete
 scrutinee value for that arm.
 
-Relational patterns:
+The binding is arm-local and may be used by the arm guard and body.
 
-```text
-< value
-<= value
-> value
->= value
-```
+Use `else =>` as the explicit full-match catch-all.
 
-Relational patterns support `Int`, `Float`, `Char` and `String`. String ordering
-is backend-defined in the current Alpha surface.
+### Relational patterns
 
-### Choice payload captures
+[codeblock, $code("text"):
+    < value
+    <= value
+    > value
+    >= value
+]
+
+Relational patterns support `Int`, `Float`, `Char` and `String`.
+
+String ordering is backend-defined in the current Alpha surface.
+
+### Choice payload capture contract
 
 - Payload captures must list every declared field.
 - Captures stay in declaration order.
@@ -69,15 +95,13 @@ is backend-defined in the current Alpha surface.
 
 ### Exhaustiveness
 
-- A non-choice full match requires `else =>`.
+- An ordinary non-choice full match requires `else =>`.
+- An option match may instead use unguarded `none` plus unguarded `|name|`.
 - A choice match may omit `else =>` only when every variant is covered.
 - Any guarded choice arm requires `else =>`.
 - The same choice variant cannot be matched more than once.
 - Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.
 - A statement match may use bodyless `else =>`.
 - A value-producing match must produce the required values on every selected path.
-
-An unconditional general capture covers every remaining value. A later arm or
-default is unreachable.
 
 Capture bindings are arm-local and follow the no-shadowing rule.

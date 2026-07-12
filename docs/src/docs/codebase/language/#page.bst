@@ -31,11 +31,15 @@ page_head #= codebase_theme_head
     - @../../functions (Functions)
     - @../../branching (Branching)
     - @../../loops (Loops)
+    - @../../errors (Errors, options and assertions)
 
-    Nominal data:
+    Data and compile-time construction:
 
     - @../../structs (Structs)
     - @../../choices (Choices)
+    - @../../collections (Collections and maps)
+    - @../../templates (Templates)
+    - @../../constants (Constants and compile-time behaviour)
 
     Each route combines a Basic teaching layer with detailed Advanced references. The unsuffixed Beandown files remain replacements under parity review and do not supersede `docs/language-overview.md` yet.
 ]

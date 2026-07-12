@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Templates | Beanstalk</title>
-    <meta name="description" content="Template syntax, slots, directives, and formatting in Beanstalk.">
+    <meta name="description" content="Template strings, directives, slots, wrappers, control flow and Markdown in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,43 +661,290 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> TEMPLATES</h1>
-    <section class="container"><p>Beanstalk has unique, superpowered templating strings. </p><p>Templates can be used to generate complex text, Markdown, HTML, or any kind of string-based structure you want.  They fold at compile time or lower to runtime string construction, with structured slots, wrappers and formatter directives. They replace the same underpowered string formatter functions/macros languages have been stuck using forever.</p><p>Templates use <code>[]</code> exclusively - not to be confused with collections `{}``.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <code> &quot;head body&quot;</code></p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;head&quot;</span><span class='bst-code-operator'>:</span> body<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.</p><p>Templates are either folded to strings at compile time, or become functions that return strings at runtime. </p><h2>Structure</h2><ul><li>Head and body separated by <code>:</code></li><li>Variable capture from the surrounding scope</li></ul><p>Templates unlock the full power of Beanstalk&#39;s HTML / CSS generation capabilities.</p><h2>Styles</h2><p>Templates can be used to build complex UI components. They can use slots to insert content from other templates and have <strong>style metadata</strong> attached to them.</p><p>A template&#39;s style is defined in the <strong>template head</strong> using <code> $</code> directives. <code>$</code> introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (<code>$md</code>, <code>$code</code>, <code>$raw</code>, <code>$slot</code>, etc.).</li><li>Project builders can register additional project-specific directives using the same <code>$name</code> syntax. In the HTML project, that includes <code>$html</code>, <code>$css</code>, and <code>$escape_html</code>.</li><li>Unknown directives fail as syntax/rule errors unless they are registered.</li></ul><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Define a template style</span>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md, <span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>All</span> children start with this prefix<span class='bst-code-operator'>!</span> <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Hello</span>
-        <span class='bst-code-struct'>This</span> template is parsed <span class='bst-code-keyword'>as</span> markdown.
+    <section class="container"><p><a href="../">Documentation</a> / Templates</p><h1>Templates</h1><p>Templates are Beanstalk&#39;s superpowered strings. They can stay tiny, or grow into a compile-time HTML and Markdown engine with slots, wrappers and control flow.</p><p>Square brackets look unusual for about five minutes. Then ordinary string formatting starts to feel underdressed.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Template basics
+    </legend>
 
-        <span class='bst-code-operator'>@</span>example.com <span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Here</span> is a link<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>)</span> using this custom markdown flavour.
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="template-basics-level"
+                id="template-basics-basic"
+                value="basic"
+                checked
+            >
 
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>todo<span class='bst-code-operator'>:</span> write some more info<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="template-basics-level"
+                id="template-basics-advanced"
+                value="advanced"
+            >
 
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>This</span> child is prefixed<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="template-basics">
+                    Template basics
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="template-basics-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="template-basics-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Templates are Beanstalk&#39;s powerful string-building form.</p><pre style=""><code class='codeblock'>
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+
+    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p><strong>Frontend Built-in Style Directives</strong></p><ul><li><code>$slot</code> / <code>$insert(..)</code> - See slots below!</li><li><code>$fresh</code>              - Opts this child template out of wrappers applied by the immediate parent&#39;s <code>$children(..)</code> directive</li><li><code>$md</code>           - Parses the template bodies with a custom flavour of Markdown</li><li><code>$code</code>               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li><code>$raw</code>                - Parses the template body as a raw string (no escaping, no formatting)</li><li><code>$note / $todo</code>       - Comments (ignored by final output)</li><li><code>$doc</code>                - Turns the template into a documentation comment</li><li><code>$children(..)</code>       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li><code>$html</code>               - Parses the template body as raw HTML (no escaping)</li><li><code>$css</code>                - Provides some basic warnings for malformed CSS</li><li><code>$escape_html</code>        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as <code>$md</code>, redeclare it in that child template&#39;s head. Beandown <code>.bd</code> files are the exception: nested templates with no explicit directive default to <code>$md</code>, and any explicit directive on that nested template overrides the Beandown default.</p><p><code>$fresh</code> is per-child and only affects wrapper application from the immediate parent. Siblings without <code>$fresh</code> still receive the parent wrappers:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p>Square brackets create the template.</p><p>The colon separates its head from its body.</p><p>A nested template inserts a value from the surrounding scope.</p><p>Templates can build plain text, Markdown, HTML, CSS or another string-based format. They may be finished during compilation or built at runtime.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Templates create owned <code>String</code> values.</p><p>They use square brackets. Collections and maps use braces.</p><pre style=""><code class='codeblock'>
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+
+    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><h3>Head and body</h3><p>A colon separates the template head from its body.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;prefix&quot;</span><span class='bst-code-operator'>:</span> body<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The head may contain:</p><ul><li>a value or helper template</li><li>directives</li><li>slot contributions</li><li>final <code>if</code> or <code>loop</code> control-flow suffixes</li></ul><p>The body contains authored text and nested templates.</p><p>Authored <code>.bst</code> templates must close with a closing square bracket.</p><p>Truncated heads, bodies, nested children and directive-argument templates are syntax errors.</p><h3>Capture and text</h3><p>A template may read visible values from its surrounding scope.</p><p>Inside a template body:</p><ul><li>backticks are ordinary body text</li><li>backslashes are ordinary body text</li><li>formatter directives decide how authored text is transformed</li></ul><p>Double-quoted string slices still use normal escaping in expression position.</p><h3>Compile-time and runtime forms</h3><p>A template may:</p><ul><li>fully fold to a compile-time string</li><li>remain as runtime string construction</li></ul><p>The source-level result is still an owned <code>String</code>.</p><p>Templates do not become source-visible function values.</p><p>Runtime Float interpolation and compile-time folding use the same Beanstalk formatter.</p><h3>Page fragments</h3><p>Only direct top-level template expressions in an HTML entry file contribute page fragments.</p><ul><li>top-level runtime templates run through entry <code>start()</code> in source order</li><li>direct top-level const templates fold into compile-time fragments</li><li>a template assigned to a binding or returned from a function does not become a page fragment by itself</li></ul><p>Page assembly is owned by Project Structure. Const-template rules are owned by <a href="../constants/#const-templates">Const templates</a>.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Template directives
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="template-directives-level"
+                id="template-directives-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="template-directives-level"
+                id="template-directives-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="template-directives">
+                    Template directives
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="template-directives-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="template-directives-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Directives change how a template is interpreted.</p><p>They begin with <code>$</code>.</p><pre style=""><code class='codeblock'>
+    content <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>A</span> heading
+
+        <span class='bst-code-struct'>This</span> body is <span class='bst-code-struct'>Markdown.</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Common directives include:</p><ul><li><code>$md</code> for Beanstalk Markdown</li><li><code>$raw</code> for unformatted text</li><li><code>$note</code> and <code>$todo</code> for ignored template notes</li><li><code>$html</code>, <code>$css</code> and <code>$code</code> in HTML projects</li></ul><p>Builders can add their own directives.</p><p>A formatter applies only to the template that declares it. Nested child templates choose their own formatter.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>$</code> introduces a compiler-handled template directive.</p><p>Directive availability comes from one merged registry:</p><ul><li>frontend directives are always available</li><li>a project builder may add project-specific directives</li><li>an unknown directive is a syntax or rule error</li></ul><h3>Frontend directives</h3><p><code>$children(...)</code>:</p><ul><li>applies one wrapper to each direct child</li><li>accepts a template or string-slice wrapper</li></ul><p><code>$fresh</code>:</p><ul><li>opts one child out of the immediate parent&#39;s <code>$children(...)</code> wrapper</li></ul><p><code>$slot</code>:</p><ul><li>declares a default, named or positional slot</li></ul><p><code>$insert(...)</code>:</p><ul><li>contributes content to a named slot</li></ul><p><code>$note</code> and <code>$todo</code>:</p><ul><li>discard their balanced bodies</li><li>are template-authored comments</li></ul><p><code>$doc</code>:</p><ul><li>marks a documentation-comment template surface</li></ul><p><code>$raw</code>:</p><ul><li>preserves authored body content without a formatter</li></ul><p><code>$md</code>:</p><ul><li>applies Beanstalk Markdown formatting</li></ul><h3>HTML builder directives</h3><p>The HTML project builder adds:</p><p><code>$html</code>:</p><ul><li>treats the body as raw HTML content</li></ul><p><code>$css</code>:</p><ul><li>applies the HTML builder&#39;s CSS checking and formatting path</li></ul><p><code>$escape_html</code>:</p><ul><li>escapes HTML-sensitive body content</li></ul><p><code>$code(language)</code>:</p><ul><li>highlights a code body</li><li>suppresses nested child-template interpretation inside the code content</li></ul><h3>Formatter scope</h3><p>Formatting directives do not flow automatically into nested child templates.</p><p>A nested child that needs <code>$md</code>, <code>$raw</code>, <code>$html</code>, <code>$css</code>, <code>$escape_html</code> or <code>$code</code> declares that formatter itself.</p><p>Beandown is the exception:</p><ul><li>a nested template with no explicit directive defaults to <code>$md</code></li><li>any explicit directive overrides that default</li></ul><p>Incompatible formatter declarations in one template head are rejected.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Template slots
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="template-slots-level"
+                id="template-slots-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="template-slots-level"
+                id="template-slots-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="template-slots">
+                    Template slots
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="template-slots-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="template-slots-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A slot is a place where another template supplies content.</p><pre style=""><code class='codeblock'>
+    card <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span>
+        <span class='bst-code-operator'>&lt;</span>section<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>section<span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span>card<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Welcome</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>This</span> is the card body.
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The named <code>title</code> slot receives <code>Welcome</code>.</p><p>The default slot receives the body text.</p><p>Slots that receive no content become empty strings.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Slots let one template receive content from another.</p><h3>Default and named slots</h3><pre style=""><code class='codeblock'>
+    card <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span>
+        <span class='bst-code-operator'>&lt;</span>section<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>section<span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span>card<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Body</span> content
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The three slot forms are:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>                 <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> default slot
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;name&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> named slot
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;name&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span> ...<span class='bst-code-parenthesis'>]</span>  <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> contribution to named slot
+    </code></pre><p>The first declares the default slot. The second declares a named slot. The third contributes to that named slot.</p><h3>Positional slots</h3><p>Positive integer slots receive loose head contributions.</p><pre style=""><code class='codeblock'>
+    image <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>img src<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(1)]&quot;</span> alt<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span>image, <span class='bst-code-string'>&quot;logo.png&quot;</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Site</span> logo<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The first loose contribution fills slot <code>1</code>.</p><p>The remaining loose body content fills the default slot.</p><h3>Routing rules</h3><ul><li>Loose contributions fill positional slots in ascending numeric order.</li><li>Remaining loose contributions go to the default slot when one exists.</li><li>Loose content that cannot be assigned is an error when no default slot exists.</li><li>Missing slots render as empty strings.</li><li>Repeated slots replay the same contribution.</li><li>Named inserts target only their named slot.</li><li>One application may combine named, positional and default contributions.</li></ul><h3>Runtime contributions</h3><p>Runtime-capable templates support slot contributions from selected template <code>if</code> branches and template loop bodies.</p><p>AST prepares the slot routing before HIR.</p><p>Runtime lowering appends the routed contributions through normal string accumulators.</p><p>Unresolved slot or insert artifacts after routing are invalid template structure.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Child wrappers
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="child-wrappers-level"
+                id="child-wrappers-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="child-wrappers-level"
+                id="child-wrappers-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="child-wrappers">
+                    Child wrappers
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="child-wrappers-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="child-wrappers-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p><code>$children(...)</code> wraps every direct child in the same template.</p><pre style=""><code class='codeblock'>
+    list <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>ul<span class='bst-code-operator'>&gt;</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>ul<span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>This is useful for lists, table rows and repeated layout elements.</p><p>Use <code>$fresh</code> when one child should skip the immediate wrapper:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span>list<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> wrapped<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> not wrapped<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>$children(...)</code> applies a wrapper to each direct child template.</p><pre style=""><code class='codeblock'>
     list <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>ul<span class='bst-code-operator'>&gt;</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
@@ -363,116 +952,84 @@ body {
     <span class='bst-code-parenthesis'>]</span>
 
     <span class='bst-code-parenthesis'>[</span>list<span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one <span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, <code>one</code> is wrapped with <code>&lt;li&gt;...&lt;/li&gt;</code>, while <code>two</code> opts out and is rendered without the parent <code>$children(..)</code> wrapper.</p><h2>Markdown inline code</h2><p><code>$md</code> supports small inline code spans with paired isolated single backticks on one line. Inline code renders as a normal HTML <code>code</code> element, preserves whitespace, escapes authored HTML-sensitive characters, and does not parse emphasis or links inside the span.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Use</span> <span class='bst-code-operator'>`</span><span class='bst-code-keyword'>copy</span><span class='bst-code-operator'>`</span> when you need an explicit copy.
-        <span class='bst-code-struct'>Write</span> literal template syntax <span class='bst-code-keyword'>as</span> <span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>`</span>.
+    </code></pre><p>Each direct child becomes one list item.</p><h3>Direct-child scope</h3><p>The wrapper applies only to direct children.</p><p>A selected child becomes an opaque contribution to its parent.</p><p>The parent&#39;s wrapper does not descend into that child&#39;s nested templates.</p><p>A nested helper may declare its own <code>$children(...)</code> wrapper.</p><p>This keeps row, cell, list and layout helpers from leaking wrappers into deeper content.</p><h3><code>$fresh</code></h3><p><code>$fresh</code> opts one child out of the immediate parent wrapper.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span>list<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Unmatched backticks and repeated backtick runs render literally. Triple-backtick fences, variable-length code-span delimiters, multiline code spans, and markdown-level backtick escaping are not part of Beanstalk markdown. Use <code>$code(...)</code> for larger code examples.</p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as <code>[$slot]</code> and marks where the main body content should be inserted.</p><p>Named slots can also be declared with <code>[$slot("name")]</code>. These allow helper templates to insert content into a specific part of another template using <code>$insert(&quot;name&quot;)</code>.</p><p>Positional slots can be declared using positive integers, such as <code>[$slot(1)]</code>, <code>[$slot(2)]</code>, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    img <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>&lt;</span>img src<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(1)]&quot;</span> alt<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-operator'>&gt;</span>
-    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The first child receives the list-item wrapper.</p><p>The second child does not.</p><p><code>$fresh</code>:</p><ul><li>affects one child</li><li>affects only the immediate parent wrapper</li><li>does not change sibling behaviour</li><li>does not disable wrappers declared deeper inside the child</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Template control flow
+    </legend>
 
-    <span class='bst-code-parenthesis'>[</span>img, <span class='bst-code-string'>&quot;logo.png&quot;</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Site</span> logo<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, <code>&quot;logo.png&quot;</code> fills the first positional slot <code>[$slot(1)]</code>, and <code>&quot;Site logo&quot;</code> fills the default <code>$slot</code>.</p><p>Named inserts:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    title <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span> style<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(&quot;</span>style<span class='bst-code-string'>&quot;)]&quot;</span><span class='bst-code-operator'>&gt;</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span>
-    <span class='bst-code-parenthesis'>]</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="template-control-flow-level"
+                id="template-control-flow-basic"
+                value="basic"
+                checked
+            >
 
-    blue <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;style&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span> color<span class='bst-code-operator'>:</span> blue;<span class='bst-code-parenthesis'>]</span>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="template-control-flow-level"
+                id="template-control-flow-advanced"
+                value="advanced"
+            >
 
-    <span class='bst-code-parenthesis'>[</span>title, blue<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Hello</span> world
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, <code>blue</code> inserts <code>color: blue;</code> into the <code>$slot(&quot;style&quot;)</code> slot of <code>title</code>, while <code>Hello world</code> is inserted into the default <code>$slot</code>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.  If a slot receives no content, it expands to an empty string. Repeated slots, such as two occurrences of <code>[$slot(1)]</code>, will replay the same content in both places.</p><p>Slot applications may contain runtime-producing content. Runtime-capable templates support default, named, positional, and loose contributions from template <code>if</code> branches and template <code>loop</code> bodies. Valid runtime slot applications are routed during AST preparation, then lowered through ordinary runtime string accumulators. Missing slots still render as empty strings, and repeated slots replay the same accumulated contribution.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    card <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span>
-        <span class='bst-code-operator'>&lt;</span>section<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>section<span class='bst-code-operator'>&gt;</span>
-    <span class='bst-code-parenthesis'>]</span>
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="template-control-flow">
+                    Template control flow
+    </h2>
 
-    <span class='bst-code-parenthesis'>[</span>card<span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> maybe_title is <span class='bst-code-operator'>|</span>title<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-                <span class='bst-code-parenthesis'>[</span>title<span class='bst-code-parenthesis'>]</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
-                <span class='bst-code-struct'>Untitled</span>
-            <span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>]</span>
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="template-control-flow-basic"
+                    >
+                        Basic
+                    </label>
 
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Because <code>$children(..)</code> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child. The parent <code>$children(..)</code> wrapper must not descend into that child and wrap its nested templates. If nested templates need their own wrappers, the child template should declare its own <code>$children(..)</code> directive.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    table <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>&lt;</span>table style<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(&quot;</span>style<span class='bst-code-string'>&quot;)]&quot;</span><span class='bst-code-operator'>&gt;</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>table<span class='bst-code-operator'>&gt;</span>
-    <span class='bst-code-parenthesis'>]</span>
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="template-control-flow-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
 
-    row <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
+            <div class="doc-level__panel doc-level__panel--basic">
+                
 
-    <span class='bst-code-parenthesis'>[</span>styled_table<span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span> with <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>html<span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>code<span class='bst-code-operator'>&gt;</span>inline helper<span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>code<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span> content<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>]</span>
 
-        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-type'>Float</span><span class='bst-code-parenthesis'>]</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>64</span><span class='bst-code-operator'>-</span>bit floating point number<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>]</span>
+
+            <p>A template can choose content with <code>if</code>.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> signed_in<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Welcome</span> back
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Please</span> sign <span class='bst-code-keyword'>in</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In that example, <code>table</code> wraps each direct <code>row</code> child in <code>&lt;tr&gt;</code>. Then <code>row</code> wraps each direct cell child in <code>&lt;td&gt;</code>. The nested inline <code>code</code> element inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template head suffix control flow</h2><p>Template control flow is written as the final suffix in the template head, immediately before the body colon. If the head already contains a value, helper, or directive, put a comma before <code>if</code> or <code>loop</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p>A template can repeat content with <code>loop</code>.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> names <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>p<span class='bst-code-operator'>&gt;</span><span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>p<span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Two structural controls are available inside a template loop:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span>break<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span>continue<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The first ends the loop. The second skips the rest of one iteration.</p><p>Template control flow builds output lazily at runtime unless a const template requires it to finish during compilation.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Templates support <code>if</code> and <code>loop</code> as final head suffixes.</p><p>If the head already contains a value, helper or directive, add a comma before the control-flow suffix.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> show<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Visible</span>
     <span class='bst-code-parenthesis'>]</span>
@@ -480,87 +1037,129 @@ body {
     <span class='bst-code-parenthesis'>[</span>card, <span class='bst-code-keyword'>if</span> show<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Visible</span> inside card
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Boolean <code>if</code> conditions choose one branch lazily at runtime. <code>[else if ...]</code> adds more branches in source order and uses the same Bool and option-present selectors as the initial <code>if</code>. <code>[else]</code> is optional, must be standalone, and binds to the nearest active template <code>if</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    show_summary <span class='bst-code-operator'>=</span> false
-    show_details <span class='bst-code-operator'>=</span> true
-
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> show_summary<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Summary</span>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span> <span class='bst-code-keyword'>if</span> show_details<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-struct'>Details</span>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-struct'>Empty</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Option-present captures use the normal <code>is |name|</code> form. The captured value is visible only inside the selected branch.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    maybe_name <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> none
-    maybe_backup <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
-
+    </code></pre><h3>Template <code>if</code></h3><p>Template <code>if</code> supports:</p><ul><li><code>Bool</code> conditions</li><li>option-present capture with <code>is |name|</code></li><li>standalone <code>else if</code> branches</li><li>one optional standalone <code>else</code></li></ul><pre style=""><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span> <span class='bst-code-keyword'>if</span> maybe_backup is <span class='bst-code-operator'>|</span>backup<span class='bst-code-operator'>|</span><span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>backup<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span> <span class='bst-code-keyword'>if</span> use_fallback<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Hello</span> fallback
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-struct'>Hello</span> guest
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Full pattern-match branch chains belong to ordinary statement/value <code>if value is:</code> blocks, not template heads.</p><p>Template loops support conditional loops, collection loops, and numeric range loops using the same header syntax as statement loops. Conditional template loops do not take bindings. Collection and range loops can use a second binding for the zero-based index. Loops concatenate iterations directly; there is no implicit separator. Standalone <code>[break]</code> and <code>[continue]</code> sentinels are valid inside template loop bodies, including nested template <code>if</code>, <code>[else if ...]</code>, and <code>[else]</code> bodies. They target the nearest active template loop and are structural control signals, not rendered output.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> has_next<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>next_item<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-
+    </code></pre><p>The selected branch is evaluated lazily at runtime.</p><p>Full pattern-match arm chains are not template-head syntax.</p><p>Use an ordinary statement or value-producing full match when pattern arms are needed.</p><h3>Template loops</h3><p>Template loops use the ordinary loop-header families:</p><ul><li>conditional loops</li><li>collection loops</li><li>numeric ranges</li></ul><pre style=""><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
 
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>i<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>number<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>number<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-
+    </code></pre><p>Collection and range loops may bind the current value and optional zero-based index.</p><p>Iterations concatenate directly. There is no implicit separator.</p><p>Range and collection sources are evaluated once before iteration.</p><p>A conditional loop checks its condition before every iteration.</p><h3>Structural loop control</h3><p>Two standalone structural controls target the nearest active template loop.</p><p>They are signals rather than rendered strings.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> item.skip<span class='bst-code-operator'>:</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>continue</span><span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>]</span>
+
+        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> item.done<span class='bst-code-operator'>:</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>break</span><span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Head values and wrappers apply to the selected or generated output. For a loop, the owning head wraps the whole aggregate once. Put per-iteration wrappers inside the loop body.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>list, <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Output produced before a control signal is preserved.</p><p>An iteration with no output before <code>break</code> or <code>continue</code> does not count as emitted output.</p><h3>Wrappers and no-output</h3><p>A wrapper in the owning loop head wraps the complete aggregate once.</p><p>Place a per-iteration wrapper inside the loop body.</p><p>These forms produce structural no-output:</p><ul><li>a false <code>if</code> with no <code>else</code></li><li>a false conditional loop</li><li>a zero-iteration collection or range loop</li></ul><p>Shared head wrappers and parent <code>$children(...)</code> wrappers are skipped when there is structural no-output.</p><p>A selected empty branch is still selected, so its own head wrapper may render an empty wrapper.</p><h3>Fallible work and slots</h3><p>Postfix <code>!</code> inside selected runtime template content propagates from the enclosing function.</p><p>Catch blocks are not template expressions.</p><p>Runtime slot applications remain valid inside template control flow after normal slot routing.</p><p>Compile-time template control flow and iteration limits are specified by <a href="../constants/#const-templates">Const templates</a>.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Markdown formatting
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="markdown-formatting-level"
+                id="markdown-formatting-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="markdown-formatting-level"
+                id="markdown-formatting-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="markdown-formatting">
+                    Markdown formatting
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="markdown-formatting-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="markdown-formatting-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Use <code>$md</code> when a template body should be formatted as Markdown.</p><pre style=""><code class='codeblock'>
+    content <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Welcome</span>
+
+        <span class='bst-code-struct'>This</span> text becomes <span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>formatted content<span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>.
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>A false <code>if</code> with no <code>[else]</code> produces structural no-output. A false conditional loop and zero-iteration collection or range loop also produce no-output. In those cases, shared head wrappers and parent <code>$children(..)</code> wrappers are skipped. A selected branch with an empty body is still selected, so its head wrappers may render an empty wrapper. A loop iteration that reaches <code>[break]</code> or <code>[continue]</code> before any output also does not count as emitted. Output before a loop-control sentinel is preserved.</p><p>Top-level <code>#[if ...:]</code> and <code>#[loop ...:]</code> fragments must fully fold at compile time. Const-required template <code>if</code> forms validate every branch body, even when one path is inactive. Const-required conditional template loops fold to no-output when their condition is compile-time <code>false</code>. Compile-time <code>true</code> and unknown/runtime conditional-loop conditions are rejected because the compiler does not perform template loop termination analysis. Const range and collection template loops can fold structural <code>[break]</code> and <code>[continue]</code>, and use the <code>template_const_loop_iteration_limit</code> project config guard. The default is <code>10_000</code> iterations per const template loop, and the configured value must be a positive folded <code>Int</code> no greater than <code>1_000_000</code>.</p><p>Runtime template control flow stays lazy. Only the selected <code>if</code> branch is evaluated. Range and collection loop sources are evaluated once before iteration; conditional loop conditions are evaluated before every iteration. Expression-level <code>!</code> inside selected branch or loop content propagates from the enclosing function.</p><p>Runtime slot applications are valid inside template control flow after normal slot routing. Escaped helper artifacts that still leave unresolved <code>[$slot]</code> or <code>$insert(...)</code> output inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-template-loop <code>[break]</code> / <code>[continue]</code> rules as direct loop body content.</p></section>
+    </code></pre><p>Small inline code spans use one backtick on each side.</p><p>Use <code>$code(&quot;bst&quot;)</code> or another language name for a full highlighted code block.</p><p>Beanstalk Markdown is deliberately small. It does not support fenced code blocks or pipe tables.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>$md</code> applies Beanstalk&#39;s small Markdown flavour.</p><p>It is intentionally not a full CommonMark implementation.</p><pre style=""><code class='codeblock'>
+    content <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Title</span>
+
+        <span class='bst-code-struct'>Use</span> <span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>clear names<span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span> and <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>other<span class='bst-code-operator'>-</span>page <span class='bst-code-parenthesis'>(</span>helpful links<span class='bst-code-parenthesis'>)</span>.
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><h3>Inline code</h3><p>Inline code uses paired isolated single backticks on one Markdown line.</p><p>It renders as a normal HTML <code>code</code> element.</p><p>Inside an inline code span:</p><ul><li>authored whitespace is preserved</li><li>HTML-sensitive authored characters are escaped</li><li>emphasis is not parsed</li><li>links are not parsed</li></ul><p>Not supported:</p><ul><li>empty code spans</li><li>repeated backtick runs</li><li>unmatched backticks</li><li>multiline code spans</li><li>variable-length delimiters</li><li>fenced code blocks</li><li>Markdown-level backtick escaping</li></ul><p>Use <code>$code(language)</code> for larger code examples.</p><h3>Dynamic content boundaries</h3><p>A dynamic expression anchor may appear inside a parent-authored code span.</p><p><code>$md</code> does not inspect that expression&#39;s rendered output.</p><p>A child template is an opaque formatting boundary.</p><p>A parent Markdown span cannot begin before a child and end after it.</p><h3>Tables</h3><p>Markdown pipe-table syntax is not part of Beanstalk Markdown.</p><p>Inside <code>.bd</code> content, use a structured list.</p><p>When a website page genuinely needs a visual table, build it in the owning <code>.bst</code> page with Beanstalk table helpers.</p><p>Do not rely on pipe-table text rendering as a table.</p><h3>Related content formats</h3><p>Beandown <code>.bd</code> files use an implicit compile-time <code>$md</code> template.</p><p>Plain <code>.md</code> files use the separate raw Markdown content path.</p><p>See <a href="../beandown">Beandown</a> and <a href="../markdown">Plain Markdown</a> for those file contracts.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../collections/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Collections and maps</span>
+            </a>
+
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../constants/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Constants and compile-time behaviour</span>
+            </a>
+
+            
+
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -853,10 +1452,10 @@ body {
     }
 
     function b_fn6() {
-    let b_l22 = __bs_binding(undefined);
+    let b_l24 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l22, []);
-    return __bs_read(b_l22);
+    __bs_assign_value(b_l24, []);
+    return __bs_read(b_l24);
     }
 
     </script>

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Errors, Options, and Assertions in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Error values, error propagation, option values, and always-checked assertions in Beanstalk.">
+    <title>Errors, options and assertions | Beanstalk</title>
+    <meta name="description" content="Recoverable errors, optional values, local recovery and assertions in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,68 +661,131 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> ERRORS, OPTIONS, AND ASSERTIONS IN BEANSTALK</h1>
-    <section class="container"><p>This page tracks Beanstalk&#39;s current error-handling surface. The public <code>Error</code> value shape and <code>catch</code> forms shown here are current.</p><p>Errors are values in Beanstalk.</p><p>Functions that can fail return an <code>Error</code> value through a dedicated error return slot.</p><p>That error slot is marked with <code>!</code>.</p><p>Any call that can return an error must handle it.</p><p>The core rule is:</p><p>&gt; If a function can return an error, the caller must either catch the error or bubble it upward.</p></section>
-    <section class="container"><h1>Core syntax</h1><p>Error-returning functions mark one return slot with <code>!</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    parse_number <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> text.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing number&quot;</span>, <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
-        ;
+    <section class="container"><p><a href="../">Documentation</a> / Errors, options and assertions</p><h1>Errors, options and assertions</h1><p>Missing data, expected failure and a broken invariant are three different problems. Beanstalk gives each one a separate path.</p><p>Use options for ordinary absence. Use typed error returns when callers need failure information. Use assertions when continuing would be wrong.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Error values
+    </legend>
 
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>42</span>
-    ;
-    </code></pre><p>In this example:</p><ul><li><code>Int</code> is the success value</li><li><code>Error!</code> is the error slot</li><li><code>return!</code> returns through the error slot</li><li>normal <code>return</code> returns through the success path</li></ul><p>The <code>!</code> marker does not mean panic.</p><p>It means this function has a typed error path that callers must handle. Expected failures should use <code>Error!</code> and <code>catch</code>. Assertions are for unrecoverable invariants and are the current explicit panic path.</p><p><code>catch:</code> and <code>catch |err|:</code> are the supported result recovery forms. <code>then</code> produces local values for a surrounding value-receiving site. Value-producing <code>if</code> and full match receivers reuse that mechanism now; catch recovery still uses it inside catch handlers until catch is refactored onto the shared value-block model. Public first-class <code>Result</code> values and raw fallible carrier storage remain deferred; use <code>!</code> return slots and call-site handling instead.</p></section>
-    <section class="container"><h1>The Error type</h1><p><code>Error</code> is a builtin language type.</p><p>It carries a human-readable message and an integer code.</p><p>Publicly, <code>Error</code> contains:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="error-values-level"
+                id="error-values-basic"
+                value="basic"
+                checked
+            >
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Field</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
-    </tr>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="error-values-level"
+                id="error-values-advanced"
+                value="advanced"
+            >
 
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="error-values">
+                    Error values
+    </h2>
 
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="error-values-basic"
+                    >
+                        Basic
+                    </label>
 
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="error-values-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>message</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>String</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Human-readable explanation </td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>code</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>Int</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Stable numeric error code. Defaults to <code>0</code>. </td>
-        </tr>
 
-            
+            <p>An <code>Error</code> carries a message and an optional numeric code.</p><pre style=""><code class='codeblock'>
+    missing <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing value&quot;</span><span class='bst-code-parenthesis'>)</span>
+    coded <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing value&quot;</span>, <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The code defaults to <code>0</code>.</p><p>Use the message to explain the failure. Use the code when a stable category is useful to callers or tools.</p>
+    </div>
 
-    </table><p><code>Error</code> is the only reserved builtin name in this family. <code>ErrorKind</code>, <code>ErrorLocation</code>, and <code>StackFrame</code> are ordinary user-available names.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>Error</code> is Beanstalk&#39;s builtin structured error type.</p><p>Its public fields are:</p><ul><li><code>message String</code></li><li><code>code Int = 0</code></li></ul><pre style=""><code class='codeblock'>
     missing <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing value&quot;</span><span class='bst-code-parenthesis'>)</span>
     coded <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Missing value&quot;</span>, code <span class='bst-code-operator'>=</span> <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre></section>
-    <section class="container"><h1>Returning errors</h1><p>Use <code>return!</code> to return through the error slot.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><h3>Contract</h3><ul><li><code>message</code> carries the human-readable explanation.</li><li><code>code</code> carries a stable integer code and defaults to <code>0</code>.</li><li>Positional construction follows field order.</li><li>Named construction follows normal constructor argument rules.</li><li><code>Error</code> is reserved by the language.</li><li><code>ErrorKind</code>, <code>ErrorLocation</code> and <code>StackFrame</code> remain ordinary user-available names.</li></ul><p><code>Error!</code> in a function signature marks an error return channel. It does not create a panic path and it is not a separate ordinary value type.</p><p>Custom structs and other compatible types may also be used as explicit error slot types. The builtin <code>Error</code> type is the common language-owned surface and the only automatic target for checked numeric recovery.</p><p>Casts between <code>String</code> and <code>Error</code> are documented by <a href="../casts">Casts</a>.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Error returns
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="error-returns-level"
+                id="error-returns-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="error-returns-level"
+                id="error-returns-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="error-returns">
+                    Error returns
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="error-returns-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="error-returns-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A function that can fail adds one final return marked with <code>!</code>.</p><pre style=""><code class='codeblock'>
+    parse_number <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>if</span> text.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing number&quot;</span><span class='bst-code-parenthesis'>)</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>42</span>
+    ;
+    </code></pre><p>Normal <code>return</code> sends success values.</p><p><code>return!</code> sends one error value.</p><p>The caller must handle that error by propagating it or catching it.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A fallible function marks one return slot with <code>!</code>.</p><pre style=""><code class='codeblock'>
     parse_number <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>if</span> text.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
             <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing number&quot;</span>, <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
@@ -388,342 +793,351 @@ body {
 
         <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>42</span>
     ;
-    </code></pre><p>A function with an <code>Error!</code> return slot can return either:</p><ul><li>success values with <code>return</code></li><li>an error value with <code>return!</code></li></ul><p>This keeps success and failure paths explicit.</p></section>
-    <section class="container"><h1>Bubbling errors</h1><p>Use a trailing <code>!</code> to bubble an error to the surrounding function.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><h3>Signature contract</h3><ul><li>A function may declare at most one error-channel slot.</li><li>The error slot must be the final return slot.</li><li>Success slots appear before it.</li><li>A function may have success slots plus one error slot.</li><li>A function may also expose only an error slot.</li><li>An alias-candidate return slot cannot be the error slot.</li></ul><p>The error slot type is explicit. <code>Error!</code> is common, but a compatible custom error type can be used when the function contract requires it.</p><h3>Returning an error</h3><p><code>return! expression</code> leaves through the current function&#39;s error channel.</p><ul><li>The current function must declare an error slot.</li><li>Exactly one error value is required.</li><li>The value must be compatible with the declared error type.</li><li><code>return!</code> is terminal for the current path.</li><li>Normal success values use <code>return</code>.</li></ul><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Failure</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        message <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    fail <span class='bst-code-operator'>|</span>message <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Failure</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Failure</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Checked numeric operations use automatic recovery only when the current error slot is the builtin <code>Error!</code> channel. Custom error slots do not receive an implicit conversion.</p><p>First-class public <code>Result</code> values and result pattern matching are outside the current language path. Fallible carriers are consumed by <code>!</code> or <code>catch</code> at the call site.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Error propagation
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="propagation-level"
+                id="propagation-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="propagation-level"
+                id="propagation-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="propagation">
+                    Error propagation
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="propagation-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="propagation-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Add <code>!</code> after a fallible call when the current function should pass the error to its caller.</p><pre style=""><code class='codeblock'>
     wrapper <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
         <span class='bst-code-keyword'>return</span> value
     ;
-    </code></pre><p>If <code>parse_number(text)</code> succeeds, execution continues normally.</p><p>If it returns an error, the surrounding function returns that error from its own error slot.</p><p>The surrounding function must declare a compatible <code>Error!</code> return slot.</p></section>
-    <section class="container"><h1>Catching errors</h1><p>Use <code>catch</code> to inspect or recover from an error.</p><p><code>catch</code> has two forms:</p><ul><li><code>catch:</code> runs a recovery block when the error value is not needed</li><li><code>catch |err|:</code> binds the error and runs a recovery block</li></ul><p>A catch block can recover with fallback success values by producing values with <code>then</code>. <code>then</code> returns expressions from the catch block to the containing assignment, return, or multi-bind site. Nested ordinary branch paths inside a value-producing catch can also target the same catch recovery block with <code>then</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p>On success, <code>value</code> receives the parsed number.</p><p>On failure, <code>wrapper</code> returns the error immediately.</p><p>The surrounding function needs a compatible error return slot.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Postfix <code>!</code> propagates a fallible value&#39;s error through the enclosing function.</p><pre style=""><code class='codeblock'>
     wrapper <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
-        ;
-
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
         <span class='bst-code-keyword'>return</span> value
     ;
-    </code></pre><p>In this example:</p><ul><li><code>err</code> is the caught error value</li><li>the handler body can inspect or log the error</li><li><code>return! err</code> explicitly rethrows the same error through the surrounding function</li></ul><p>A success-producing <code>catch</code> block without <code>then</code> must terminate on every reachable handler path with <code>return</code> or <code>return!</code>. Otherwise the handled expression would have no success value to assign.</p></section>
-    <section class="container"><h1>Recovering with fallback values</h1><p>Use <code>catch:</code> with <code>then</code> to recover from an error with fallback success values.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
-            then <span class='bst-code-number'>0</span>
-        ;
+    </code></pre><h3>Contract</h3><ul><li>The handled expression must have a fallible error channel.</li><li>The enclosing function must declare an error slot.</li><li>The produced error type must be compatible with that slot.</li><li>On success, the expression yields its success values.</li><li>On failure, the current function returns the error immediately.</li><li>A no-success fallible operation may still use postfix <code>!</code> as a statement.</li><li>Multi-success fallible calls may feed a matching multi-bind.</li></ul><pre style=""><code class='codeblock'>
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+    </code></pre><p>Postfix propagation is not panic syntax.</p><p><code>cast!</code> uses the same outward error path for a fallible explicit cast, but its target and evidence rules remain owned by <a href="../casts">Casts</a>.</p><h3>Removed forms</h3><p>Old inline fallback and bang-handler spellings are invalid.</p><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span><span class='bst-code-number'>0</span>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span>
+    </code></pre><p>Use <code>catch then ...</code> or a block <code>catch:</code> handler for recovery.</p><p>Checked numeric recovery is compiler-owned control flow. Numeric operators do not become first-class source-visible <code>Error!</code> expressions.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Catch and recovery
+    </legend>
 
-        <span class='bst-code-keyword'>return</span> value
-    ;
-    </code></pre><p>If <code>parse_number(text)</code> succeeds, <code>value</code> receives the parsed number.</p><p>If it returns an error, <code>value</code> receives <code>0</code>.</p><p>The <code>then</code> value must match the expected success type.</p></section>
-    <section class="container"><h1>Recovering with a handler block</h1><p>Use <code>catch |err|:</code> when recovery needs to inspect or log the error.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-            then <span class='bst-code-number'>0</span>
-        ;
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="catch-and-recovery-level"
+                id="catch-and-recovery-basic"
+                value="basic"
+                checked
+            >
 
-        <span class='bst-code-keyword'>return</span> value
-    ;
-    </code></pre><p>In this example:</p><ul><li><code>err</code> is the caught error value</li><li><code>then 0</code> returns the fallback success value from the catch block</li><li>the handler body can inspect or log the error</li><li>the surrounding function does not need to return <code>Error!</code></li></ul><p>The handler body runs only on the error path.</p><p>The <code>then</code> fallback value is used after the handler body completes.</p></section>
-    <section class="container"><h1>Overriding catch behavior</h1><p>A success-producing <code>catch</code> block can omit <code>then</code> only when the handler exits explicitly.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
-        ;
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="catch-and-recovery-level"
+                id="catch-and-recovery-advanced"
+                value="advanced"
+            >
 
-        <span class='bst-code-keyword'>return</span> value
-    ;
-    </code></pre><p>In this example, the surrounding function returns <code>0</code> from inside the <code>catch</code> block.</p><p>This is useful when the surrounding function does not return <code>Error!</code>, but the recovery path needs more control than a fallback expression.</p></section>
-    <section class="container"><h1>Multiple success values</h1><p>Beanstalk supports multiple return values.</p><p>A function can return multiple success values and one error slot.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    load_user <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> id.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing user id&quot;</span>, <span class='bst-code-number'>1000</span><span class='bst-code-parenthesis'>)</span>
-        ;
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="catch-and-recovery">
+                    Catch and recovery
+    </h2>
 
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;guest&quot;</span>, <span class='bst-code-number'>0.0</span>
-    ;
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="catch-and-recovery-basic"
+                    >
+                        Basic
+                    </label>
 
-    name, score <span class='bst-code-operator'>=</span> load_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-        then <span class='bst-code-string'>&quot;guest&quot;</span>, <span class='bst-code-number'>0.0</span>
-    ;
-    </code></pre><p>The <code>then</code> fallback values must match the success return list.</p><p>If the success path returns two values, the recovery path must provide two fallback values.</p></section>
-    <section class="container"><h1>Error handling forms</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="catch-and-recovery-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
-    </tr>
-
-
-
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>parse_number(text)!</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Bubble the error to the surrounding function. </td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>parse_number(text) catch: then 0 ;</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Use <code>0</code> as a fallback value if an error is returned. </td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>parse_number(text) catch |err|: ... return! err ;</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Bind the error as <code>err</code>, run a handler block, and terminate explicitly with <code>return</code> or <code>return!</code>. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>parse_number(text) catch |err|: ... then 0 ;</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Bind the error as <code>err</code>, run a handler block, then recover with <code>0</code>. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>return!</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Return an error from the current function's error slot. </td>
-        </tr>
-            
-
-    </table></section>
-    <section class="container"><h1>Collection errors</h1><p>Collection operations use structured errors for invalid runtime cases.</p><p>By default, <code>get(index)</code> returns a result-like value that must be handled.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    my_list <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
-
-    fallback <span class='bst-code-operator'>=</span> my_list.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+            <p>Use <code>catch</code> when the current code has a useful fallback.</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-
-    value <span class='bst-code-operator'>=</span> my_list.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>Use <code>catch |err|:</code> when the message or code matters:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-        then fallback
+        then <span class='bst-code-number'>0</span>
     ;
-    </code></pre><p>If the index is out of bounds, the error value is an <code>Error</code> with a <code>message</code> field.</p><p>Collection methods should not silently ignore invalid operations.</p><p>They should produce structured errors that can be caught, bubbled, or recovered from.</p></section>
-    <section class="container"><h1>Strict runtime validation</h1><p>Collection methods should enforce strict runtime validation.</p><p>This includes:</p><ul><li>invalid receivers</li><li>out-of-bounds indices</li><li>invalid mutation targets</li><li>invalid remove operations</li><li>backend-specific runtime failures</li></ul><p>Compiler-owned collection methods report failures through the same fallible call path as user functions.</p><p>User code still sees the same error-handling surface:</p><ul><li>recover with a fallback</li><li>recover with a catch handler block</li><li>bubble the error</li></ul></section>
-    <section class="container"><h1>Options</h1><p>Optional values use <code>?</code>.</p><p>An optional value represents a value that may not exist.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    find_url <span class='bst-code-operator'>|</span>has_url <span class='bst-code-type'>Bool</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> has_url<span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;https://nyejames.com&quot;</span>
-        ;
+    </code></pre><p>A short fallback can stay on one line:</p><pre style=""><code class='codeblock'>
+    count <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch then <span class='bst-code-number'>0</span>
+    </code></pre><p>Use <code>then</code> to provide the value expected by the surrounding assignment.</p>
+    </div>
 
-        <span class='bst-code-keyword'>return</span> none
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>catch</code> handles a fallible value locally.</p><h3>Block forms</h3><p>Use <code>catch:</code> when the error value is not needed.</p><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
     ;
+    </code></pre><p>Use <code>catch |err|:</code> when the handler needs the error.</p><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>The error binding:</p><ul><li>is immutable</li><li>is visible only inside the handler</li><li>must not shadow another visible name</li><li>has the fallible expression&#39;s declared error type</li></ul><h3>Inline forms</h3><p>A simple recovery may stay on one logical line.</p><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch then <span class='bst-code-number'>0</span>
+    other <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span> then <span class='bst-code-number'>0</span>
+    </code></pre><p>Inline catch:</p><ul><li>uses <code>then</code></li><li>stays on one logical line</li><li>may produce the receiver&#39;s required value list</li><li>does not contain a statement body</li></ul><h3>Value requirements</h3><p>When the handled expression has success values and the receiving site needs them, every reachable handler path must:</p><ul><li>produce the required values with <code>then</code></li><li>leave the enclosing function with <code>return</code></li><li>leave through its error channel with <code>return!</code></li></ul><p>A handler that can fall through without producing or terminating is invalid.</p><pre style=""><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>A fallible operation with no success values does not need <code>then</code>.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;push failed&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Context and conflicts</h3><ul><li><code>catch</code> and postfix <code>!</code> are alternative handling paths.</li><li>One expression cannot use both.</li><li><code>catch</code> handles only the selected fallible expression.</li><li>Catch bodies are statement-like and are rejected inside conditions, templates and constants.</li><li>First-class fallible carriers cannot be stored without handling.</li></ul><p><code>then</code> and closed receiving sites are specified by <a href="../branching/#value-producing-if">Value-producing if</a>.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Options
+    </legend>
 
-    url <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> find_url<span class='bst-code-parenthesis'>(</span>false<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><code>none</code> is the only special option value.</p><p>A normal value of type <code>T</code> can be used where <code>T?</code> is expected.</p><p><code>none</code> requires an optional type context.</p><p>Option recovery uses explicit present-value inspection.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    display_name <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
-    </code></pre><p><code>|name|</code> matches the present case and binds the inner value. Absence checks remain statement-friendly:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-keyword'>if</span> maybe_name is none<span class='bst-code-operator'>:</span>
-        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><p>Direct option fallback syntax such as <code>maybe_name else then &quot;guest&quot;</code> is rejected in favour of <code>if option is |value| ... else ...</code>.</p><p>Postfix <code>?</code> propagates absence from functions that return an optional value.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="options-level"
+                id="options-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="options-level"
+                id="options-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="options">
+                    Options
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="options-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="options-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Use <code>T?</code> when a value may be missing and that absence is normal.</p><pre style=""><code class='codeblock'>
+    nickname <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> none
+    </code></pre><p>A normal <code>String</code> can be used where <code>String?</code> is expected.</p><p>Inspect a present value with <code>is |name|</code>:</p><pre style=""><code class='codeblock'>
+    display_name <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> nickname is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
+    </code></pre><p>Use postfix <code>?</code> inside a function that also returns an optional value:</p><pre style=""><code class='codeblock'>
     get_display_name <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
         user <span class='bst-code-operator'>=</span> find_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>?</span>
         <span class='bst-code-keyword'>return</span> user.name
     ;
-    </code></pre></section>
-    <section class="container"><h1>Errors, options, and assertions</h1><p>Errors, options, and assertions solve different problems.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>If <code>find_user</code> returns <code>none</code>, the current function returns <code>none</code> too.</p>
+    </div>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use when</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
-    </tr>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>T?</code> is an optional value that may contain <code>T</code> or may be absent.</p><p><code>none</code> is the only special absent value.</p><pre style=""><code class='codeblock'>
+    name <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> none
+    fallback <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;guest&quot;</span>
+    </code></pre><h3>Contextual wrapping</h3><p>A value of <code>T</code> can be used where <code>T?</code> is expected.</p><p><code>none</code> requires an immediate optional receiving context. It is not a standalone inferred type.</p><p>Optional values are not automatically unwrapped.</p><h3>Present-value inspection</h3><p>Inline inspection:</p><pre style=""><code class='codeblock'>
+    display_name <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
+    </code></pre><p>Statement inspection:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> maybe_name is none<span class='bst-code-operator'>:</span>
+        io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Full option match:</p><pre style=""><code class='codeblock'>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-string'>&quot;Ada&quot;</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then <span class='bst-code-string'>&quot;Hi Ada&quot;</span>
+        <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then name
+        none <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> then <span class='bst-code-string'>&quot;guest&quot;</span>
+    ;
+    </code></pre><p>Option patterns support:</p><ul><li><code>none</code></li><li>compatible literal present-value patterns</li><li>compatible relational present-value patterns</li><li><code>|name|</code> to capture any present value</li><li>guards</li><li><code>else =&gt;</code></li></ul><p>An option match can be exhaustive without <code>else =&gt;</code> when it has both an unguarded <code>none</code> arm and an unguarded present-value capture.</p><p>Direct fallback syntax such as <code>maybe_name else then &quot;guest&quot;</code> is invalid.</p><h3>Postfix propagation</h3><p>Postfix <code>?</code> unwraps a present value or returns <code>none</code> from the enclosing function.</p><pre style=""><code class='codeblock'>
+    get_display_name <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
+        user <span class='bst-code-operator'>=</span> find_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>?</span>
+        <span class='bst-code-keyword'>return</span> user.name
+    ;
+    </code></pre><p>The exact contract is:</p><ul><li>the operand must be optional</li><li>the enclosing function must have exactly one success return slot</li><li>that success slot must be a compatible optional type</li><li>the present payload becomes the expression result</li><li>absence returns <code>none</code> immediately</li><li><code>?</code> cannot be followed by <code>catch</code></li></ul><p>Options are compiler-owned value shapes. Source code does not construct public <code>Option</code> variants.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Assertions
+    </legend>
 
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="assertions-level"
+                id="assertions-basic"
+                value="basic"
+                checked
+            >
 
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="assertions-level"
+                id="assertions-advanced"
+                value="advanced"
+            >
 
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="assertions">
+                    Assertions
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="assertions-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="assertions-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>T?</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Absence is expected and not a failure. </td>
-     <td style="padding: 0.2em 0.5em;  "> A user profile has no avatar. </td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>Error!</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Something failed and the caller needs failure information. </td>
-     <td style="padding: 0.2em 0.5em;  "> Parsing text failed because the format was invalid. </td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>assert</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> A required invariant is false and execution must stop. </td>
-     <td style="padding: 0.2em 0.5em;  "> An index must already be in bounds before unsafe work continues. </td>
-        </tr>
-            
+            <p>Use <code>assert</code> for a condition that must already be true.</p><pre style=""><code class='codeblock'>
+    assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length<span class='bst-code-parenthesis'>)</span>
+    assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length, <span class='bst-code-string'>&quot;index must be in bounds&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A failed assertion stops the current program path.</p><p>It is not a recoverable error and cannot be caught.</p><p>Use <code>Error!</code> for failures callers are expected to handle. Use <code>assert</code> for broken assumptions and impossible states.</p>
+    </div>
 
-    </table><p>Use <code>?</code> when missing data is ordinary.</p><p>Use <code>Error!</code> when failure details matter.</p><p>Use <code>assert</code> for broken assumptions, not regular failures.</p></section>
-    <section class="container"><h1>Assertions</h1><p>Assertions are different from recoverable errors.</p><p>A failed assertion means the program should not continue.</p><p>Assertions are intended for cases such as:</p><ul><li>impossible states</li><li>critical invariant violations</li><li>debugging unexpected state</li><li>stopping before unsafe or invalid behavior could continue</li></ul><p>Assertion syntax:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p><code>assert</code> is an always-checked statement intrinsic for invariants.</p><pre style=""><code class='codeblock'>
     assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length<span class='bst-code-parenthesis'>)</span>
     assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length, <span class='bst-code-string'>&quot;index must be in bounds&quot;</span><span class='bst-code-parenthesis'>)</span>
     assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;unimplemented backend path&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><code>assert</code> is a language-owned statement intrinsic, not a function. It returns no value, cannot be assigned or passed as an argument, and cannot be used in template interpolation.</p><p>Assertions are always checked in development and release builds.</p><p>Failed assertions are unrecoverable in Beanstalk source. They do not return <code>Error!</code>, and <code>catch</code> cannot catch them.</p><p><code>assert(false, &quot;message&quot;)</code> is the only explicit source-level spelling for an intentional unrecoverable stop for now.</p><p>Assertion messages currently must be string literals. Runtime message expressions and compile-time constant messages are deferred until failure-only message evaluation is designed.</p><p>Most expected failures should use <code>Error!</code> instead.</p></section>
-    <section class="container"><h1>Assertion diagnostics</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><h3>Accepted forms</h3><pre style=""><code class='codeblock'>
+    assert<span class='bst-code-parenthesis'>(</span>condition<span class='bst-code-parenthesis'>)</span>
+    assert<span class='bst-code-parenthesis'>(</span>condition, <span class='bst-code-string'>&quot;literal message&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><ul><li>The condition must resolve to <code>Bool</code>.</li><li>The condition is required.</li><li>The optional message must be a quoted string literal.</li><li>Exactly one condition and at most one message are accepted.</li><li>Named arguments are invalid.</li><li>Mutable access markers are invalid.</li><li>Parentheses are required.</li></ul><h3>Failure behaviour</h3><ul><li>Assertions are checked in development and release builds.</li><li>Failure is unrecoverable in Beanstalk source.</li><li>Failure does not produce <code>Error!</code>.</li><li>Postfix <code>!</code> is invalid.</li><li><code>catch</code> is invalid.</li><li>Expected runtime failures should use a typed error path instead.</li></ul><h3>Statement-only contract</h3><p><code>assert</code>:</p><ul><li>cannot be assigned</li><li>cannot be passed as an argument</li><li>cannot be imported or aliased</li><li>cannot appear in template interpolation</li><li>does not produce a value</li></ul><p><code>assert(false)</code> and <code>assert(false, &quot;message&quot;)</code> are statically terminal.</p><p>They may end a function path that otherwise requires a value.</p><p>A dynamic <code>assert(condition)</code> is not statically terminal because the condition may succeed.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../choices/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Choices</span>
+            </a>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Invalid form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Diagnostic direction</th> 
-    </tr>
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../collections/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Collections and maps</span>
+            </a>
 
-
-
-                
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>assert(1)</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> The condition must be <code>Bool</code>. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>assert()</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> The assertion condition is required. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>assert(true, value)</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Assertion messages must be string literals for now. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>value = assert(true)</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> <code>assert</code> is statement-only and cannot be used as a value. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>assert(true) catch:</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Assertion failure is not a recoverable <code>Error!</code> path. </td>
-        </tr>
             
 
-    </table></section>
-    <section class="container"><h1>Full example</h1><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    parse_number <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>if</span> text.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Missing number&quot;</span>, <span class='bst-code-number'>200</span><span class='bst-code-parenthesis'>)</span>
-        ;
 
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>42</span>
-    ;
 
-    wrapper <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        <span class='bst-code-keyword'>return</span> value
-    ;
-
-    log_then_rethrow <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
-        ;
-
-        <span class='bst-code-keyword'>return</span> value
-    ;
-
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            io.line<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
-            then <span class='bst-code-number'>0</span>
-        ;
-
-        <span class='bst-code-keyword'>return</span> value
-    ;
-
-    fallback_value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
-        then <span class='bst-code-number'>0</span>
-    ;
-    </code></pre><p>This example shows the core call-site choices:</p><ul><li>bubble with <code>parse_number(text)!</code></li><li>recover with <code>parse_number(text) catch: then 0 ;</code></li><li>catch, inspect, and explicitly rethrow with <code>return!</code></li><li>catch, inspect, and recover with <code>catch |err|: ... then 0 ;</code></li></ul></section>
-    <section class="container"><h1>Diagnostics</h1><p>Error handling should produce clear diagnostics.</p><p>Useful diagnostic cases include:</p><ul><li>calling an error-returning function without handling the error</li><li>using trailing <code>!</code> in a function with no compatible error return slot</li><li>using success-producing <code>catch</code> without <code>then</code> when the handler can fall through</li><li>using <code>then</code> fallback values with the wrong type or wrong count</li><li>using <code>return!</code> in a function that does not return <code>Error!</code></li><li>using <code>none</code> without optional type context</li><li>using <code>assert</code> in expression position</li><li>using <code>assert</code> with a non-<code>Bool</code> condition</li><li>using <code>assert</code> with <code>!</code> or <code>catch</code></li></ul><p>Error handling is part of the type system.</p><p>It should not be treated as a backend-only runtime behavior.</p></section>
-    <section class="container"><h1>Summary</h1><p>Beanstalk separates three kinds of failure or absence:</p><ul><li><code>Error!</code> for recoverable errors with structured information</li><li><code>?</code> and <code>none</code> for optional values</li><li><code>assert</code> for always-checked unrecoverable invariant failures</li></ul><p>The core rules are:</p><ul><li>functions that can fail mark one return slot with <code>!</code></li><li>error-returning calls must be handled</li><li><code>return!</code> returns an error</li><li>trailing <code>!</code> bubbles an error</li><li><code>catch:</code> with <code>then</code> recovers with fallback success values</li><li><code>catch |err|: ... return! err ;</code> catches, handles, and explicitly rethrows</li><li><code>catch |err|: ... then fallback ;</code> catches, handles, and recovers</li><li>failed assertions are not catchable and should not be used for normal control flow</li></ul><p>The result is explicit, typed, and compiler-checkable error handling.</p></section>
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -1016,10 +1430,10 @@ body {
     }
 
     function b_fn6() {
-    let b_l22 = __bs_binding(undefined);
+    let b_l24 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l22, []);
-    return __bs_read(b_l22);
+    __bs_assign_value(b_l24, []);
+    return __bs_read(b_l24);
     }
 
     </script>

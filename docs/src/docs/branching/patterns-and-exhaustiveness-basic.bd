@@ -26,5 +26,14 @@ Use `as` when the local name should be different:
     Err(message as error_text) => io.line(error_text)
 ]
 
-A normal value match needs `else =>` because the compiler cannot list every
-possible value for types such as `Int` or `String`.
+Options have two complete shapes: absent and present.
+
+[codeblock, $code("bst"):
+    if maybe_name is:
+        none => io.line("missing")
+        |name| => io.line(name)
+    ;
+]
+
+Most other value matches need `else =>` because the compiler cannot list every
+possible `Int`, `String` or other scalar value.

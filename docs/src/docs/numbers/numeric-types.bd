@@ -6,9 +6,9 @@ Beanstalk has two core numeric types.
 
 Its range is:
 
-```text
--2147483648 through 2147483647
-```
+[codeblock, $code("text"):
+    -2147483648 through 2147483647
+]
 
 ### `Float`
 

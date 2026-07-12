@@ -21,10 +21,6 @@ replacement can be checked against one stable baseline.
 - `docs/src/docs/language-overview/core-values.bd`
 - `docs/src/docs/language-overview/strings-and-characters.bd`
 
-Public route:
-
-`docs/src/docs/language-overview/#page.bst`
-
 ### Values and bindings
 
 - `docs/src/docs/bindings/bindings.bd`
@@ -33,20 +29,12 @@ Public route:
 - `docs/src/docs/bindings/explicit-copies.bd`
 - `docs/src/docs/bindings/shadowing.bd`
 
-Public route:
-
-`docs/src/docs/bindings/#page.bst`
-
 ### Numbers
 
 - `docs/src/docs/numbers/numeric-types.bd`
 - `docs/src/docs/numbers/numeric-literals.bd`
 - `docs/src/docs/numbers/operators.bd`
 - `docs/src/docs/numbers/checked-arithmetic.bd`
-
-Public route:
-
-`docs/src/docs/numbers/#page.bst`
 
 ### Casts
 
@@ -55,20 +43,12 @@ Public route:
 - `docs/src/docs/casts/fallible-casts.bd`
 - `docs/src/docs/casts/cast-evidence.bd`
 
-Public route:
-
-`docs/src/docs/casts/#page.bst`
-
 ### Functions
 
 - `docs/src/docs/functions/function-declarations.bd`
 - `docs/src/docs/functions/parameters-and-defaults.bd`
 - `docs/src/docs/functions/calls-and-access.bd`
 - `docs/src/docs/functions/returns-and-multiple-values.bd`
-
-Public route:
-
-`docs/src/docs/functions/#page.bst`
 
 ### Branching
 
@@ -77,20 +57,12 @@ Public route:
 - `docs/src/docs/branching/pattern-matching.bd`
 - `docs/src/docs/branching/patterns-and-exhaustiveness.bd`
 
-Public route:
-
-`docs/src/docs/branching/#page.bst`
-
 ### Loops
 
 - `docs/src/docs/loops/conditional-loops.bd`
 - `docs/src/docs/loops/collection-loops.bd`
 - `docs/src/docs/loops/range-loops.bd`
 - `docs/src/docs/loops/loop-control.bd`
-
-Public route:
-
-`docs/src/docs/loops/#page.bst`
 
 ### Structs
 
@@ -99,10 +71,6 @@ Public route:
 - `docs/src/docs/structs/receiver-methods.bd`
 - `docs/src/docs/structs/mutable-receivers.bd`
 
-Public route:
-
-`docs/src/docs/structs/#page.bst`
-
 ### Choices
 
 - `docs/src/docs/choices/choice-declarations.bd`
@@ -110,11 +78,42 @@ Public route:
 - `docs/src/docs/choices/payload-patterns.bd`
 - `docs/src/docs/choices/choice-equality.bd`
 
-Public route:
+### Errors, options and assertions
 
-`docs/src/docs/choices/#page.bst`
+- `docs/src/docs/errors/error-values.bd`
+- `docs/src/docs/errors/error-returns.bd`
+- `docs/src/docs/errors/propagation.bd`
+- `docs/src/docs/errors/catch-and-recovery.bd`
+- `docs/src/docs/errors/options.bd`
+- `docs/src/docs/errors/assertions.bd`
+
+### Collections and maps
+
+- `docs/src/docs/collections/collection-literals.bd`
+- `docs/src/docs/collections/growable-collections.bd`
+- `docs/src/docs/collections/fixed-collections.bd`
+- `docs/src/docs/collections/collection-operations.bd`
+- `docs/src/docs/collections/hash-maps.bd`
+
+### Templates
+
+- `docs/src/docs/templates/template-basics.bd`
+- `docs/src/docs/templates/template-directives.bd`
+- `docs/src/docs/templates/template-slots.bd`
+- `docs/src/docs/templates/child-wrappers.bd`
+- `docs/src/docs/templates/template-control-flow.bd`
+- `docs/src/docs/templates/markdown-formatting.bd`
+
+### Constants and compile-time behaviour
+
+- `docs/src/docs/constants/constant-bindings.bd`
+- `docs/src/docs/constants/constant-folding.bd`
+- `docs/src/docs/constants/const-records.bd`
+- `docs/src/docs/constants/const-templates.bd`
 
 Each unsuffixed file has a paired `-basic.bd` teaching version.
+
+Each public route imports both levels.
 
 These files are written in the intended final shape. They do not supersede
 `docs/language-overview.md` until the complete language migration and parity

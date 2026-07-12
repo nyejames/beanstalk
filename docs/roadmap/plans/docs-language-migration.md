@@ -640,7 +640,19 @@ Detailed examples should:
 
 Page-only examples may carry more personality. Unique semantic evidence belongs in Beandown.
 
-### 9.5 Inline template syntax
+### 9.5 Type-coherent examples
+
+A valid example must be coherent as one statically typed snippet.
+
+Do not put unrelated literal pattern types under one scrutinee, use a mutable
+operation on an immutable binding, or call a returning function without its
+declared return slot.
+
+When a block demonstrates invalid forms, label the block or surrounding prose
+clearly. Do not mix valid and invalid lines without explaining which are
+rejected.
+
+### 9.6 Inline template syntax
 
 Do not expose escape artifacts such as:
 
@@ -841,10 +853,20 @@ In `.bd` files:
 - avoid raw HTML
 - use Markdown and Beandown helpers
 - use full code blocks for multiline source
-- use semantic table helpers
-- do not place paragraphs directly under table rows
 - keep headings at H3 or deeper
 - do not rely on page-local imports
+- do not use Markdown pipe tables
+
+Beanstalk's `$md` formatter does not currently render Markdown pipe tables.
+
+Use a structured list when detailed semantic data would otherwise be tabular.
+
+A `#page.bst` file may build a visual table with Beanstalk table helpers when
+that presentation genuinely helps the website. The unsuffixed `.bd` must still
+preserve the complete information in directly readable list form.
+
+Do not add route-local facades or exports solely to force table helpers into
+Beandown.
 
 ---
 
@@ -2019,6 +2041,21 @@ Inspect the generated route and confirm:
 - code and tables are styled
 - no source template syntax leaked into HTML
 
+### 18.4 Report the inspection actually performed
+
+Do not claim every character or every route was reviewed when inspection used
+targeted searches.
+
+A final report should distinguish:
+
+- routes opened and read manually
+- structural checks such as H1, toggle and pager counts
+- key semantic phrases checked in Advanced panels
+- generated files that were not inspected in full
+
+Targeted inspection is acceptable when it covers the changed contract. The
+report must describe it accurately.
+
 ---
 
 ## 19. Manual-edit policy
@@ -2204,55 +2241,65 @@ The prototype established several requirements for later patches:
 - the monolith and `AGENTS.md` remain protected
 - generated release artifacts may remain in the workspace
 
-### 21.3 Foundational language batch
+### 21.3 Completed Functions, Branching, Structs and Choices batch
 
-The completed foundational batch covers:
-
-- Language Basics
-- Values and Bindings
-- Numbers
-- Casts
-- navigation from Getting Started through Functions
-- the focused-reference index for those replacement sets
-
-Review found four mandatory follow-up corrections:
-
-- `--` comment syntax is ordinary-code context, not template-body or Beandown context
-- `copy` accepts places rather than arbitrary expressions
-- the operator reference needs the complete type policy and precedence table
-- the cast reference needs the complete builtin policy and core-trait tables
-
-### 21.4 Functions, branching and nominal data batch
-
-The next batch covers:
+The completed batch covers:
 
 - Functions
 - Branching
 - Structs
 - Choices
-- navigation through Errors
+- navigation from Casts through Errors
 - focused-reference indexing for those routes
 
-The batch must preserve two unresolved implementation/design discrepancies in
-its final report:
+Review found three follow-up requirements:
 
-- parameter-alias return syntax exists in the parser but is absent from the monolith
-- option payload equality is accepted by the monolith but is not handled by the current nested choice-payload equality query
+- one literal-pattern example mixed unrelated scrutinee types
+- option exhaustiveness needs its `none` plus present-capture exception
+- full-match general capture and exhaustiveness are inconsistent in the current compiler
 
-Neither discrepancy transfers authority or authorises compiler changes.
+The first two are documentation corrections.
 
-### 21.5 Next route work
+The third remains an implementation/design discrepancy. Until resolved,
+`else =>` is the documented full-match catch-all.
 
-After this batch passes review, continue with:
+### 21.4 Current Errors, Collections, Templates and Constants batch
 
-1. Errors, Options and Assertions
-2. Collections and Maps
-3. Templates
-4. Constants and Compile-Time Behaviour
+The next batch covers:
 
-Errors should precede Collections because collection operations use the typed
-error path. Templates should precede Constants because const-template rules
-depend on the template surface.
+- Errors, Options and Assertions
+- Collections and Maps
+- Templates
+- Constants and Compile-Time Behaviour
+- navigation through Aliases
+- focused-reference indexing for those routes
+
+It also codifies that Markdown pipe tables are unsupported in `.bd` and that
+generated inspection reports must describe their actual coverage.
+
+### 21.5 Unresolved implementation/design discrepancies
+
+Keep these visible until separately resolved:
+
+1. Parameter-alias return syntax such as `-> first or fallback` exists in the parser but is absent from the monolith.
+2. Option payload equality is accepted by the monolith but the current nested choice-payload equality query rejects constructed option types.
+3. Template-backed `String` payload equality may not be distinguishable from ordinary `String` through current semantic type identity alone.
+4. An unconditional general capture is treated as making later arms unreachable, but the final full-match exhaustiveness checker does not count it as satisfying ordinary, option or choice coverage.
+
+Ordinary documentation migration patches do not authorise compiler changes for
+these discrepancies.
+
+### Next route work
+
+After the current batch passes review, continue with:
+
+1. Aliases
+2. Generics
+3. Traits
+4. Reactivity
+
+These routes share type-position naming, evidence and static-contract rules, so
+they should be reviewed together before Project Structure and Libraries.
 
 ---
 

@@ -721,7 +721,9 @@ body {
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk has two core numeric types.</p><h3><code>Int</code></h3><p><code>Int</code> is a signed 32-bit integer.</p><p>Its range is:</p><p>```text -2147483648 through 2147483647 ```</p><h3><code>Float</code></h3><p><code>Float</code> is a finite <code>f64</code>.</p><p><code>NaN</code>, positive infinity and negative infinity are not valid Beanstalk <code>Float</code> values. Boundaries that can introduce a non-finite result must reject it.</p><h3>Promotion</h3><p><code>Int</code> may promote to <code>Float</code> at a contextual numeric boundary.</p><pre style=""><code class='codeblock'>
+        <p>Beanstalk has two core numeric types.</p><h3><code>Int</code></h3><p><code>Int</code> is a signed 32-bit integer.</p><p>Its range is:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-operator'>-</span><span class='bst-code-number'>2147483648</span> through <span class='bst-code-number'>2147483647</span>
+    </code></pre><h3><code>Float</code></h3><p><code>Float</code> is a finite <code>f64</code>.</p><p><code>NaN</code>, positive infinity and negative infinity are not valid Beanstalk <code>Float</code> values. Boundaries that can introduce a non-finite result must reject it.</p><h3>Promotion</h3><p><code>Int</code> may promote to <code>Float</code> at a contextual numeric boundary.</p><pre style=""><code class='codeblock'>
     count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
     ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> count
     </code></pre><p>Mixed <code>Int</code> and <code>Float</code> arithmetic produces <code>Float</code>.</p><p>There is no implicit <code>Float -&gt; Int</code> conversion. Use a fallible explicit cast at an <code>Int</code> target.</p><p><code>Bool</code> and <code>Char</code> are not numeric types.</p>
@@ -1281,10 +1283,10 @@ body {
     }
 
     function b_fn6() {
-    let b_l22 = __bs_binding(undefined);
+    let b_l24 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l22, []);
-    return __bs_read(b_l22);
+    __bs_assign_value(b_l24, []);
+    return __bs_read(b_l24);
     }
 
     </script>
