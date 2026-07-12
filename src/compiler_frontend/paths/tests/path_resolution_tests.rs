@@ -408,6 +408,51 @@ fn source_library_import_resolves_to_library_root() {
 }
 
 #[test]
+fn source_library_folder_import_uses_generic_hash_root_facade() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+    let library_root = project_root.join("lib/helper");
+    let root_file = library_root.join("#library.bst");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(&library_root).unwrap();
+    fs::write(&root_file, b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    source_libraries.register_filesystem_root("helper", library_root.clone());
+
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
+
+    let canonical_root_file = fs::canonicalize(&root_file).unwrap();
+    assert_eq!(
+        resolver.facade_files().get("helper"),
+        Some(&canonical_root_file)
+    );
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("helper", &mut string_table);
+
+    let resolved = resolver
+        .resolve_import_to_source_file_with_facade_fallback(
+            &path,
+            &entry_root.join("index.bst"),
+            &mut string_table,
+        )
+        .expect("source library folder import should use its generic root");
+
+    assert_eq!(resolved.path, canonical_root_file);
+}
+
+#[test]
 fn source_library_prefix_takes_priority_over_entry_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();

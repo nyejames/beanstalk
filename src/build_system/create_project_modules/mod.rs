@@ -4,7 +4,7 @@
 //! - `frontend_orchestration`   — per-module pipeline (tokenization through borrow checking)
 //! - `project_roots`            — config root interpretation and path-resolver setup
 //! - `source_library_discovery` — project-local source-library scanning and prefix checks
-//! - `facade_validation`        — source-library `#mod.bst` preflight
+//! - `facade_validation`        — source-library generic hash-root preflight
 //! - `source_tree_index`        — one directory-project source-tree traversal
 //! - `module_inventory`         — project-level module assembly
 //! - `reachable_file_discovery` — BFS traversal over import graphs

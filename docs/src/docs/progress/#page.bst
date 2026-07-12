@@ -454,7 +454,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted config-defined library folders, import resolution, and facade-gating coverage.]
             [: Frontend / HTML]
-            [: Project-local source libraries are discovered from [$html:<code>library_folders</code>], with `/lib` as the default convention. Each direct child folder becomes an import prefix. Public cross-module access goes through [$html:<code>#mod.bst</code>].]
+            [: Project-local source libraries are discovered from [$html:<code>library_folders</code>], with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. Public export/file-role handling still goes through [$html:<code>#mod.bst</code>] until the generic module-root role migration lands.]
         ]
 
         [data:

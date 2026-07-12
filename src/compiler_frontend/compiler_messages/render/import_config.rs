@@ -177,11 +177,28 @@ pub(crate) fn invalid_config_message(
             string_table.resolve(*entry_folder),
             string_table.resolve(*prefix),
         ),
-        InvalidConfigReason::SourceLibraryMissingFacade { prefix, root } => format!(
-            "Source library '@{}' at '{}' is missing a #mod.bst facade file. Every source library must declare its public export surface through a #mod.bst facade.",
+        InvalidConfigReason::SourceLibraryMissingRoot { prefix, root } => format!(
+            "Source library '@{}' at '{}' is missing a direct-child hash root file. Every source library must contain exactly one non-empty filename matching '#*.bst'.",
             string_table.resolve(*prefix),
             string_table.resolve(*root),
         ),
+        InvalidConfigReason::SourceLibraryMultipleRoots {
+            prefix,
+            root,
+            candidates,
+        } => {
+            let candidates = candidates
+                .iter()
+                .map(|candidate| format!("'{}'", string_table.resolve(*candidate)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "Source library '@{}' at '{}' has multiple direct-child hash root files: {}. Every source library must contain exactly one non-empty filename matching '#*.bst'.",
+                string_table.resolve(*prefix),
+                string_table.resolve(*root),
+                candidates,
+            )
+        }
         InvalidConfigReason::NoRootModuleEntries { entry_root } => format!(
             "No root module entries were found under '{}'. Expected at least one '#*.bst' file under the configured entry root.",
             string_table.resolve(*entry_root),

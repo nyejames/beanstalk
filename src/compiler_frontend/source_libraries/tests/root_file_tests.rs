@@ -1,10 +1,12 @@
 use super::root_file::{
-    file_name_is_config_file, file_name_is_hash_root_file,
-    hash_root_file_name_from_import_component, import_component_is_hash_root_file,
-    import_path_references_config_file, import_path_references_hash_root_file,
+    HashRootFileDiscovery, discover_hash_root_file, file_name_is_config_file,
+    file_name_is_hash_root_file, hash_root_file_name_from_import_component,
+    import_component_is_hash_root_file, import_path_references_config_file,
+    import_path_references_hash_root_file,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::fs;
 
 fn path(components: &[&str], string_table: &mut StringTable) -> InternedPath {
     let mut path = InternedPath::new();
@@ -98,4 +100,49 @@ fn hash_root_import_classification_uses_the_source_component() {
         false,
         &string_table
     ));
+}
+
+#[test]
+fn discovers_sorted_direct_child_hash_roots_and_ignores_config_and_nested_files() {
+    let directory = tempfile::tempdir().expect("failed to create temp directory");
+    fs::create_dir(directory.path().join("nested")).expect("should create nested directory");
+    fs::write(directory.path().join("#zeta.bst"), b"").expect("should write root");
+    fs::write(directory.path().join("#alpha.bst"), b"").expect("should write root");
+    fs::write(directory.path().join("config.bst"), b"").expect("should write config");
+    fs::write(directory.path().join("ordinary.bst"), b"").expect("should write ordinary file");
+    fs::write(directory.path().join("nested/#inner.bst"), b"").expect("should write nested root");
+
+    let discovery = discover_hash_root_file(directory.path()).expect("discovery should succeed");
+    let HashRootFileDiscovery::Multiple(root_files) = discovery else {
+        panic!("expected multiple direct-child hash roots");
+    };
+
+    assert_eq!(
+        root_files,
+        vec![
+            directory.path().join("#alpha.bst"),
+            directory.path().join("#zeta.bst"),
+        ]
+    );
+}
+
+#[test]
+fn discovers_mod_and_cosmetic_hash_roots_as_the_same_unique_kind() {
+    let directory = tempfile::tempdir().expect("failed to create temp directory");
+    let root_file = directory.path().join("#mod.bst");
+    fs::write(&root_file, b"").expect("should write root");
+
+    assert_eq!(
+        discover_hash_root_file(directory.path()).expect("discovery should succeed"),
+        HashRootFileDiscovery::Unique(root_file)
+    );
+
+    fs::remove_file(directory.path().join("#mod.bst")).expect("should remove mod root");
+    let cosmetic_root = directory.path().join("#library.bst");
+    fs::write(&cosmetic_root, b"").expect("should write cosmetic root");
+
+    assert_eq!(
+        discover_hash_root_file(directory.path()).expect("discovery should succeed"),
+        HashRootFileDiscovery::Unique(cosmetic_root)
+    );
 }

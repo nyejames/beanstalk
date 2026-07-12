@@ -24,7 +24,9 @@ use crate::compiler_frontend::paths::path_normalization::{
     candidate_import_files_for_source_kinds, canonicalize_best_effort, import_contains_dotdot,
     is_relative_import_path, join_and_normalize_path,
 };
-use crate::compiler_frontend::source_libraries::root_file::MOD_FILE_NAME;
+use crate::compiler_frontend::source_libraries::root_file::{
+    HashRootFileDiscovery, discover_hash_root_file,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
@@ -59,7 +61,8 @@ pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
     source_library_roots: HashMap<String, PathBuf>,
-    /// Maps library prefix to the canonical path of its `#mod.bst` facade file, if present.
+    source_library_root_files: HashMap<String, HashRootFileDiscovery>,
+    /// Maps library prefix to the canonical path of its temporary facade file, if present.
     facade_files: HashMap<String, PathBuf>,
     /// Module roots prepared by Stage 0. Resolver construction never discovers them.
     module_roots: ModuleRootTable,
@@ -115,16 +118,36 @@ impl ProjectPathResolver {
             source_library_roots_start,
         );
 
-        // Discover facade files (`#mod.bst`) in each source library root.
+        // Discover one generic root candidate in each source library root. Missing or ambiguous
+        // candidates stay in the resolver for Stage 0 validation, while the unique candidate is
+        // canonicalized for the existing temporary facade map.
         let source_library_facades_start = crate::timing::start_pipeline_timing();
+        let mut source_library_root_files = HashMap::new();
         let mut facade_files = HashMap::new();
         for (prefix, root) in &source_library_roots {
-            let mod_file = root.join(MOD_FILE_NAME);
-            if mod_file.is_file()
-                && let Ok(canonical) = fs::canonicalize(&mod_file)
-            {
-                facade_files.insert(prefix.clone(), canonical);
-            }
+            let discovery = match discover_hash_root_file(root) {
+                Ok(discovery) => discovery,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    HashRootFileDiscovery::Missing
+                }
+                Err(error) => HashRootFileDiscovery::Unreadable(error.to_string()),
+            };
+
+            let discovery = match discovery {
+                HashRootFileDiscovery::Unique(root_file) => match fs::canonicalize(&root_file) {
+                    Ok(canonical) => {
+                        facade_files.insert(prefix.clone(), canonical);
+                        HashRootFileDiscovery::Unique(root_file)
+                    }
+                    Err(error) => HashRootFileDiscovery::Unreadable(format!(
+                        "Failed to canonicalize source library root file '{}': {error}",
+                        root_file.display()
+                    )),
+                },
+                discovery => discovery,
+            };
+
+            source_library_root_files.insert(prefix.clone(), discovery);
         }
         log_path_resolver_timing(
             "stage0.path_resolver.source_library_facades",
@@ -135,6 +158,7 @@ impl ProjectPathResolver {
             project_root,
             entry_root,
             source_library_roots,
+            source_library_root_files,
             facade_files,
             module_roots,
             import_root_policy: ImportRootPolicy::Normal,
@@ -168,6 +192,11 @@ impl ProjectPathResolver {
     /// WHAT: returns the map of discovered facade files.
     pub(crate) fn facade_files(&self) -> &HashMap<String, PathBuf> {
         &self.facade_files
+    }
+
+    /// Returns the generic hash-root discovery state for each source library.
+    pub(crate) fn source_library_root_files(&self) -> &HashMap<String, HashRootFileDiscovery> {
+        &self.source_library_root_files
     }
 
     pub(crate) fn module_root_facades(&self) -> &HashMap<PathBuf, PathBuf> {
@@ -321,8 +350,8 @@ impl ProjectPathResolver {
     /// WHAT: checks whether an import path targets a regular module root with a facade,
     /// and if so, returns the facade file path. If the target is a module root without a facade,
     /// returns a diagnostic so the caller can report a clear missing-facade error.
-    /// WHY: regular module roots (under the entry root) use `#mod.bst` as their outward-facing
-    ///      export surface. Plain folder imports must resolve to the facade only when it exists.
+    /// WHY: regular module roots (under the entry root) use their prepared facade file as the
+    ///      outward-facing export surface. Plain folder imports resolve to it only when present.
     fn resolve_module_root_facade_fallback(
         &self,
         import_path: &InternedPath,

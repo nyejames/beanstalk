@@ -173,9 +173,14 @@ pub enum InvalidConfigReason {
         prefix: StringId,
         entry_folder: StringId,
     },
-    SourceLibraryMissingFacade {
+    SourceLibraryMissingRoot {
         prefix: StringId,
         root: StringId,
+    },
+    SourceLibraryMultipleRoots {
+        prefix: StringId,
+        root: StringId,
+        candidates: Vec<StringId>,
     },
     NoRootModuleEntries {
         entry_root: StringId,
@@ -274,9 +279,21 @@ impl InvalidConfigReason {
                 *entry_folder = remap.get(*entry_folder);
             }
 
-            Self::SourceLibraryMissingFacade { prefix, root } => {
+            Self::SourceLibraryMissingRoot { prefix, root } => {
                 *prefix = remap.get(*prefix);
                 *root = remap.get(*root);
+            }
+
+            Self::SourceLibraryMultipleRoots {
+                prefix,
+                root,
+                candidates,
+            } => {
+                *prefix = remap.get(*prefix);
+                *root = remap.get(*root);
+                for candidate in candidates {
+                    *candidate = remap.get(*candidate);
+                }
             }
 
             Self::BstFileFolderCollision {

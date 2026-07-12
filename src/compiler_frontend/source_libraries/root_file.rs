@@ -7,9 +7,20 @@
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::CONFIG_FILE_NAME;
+use std::io;
+use std::path::{Path, PathBuf};
 
 /// Temporary cosmetic root name used by the current facade role.
 pub(crate) const MOD_FILE_NAME: &str = "#mod.bst";
+
+/// The direct-child hash-root state for one source-library directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum HashRootFileDiscovery {
+    Missing,
+    Unique(PathBuf),
+    Multiple(Vec<PathBuf>),
+    Unreadable(String),
+}
 
 /// Whether a filesystem filename is a non-config Beanstalk module root.
 pub(crate) fn file_name_is_hash_root_file(file_name: &str) -> bool {
@@ -21,6 +32,35 @@ pub(crate) fn file_name_is_hash_root_file(file_name: &str) -> bool {
     };
 
     !root_name.is_empty()
+}
+
+/// Discover direct-child Beanstalk hash roots without assigning a semantic filename role.
+///
+/// WHAT: applies the generic `#*.bst` filename policy to one source-library directory.
+/// WHY: source-library preflight and path resolution must inspect the same filesystem candidates
+///      while keeping missing or ambiguous roots available for typed Stage 0 diagnostics.
+pub(crate) fn discover_hash_root_file(directory: &Path) -> io::Result<HashRootFileDiscovery> {
+    let mut root_files = Vec::new();
+
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+
+        if file_name_is_hash_root_file(file_name) && path.is_file() {
+            root_files.push(path);
+        }
+    }
+
+    root_files.sort();
+
+    Ok(match root_files.as_slice() {
+        [] => HashRootFileDiscovery::Missing,
+        [root_file] => HashRootFileDiscovery::Unique(root_file.clone()),
+        _ => HashRootFileDiscovery::Multiple(root_files),
+    })
 }
 
 /// Whether a filesystem filename is the canonical project configuration file.

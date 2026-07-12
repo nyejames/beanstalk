@@ -2676,8 +2676,8 @@ fn explicit_library_folder_must_be_directory() {
 }
 
 #[test]
-fn source_library_requires_mod_facade() {
-    let root = temp_dir("source_library_missing_facade");
+fn source_library_requires_one_generic_hash_root() {
+    let root = temp_dir("source_library_missing_root");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -2700,11 +2700,99 @@ fn source_library_requires_mod_facade() {
         &mut string_table,
     );
 
-    let messages = result.expect_err("source library without #mod.bst should fail");
+    let messages = result.expect_err("source library without a hash root should fail");
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::SourceLibraryMissingFacade { .. }
+        InvalidConfigReason::SourceLibraryMissingRoot { .. }
     ));
+    let error_text = rendered_first_error(&messages);
+    assert!(error_text.contains("#*.bst"));
+    assert!(!error_text.contains("#mod.bst"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_library_accepts_cosmetic_hash_root_name() {
+    let root = temp_dir("source_library_cosmetic_root");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#library.bst"), "foo #= 1\n")
+        .expect("should write cosmetic root");
+    fs::write(root.join("lib/helper/utils.bst"), "bar #= 2\n")
+        .expect("should write library source");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let resolver = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
+        &mut string_table,
+    )
+    .expect("cosmetic source-library root should pass Stage 0 preflight");
+
+    let mut path = crate::compiler_frontend::symbols::interned_path::InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    let importer = root.join("src/#page.bst");
+    let resolved = resolver
+        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
+        .expect("source-library folder import should resolve through the facade pipeline");
+
+    assert_eq!(
+        resolved.path,
+        fs::canonicalize(root.join("lib/helper/#library.bst")).unwrap()
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_library_rejects_multiple_generic_hash_roots() {
+    let root = temp_dir("source_library_multiple_roots");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#first.bst"), "foo #= 1\n").expect("should write first root");
+    fs::write(root.join("lib/helper/#second.bst"), "bar #= 2\n").expect("should write second root");
+    fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
+        &mut string_table,
+    );
+
+    let messages = result.expect_err("multiple source-library roots should fail preflight");
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::SourceLibraryMultipleRoots { .. }
+    ));
+    let error_text = rendered_first_error(&messages);
+    assert!(error_text.contains("#first.bst"));
+    assert!(error_text.contains("#second.bst"));
+    assert!(!error_text.contains("#mod.bst facade"));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
