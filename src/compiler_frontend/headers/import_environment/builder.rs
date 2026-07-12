@@ -9,7 +9,7 @@
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{
-    FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
+    ModuleSymbols, PublicExportEntry, PublicExportTarget,
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::source_libraries::root_file::{
@@ -416,7 +416,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         &self,
         implicit_constants: &mut FxHashMap<StringId, InternedPath>,
     ) {
-        let Some(entries) = self.module_symbols.facade_exports.get("html") else {
+        let Some(entries) = self
+            .module_symbols
+            .source_library_public_exports
+            .get("html")
+        else {
             return;
         };
 
@@ -432,23 +436,23 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return;
         };
 
-        if let Some(entries) = self.source_library_facade_exports_for_file(&facade_file) {
+        if let Some(entries) = self.source_library_public_exports_for_file(&facade_file) {
             self.collect_constant_exports(entries, implicit_constants, Some(source_file));
         }
 
-        if let Some(entries) = self.module_root_facade_exports_for_file(&facade_file) {
+        if let Some(entries) = self.module_root_public_exports_for_file(&facade_file) {
             self.collect_constant_exports(entries, implicit_constants, Some(source_file));
         }
     }
 
     fn collect_constant_exports(
         &self,
-        entries: &FxHashSet<FacadeExportEntry>,
+        entries: &FxHashSet<PublicExportEntry>,
         implicit_constants: &mut FxHashMap<StringId, InternedPath>,
         excluded_source_file: Option<&InternedPath>,
     ) {
         for entry in entries {
-            let FacadeExportTarget::Source(path) = &entry.target else {
+            let PublicExportTarget::Source(path) = &entry.target else {
                 continue;
             };
 
@@ -548,13 +552,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .map(|parent| parent.to_path_buf(self.string_table))
     }
 
-    fn source_library_facade_exports_for_file(
+    fn source_library_public_exports_for_file(
         &self,
         facade_file: &InternedPath,
-    ) -> Option<&FxHashSet<FacadeExportEntry>> {
+    ) -> Option<&FxHashSet<PublicExportEntry>> {
         let prefix = self
             .module_symbols
-            .source_library_facade_files
+            .source_library_root_files
             .iter()
             .find_map(|(prefix, source)| {
                 if source == facade_file {
@@ -564,20 +568,22 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
             })?;
 
-        self.module_symbols.facade_exports.get(prefix)
+        self.module_symbols
+            .source_library_public_exports
+            .get(prefix)
     }
 
-    fn module_root_facade_exports_for_file(
+    fn module_root_public_exports_for_file(
         &self,
         facade_file: &InternedPath,
-    ) -> Option<&FxHashSet<FacadeExportEntry>> {
+    ) -> Option<&FxHashSet<PublicExportEntry>> {
         let module_root = self
             .module_symbols
             .file_module_membership
             .get(facade_file)?;
 
         self.module_symbols
-            .module_root_facade_exports
+            .module_root_public_exports
             .get(module_root)
     }
 
@@ -611,9 +617,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let facade_input = FacadeResolutionInput {
             importer_file: source_file,
             header_path: &import.header_path,
-            facade_exports: &self.module_symbols.facade_exports,
+            source_library_public_exports: &self.module_symbols.source_library_public_exports,
             file_library_membership: &self.module_symbols.file_library_membership,
-            module_root_facade_exports: &self.module_symbols.module_root_facade_exports,
+            module_root_public_exports: &self.module_symbols.module_root_public_exports,
             file_module_membership: &self.module_symbols.file_module_membership,
             module_root_boundaries: &self.module_symbols.module_root_boundaries,
             string_table: self.string_table,
@@ -693,9 +699,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         requested_path: &import.header_path,
                         location: import.location.clone(),
                         file_library_membership: &self.module_symbols.file_library_membership,
-                        source_library_facade_files: &self
-                            .module_symbols
-                            .source_library_facade_files,
+                        source_library_root_files: &self.module_symbols.source_library_root_files,
                         string_table: self.string_table,
                     })?;
                     check_module_boundary(ModuleBoundaryCheckInput {
@@ -704,7 +708,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         symbol_path: &symbol_path,
                         location: import.location.clone(),
                         file_module_membership: &self.module_symbols.file_module_membership,
-                        module_root_facade_exports: &self.module_symbols.module_root_facade_exports,
+                        module_root_public_exports: &self.module_symbols.module_root_public_exports,
                     })?;
                 }
 

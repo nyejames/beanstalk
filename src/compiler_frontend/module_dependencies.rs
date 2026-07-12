@@ -18,7 +18,7 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
-use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, ModuleSymbols};
+use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, PublicExportEntry};
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
@@ -90,19 +90,19 @@ impl DependencyTracker {
 /// Header dependency graph plus the path-resolution rules that make graph edges sortable.
 ///
 /// WHAT: owns the graph keys, source-order indexes, and resolved edge construction used by DFS.
-/// WHY: dependency sorting needs one place where exact header membership, source-library facade
+/// WHY: dependency sorting needs one place where exact header membership, source-library public
 /// fallback, same-file hint deferral, and stable edge ordering are applied consistently.
 struct DependencyGraph<'a> {
     headers_by_path: FxHashMap<InternedPath, Header>,
     source_order_by_path: FxHashMap<InternedPath, usize>,
     ordered_paths: Vec<InternedPath>,
-    facade_exports: &'a FxHashMap<String, FxHashSet<FacadeExportEntry>>,
+    source_library_public_exports: &'a FxHashMap<String, FxHashSet<PublicExportEntry>>,
 }
 
 impl<'a> DependencyGraph<'a> {
     fn from_headers(
         headers: Vec<Header>,
-        facade_exports: &'a FxHashMap<String, FxHashSet<FacadeExportEntry>>,
+        source_library_public_exports: &'a FxHashMap<String, FxHashSet<PublicExportEntry>>,
         _string_table: &StringTable,
     ) -> Self {
         let mut headers_by_path: FxHashMap<InternedPath, Header> =
@@ -124,7 +124,7 @@ impl<'a> DependencyGraph<'a> {
             headers_by_path,
             source_order_by_path,
             ordered_paths,
-            facade_exports,
+            source_library_public_exports,
         }
     }
 
@@ -149,11 +149,11 @@ impl<'a> DependencyGraph<'a> {
             return Some(ResolvedGraphPath::Header(requested_path.to_owned()));
         }
 
-        // Source-library facade imports can use a public prefix path that differs from the
-        // concrete `#mod.bst` header path. Accept those public edges without treating them as
+        // Source-library public imports can use a public prefix path that differs from the
+        // concrete root-file header path. Accept those public edges without treating them as
         // graph nodes.
-        if self.is_source_library_facade_export_path(requested_path, string_table) {
-            return Some(ResolvedGraphPath::SourceLibraryFacadeExport(
+        if self.is_source_library_public_export_path(requested_path, string_table) {
+            return Some(ResolvedGraphPath::SourceLibraryPublicExport(
                 requested_path.to_owned(),
             ));
         }
@@ -168,7 +168,7 @@ impl<'a> DependencyGraph<'a> {
     ) -> Option<usize> {
         let resolved_path = match self.resolve_requested_path(requested_path, string_table)? {
             ResolvedGraphPath::Header(path) => path,
-            ResolvedGraphPath::SourceLibraryFacadeExport(_) => return None,
+            ResolvedGraphPath::SourceLibraryPublicExport(_) => return None,
         };
 
         self.source_order_by_path.get(&resolved_path).copied()
@@ -218,13 +218,13 @@ impl<'a> DependencyGraph<'a> {
                 source_order,
                 kind: DependencyEdgeKind::GraphHeader,
             },
-            Some(ResolvedGraphPath::SourceLibraryFacadeExport(resolved_path)) => {
+            Some(ResolvedGraphPath::SourceLibraryPublicExport(resolved_path)) => {
                 ResolvedDependencyEdge {
                     requested_path: requested_path.to_owned(),
                     resolved_path: Some(resolved_path),
                     location,
                     source_order,
-                    kind: DependencyEdgeKind::SourceLibraryFacadeExport,
+                    kind: DependencyEdgeKind::SourceLibraryPublicExport,
                 }
             }
             None if self.is_same_file_symbol_hint(requested_path, &header.source_file) => {
@@ -250,7 +250,7 @@ impl<'a> DependencyGraph<'a> {
         edge.source_order.unwrap_or(usize::MAX)
     }
 
-    fn is_source_library_facade_export_path(
+    fn is_source_library_public_export_path(
         &self,
         path: &InternedPath,
         string_table: &StringTable,
@@ -265,7 +265,7 @@ impl<'a> DependencyGraph<'a> {
             return false;
         };
 
-        if let Some(entries) = self.facade_exports.get(first_component) {
+        if let Some(entries) = self.source_library_public_exports.get(first_component) {
             for entry in entries {
                 if entry.export_name == export_name {
                     return true;
@@ -291,14 +291,14 @@ struct ResolvedDependencyEdge {
 
 enum DependencyEdgeKind {
     GraphHeader,
-    SourceLibraryFacadeExport,
+    SourceLibraryPublicExport,
     SameFileSymbolHint,
     Missing,
 }
 
 enum ResolvedGraphPath {
     Header(InternedPath),
-    SourceLibraryFacadeExport(InternedPath),
+    SourceLibraryPublicExport(InternedPath),
 }
 
 /// Boxed diagnostic result shared by the DFS visit and edge-recursion boundaries.
@@ -356,7 +356,7 @@ pub fn resolve_module_dependencies(
     let (mut sorted, dependency_visit_count) = {
         let graph = DependencyGraph::from_headers(
             top_level_headers,
-            &module_symbols.facade_exports,
+            &module_symbols.source_library_public_exports,
             string_table,
         );
         let mut diagnostic_bag = DiagnosticBag::new();
@@ -440,7 +440,7 @@ fn visit_node(
 
     let resolved_path = match resolved_graph_path {
         ResolvedGraphPath::Header(path) => path,
-        ResolvedGraphPath::SourceLibraryFacadeExport(path) => {
+        ResolvedGraphPath::SourceLibraryPublicExport(path) => {
             tracker.visited.insert(path);
             return Ok(());
         }
@@ -518,7 +518,7 @@ fn visit_dependency_edge(
             )
         }
 
-        DependencyEdgeKind::SourceLibraryFacadeExport => {
+        DependencyEdgeKind::SourceLibraryPublicExport => {
             if let Some(resolved_path) = edge.resolved_path {
                 tracker.visited.insert(resolved_path);
             }

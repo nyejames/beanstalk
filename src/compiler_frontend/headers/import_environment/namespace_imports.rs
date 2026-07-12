@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFaca
 use crate::compiler_frontend::external_packages::{ExternalSymbolId, ExternalSymbolPath};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::module_symbols::{
-    FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind,
+    GenericDeclarationKind, PublicExportEntry, PublicExportTarget,
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::keywords::is_valid_identifier;
@@ -237,7 +237,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         match access {
             SourceImportAccess::Facade { exported_entries } => {
                 for entry in exported_entries {
-                    let FacadeExportTarget::Source(type_path) = &entry.target else {
+                    let PublicExportTarget::Source(type_path) = &entry.target else {
                         continue;
                     };
 
@@ -299,20 +299,20 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Some(SourceImportAccess::Internal);
         }
 
-        self.facade_entries_for_source_file(namespace_file)
+        self.public_export_entries_for_source_file(namespace_file)
             .map(|exported_entries| SourceImportAccess::Facade { exported_entries })
     }
 
-    /// Public facade entries for a concrete facade source file, if this source is a facade.
-    fn facade_entries_for_source_file(
+    /// Public export entries for a concrete root source file, if this source is a root.
+    fn public_export_entries_for_source_file(
         &self,
         source_file: &InternedPath,
-    ) -> Option<FxHashSet<FacadeExportEntry>> {
-        for (library_prefix, facade_file) in &self.module_symbols.source_library_facade_files {
-            if facade_file == source_file {
+    ) -> Option<FxHashSet<PublicExportEntry>> {
+        for (library_prefix, root_file) in &self.module_symbols.source_library_root_files {
+            if root_file == source_file {
                 return self
                     .module_symbols
-                    .facade_exports
+                    .source_library_public_exports
                     .get(library_prefix)
                     .cloned();
             }
@@ -323,7 +323,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .file_module_membership
             .get(source_file)?;
         self.module_symbols
-            .module_root_facade_exports
+            .module_root_public_exports
             .get(module_root)
             .cloned()
     }
@@ -363,7 +363,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let library_prefix = self.string_table.resolve(components[0]).to_owned();
         if !self
             .module_symbols
-            .facade_exports
+            .source_library_public_exports
             .contains_key(&library_prefix)
         {
             return None;
@@ -374,16 +374,16 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return None;
         }
 
-        let facade_file = self
+        let root_file = self
             .module_symbols
-            .source_library_facade_files
+            .source_library_root_files
             .get(&library_prefix)?
             .clone();
 
         self.module_symbols
             .module_file_paths
-            .contains(&facade_file)
-            .then_some(ResolvedNamespaceTarget::SourceFile(facade_file))
+            .contains(&root_file)
+            .then_some(ResolvedNamespaceTarget::SourceFile(root_file))
     }
 
     fn resolve_module_root_namespace_facade(
@@ -452,7 +452,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             if importer_library.map(String::as_str) != Some(target_library.as_str()) {
                 if self
                     .module_symbols
-                    .source_library_facade_files
+                    .source_library_root_files
                     .get(&target_library)
                     .is_some_and(|facade_file| target_file == facade_file)
                 {
@@ -489,7 +489,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         if self
             .module_symbols
-            .module_root_facade_exports
+            .module_root_public_exports
             .contains_key(target_root)
         {
             return Err(Box::new(diagnostics::cross_module_import_not_exported(
@@ -602,15 +602,15 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         })
     }
 
-    /// Build a namespace record from a facade's explicit public export entries.
+    /// Build a namespace record from a root file's explicit public export entries.
     ///
-    /// WHAT: namespace imports of a facade expose the same public API as grouped facade imports,
-    /// including import-only facades and grouped re-export aliases. Receiver methods remain
+    /// WHAT: namespace imports of a root file expose the same public API as grouped imports,
+    /// including import-only roots and grouped re-export aliases. Receiver methods remain
     /// receiver-call-only and are registered through `add_source_namespace_receiver_methods`.
     fn build_facade_namespace_record(
         &self,
-        facade_file: &InternedPath,
-        exported_entries: &FxHashSet<FacadeExportEntry>,
+        root_file: &InternedPath,
+        exported_entries: &FxHashSet<PublicExportEntry>,
         location: &SourceLocation,
     ) -> NamespaceImportResult<NamespaceRecord> {
         let mut value_members = FxHashMap::default();
@@ -618,7 +618,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         for entry in exported_entries {
             match &entry.target {
-                FacadeExportTarget::Source(symbol_path) => {
+                PublicExportTarget::Source(symbol_path) => {
                     if self
                         .module_symbols
                         .receiver_method_paths
@@ -644,7 +644,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     }
                 }
 
-                FacadeExportTarget::External(symbol_id) => match symbol_id {
+                PublicExportTarget::External(symbol_id) => match symbol_id {
                     ExternalSymbolId::Function(_) | ExternalSymbolId::Constant(_) => {
                         value_members.insert(
                             entry.export_name,
@@ -661,18 +661,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         }
 
-        self.check_duplicate_namespace_members(
-            facade_file,
-            &value_members,
-            &type_members,
-            location,
-        )?;
+        self.check_duplicate_namespace_members(root_file, &value_members, &type_members, location)?;
 
         Ok(NamespaceRecord {
             value_members,
             type_members,
             child_namespaces: FxHashMap::default(),
-            record_source: NamespaceRecordSource::SourceFile(facade_file.clone()),
+            record_source: NamespaceRecordSource::SourceFile(root_file.clone()),
         })
     }
 

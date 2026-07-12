@@ -14,7 +14,7 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidReceiverDeclarationReason,
 };
 use crate::compiler_frontend::headers::import_environment::diagnostics;
-use crate::compiler_frontend::headers::module_symbols::FacadeExportTarget;
+use crate::compiler_frontend::headers::module_symbols::PublicExportTarget;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -111,7 +111,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         match access {
             SourceImportAccess::Internal | SourceImportAccess::DirectSourceExport => true,
             SourceImportAccess::Facade { exported_entries } => exported_entries.iter().any(
-                |entry| matches!(&entry.target, FacadeExportTarget::Source(path) if path == nominal_type_path),
+                |entry| matches!(&entry.target, PublicExportTarget::Source(path) if path == nominal_type_path),
             ),
         }
     }

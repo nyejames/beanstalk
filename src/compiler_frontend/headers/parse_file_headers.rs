@@ -12,11 +12,11 @@ use crate::compiler_frontend::headers::constant_dependencies::{
     ConstantDependencyInput, add_constant_initializer_dependencies,
 };
 use crate::compiler_frontend::headers::dependency_canonicalization::canonicalize_header_dependencies;
-use crate::compiler_frontend::headers::facade_data::build_facade_data;
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::import_environment::{
     ImportEnvironmentInput, prepare_import_environment,
 };
+use crate::compiler_frontend::headers::public_exports::build_public_exports;
 use crate::compiler_frontend::headers::symbol_collection::build_module_symbols;
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
@@ -137,7 +137,7 @@ pub fn prepare_file_from_tokens(
 /// Aggregate per-file frontend preparation outputs into module-wide `Headers`.
 ///
 /// WHAT: consumes already-remapped `FileFrontendPrepareOutput` values and builds the module-wide
-/// symbol package, import environment, dependency graph, and facade data.
+/// symbol package, import environment, dependency graph, and public export data.
 /// WHY: module-wide aggregation must happen after all per-file outputs have been remapped into
 /// the global string table so that symbol paths and dependency edges resolve consistently.
 pub fn parse_headers(
@@ -167,7 +167,7 @@ pub fn parse_headers(
     }
 
     if let Some(resolver) = project_path_resolver {
-        build_facade_data(
+        build_public_exports(
             &mut module_symbols,
             &headers,
             resolver,

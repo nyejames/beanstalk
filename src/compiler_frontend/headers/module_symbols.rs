@@ -46,24 +46,24 @@ use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::PathBuf;
 
-/// Resolved target of a facade export entry.
+/// Resolved target of a module-root public export entry.
 ///
-/// WHAT: a facade export exposes either a source declaration or an external package symbol
-/// through the module facade.
+/// WHAT: a public export exposes either a source declaration or an external package symbol
+/// through a module-root public surface.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum FacadeExportTarget {
+pub enum PublicExportTarget {
     Source(InternedPath),
     External(crate::compiler_frontend::external_packages::ExternalSymbolId),
 }
 
-/// One exported symbol in a module facade.
+/// One exported symbol in a module-root public surface.
 ///
 /// WHAT: records the name that external importers use and the resolved target.
-/// WHY: the public facade name can differ from the canonical declaration path.
+/// WHY: the public API name can differ from the canonical declaration path.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FacadeExportEntry {
+pub struct PublicExportEntry {
     pub export_name: StringId,
-    pub target: FacadeExportTarget,
+    pub target: PublicExportTarget,
 }
 
 /// Prepared entry-root boundary identity used by header import resolution.
@@ -121,13 +121,13 @@ pub(crate) struct ModuleSymbols {
     // Order-independent maps built during header parsing.
     pub(crate) canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath>,
     pub(crate) module_file_paths: FxHashSet<InternedPath>,
-    // Per-file metadata is recorded for every prepared file, including import-only facades that
+    // Per-file metadata is recorded for every prepared file, including import-only root files that
     // produce no declaration headers.
     pub(crate) file_roles_by_source: FxHashMap<InternedPath, FileRole>,
     pub(crate) canonical_os_path_by_source: FxHashMap<InternedPath, PathBuf>,
     pub(crate) file_imports_by_source: FxHashMap<InternedPath, Vec<FileImport>>,
-    // Source declarations eligible for import-environment source surfaces. Private facade
-    // declarations are intentionally absent because they are reachable only inside the facade
+    // Source declarations eligible for import-environment source surfaces. Private root-file
+    // declarations are intentionally absent because they are reachable only inside the root
     // file that authored them.
     pub(crate) importable_source_symbol_paths: FxHashSet<InternedPath>,
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
@@ -160,21 +160,21 @@ pub(crate) struct ModuleSymbols {
     //      enough to avoid importing unrelated methods from the same source file.
     pub(crate) receiver_method_receiver_names: FxHashMap<InternedPath, StringId>,
 
-    // Facade data: maps source-library import prefix to exported module-facade entries.
+    // Public export data: maps source-library import prefixes to exported root-file entries.
     // Each entry records the export name (which may differ from the target path name via alias)
     // and the resolved target (source symbol path or external symbol id).
-    pub(crate) facade_exports: FxHashMap<String, FxHashSet<FacadeExportEntry>>,
-    // Maps source-library import prefix to the actual logical `#mod.bst` source file.
-    // WHY: namespace imports need the facade file itself, not a synthetic `prefix/#mod.bst`
-    // spelling, because source-library roots usually live under configured folders such as `lib/`.
-    pub(crate) source_library_facade_files: FxHashMap<String, InternedPath>,
+    pub(crate) source_library_public_exports: FxHashMap<String, FxHashSet<PublicExportEntry>>,
+    // Maps source-library import prefix to the actual logical root source file.
+    // WHY: namespace imports need the prepared root file itself, not a synthetic path spelling,
+    // because source-library roots usually live under configured folders such as `lib/`.
+    pub(crate) source_library_root_files: FxHashMap<String, InternedPath>,
     // Maps source file logical path to its library prefix, if the file belongs to a source library.
     pub(crate) file_library_membership: FxHashMap<InternedPath, String>,
     // Module root membership for entry-root files (not source libraries).
     // Maps file path (logical or canonical) to its module root path.
     pub(crate) file_module_membership: FxHashMap<InternedPath, InternedPath>,
-    // Facade exports for entry-root module roots, keyed by module root path.
-    pub(crate) module_root_facade_exports: FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
+    // Public exports for module roots, keyed by module root path.
+    pub(crate) module_root_public_exports: FxHashMap<InternedPath, FxHashSet<PublicExportEntry>>,
     // Prepared entry-root boundary identities, sorted by import prefix longest first.
     // Used for intercepting cross-module imports before file resolution and for resolving the
     // actual prepared export file for namespace imports.
@@ -205,11 +205,11 @@ impl ModuleSymbols {
             nominal_type_paths: FxHashSet::default(),
             trait_paths: FxHashSet::default(),
             generic_declarations_by_path: FxHashMap::default(),
-            facade_exports: FxHashMap::default(),
-            source_library_facade_files: FxHashMap::default(),
+            source_library_public_exports: FxHashMap::default(),
+            source_library_root_files: FxHashMap::default(),
             file_library_membership: FxHashMap::default(),
             file_module_membership: FxHashMap::default(),
-            module_root_facade_exports: FxHashMap::default(),
+            module_root_public_exports: FxHashMap::default(),
             module_root_boundaries: Vec::new(),
         }
     }

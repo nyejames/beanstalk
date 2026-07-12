@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
-use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
+use crate::compiler_frontend::headers::module_symbols::{PublicExportEntry, PublicExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -386,7 +386,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             .module_symbols
             .file_library_membership
             .get(public_facade_file)
-            && let Some(entries) = self.module_symbols.facade_exports.get(library_prefix)
+            && let Some(entries) = self
+                .module_symbols
+                .source_library_public_exports
+                .get(library_prefix)
             && entries
                 .iter()
                 .any(|entry| facade_export_targets_source_path(entry, path))
@@ -400,7 +403,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             .get(public_facade_file)
             && let Some(entries) = self
                 .module_symbols
-                .module_root_facade_exports
+                .module_root_public_exports
                 .get(module_root)
             && entries
                 .iter()
@@ -476,10 +479,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     }
 }
 
-fn facade_export_targets_source_path(entry: &FacadeExportEntry, path: &InternedPath) -> bool {
+fn facade_export_targets_source_path(entry: &PublicExportEntry, path: &InternedPath) -> bool {
     match &entry.target {
-        FacadeExportTarget::Source(exported_path) => exported_path == path,
-        FacadeExportTarget::External(_) => false,
+        PublicExportTarget::Source(exported_path) => exported_path == path,
+        PublicExportTarget::External(_) => false,
     }
 }
 

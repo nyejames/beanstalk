@@ -9,7 +9,7 @@ use super::*;
 use crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
+use crate::compiler_frontend::headers::module_symbols::{PublicExportEntry, PublicExportTarget};
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderKind, HeaderParseOptions, Headers, parse_headers, prepare_file_from_tokens,
 };
@@ -556,7 +556,7 @@ fn trait_incompatibility_references_do_not_create_dependency_sort_edges() {
 }
 
 #[test]
-fn source_library_facade_export_dependency_edges_do_not_require_concrete_header_paths() {
+fn source_library_public_export_dependency_edges_do_not_require_concrete_header_paths() {
     let (mut headers, mut string_table) = parse_module_headers(
         &[("src/page.bst", "NeedsWidget #String = \"ok\"\n")],
         "src/page.bst",
@@ -579,16 +579,16 @@ fn source_library_facade_export_dependency_edges_do_not_require_concrete_header_
 
     headers
         .module_symbols
-        .facade_exports
+        .source_library_public_exports
         .entry("helper".to_owned())
         .or_default()
-        .insert(FacadeExportEntry {
+        .insert(PublicExportEntry {
             export_name: widget_name,
-            target: FacadeExportTarget::Source(concrete_target),
+            target: PublicExportTarget::Source(concrete_target),
         });
 
     let sorted = resolve_module_dependencies(headers, &mut string_table)
-        .expect("facade export dependency path should be accepted without a graph header");
+        .expect("public export dependency path should be accepted without a graph header");
 
     let non_start_names: Vec<_> = sorted
         .headers
@@ -600,6 +600,6 @@ fn source_library_facade_export_dependency_edges_do_not_require_concrete_header_
     assert_eq!(
         non_start_names,
         vec!["NeedsWidget"],
-        "source-library public facade export paths may differ from concrete source headers"
+        "source-library public export paths may differ from concrete source headers"
     );
 }
