@@ -1,213 +1,330 @@
-# Beanstalk language documentation migration — design brief
+# Beanstalk language documentation migration
 
 ## 1. Purpose
 
-This migration will replace `docs/language-overview.md` as the monolithic language authority with a set of focused Beandown references embedded in the public documentation site.
+This project will replace the single long-form language reference with focused Beandown references embedded in the public documentation site.
 
-The new structure must serve three jobs without forcing them into the same prose:
+`docs/language-overview.md` remains untouched and authoritative throughout the migration. It is the parity baseline and backup reference until every language area has been migrated, reviewed and explicitly approved for an authority switch.
+
+The new structure separates three jobs:
 
 1. **`#page.bst` entry files** provide the public website experience: structure, introductions, examples, personality, visual layout, concept ordering and navigation.
-2. **`<concept>-basic.bd` files** teach each concept slowly with definitions, mental models and plenty of examples while avoiding unstable edge cases and excessive technical detail.
-3. **`<concept>.bd` files** are the canonical semantic references. They describe exact language behavior, restrictions, edge cases, inference boundaries, deferred behavior and outside-scope decisions.
+2. **`<concept>-basic.bd` files** teach each concept with definitions, mental models and progressive examples while avoiding unstable edge cases and excessive technical detail.
+3. **`<concept>.bd` files** are detailed semantic replacements written in the intended final canonical shape. They describe exact behaviour, restrictions, edge cases, inference boundaries, deferred behaviour and outside-scope decisions.
 
-The canonical file intentionally has **no `-advanced` suffix**. Once migrated, it is the normal source of truth for that language concept. `-basic` marks the distilled teaching version.
+The unsuffixed file intentionally has no `-advanced` suffix. It feeds the website's **Advanced** panel and is intended to become the final semantic reference after the migration passes parity review. During migration it does not supersede `docs/language-overview.md`.
 
-This extends the structural precedent established by the codebase migration: presentation belongs to the page entry while reusable technical content belongs in Beandown. The current tracked `AGENTS.md`, not the earlier migration snapshots, remains authoritative for repository behavior. 
+Presentation belongs to the page entry. Reusable teaching and semantic content belongs in Beandown.
 
----
-
-# 2. Fixed design decisions
-
-These decisions should not be reinterpreted independently by later implementation plans.
-
-| Area                         | Decision                                                                          |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| Canonical semantics          | `<concept>.bd`                                                                    |
-| Beginner teaching            | `<concept>-basic.bd`                                                              |
-| Website composition          | `#page.bst` imports both                                                          |
-| Website default              | Basic                                                                             |
-| Alternate website level      | Advanced                                                                          |
-| Toggle granularity           | One toggle per concept, not one per page                                          |
-| Toggle implementation        | Two native radios with CSS `:checked` selectors                                   |
-| JavaScript                   | None for the initial implementation                                               |
-| ARIA tabs                    | Do not use                                                                        |
-| Page heading                 | One H1 per page                                                                   |
-| Concept heading              | One stable heading outside both variants                                          |
-| Navigation                   | Explicit Previous and Next page links                                             |
-| Sidebar and glossary         | Designed for later, not implemented now                                           |
-| Cross-page level persistence | Not implemented now                                                               |
-| Migration cadence            | Small, reviewable patches                                                         |
-| Monolith removal             | Only after complete parity and authority review                                   |
-| Public LLM references        | Allowed where they genuinely describe the language, tooling or project philosophy |
-| Reader treatment             | Never address or route the reader as though they might be an agent or LLM         |
+`AGENTS.md` and `docs/language-overview.md` are protected throughout the migration. Ordinary route workers must not edit either file.
 
 ---
 
-# 3. Goals
+## 2. Fixed decisions
 
-## 3.1 Semantic goals
+These decisions are project constraints. Route-level implementation plans must not reinterpret them.
 
-The migration must:
-
-* preserve every accepted rule currently owned by `docs/language-overview.md`
-* reconcile stale website material against the current language authority
-* give every normative rule one canonical home
-* distinguish accepted semantics from current implementation coverage
-* distinguish deferred work from intentionally excluded language design
-* keep the exact behavior easy to update when compiler semantics change
-* make canonical references efficient to read directly without loading page presentation
-
-`docs/language-overview.md` currently combines syntax, semantics, edge cases, deferred features, project rules and design-scope decisions across a very large reference. That breadth makes it a useful migration ledger, but a poor long-term unit of ownership.
-
-## 3.2 Public documentation goals
-
-The website must:
-
-* offer an approachable path through the language
-* begin with concepts and examples rather than edge-case inventories
-* let the reader switch a single concept to Advanced without changing the rest of the page
-* keep headings, anchors and page navigation stable while switching
-* provide enough examples that a beginner can learn without opening Advanced
-* expose detailed behavior without sending readers to a separate maintainer site
-* retain Beanstalk's playful, conversational voice
-* maintain one clear learning sequence across pages
-
-## 3.3 Maintenance goals
-
-The structure should reduce duplicated work:
-
-* subtle compiler behavior normally changes only the canonical `.bd`
-* a basic file changes only when the high-level model changes
-* page copy changes only when presentation, tone or navigation changes
-* exact semantic details do not need to be repeated in page introductions
-* editorial jokes do not become normative language rules
-* future navigation work does not require rewriting concept content
-
-The basic files may be **longer** than the canonical files because examples and beginner explanations take space. They should be semantically narrower, not necessarily shorter.
+| Area | Decision |
+|---|---|
+| Active language authority | `docs/language-overview.md` until explicit final approval |
+| Detailed replacement | Unsuffixed `<concept>.bd` |
+| Beginner teaching | `<concept>-basic.bd` |
+| Website composition | `#page.bst` imports both levels |
+| Website default | Basic |
+| Alternate website level | Advanced |
+| Toggle granularity | One independent toggle per concept |
+| Toggle implementation | Two native radios with CSS `:checked` selectors |
+| JavaScript | None for the initial implementation |
+| ARIA tabs | Do not use |
+| Page heading | One H1 per page |
+| Concept heading | One stable H2 outside both variants |
+| Fragment headings | H3 and deeper only |
+| Navigation | Explicit Previous and Next page links |
+| Sequence endpoints | Dedicated Previous-only or Next-only pager |
+| Sidebar and glossary | Designed for later, not implemented now |
+| Cross-page level persistence | Not implemented now |
+| Migration cadence | Small, reviewable patches |
+| Monolith editing | Prohibited during migration |
+| `AGENTS.md` editing | Prohibited during migration |
+| Shadow authority files | Do not create alternate copies such as `language-review.md` or `language-overview-new.md` |
+| Monolith removal | Only after full parity review and explicit user approval |
+| Generated release artifacts | May remain modified during and after a patch |
+| Generated HTML editing | Prohibited |
+| Import/export repairs | Allowed when current strict export rules require a narrow fix |
+| Public LLM references | Allowed when they describe the language, tooling, project philosophy or a deliberate joke |
+| Reader treatment | Never address or route the reader as though they might be an agent or LLM |
 
 ---
 
-# 4. Non-goals
+## 3. Authority model
 
-This project will not initially:
+### 3.1 Authority during migration
 
-* migrate every language route in one patch
-* add a global Basic or Advanced preference
-* remember the selected level across page navigation
-* add JavaScript for toggle behavior
-* implement the planned glossary
-* implement the planned responsive sidebar
-* redesign the complete documentation theme
-* move compiler architecture into language references
-* delete `docs/language-overview.md` before complete parity review
-* treat the current website pages as reliable semantic sources
-* convert the async design draft into supported-language documentation
-* generate basic files mechanically from canonical files
-* use automated prose rewriting across the documentation tree
+During the migration:
 
----
+| Source | Responsibility |
+|---|---|
+| `docs/language-overview.md` | Complete compiler-facing language authority and stable parity baseline |
+| Unsuffixed `<concept>.bd` | Detailed semantic replacement under review |
+| `<concept>-basic.bd` | Simplified teaching version consistent with the detailed replacement |
+| `#page.bst` | Website structure, tone, navigation and editorial context |
+| `docs/src/docs/codebase/language/overview.bd` | Index of focused replacements completed so far |
+| Progress matrix | Current implementation and backend coverage |
+| Roadmap | Sequencing, active plans and unaccepted work |
+| Compiler-design docs | Compiler stage ownership and implementation contracts |
+| Memory docs | Access, borrowing, ownership and lowering architecture |
 
-# 5. Content authority model
+No ordinary route patch transfers authority.
 
-## 5.1 Final authority hierarchy
+The duplicate semantic coverage between the monolith and the new detailed files is intentional during migration. It provides a stable comparison target and prevents an incomplete replacement from silently becoming authoritative.
 
-After migration, authority should be:
+The unsuffixed files must be complete enough to replace the monolith later. They remain replacement candidates until the whole migration has passed review.
 
-| Source                                        | Responsibility                                            |
-| --------------------------------------------- | --------------------------------------------------------- |
-| Canonical `<concept>.bd`                      | Exact language semantics                                  |
-| `<concept>-basic.bd`                          | Simplified explanation consistent with the canonical file |
-| `#page.bst`                                   | Website structure, tone, navigation and editorial context |
-| `docs/src/docs/codebase/language/overview.bd` | Routing map to canonical concept references               |
-| Progress matrix                               | Current implementation and backend coverage               |
-| Roadmap                                       | Sequencing, active proposals and unaccepted work          |
-| Compiler-design docs                          | Compiler stage ownership and implementation contracts     |
-| Memory docs                                   | Access, borrowing, ownership and lowering architecture    |
+### 3.2 Final authority model
 
-A `#page.bst` file is never the canonical location for subtle semantic rules. It may summarize stable ideas, but a rule that another compiler contributor needs to implement must have a canonical `.bd` owner.
+After every language area has been migrated and the complete parity audit has passed, the user may approve a separate authority-switch patch.
 
-A basic file is not an independent specification. It can omit complexity, but it cannot simplify a rule into something false.
+The intended final hierarchy is:
 
-## 5.2 Authority during incremental migration
+| Source | Responsibility |
+|---|---|
+| Unsuffixed `<concept>.bd` | Exact language semantics |
+| `<concept>-basic.bd` | Simplified explanation consistent with the detailed reference |
+| `#page.bst` | Website structure, tone, navigation and editorial context |
+| `docs/src/docs/codebase/language/overview.bd` | Routing map to focused semantic references |
+| Progress matrix | Current implementation and backend coverage |
+| Roadmap | Sequencing, active proposals and unaccepted work |
+| Compiler-design docs | Compiler stage ownership and implementation contracts |
+| Memory docs | Access, borrowing, ownership and lowering architecture |
 
-A full authority switch at the end would require maintaining two complete semantic sources throughout the project. Avoid that.
+The final authority switch is a distinct user-approved operation. Migration workers must not edit `AGENTS.md`, shorten the monolith, turn it into an index or delete it.
 
-Authority should transfer **concept by concept**.
+### 3.3 Focused-reference index
 
-### Migration routing index
-
-Repurpose:
+Use:
 
 ```text
 docs/src/docs/codebase/language/overview.bd
 ```
 
-as the language authority map.
+to list focused replacement sets completed so far.
 
 During migration it should identify:
 
-* concepts already owned by canonical Beandown files
-* their canonical paths
-* concepts still owned by `docs/language-overview.md`
-* directly related language and codebase references
+- each completed unsuffixed detailed file
+- its paired basic file or files
+- the public route that combines them
+- the fact that `docs/language-overview.md` remains authoritative
+- directly related language, compiler and memory references
 
-It remains a neutral technical routing document. It should not talk about agents or identify reader types.
+It remains a neutral technical index. It must not claim that authority has moved.
 
-### Per-concept handoff
+### 3.4 Public codebase language page
 
-A concept patch transfers authority only when all of these land together:
+The website route under:
 
-1. Canonical `<concept>.bd`
-2. Paired `<concept>-basic.bd`
-3. Updated `#page.bst`
-4. Updated language authority map
-5. Updated `docs/language-overview.md` section
-6. Relevant links and navigation
-7. Successful generated-output review
-
-The migrated monolith section should be replaced with a concise canonical pointer rather than retaining a second full copy:
-
-```markdown
-## Loops
-
-Canonical loop semantics are maintained in:
-
-`docs/src/docs/loops/loops.bd`
+```text
+docs/src/docs/codebase/language/
 ```
 
-This prevents two active copies from drifting.
+may explain where compiler-facing language references live. It should stay useful to a reader and avoid migration-management chatter.
 
-### First authority-routing patch
-
-The first migration patch that transfers a concept should update `AGENTS.md` so language work follows this sequence:
-
-1. Read `docs/src/docs/codebase/language/overview.bd`
-2. Read the canonical concept files it selects
-3. Use `docs/language-overview.md` only for concepts not migrated yet
-4. Use the progress matrix for current support
-
-The current tracked rules still identify the monolith as the remaining language authority, so this change is necessary once the first concept moves.
-
-## 5.3 Resolving semantic conflicts
-
-For each concept, review evidence in this order:
-
-1. Explicit user decisions for the migration
-2. Current accepted semantics in `docs/language-overview.md`
-3. Relevant compiler and memory design references
-4. Progress matrix for implementation coverage
-5. Tests and implementation when documentation and behavior appear inconsistent
-6. Existing website page only as non-authoritative teaching material
-
-Do not silently canonize an accidental compiler behavior.
-
-When implementation conflicts with accepted design, the patch must identify the conflict. The canonical language file should record the accepted behavior. The progress matrix should explain current support where relevant.
+It may say that focused references are under review. It must not announce that a concept has superseded the monolith before final approval.
 
 ---
 
-# 6. File and naming architecture
+## 4. Goals
 
-## 6.1 One pair per concept
+### 4.1 Semantic goals
+
+The migration must:
+
+- preserve every accepted rule in `docs/language-overview.md`
+- preserve important valid examples, invalid examples and edge cases
+- reconcile stale website content against the monolith
+- keep deferred behaviour distinct from outside-scope behaviour
+- distinguish accepted language design from current implementation coverage
+- give every normative fact one planned final owner
+- keep detailed references efficient to load directly
+- make subtle compiler-relevant behaviour easy to update
+- report implementation conflicts rather than silently choosing one side
+- retain the monolith unchanged for final whole-project review
+
+### 4.2 Public documentation goals
+
+The website must:
+
+- offer an approachable path through the language
+- begin with concepts and examples rather than edge-case inventories
+- let a reader switch one concept to Advanced without changing the rest of the page
+- keep headings, anchors and navigation stable while switching
+- provide enough examples that Basic is useful on its own
+- expose detailed behaviour without sending readers to another site
+- retain Beanstalk's playful and conversational voice
+- maintain one clear learning sequence across pages
+- remain useful on mobile, desktop and printed output
+
+### 4.3 Maintenance goals
+
+The structure should reduce unnecessary duplicated editing:
+
+- subtle semantic changes normally update the unsuffixed file
+- a basic file changes only when the stable mental model changes
+- page copy changes when presentation, tone or navigation changes
+- exact rules are not repeated in page introductions
+- jokes and editorial examples do not become normative language rules
+- future navigation work does not require rewriting concept content
+- final direct references can be loaded without page layout or beginner prose
+
+A basic file may be longer than its detailed partner because teaching takes examples and explanation. It should be semantically narrower, not necessarily shorter.
+
+---
+
+## 5. Non-goals
+
+This project will not initially:
+
+- migrate every language route in one patch
+- add a global Basic or Advanced preference
+- remember the selected level across page navigation
+- add JavaScript for toggle behaviour
+- implement the planned glossary
+- implement the planned responsive sidebar
+- redesign the complete documentation theme
+- move compiler architecture into language references
+- edit, shorten or replace sections in `docs/language-overview.md`
+- edit `AGENTS.md`
+- create a second monolithic authority or migration copy
+- delete the monolith before complete parity review and explicit approval
+- require documentation builds to leave a clean worktree
+- treat current website pages as reliable semantic sources
+- convert the async design draft into supported-language documentation
+- generate basic files mechanically from detailed files
+- use automated prose rewriting across the documentation tree
+- turn every current compiler implementation detail into accepted language semantics
+
+---
+
+## 6. Layer responsibilities
+
+### 6.1 `#page.bst`
+
+The page entry owns:
+
+- imports
+- browser title
+- page description
+- theme head
+- navbar
+- breadcrumb
+- the page's single H1
+- friendly introduction
+- page-level mental model
+- ordering of concepts
+- toggle component calls
+- transition prose between concepts
+- optional editorial examples
+- jokes and conversational asides
+- related-page links
+- Previous and Next navigation
+
+The page should not own:
+
+- exhaustive syntax rules
+- inference boundaries
+- precise rejected forms
+- backend-specific edge-case matrices
+- normative deferred or outside-scope inventories
+- compiler implementation paths
+- duplicate copies of detailed examples
+
+A page may summarise stable concepts, but a semantic fact needed by a direct reader of the Advanced reference must also exist in the unsuffixed `.bd` file.
+
+### 6.2 `<concept>-basic.bd`
+
+The basic file teaches.
+
+It should usually contain:
+
+1. A plain definition
+2. Why the concept exists
+3. The smallest useful example
+4. A step-by-step explanation
+5. Progressively richer examples
+6. Common mistakes
+7. A stable rule to remember
+
+Basic content should:
+
+- introduce terminology before using it
+- avoid assuming knowledge of several other languages
+- use realistic names and examples
+- explain unusual punctuation
+- avoid exhaustive edge-case lists
+- avoid compiler implementation terms
+- avoid backend detail unless the user must act differently
+- avoid large support-status tables
+- remain accurate even when it omits complexity
+
+### 6.3 Unsuffixed `<concept>.bd`
+
+The unsuffixed file specifies the detailed replacement contract.
+
+It should usually contain:
+
+1. A concise definition or contract
+2. Canonical syntax forms
+3. Exact semantic rules
+4. Type and inference behaviour
+5. Receiving-context or scope constraints
+6. Mutation, access or ownership effects where relevant
+7. Evaluation-order or lifetime rules when they are accepted language behaviour
+8. Edge cases
+9. Invalid and rejected forms
+10. Deferred behaviour
+11. Outside-scope behaviour
+12. Links to adjacent detailed concepts
+
+Detailed content should:
+
+- use precise normative language
+- prefer compact rule lists over long teaching prose
+- preserve exact terminology
+- include representative examples
+- preserve unique important examples from the monolith
+- distinguish invalid, deferred and outside-scope behaviour
+- describe backend restrictions only when they affect observable language behaviour
+- link to the progress matrix rather than becoming a status dashboard
+- link to codebase design docs rather than duplicating compiler architecture
+- remain useful when opened directly from the repository
+- contain essential high-level framing even when that framing also appears in `#page.bst`
+
+During migration, compare this file against `docs/language-overview.md`. It is a future canonical reference, not active authority yet.
+
+### 6.4 Progress and roadmap
+
+Use the progress matrix for:
+
+- current implementation support
+- partial support
+- clean rejection
+- backend coverage
+- test coverage
+
+Use the roadmap for:
+
+- sequencing
+- active plans
+- unresolved proposals
+- planned work not yet accepted as language design
+
+Do not turn detailed language references into implementation-status logs.
+
+---
+
+## 7. File and naming architecture
+
+### 7.1 One pair per independently toggleable concept
 
 A page with several independently useful concepts needs several file pairs.
 
@@ -230,16 +347,9 @@ docs/src/docs/errors/
 └── assertions-basic.bd
 ```
 
-This is intentionally more granular than:
+A whole-page pair would permit only one toggle for the entire page and would hide too much material behind one choice.
 
-```text
-errors.bd
-errors-basic.bd
-```
-
-A whole-page pair would permit only one toggle for the entire page.
-
-## 6.2 Naming rules
+### 7.2 Naming rules
 
 Use lower kebab case:
 
@@ -259,9 +369,9 @@ overview.bd
 
 for ordinary concept content.
 
-The unsuffixed file is canonical.
+The unsuffixed file is the detailed replacement and Advanced-panel source. It becomes canonical only after the final authority switch.
 
-## 6.3 Import aliases
+### 7.3 Import aliases
 
 Use explicit aliases that preserve the relationship:
 
@@ -275,18 +385,9 @@ import @./mutable-access-basic {
 }
 ```
 
-Do not use generic aliases such as:
+Do not use generic aliases such as `content`, `advanced`, `basic` or `reference` when a page imports several concepts.
 
-```beanstalk
-content
-advanced
-basic
-reference
-```
-
-when a page imports several concepts.
-
-## 6.4 Concept keys
+### 7.4 Concept keys
 
 Every toggle receives a manually authored stable key:
 
@@ -298,399 +399,465 @@ fixed-collections
 
 The key owns:
 
-* the stable concept anchor
-* radio input IDs
-* the radio group name
-* future sidebar deep links
-* future glossary links
+- the stable concept anchor
+- radio input IDs
+- the radio group name
+- future sidebar deep links
+- future glossary links
 
 Keys must:
 
-* be unique within the page
-* use lowercase ASCII kebab case
-* remain stable even when the displayed heading changes
-* never be derived automatically from heading text
+- be unique within the page
+- use lowercase ASCII kebab case
+- remain stable when display wording changes
+- never be generated automatically from a heading
 
-## 6.5 Heading rules
+### 7.5 Heading rules
 
 Each page has exactly one H1.
 
-Each toggled concept has one stable H2 outside both variants.
+Each toggled concept has one H2 outside both content variants.
 
-The basic and canonical Beandown files:
+Basic and detailed Beandown files:
 
-* must not begin with H1 or H2
-* may use H3 and deeper headings
-* should begin with a definition or contract paragraph
-* must not repeat the concept title
-* must not own page navigation
-
-This keeps the direct source readable while preventing duplicate page headings.
+- must not begin with H1 or H2
+- may use H3 and deeper headings
+- should begin with a definition or contract paragraph
+- must not repeat the concept title
+- must not own page navigation
 
 ---
 
-# 7. Responsibility of each layer
+## 8. Information preservation and parity review
 
-## 7.1 `#page.bst`
+### 8.1 The monolith is read-only evidence
 
-The page entry owns:
+`docs/language-overview.md` is the stable comparison target.
 
-* imports
-* browser title
-* page description
-* theme head
-* navbar
-* breadcrumb
-* the page's single H1
-* friendly introduction
-* page-level mental model
-* ordering of concepts
-* toggle component calls
-* transition prose between concepts
-* optional editorial examples
-* jokes and conversational asides
-* related pages
-* Previous and Next navigation
+Route workers must:
 
-It should not own:
+- read the relevant section
+- quote or inventory its rules in their private work notes
+- compare the final detailed files against it
+- leave the source file byte-for-byte unchanged
 
-* exhaustive syntax rules
-* inference boundaries
-* backend-specific edge-case matrices
-* precise rejected forms
-* normative deferred or outside-scope inventories
-* compiler implementation paths
-* duplicate copies of canonical examples
+They must not:
 
-The page can say:
+- replace migrated sections with pointers
+- add migration notices
+- shorten examples
+- correct unrelated wording
+- split the file
+- create a shadow copy under another name
 
-> Collections are Beanstalk's ordered groups of values. They use braces, not square brackets, because square brackets have a more interesting job.
+Before and after each patch, inspect:
 
-The exact fixed-capacity identity and inference rules belong in the canonical files.
+```sh
+git diff -- docs/language-overview.md AGENTS.md
+```
 
-## 7.2 `<concept>-basic.bd`
+Any patch-created change is a blocking scope violation.
 
-The basic file teaches.
+### 8.2 Per-concept rule inventory
 
-It should usually contain:
+Before writing a concept, inventory:
 
-1. A plain definition
-2. Why the concept exists
-3. The smallest useful example
-4. A step-by-step explanation
-5. A few progressively richer examples
-6. Common mistakes
-7. A stable high-level rule to remember
+- every normative paragraph
+- every table row
+- every syntax form
+- every valid example that carries unique information
+- every invalid or removed form
+- every edge case
+- every deferred feature
+- every outside-scope decision
+- every statement containing words such as `must`, `must not`, `only`, `never`, `invalid`, `requires`, `deferred` or `outside scope`
 
-Basic content should:
+Assign each item to one planned unsuffixed owner.
 
-* introduce terminology before using it
-* avoid assuming familiarity with several other languages
-* use realistic names and examples
-* explain punctuation that may look unusual
-* avoid exhaustive edge-case lists
-* avoid compiler implementation terms
-* avoid backend details unless the user must act differently
-* avoid large support-status tables
-* be accurate without being exhaustive
+Do not start prose until the ownership map is clear.
 
-A basic file may include many examples. That is expected.
+### 8.3 Example parity
 
-## 7.3 Canonical `<concept>.bd`
+The Advanced panel completely replaces Basic. An important example present only in Basic is not visible when Advanced is selected.
 
-The canonical file specifies.
+For that reason:
 
-It should usually contain:
+- preserve important unique monolith examples in the detailed file
+- replace an example only with an equivalent or stronger example
+- record why an example was intentionally omitted
+- do not assume page-level or Basic examples satisfy direct-read parity
 
-1. A concise definition or contract
-2. Canonical syntax forms
-3. Exact semantic rules
-4. Type and inference behavior
-5. Receiving-context or scope constraints
-6. Mutation, access or ownership effects where relevant
-7. Edge cases
-8. Invalid and rejected forms
-9. Deferred behavior
-10. Outside-scope behavior
-11. Links to adjacent canonical concepts
+Basic may contain additional teaching examples that do not belong in the detailed file.
 
-Canonical content should:
+### 8.4 Direct-reading gate
 
-* use precise normative language
-* prefer concise rule lists over long teaching prose
-* preserve exact terminology
-* include representative examples, not every possible beginner example
-* distinguish “invalid”, “deferred” and “outside scope”
-* describe backend-visible restrictions only when they affect language behavior
-* link to the progress matrix rather than becoming a status dashboard
-* link to codebase design docs rather than duplicating compiler architecture
-* remain useful when opened directly from the repository
+Review every unsuffixed file as though the website page and Basic file were unavailable.
 
-This file is what compiler maintainers and language-aware tools should normally load.
+It must answer:
+
+- What is this feature?
+- What syntax forms are accepted?
+- What exact behaviour is guaranteed?
+- What types and contexts are valid?
+- What forms are rejected?
+- What edge cases matter?
+- What is deferred?
+- What is outside scope?
+- Which adjacent reference owns related rules?
+
+High-level framing that is essential to understanding the feature must not live only in `#page.bst`.
+
+### 8.5 Basic consistency gate
+
+For every statement in a Basic file, ask:
+
+> Is this still true under every detailed rule that Basic omits?
+
+If not, rewrite the Basic explanation. Do not use a convenient simplification that becomes false in an edge case.
+
+### 8.6 Implementation-derived information
+
+Implementation and tests are evidence, not automatic language authority.
+
+When code exposes behaviour absent from the monolith:
+
+1. Decide whether the behaviour is an intentional observable language contract
+2. Check relevant compiler or memory design references
+3. Check tests for deliberate coverage
+4. Report ambiguity instead of silently canonising an implementation accident
+5. Add it to the detailed file only when accepted as language behaviour
+
+Examples include:
+
+- expression evaluation order
+- whether a source expression is evaluated once or repeatedly
+- mutation visibility during iteration
+- backend-specific string ordering
+- runtime failure timing
+- internal lowering shapes
+
+Compiler-internal representation never belongs in language semantics merely because it is current implementation.
+
+### 8.7 Conflict resolution order
+
+For each concept, review evidence in this order:
+
+1. Explicit user decisions for the migration
+2. Current accepted semantics in `docs/language-overview.md`
+3. Relevant compiler and memory design references
+4. Progress matrix for implementation coverage
+5. Tests and implementation when documentation and behaviour appear inconsistent
+6. Existing website pages as non-authoritative teaching material
+
+When implementation conflicts with accepted design:
+
+- do not edit the monolith
+- do not silently document the implementation as final semantics
+- report the conflict
+- keep implementation status in the progress matrix when an update is actually required
 
 ---
+## 9. Writing and audience standards
 
-# 8. LLM references and public tone
+### 9.1 Shared prose rules
 
-There is **no global ban** on mentioning LLMs.
+Use:
 
-## Allowed
+- straight apostrophes
+- natural contractions
+- varied sentence lengths
+- direct examples
+- concise headings
+- friendly confidence
+- exact code syntax
 
-Keep references when they genuinely describe:
+Avoid:
 
-* Beanstalk's LLM-aware design goals
-* terse diagnostic output being useful to LLM workflows
-* tool integration
-* historical jokes
-* playful examples such as the deliberate strawberry misspelling
-* reasons the language favors readability and constrained syntax
+- em dashes
+- curly apostrophes
+- prose semicolons
+- unnecessary Oxford commas
+- generic transitions such as `however`, `therefore` and `consequently`
+- long document-mechanics preambles
+- vague support wording when a precise semantic rule exists
+- visible template escape artifacts
 
-The comment about spelling strawberry incorrectly “to confuse LLMs” can remain as page-level personality.
+Do not change literal code syntax to satisfy prose preferences.
 
-The Getting Started statement that terse output is useful for LLM workflows can remain because it describes the tool.
+### 9.2 Audience-neutral documentation
 
-## Not allowed
+Do not write:
 
-Remove or avoid wording that treats the reader as an agent:
+- “agents should read this”
+- “for agents”
+- “agent-only”
+- “if you are an LLM”
+- “humans can skip this”
+- “maintainer mode” as a public toggle label
 
-* “Agents should read this section”
-* “If you are an LLM”
-* “This page is primarily for agents”
-* “Humans can skip this”
-* “Agent version”
-* “Agent-only explanation”
-
-The UI labels remain simply:
+The UI labels remain:
 
 ```text
 Basic
 Advanced
 ```
 
-The canonical source is not described publicly as “the agent version”.
+The unsuffixed file is not publicly described as an agent version.
+
+### 9.3 Legitimate LLM references
+
+There is no global ban on mentioning LLMs.
+
+Keep references when they genuinely describe:
+
+- Beanstalk's LLM-aware design goals
+- terse diagnostic output being useful to LLM workflows
+- editor or tool integration
+- historical jokes
+- deliberate playful examples such as the strawberry misspelling
+- why the language favours readability and constrained syntax
+
+Remove only wording that treats the reader as though they might be an LLM or routes them according to agent workflow.
+
+### 9.4 Examples
+
+Basic examples should:
+
+- compile when presented as valid
+- introduce one new idea at a time
+- progress from small to realistic
+- avoid unrelated advanced features
+- explain intent with short comments when useful
+
+Detailed examples should:
+
+- be compact
+- demonstrate exact boundaries
+- show accepted syntax precisely
+- include invalid forms when the rejection matters
+- avoid decorative noise
+- preserve unique semantic evidence from the monolith
+
+Page-only examples may carry more personality. Unique semantic evidence belongs in Beandown.
+
+### 9.5 Inline template syntax
+
+Do not expose escape artifacts such as:
+
+```text
+["#[...]"]
+["[source]"]
+```
+
+Use full code blocks when template syntax cannot be represented cleanly inline.
 
 ---
 
-# 9. Toggle component design
+## 10. Toggle and shared component design
 
-## 9.1 Accepted interaction model
+### 10.1 Accepted interaction model
 
-The initial implementation uses:
+Each concept uses:
 
-* one `fieldset`
-* one visually hidden `legend`
-* two native radios
-* one shared radio `name`
-* two unique radio IDs
-* Basic checked by default
-* labels styled as a segmented selector
-* CSS sibling selectors to reveal one panel
-* no JavaScript
-* no ARIA tab roles
+- one `fieldset`
+- one visually hidden `legend`
+- two native radios
+- one shared radio `name`
+- two unique input IDs
+- Basic checked by default
+- labels styled as a restrained segmented selector
+- CSS sibling selectors to reveal one panel
+- no JavaScript
+- no ARIA tab roles
 
-The supplied radio and CSS pattern is the accepted baseline. Implementation work may adapt names to Beanstalk's component API and shared theme tokens, but it must not redesign the interaction model.
+The heading stays outside both panels so its anchor remains stable.
 
-## 9.2 Component location
+### 10.2 Accessibility requirements
 
-Add the reusable component to:
+The component must:
+
+- use native radio semantics
+- group each pair with `fieldset` and `legend`
+- visually clip inputs rather than applying `display: none`
+- provide visible `:focus-visible` styling on the matching label
+- maintain sufficient contrast in both colour schemes
+- let normal radio keyboard behaviour change selection
+- remove the inactive panel with `display: none`
+- keep the concept heading stable
+- avoid `role="tab"`, `role="tabpanel"` and related tab attributes
+
+Without CSS, both explanations may appear. That is an acceptable fallback because all content remains available.
+
+### 10.3 Unique group rule
+
+Within one concept, the two inputs share a name:
+
+```text
+mutable-access-level
+```
+
+Different concepts must use different names. Selecting Advanced in one concept must not reset another concept.
+
+### 10.4 Default and persistence
+
+Basic is the authored default.
+
+The initial version does not remember selection:
+
+- across page navigation
+- after reload
+- across different concept selectors
+
+A later JavaScript enhancement may introduce a shared preference. It must remain progressive enhancement over the native-radio implementation.
+
+### 10.5 Shared style ownership
+
+Reusable documentation styles live in:
 
 ```text
 docs/src/styles/docs.bst
 ```
 
-That file already owns the site theme, navbar, sections, tables, code blocks and title helpers, but currently has no explanation-level component.
-
-Recommended additions:
+The shared foundation should contain:
 
 ```text
+docs_content_css
 language_docs_css
 language_theme_head
+codebase_theme_head
 doc_level
 doc_pager
+doc_pager_previous
+doc_pager_next
 ```
 
-### `language_docs_css`
+#### `docs_content_css`
+
+Owns article content shared by language and codebase documentation:
+
+- code-block containers
+- horizontal overflow for source examples
+- tables
+- table cells and headers
+- responsive table sizing
+
+Both `language_theme_head` and `codebase_theme_head` include it.
+
+This is required because imported Beandown code blocks may render with an empty inline style. Their visual treatment must come from shared CSS rather than page-local helper identity.
+
+#### `language_docs_css`
 
 Owns:
 
-* explanation selector styles
-* visually hidden utility
-* selected label styles
-* focus-visible styles
-* panel visibility
-* narrow-screen layout
-* reduced-motion handling
-* Previous and Next navigation styles
+- explanation selector styles
+- visually hidden utility
+- selected label styles
+- focus-visible styles
+- panel visibility
+- narrow-screen layout
+- reduced-motion handling
+- pager styles
 
-### `language_theme_head`
+#### `language_theme_head`
 
 Composes:
 
 ```text
 theme_head
+docs_content_css
 language_docs_css
 ```
 
-Do not place the language-only selector CSS into `codebase_theme_head`.
+#### `codebase_theme_head`
 
-### `doc_level`
-
-Conceptual interface:
+Composes:
 
 ```text
-doc_level(
-    key,
-    title,
-    basic_content,
-    advanced_content
-)
+theme_head
+docs_content_css
 ```
 
-The exact Beanstalk function or template signature should be proven in the first patch.
+### 10.6 Pager components
 
-The component must emit static HTML only.
-
-## 9.3 Required markup contract
-
-For a concept key `mutable-access`, generated markup should follow this shape:
-
-```html
-<fieldset class="doc-level">
-    <legend class="visually-hidden">
-        Choose the explanation level for mutable access
-    </legend>
-
-    <input
-        class="doc-level__input doc-level__input--basic"
-        type="radio"
-        name="mutable-access-level"
-        id="mutable-access-basic"
-        value="basic"
-        checked
-    >
-
-    <input
-        class="doc-level__input doc-level__input--advanced"
-        type="radio"
-        name="mutable-access-level"
-        id="mutable-access-advanced"
-        value="advanced"
-    >
-
-    <header class="doc-level__header">
-        <h2 class="doc-level__title" id="mutable-access">
-            Mutable access
-        </h2>
-
-        <div class="doc-level__switch">
-            <label
-                class="doc-level__option doc-level__option--basic"
-                for="mutable-access-basic"
-            >
-                Basic
-            </label>
-
-            <label
-                class="doc-level__option doc-level__option--advanced"
-                for="mutable-access-advanced"
-            >
-                Advanced
-            </label>
-        </div>
-    </header>
-
-    <div class="doc-level__panel doc-level__panel--basic">
-        ...
-    </div>
-
-    <div class="doc-level__panel doc-level__panel--advanced">
-        ...
-    </div>
-</fieldset>
-```
-
-The sibling order is part of the component contract because the CSS relies on `~` selectors.
-
-## 9.4 Accessibility requirements
-
-The component must:
-
-* use native radio semantics
-* group each pair with `fieldset` and `legend`
-* visually clip inputs rather than applying `display: none`
-* provide a visible `:focus-visible` indicator on the matching label
-* maintain sufficient contrast in both color schemes
-* let normal radio keyboard behavior select Basic or Advanced
-* remove the inactive panel from layout and the accessibility tree through `display: none`
-* keep the heading stable during switching
-* avoid `role="tab"`, `role="tabpanel"` and related ARIA tab attributes
-
-Without CSS, both explanations may appear. That is an acceptable fallback because all content remains available.
-
-## 9.5 Unique group rule
-
-Within one component:
+Use:
 
 ```text
-name="mutable-access-level"
+doc_pager
 ```
 
-is shared by its two inputs.
+when both neighbours exist.
 
-Across components, names must differ:
+Use:
 
 ```text
-mutable-access-level
-explicit-copies-level
-shared-access-level
+doc_pager_previous
 ```
 
-Otherwise selecting Advanced in one concept would reset another concept.
+for a final page with only a Previous destination.
 
-## 9.6 Default and persistence
+Use:
 
-Basic is the authored default:
-
-```html
-checked
+```text
+doc_pager_next
 ```
 
-The first version does not remember selection:
+for a first page with only a Next destination.
 
-* across page navigation
-* after a reload
-* across different concept selectors
+Do not emit an empty anchor to simulate a missing neighbour.
 
-A later JavaScript enhancement may introduce a shared preference. It must remain progressive enhancement over this native-radio implementation.
+### 10.7 Strict export-block compatibility
 
-## 9.7 Visual direction
+Recent language changes use explicit `export:` blocks.
 
-Keep the supplied restrained design:
+The current docs root reexports shared docs declarations through:
 
-* small segmented selector
-* Beanstalk green for selected text and subtle outlines
-* no giant Basic and Advanced buttons
-* no large card around every explanation
-* selector beside the heading on wide screens
-* selector below the heading on narrow screens
-* identical code-block and callout treatment in both variants
-* Advanced may be denser, but not smaller or lower contrast
-* transitions disabled when reduced motion is preferred
+```text
+docs/src/#page.bst
+```
+
+When adding a shared helper:
+
+- define it in `docs/src/styles/docs.bst`
+- add it to the explicit export import list in `docs/src/#page.bst`
+- use current `export:` syntax
+- do not restore removed legacy export syntax
+
+A narrow import/export repair is allowed when `bean check docs` reports a real missing export or broken import.
+
+Allowed repair owners may include:
+
+```text
+docs/src/#page.bst
+docs/src/**/#mod.bst
+libraries/html/#mod.bst
+```
+
+Keep the repair tied to the exact diagnostic. Do not use export churn as an excuse to redesign unrelated facades or libraries.
+
+### 10.8 Beandown markup
+
+In `.bd` files:
+
+- avoid raw HTML
+- use Markdown and Beandown helpers
+- use full code blocks for multiline source
+- use semantic table helpers
+- do not place paragraphs directly under table rows
+- keep headings at H3 or deeper
+- do not rely on page-local imports
 
 ---
 
-# 10. Page composition contract
+## 11. Page composition contract
 
-A migrated page should read like one coherent article.
-
-Conceptual structure:
+A migrated page should read as one coherent article:
 
 ```text
 navbar
 breadcrumb
 H1
 friendly introduction
-page map or opening example
+optional page map or opening example
 
 concept 1
     stable H2
@@ -708,7 +875,7 @@ related concepts
 Previous / Next navigation
 ```
 
-Example composition shape:
+Example:
 
 ```beanstalk
 import @./mutable-access {
@@ -742,31 +909,34 @@ page_head #= language_theme_head
 ]
 
 #[section:
-    [doc_level(
-        key = "mutable-access",
-        title = "Mutable access",
-        basic_content = mutable_access_basic,
-        advanced_content = mutable_access,
-    )]
+    [doc_level:
+        [$insert("key"):mutable-access]
+        [$insert("title"):Mutable access]
+        [$insert("advanced"):[mutable_access]]
+
+        [mutable_access_basic]
+    ]
 ]
 
-#[doc_pager(
-    previous_path = "../language-overview",
-    previous_title = "Language basics",
-    next_path = "../numbers",
-    next_title = "Numbers",
-)]
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../language-overview/]
+        [$insert("previous_title"):Language basics]
+        [$insert("next_path"):../numbers/]
+        [$insert("next_title"):Numbers]
+    ]
+]
 ```
 
-This is a target composition model. The first component patch must confirm the cleanest valid Beanstalk signature before subsequent plans copy it.
+Use `doc_pager_next` or `doc_pager_previous` at sequence endpoints.
 
 ---
 
-# 11. Natural documentation flow
+## 12. Natural documentation flow
 
-## 11.1 Canonical learning sequence
+### 12.1 Learning sequence
 
-The initial linear path should be:
+The initial sequence is:
 
 1. Getting Started
 2. Language Basics
@@ -781,7 +951,7 @@ The initial linear path should be:
 11. Errors, Options and Assertions
 12. Collections and Maps
 13. Templates
-14. Constants and Compile-Time Behavior
+14. Constants and Compile-Time Behaviour
 15. Aliases
 16. Generics
 17. Traits
@@ -818,7 +988,7 @@ Suggested routes:
 /docs/markdown/
 ```
 
-Existing routes remain stable. New routes are:
+Existing routes remain stable. New routes are expected for:
 
 ```text
 bindings
@@ -827,37 +997,19 @@ casts
 constants
 ```
 
-The current documentation index already groups the existing language routes, so it should be expanded rather than replaced with a completely different entry point.
+### 12.2 Previous and Next navigation
 
-## 11.2 Page-level Previous and Next navigation
+Every page declares its neighbours explicitly.
 
-Every page in the sequence gets an explicit pager.
+Do not infer adjacency from directory order.
 
-The pager should render:
+The first page uses `doc_pager_next`.
 
-```text
-Previous
-Page title
+A final page with no onward language topic uses `doc_pager_previous`, unless the user explicitly chooses a related project page as the next destination.
 
-Next
-Page title
-```
+### 12.3 Concept anchors
 
-Use a semantic `<nav>` with an accessible label such as:
-
-```html
-<nav class="doc-pager" aria-label="Language documentation">
-```
-
-Do not infer adjacency from directories. Each page explicitly declares its neighbors.
-
-The first page may have only Next. The final language page may point onward to project documentation.
-
-## 11.3 Concept anchors
-
-Each concept heading has a stable ID.
-
-Example:
+Each concept heading has a stable ID:
 
 ```text
 /docs/bindings/#shared-access
@@ -865,36 +1017,33 @@ Example:
 /docs/templates/#template-slots
 ```
 
-These anchors become the future integration points for:
+These anchors support future:
 
-* sidebar navigation
-* glossary links
-* cross-page references
-* search results
-* copied deep links
+- sidebar navigation
+- glossary links
+- cross-page references
+- search results
+- copied deep links
 
-## 11.4 Future sidebar compatibility
+### 12.4 Future sidebar compatibility
 
-The initial implementation must not add the sidebar or hamburger menu.
+Do not add the sidebar or hamburger menu yet.
 
-It should prepare for them by preserving:
+Prepare for them by preserving:
 
-* stable route order
-* stable page titles
-* stable concept keys
-* one H1 per page
-* one H2 per toggle concept
-* explicit Previous and Next relationships
-
-No unused sidebar markup or JavaScript should be added yet.
+- stable route order
+- stable page titles
+- stable concept keys
+- one H1 per page
+- one H2 per toggle concept
+- explicit neighbour relationships
 
 ---
+## 13. Proposed concept map
 
-# 12. Proposed concept ownership map
+This is the initial ownership map. A route plan may split a concept further when one toggle would become too large. It should not merge concepts merely to reduce file count.
 
-This is the initial taxonomy. A concept may be split further during migration if its canonical rules are too broad for one independent toggle. Two entries should be merged only when presenting them separately would be artificial.
-
-## 12.1 Language Basics
+### 13.1 Language Basics
 
 Route:
 
@@ -902,7 +1051,7 @@ Route:
 docs/src/docs/language-overview/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 blocks-and-statements.bd
@@ -920,30 +1069,25 @@ strings-and-characters-basic.bd
 
 Owns:
 
-* block punctuation
-* statement shape
-* comments
-* naming conventions
-* primitive value forms
-* strings, raw strings and characters
-* syntax tour
+- block punctuation
+- statement shape
+- comments
+- naming conventions
+- primitive value forms
+- strings, raw strings and characters
+- syntax tour
 
-Does not own:
+Does not own mutable access, detailed numeric behaviour, template semantics or project structure.
 
-* mutable access
-* detailed numeric behavior
-* template semantics
-* project structure
+### 13.2 Values and Bindings
 
-## 12.2 Values and Bindings
-
-New route:
+Route:
 
 ```text
 docs/src/docs/bindings/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 bindings.bd
@@ -962,27 +1106,19 @@ shadowing.bd
 shadowing-basic.bd
 ```
 
-Owns:
+Owns declarations, reassignment, mutability, shared access, explicit copies, no-shadowing semantics and the distinction between binding mutability and call-site exclusive access.
 
-* declaration forms
-* reassignment
-* mutability
-* shared access
-* explicit copying
-* no-shadowing semantics
-* distinction between binding mutability and call-site exclusive access
+Memory implementation strategy stays in the memory docs. This route owns observable language behaviour.
 
-The exact ownership and lowering strategy remains in memory/codebase docs. The language page owns observable source semantics.
+### 13.3 Numbers
 
-## 12.3 Numbers
-
-New route:
+Route:
 
 ```text
 docs/src/docs/numbers/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 numeric-types.bd
@@ -998,26 +1134,17 @@ checked-arithmetic.bd
 checked-arithmetic-basic.bd
 ```
 
-Owns:
+Owns `Int`, `Float`, literal grammar, operator spacing, result types, integer and real division, overflow, numeric failures and finite-Float rules.
 
-* `Int`
-* `Float`
-* literal grammar
-* operator spacing
-* arithmetic result types
-* integer and real division
-* overflow and other numeric failures
-* finite-float rules
+### 13.4 Casts
 
-## 12.4 Casts
-
-New route:
+Route:
 
 ```text
 docs/src/docs/casts/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 cast-syntax.bd
@@ -1033,26 +1160,17 @@ cast-evidence.bd
 cast-evidence-basic.bd
 ```
 
-Owns:
+Owns typed-boundary target selection, `cast`, `cast!`, local recovery, supported targets, invalid contexts, conversion behaviour and compiler-owned cast traits.
 
-* typed-boundary target selection
-* `cast`
-* `cast!`
-* `cast ... catch`
-* supported builtin targets
-* invalid target contexts
-* string and numeric conversion behavior
-* compiler-owned cast traits
+### 13.5 Functions
 
-## 12.5 Functions
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/functions/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 function-declarations.bd
@@ -1068,28 +1186,19 @@ returns-and-multiple-values.bd
 returns-and-multiple-values-basic.bd
 ```
 
-Owns:
+Owns signatures, parameters, defaults, named arguments, call ordering, success returns, multiple returns and immediate call access syntax.
 
-* signatures
-* parameters
-* default arguments
-* named arguments
-* call ordering rules
-* success returns
-* multiple returns
-* immediate call access syntax
+Shared and exclusive access semantics are linked from Bindings rather than duplicated exhaustively.
 
-Shared and exclusive access semantics remain canonically owned by the Bindings page and are linked rather than duplicated.
+### 13.6 Branching
 
-## 12.6 Branching
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/branching/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 statement-if.bd
@@ -1105,30 +1214,19 @@ patterns-and-exhaustiveness.bd
 patterns-and-exhaustiveness-basic.bd
 ```
 
-Owns:
+Owns statement `if`, `else`, value-producing `if`, `then`, full match syntax, patterns, captures, guards, exhaustiveness and bodyless fallback arms.
 
-* statement `if`
-* `else`
-* value-producing `if`
-* `then`
-* full match syntax
-* patterns
-* captures
-* guards
-* exhaustiveness
-* bodyless fallback arms
+Catch recovery uses value-producing blocks but remains owned by Errors.
 
-Catch recovery uses value-producing blocks but remains canonically owned by Errors.
+### 13.7 Loops
 
-## 12.7 Loops
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/loops/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 conditional-loops.bd
@@ -1144,29 +1242,19 @@ loop-control.bd
 loop-control-basic.bd
 ```
 
-Owns:
+Owns conditional loops, collection iteration, numeric ranges, inclusive and exclusive bounds, inferred direction, steps, bindings, `break` and `continue`.
 
-* conditional loops
-* collection iteration
-* numeric ranges
-* inclusive and exclusive bounds
-* inferred direction
-* `by`
-* index bindings
-* `break`
-* `continue`
+Loops is the prototype route for the migration architecture.
 
-This is the recommended prototype route because it has several independent concepts, useful code examples and a bounded semantic surface.
+### 13.8 Structs
 
-## 12.8 Structs
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/structs/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 struct-declarations.bd
@@ -1182,26 +1270,17 @@ mutable-receivers.bd
 mutable-receivers-basic.bd
 ```
 
-Owns:
+Owns nominal identity, fields, defaults, construction, field access, receiver methods, receiver ownership restrictions and mutable receiver calls.
 
-* nominal identity
-* fields
-* defaults
-* construction
-* field access
-* receiver methods
-* receiver ownership restrictions
-* mutable receiver calls
+### 13.9 Choices
 
-## 12.9 Choices
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/choices/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 choice-declarations.bd
@@ -1217,26 +1296,19 @@ choice-equality.bd
 choice-equality-basic.bd
 ```
 
-Owns:
+Owns unit and payload variants, construction, immutable payloads, payload matching, structural equality and unsupported equality payloads.
 
-* unit and payload variants
-* construction
-* immutable payloads
-* payload matching
-* structural equality
-* unsupported equality payloads
+Generic declaration syntax is introduced here but specified under Generics.
 
-Generic declaration syntax is introduced here but canonically specified under Generics.
+### 13.10 Errors, Options and Assertions
 
-## 12.10 Errors, Options and Assertions
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/errors/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 error-values.bd
@@ -1258,30 +1330,19 @@ assertions.bd
 assertions-basic.bd
 ```
 
-Owns:
+Owns `Error`, error return slots, `return!`, postfix `!`, `catch`, recovery with `then`, optional values, postfix `?`, assertions and expected failure versus invariant failure.
 
-* `Error`
-* error return slots
-* `return!`
-* postfix `!`
-* `catch`
-* recovery with `then`
-* optional values
-* postfix `?`
-* assertions
-* expected failure versus invariant failure
+General value-producing-block syntax stays under Branching.
 
-General value-producing-block syntax remains owned by Branching.
+### 13.11 Collections and Maps
 
-## 12.11 Collections and Maps
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/collections/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 collection-literals.bd
@@ -1300,28 +1361,19 @@ hash-maps.bd
 hash-maps-basic.bd
 ```
 
-Owns:
+Owns collection types and literals, empty-literal inference, growable collections, fixed capacity and type identity, fallible operations, map key restrictions, insertion order and mutation/access behaviour.
 
-* collection type and literal forms
-* empty-literal inference
-* growable collections
-* fixed capacity and type identity
-* fallible builtins
-* map key restrictions
-* insertion order
-* mutation and access behavior
+The page may preserve playful examples such as the strawberry joke.
 
-The page may keep playful examples, including the strawberry joke.
+### 13.12 Templates
 
-## 12.12 Templates
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/templates/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 template-basics.bd
@@ -1343,31 +1395,19 @@ markdown-formatting.bd
 markdown-formatting-basic.bd
 ```
 
-Owns:
+Owns template head and body, capture, directives, slots, inserts, `$children`, `$fresh`, template `if`, template `loop`, Markdown formatting and compile-time versus runtime behaviour.
 
-* template head and body
-* capture
-* directives
-* default, named and positional slots
-* inserts
-* `$children`
-* `$fresh`
-* template `if`
-* template `loop`
-* Markdown formatting
-* compile-time versus runtime template behavior
+Builder page-fragment assembly remains under Project Structure. Const-template folding is linked from Constants.
 
-Builder page-fragment assembly remains owned by Project Structure. Const-template folding rules are also linked from Constants.
+### 13.13 Constants and Compile-Time Behaviour
 
-## 12.13 Constants and Compile-Time Behavior
-
-New route:
+Route:
 
 ```text
 docs/src/docs/constants/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 constant-bindings.bd
@@ -1383,27 +1423,19 @@ const-templates.bd
 const-templates-basic.bd
 ```
 
-Owns:
+Owns `#` bindings, immutability, foldability, dependency and source-order rules, const records, compile-time templates and const template limits.
 
-* `#` bindings
-* immutability
-* foldability
-* dependency and source-order rules
-* const records
-* compile-time template forms
-* const template loop limits
+Project-entry fragment positioning remains under Project Structure.
 
-Project-entry fragment positioning remains owned by Project Structure.
+### 13.14 Aliases
 
-## 12.14 Aliases
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/aliases/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 type-aliases.bd
@@ -1416,23 +1448,17 @@ payload-capture-aliases.bd
 payload-capture-aliases-basic.bd
 ```
 
-Owns:
+Owns transparent type aliases, import renaming, collision rules, facade-export alias distinctions and match payload capture aliases.
 
-* transparent type aliases
-* import renaming
-* collision rules
-* facade export alias distinction
-* match payload capture aliases
+### 13.15 Generics
 
-## 12.15 Generics
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/generics/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 generic-declarations.bd
@@ -1451,27 +1477,19 @@ generic-limits.bd
 generic-limits-basic.bd
 ```
 
-Owns:
+Owns declaration-site parameters, `of`, concrete aliases, generic functions, immediate inference, instance restrictions and rejected or outside-scope surfaces.
 
-* declaration-site parameters
-* `of`
-* concrete generic aliases
-* generic functions
-* immediate inference
-* instance restrictions
-* rejected and outside-scope generic surfaces
+Trait-bound semantics are linked from Traits.
 
-Trait-bound semantics are canonically owned by Traits and linked here.
+### 13.16 Traits
 
-## 12.16 Traits
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/traits/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 trait-declarations.bd
@@ -1496,28 +1514,17 @@ trait-design-scope.bd
 trait-design-scope-basic.bd
 ```
 
-Owns:
+Owns trait contracts, `This`, `~This`, explicit conformance, evidence visibility, generic bounds, incompatibility, compiler-owned cast traits, static versus runtime heterogeneity and excluded trait-system complexity.
 
-* trait contracts
-* `This`
-* `~This`
-* explicit conformance
-* evidence visibility
-* generic bounds
-* incompatibility
-* compiler-owned cast traits
-* static versus runtime heterogeneity
-* excluded trait-system complexity
+### 13.17 Reactivity
 
-## 12.17 Reactivity
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/reactivity/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 reactive-sources.bd
@@ -1539,28 +1546,17 @@ reactivity-scope.bd
 reactivity-scope-basic.bd
 ```
 
-Owns:
+Owns reactive declarations, source identity, snapshot reads, subscriptions, function boundaries, invalidation, live sinks, backend restrictions, deferred reactivity and the relationship to closures and function values.
 
-* reactive declarations
-* source identity
-* snapshot reads
-* subscriptions
-* function boundaries
-* invalidation
-* live sinks
-* backend restrictions
-* deferred reactivity
-* relationship to closures and function values
+### 13.18 Project Structure
 
-## 12.18 Project Structure
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/project-structure/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 project-config.bd
@@ -1579,26 +1575,17 @@ output-layout.bd
 output-layout-basic.bd
 ```
 
-Owns:
+Owns project config, entry roots, module entries, facades, runtime `start`, page fragments, output routes and build folders.
 
-* project config
-* entry roots
-* module entry files
-* facades
-* runtime `start`
-* page fragment behavior
-* output routes
-* build folders
+### 13.19 Libraries and Imports
 
-## 12.19 Libraries and Imports
-
-Existing route:
+Route:
 
 ```text
 docs/src/docs/libraries/
 ```
 
-Concept pairs:
+Pairs:
 
 ```text
 import-forms.bd
@@ -1623,18 +1610,9 @@ visibility-and-collisions.bd
 visibility-and-collisions-basic.bd
 ```
 
-Owns:
+Owns import syntax, namespaces, source libraries, facades, builder libraries, external packages, JavaScript import metadata, visibility and collisions.
 
-* import syntax
-* namespaces
-* source libraries
-* facades
-* builder libraries
-* external packages
-* JavaScript import metadata
-* visibility and collisions
-
-## 12.20 Beandown and Markdown
+### 13.20 Beandown and Markdown
 
 Existing routes remain separate.
 
@@ -1664,196 +1642,110 @@ markdown-boundaries.bd
 markdown-boundaries-basic.bd
 ```
 
-Beandown files already compile into a generated `content #String` surface and are intended as imported content rather than standalone page entries.
+Beandown files are Beanstalk-aware imported content. Plain Markdown files are raw Markdown content without Beanstalk scope.
 
 ---
 
-# 13. Single-owner rule
+## 14. Future single-owner map
 
-Every normative fact must have one canonical owner.
+Every normative fact must have one planned unsuffixed owner after the final authority switch.
 
 Examples:
 
-| Rule                                                         | Canonical owner                                                           |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| Existing values use shared access by default                 | `bindings/shared-access.bd`                                               |
-| A function call uses `~place` for existing mutable arguments | `functions/calls-and-access.bd`, with access semantics linked to Bindings |
-| `then` targets a value-producing block                       | `branching/value-producing-if.bd` or a shared value-block concept         |
-| `then` inside `catch` recovers success values                | `errors/catch-and-recovery.bd`                                            |
-| Choice payload aliases use `as`                              | `aliases/payload-capture-aliases.bd`                                      |
-| Payload pattern shape                                        | `branching/patterns-and-exhaustiveness.bd`                                |
-| Generic bounds use traits                                    | `traits/generic-trait-bounds.bd`                                          |
-| Generic declaration and inference                            | `generics/*.bd`                                                           |
-| Const templates fold                                         | `constants/const-templates.bd`                                            |
-| Entry fragments are assembled into pages                     | `project-structure/page-fragments.bd`                                     |
-| Template loop syntax                                         | `templates/template-control-flow.bd`                                      |
-| Ordinary loop syntax                                         | `loops/*.bd`                                                              |
+| Rule | Planned detailed owner |
+|---|---|
+| Existing values use shared access by default | `bindings/shared-access.bd` |
+| A call uses `~place` for an existing mutable argument | `functions/calls-and-access.bd`, linked to Bindings |
+| `then` targets a value-producing block | `branching/value-producing-if.bd` or a dedicated value-block concept |
+| `then` inside `catch` recovers success values | `errors/catch-and-recovery.bd` |
+| Choice payload aliases use `as` | `aliases/payload-capture-aliases.bd` |
+| Payload pattern shape | `branching/patterns-and-exhaustiveness.bd` |
+| Generic bounds use traits | `traits/generic-trait-bounds.bd` |
+| Generic declaration and inference | `generics/*.bd` |
+| Const templates fold | `constants/const-templates.bd` |
+| Entry fragments are assembled into pages | `project-structure/page-fragments.bd` |
+| Template loop syntax | `templates/template-control-flow.bd` |
+| Ordinary loop syntax | `loops/*.bd` |
 
-Other pages may summarize and link, but must not carry a second exhaustive rule list.
-
----
-
-# 14. Writing standards
-
-## 14.1 Shared prose rules
-
-Use:
-
-* straight apostrophes
-* natural contractions
-* varied sentence lengths
-* direct examples
-* concise headings
-* friendly confidence
-* exact code syntax
-
-Avoid:
-
-* em dashes
-* curly apostrophes
-* prose semicolons
-* unnecessary Oxford commas
-* “however”, “therefore” and similar filler transitions
-* long document-mechanics preambles
-* vague “currently supported” language where a precise rule is available
-* visible template escape artifacts
-
-## 14.2 Basic files
-
-Prefer:
-
-> A mutable binding is a name whose value can change. Add `~` when you create it, then use normal `=` when assigning a new value.
-
-Avoid:
-
-> Mutability is represented as an access-mode property orthogonal to semantic type identity.
-
-That belongs in the canonical file.
-
-## 14.3 Canonical files
-
-Prefer:
-
-> `~` on a declaration marks the binding as mutation-capable. Reassignment still uses `=`. Binding mutability is separate from call-site exclusive access and is not part of semantic type identity.
-
-Avoid:
-
-> Think of `~` as making the variable more flexible.
-
-## 14.4 Page files
-
-Page prose can be more expressive:
-
-> Square brackets already have a full-time job. They build templates, so collections use braces instead.
-
-Jokes should not become the only explanation of a rule.
-
-## 14.5 Examples
-
-Examples in basic files should:
-
-* compile where presented as valid
-* use one new concept at a time
-* progress from small to realistic
-* avoid unrelated advanced features
-* use comments to explain intent
-
-Examples in canonical files should:
-
-* be compact
-* demonstrate exact boundaries
-* include invalid forms only when the rejection matters
-* show accepted syntax precisely
-* avoid decorative noise
-
-Page-only examples may carry more personality, but unique semantic evidence belongs in the Beandown files.
+Other pages may summarise and link. They must not carry a second exhaustive rule list after the final authority switch.
 
 ---
 
-# 15. Migration ledger
+## 15. Migration ledger
 
-Maintain a section-level ledger for the duration of the project.
+Maintain a section-level parity ledger for the duration of the project.
 
-Recommended location if committed:
+Recommended location if explicitly requested:
 
 ```text
 docs/roadmap/language-documentation-migration.md
 ```
 
-The roadmap is the appropriate owner because this is sequencing and active migration work.
+Do not create the ledger in an ordinary route patch unless its implementation plan includes it.
 
 Each ledger row should record:
 
-| Field                      | Meaning                  |
-| -------------------------- | ------------------------ |
-| Monolith heading           | Original source section  |
-| Canonical target           | Unsuffixed `.bd`         |
-| Basic target               | `-basic.bd`              |
-| Website route              | Importing `#page.bst`    |
-| Related owner              | Any canonical cross-link |
-| Semantic review            | Pending or complete      |
-| Authority moved            | Yes or no                |
-| Monolith pointer installed | Yes or no                |
-| Generated route inspected  | Yes or no                |
-
-The ledger must cover:
-
-* every normative paragraph
-* every table row
-* every syntax form
-* every important valid example
-* every rejected example
-* every deferred feature
-* every outside-scope statement
+| Field | Meaning |
+|---|---|
+| Monolith heading | Original source section |
+| Detailed target | Unsuffixed `.bd` |
+| Basic target | `-basic.bd` |
+| Website route | Importing `#page.bst` |
+| Related owner | Planned semantic cross-link |
+| Detailed reference complete | Yes or no |
+| Basic reference complete | Yes or no |
+| Monolith parity reviewed | Yes or no |
+| Important examples preserved | Yes or no |
+| Implementation conflict reviewed | Yes, no or not applicable |
+| Generated route inspected | Yes or no |
+| Remaining discrepancy | Description or none |
 
 A section is not complete merely because its prose was copied somewhere.
 
+The ledger tracks replacement readiness. It does not transfer authority.
+
 ---
+## 16. Patch strategy
 
-# 16. Patch strategy
+### 16.1 Generated-output baseline
 
-## 16.1 Baseline patch
+At the start of a patch:
 
-Before migration output is reviewed:
+1. Record the current branch and worktree state
+2. Record pre-existing changes
+3. Record existing `docs/release/**` changes separately
+4. Read protected-file diffs
+5. Run `bean check docs` when a source baseline is needed
+6. Build documentation when generated inspection is required
 
-1. Confirm `main` is clean
-2. Run `bean check docs`
-3. Run `bean build docs --release`
-4. Commit any legitimate generated synchronization separately
-5. Establish a clean generated-output baseline
+A documentation build may update tracked release artifacts. Those changes may remain in the workspace and may be committed with the owning source change.
 
-This prevents old generated drift from obscuring migration diffs.
+Do not require a clean post-build worktree. Review generated diffs instead.
 
-## 16.2 Foundation and prototype patch
+### 16.2 Shared foundation
 
-The first substantive patch should include:
+The shared foundation consists of:
 
-* `language_docs_css`
-* `language_theme_head`
-* `doc_level`
-* `doc_pager`
-* stable concept IDs
-* one migrated route
-* initial authority routing changes
-* Previous and Next navigation
-* generated route inspection
+- `docs_content_css`
+- `language_docs_css`
+- `language_theme_head`
+- `codebase_theme_head`
+- `doc_level`
+- `doc_pager`
+- `doc_pager_previous`
+- `doc_pager_next`
+- stable concept IDs
+- Basic selected by default
+- independent radio groups
+- generated route inspection
 
-**Loops is the recommended prototype.**
+Loops is the prototype route.
 
-It exercises:
+The foundation does not transfer language authority.
 
-* several independent toggles
-* Basic and Advanced code examples
-* desktop and mobile selector layout
-* a page-level learning sequence
-* a bounded canonical semantic surface
-* enough content to prove direct reading
+### 16.3 Route migration order
 
-The first patch should not simultaneously rewrite Language Basics, Templates or Errors.
-
-## 16.3 Route migration patches
-
-After the prototype is accepted, migrate one route per patch unless two routes are inseparable.
+After the foundation is accepted, migrate one route per patch unless two routes are inseparable.
 
 Recommended order:
 
@@ -1879,95 +1771,138 @@ Recommended order:
 20. Markdown
 21. Core-library language surfaces
 
-Loops is already complete if used for the prototype.
+Loops is already the prototype and should receive only targeted follow-up corrections unless a review finds additional parity gaps.
 
-This order builds conceptual dependencies before pages that rely on them. Errors moves ahead of Collections because collection operations are fallible.
-
-## 16.4 Final authority patch
+### 16.4 Final parity and authority review
 
 After every ledger row is complete:
 
-* audit all canonical files against the original monolith
-* audit deferred and outside-scope rules
-* update the language authority map
-* update `AGENTS.md` to remove the monolith fallback
-* convert `docs/language-overview.md` into a legacy index or consolidated notice
-* update README and documentation links
-* regenerate the entire site
-* inspect all language routes
-* retain or remove the legacy monolith only after explicit approval
+- audit every detailed file against the untouched monolith
+- audit deferred and outside-scope rules
+- inspect every language route
+- confirm Basic files remain accurate simplifications
+- verify generated output
+- review every implementation conflict
+- present remaining discrepancies to the user
+
+The user then decides whether and when to switch authority.
+
+Migration workers must not edit `AGENTS.md`, shorten the monolith, turn it into an index or delete it unless a separate explicit instruction authorises that work.
 
 ---
 
-# 17. Per-patch implementation contract
+## 17. Per-patch implementation contract
 
-Every route migration plan should require these steps.
+Every route migration plan should require these phases.
 
-## 17.1 Read and reconcile
+### 17.1 Read and reconcile
 
 Read:
 
-* monolith sections
-* current website page
-* relevant compiler design references
-* relevant memory references
-* progress rows
-* implementation and tests when rules appear inconsistent
+- the current tracked `AGENTS.md`
+- this design brief
+- the relevant monolith sections
+- the current website page
+- relevant compiler design references
+- relevant memory references
+- progress rows
+- implementation and tests when rules appear inconsistent
 
 Record conflicts before writing.
 
-## 17.2 Define canonical ownership
+Reading `AGENTS.md` does not authorise editing it.
 
-List the concepts and assign each normative rule to one unsuffixed `.bd`.
+### 17.2 Record protected-file state
+
+Run:
+
+```sh
+git diff -- AGENTS.md docs/language-overview.md
+```
+
+Record any pre-existing changes.
+
+Do not stage, modify or overwrite either file.
+
+### 17.3 Define future ownership
+
+List concepts and assign every normative item to one planned unsuffixed `.bd`.
 
 Do not start prose until the owner map is clear.
 
-## 17.3 Write canonical files first
+### 17.4 Write detailed files first
 
-The canonical files establish semantics.
+The unsuffixed files establish the detailed replacement contract while the monolith remains authoritative.
 
 Review them for:
 
-* completeness
-* exact syntax
-* normative language
-* edge cases
-* rejected forms
-* deferred behavior
-* outside scope
-* correct cross-links
+- complete rule coverage
+- exact syntax
+- normative language
+- type and context rules
+- edge cases
+- rejected forms
+- deferred behaviour
+- outside-scope behaviour
+- unique examples
+- correct cross-links
+- direct-reading quality
 
-## 17.4 Write basic files from the canonical contract
+### 17.5 Perform detailed parity review
 
-The basic file should be authored manually.
+Compare each unsuffixed file against the monolith before writing Basic.
 
-Do not mechanically shorten the canonical file.
+Do not rely on memory or a generated summary.
 
-Check that every statement remains true even though details are omitted.
+Record anything intentionally omitted and why.
 
-## 17.5 Rewrite the page entry
+### 17.6 Write Basic files manually
+
+Do not mechanically shorten the detailed file.
+
+Write the stable mental model, progressive examples and common mistakes.
+
+Check that every simplified statement remains true.
+
+### 17.7 Rewrite the page entry
 
 The page should:
 
-* own one H1
-* introduce the page
-* order the concepts
-* provide transitions
-* call `doc_level` for each pair
-* preserve appropriate personality
-* add related links
-* add Previous and Next navigation
+- own one H1
+- introduce the page
+- order the concepts
+- provide transitions
+- call `doc_level` for each pair
+- preserve appropriate personality
+- add related links
+- add the correct pager
 
-## 17.6 Transfer authority
+It should not duplicate exhaustive semantic rules.
 
-In the same patch:
+### 17.8 Update the focused-reference index
 
-* update language authority map
-* replace migrated monolith sections with canonical pointers
-* update relevant links
-* update `AGENTS.md` routing when required
+Update `docs/src/docs/codebase/language/overview.bd` only when a replacement set is complete.
 
-## 17.7 Validate
+State that:
+
+- the monolith remains authoritative
+- the new files are detailed replacements under review
+- the public route combines Basic and Advanced
+
+Do not claim authority transfer.
+
+### 17.9 Repair exports only when required
+
+Run `bean check docs`.
+
+If it reports a missing import or export:
+
+- identify the exact owner
+- update the current explicit export block
+- avoid unrelated facade changes
+- document the repair in the final report
+
+### 17.10 Validate
 
 For documentation-only patches:
 
@@ -1976,168 +1911,392 @@ bean check docs
 bean build docs --release
 ```
 
-Do not run the full Rust validation gate unless implementation code changes.
+Do not run the full Rust validation gate unless implementation code changes and the user explicitly changes the scope.
 
-## 17.8 Inspect generated output
+### 17.11 Inspect generated output
 
 Inspect:
 
-* one H1
-* concept heading levels
-* Basic selected by default
-* Advanced fully replaces Basic
-* keyboard focus
-* radio exclusivity per component
-* independence between components
-* unique IDs
-* no ARIA tab roles
-* desktop layout
-* narrow-screen layout
-* dark mode
-* reduced-motion behavior
-* code blocks
-* links
-* Previous and Next navigation
-* no manually edited HTML
+- one H1
+- concept heading levels
+- Basic selected by default
+- Advanced fully replacing Basic
+- keyboard focus
+- radio exclusivity
+- independence between concepts
+- unique IDs
+- no ARIA tab roles
+- desktop layout
+- narrow-screen layout
+- dark mode
+- reduced-motion behaviour
+- code blocks
+- tables
+- links
+- pager destinations
+- no visible Beandown escape artifacts
+- no manually patched HTML
+
+### 17.12 Final audit
+
+Verify:
+
+- protected files remain unchanged
+- the monolith still contains the original section
+- detailed parity is complete
+- Basic is accurate
+- page prose does not become a second semantic authority
+- import/export repairs are narrow
+- generated artifacts are retained and explained
+- no implementation or test source changed
 
 ---
 
-# 18. Manual-edit policy
+## 18. Validation and generated artifacts
 
-The migration should be manually authored and reviewed.
+### 18.1 Allowed commands
 
-Scripts may help inventory:
+Documentation-only migration patches use:
 
-* headings
-* file paths
-* repeated terms
-* links
-* monolith sections
+```sh
+bean check docs
+bean build docs --release
+```
 
-Scripts must not:
+`bean check docs` may be repeated during iteration.
 
-* rewrite prose
-* convert contractions
-* change punctuation globally
-* generate basic explanations
-* split paragraphs into concept files
-* alter headings across the tree
-* update generated HTML directly
+Do not run:
 
-This avoids repeating the kind of grammatical regressions caused by mechanical prose conversion.
+```text
+just validate
+cargo check
+cargo test
+cargo clippy
+bean tests
+benchmarks
+Cargo wrappers around bean
+```
+
+unless a later user instruction changes the scope.
+
+### 18.2 Generated output policy
+
+Generated release artifacts:
+
+- may be modified before work begins
+- may change during the patch
+- may remain modified at the end
+- may be committed with the source patch
+
+Do not reset them merely to make the worktree clean.
+
+Do not edit them directly.
+
+Review:
+
+```sh
+git diff -- docs/release
+```
+
+Distinguish:
+
+- changes caused by the current source edits
+- normal compiler-wide regeneration churn
+- pre-existing generated changes
+
+Report unrelated generated churn rather than hiding it.
+
+### 18.3 Generated inspection over command claims
+
+A successful command is not enough.
+
+Inspect the generated route and confirm:
+
+- content appears once
+- headings are correct
+- links resolve
+- selectors work structurally
+- code and tables are styled
+- no source template syntax leaked into HTML
 
 ---
 
-# 19. Risks and controls
+## 19. Manual-edit policy
 
-## Duplicate authority
+The migration must be manually authored and reviewed.
 
-**Risk:** The monolith and canonical file both remain complete.
+Use read-only inventory commands such as:
 
-**Control:** Transfer one concept at a time and replace the monolith section with a pointer in the same patch.
+```text
+rg
+find
+git diff
+git show
+```
 
-## Basic and canonical drift
+Do not write or run scripts that:
 
-**Risk:** A subtle semantic change updates only the canonical file while the basic file becomes false.
+- rewrite prose
+- convert contractions
+- change punctuation globally
+- generate Basic explanations
+- split monolith paragraphs into concept files
+- alter headings across the tree
+- update generated HTML directly
 
-**Control:** Every canonical edit must answer:
+Do not use Python, Node, Perl, shell rewrite loops or complex multi-file regular expressions for migration edits.
 
-> Does this change the stable mental model described in the paired basic file?
+Edit one file at a time and inspect its complete diff.
 
-If no, the basic file stays unchanged. If yes, update both.
+---
 
-## Toggle group collisions
+## 20. Risks and controls
+
+### 20.1 Replacement drift
+
+**Risk:** A detailed replacement drifts from the monolith while the monolith remains authoritative.
+
+**Control:** Keep the monolith read-only. Perform rule-by-rule parity review and record discrepancies.
+
+### 20.2 Accidental protected-file edits
+
+**Risk:** A worker follows an older plan and edits `AGENTS.md` or the monolith.
+
+**Control:** List both as protected in every route plan. Run protected-file diffs before and after work. Treat any patch-created change as blocking.
+
+### 20.3 Basic and detailed drift
+
+**Risk:** A subtle semantic change updates only the detailed reference while Basic becomes false.
+
+**Control:** Every detailed edit must answer:
+
+> Does this change the stable mental model described in the paired Basic file?
+
+Update Basic only when the answer is yes.
+
+### 20.4 Page-level semantic duplication
+
+**Risk:** Friendly page prose becomes another exact rule source.
+
+**Control:** Keep page summaries stable and broad. Put exact rules in the detailed file.
+
+### 20.5 Important information visible only in Basic
+
+**Risk:** Selecting Advanced hides a unique example or rule.
+
+**Control:** Preserve important monolith evidence in the detailed file. Review Advanced as a standalone reference.
+
+### 20.6 Implementation accident becomes language design
+
+**Risk:** A current lowering detail is documented as permanent semantics.
+
+**Control:** Require an explicit semantic decision before adding implementation-derived behaviour to a detailed language contract.
+
+### 20.7 Toggle group collisions
 
 **Risk:** Selecting Advanced in one concept changes another concept.
 
-**Control:** Require a unique radio `name` and IDs for every component.
+**Control:** Require unique names and IDs for every component.
 
-## Oversized concepts
+### 20.8 Hidden accessibility regression
 
-**Risk:** A toggle becomes an entire long page hidden behind one selector.
+**Risk:** Inputs are removed from keyboard or assistive access.
 
-**Control:** Split by semantic responsibility. A concept should be independently understandable and independently useful to toggle.
+**Control:** Visually clip radio inputs. Never apply `display: none` to the inputs.
 
-## Hidden accessibility regression
+### 20.9 Imported Beandown content loses styling
 
-**Risk:** Inputs are visually removed in a way that prevents keyboard or assistive use.
+**Risk:** Imported code blocks or tables render without the docs site's article styling.
 
-**Control:** Clip inputs visually. Never use `display: none` on the radio inputs.
+**Control:** Keep shared code and table rules in `docs_content_css` and include it in both language and codebase theme heads.
 
-## Page-level semantics drift
+### 20.10 Export-block regressions
 
-**Risk:** Friendly page prose becomes another source of exact rules.
+**Risk:** A new helper exists in `docs.bst` but is not exported through the current root entry.
 
-**Control:** Keep page summaries stable and broad. Move details into canonical files.
+**Control:** Update the explicit export block in `docs/src/#page.bst`. Make further repairs only when a compiler diagnostic identifies the owner.
 
-## Canonical files become compiler-design documents
+### 20.11 Oversized concepts
 
-**Risk:** Exact language references accumulate AST, HIR and backend implementation detail.
+**Risk:** One toggle hides an entire long page.
 
-**Control:** Describe observable semantics and link to codebase references for implementation ownership.
+**Control:** Split by semantic responsibility. Each concept should be independently understandable and useful to toggle.
 
-## Public tone becomes sterile
+### 20.12 Public tone becomes sterile
 
-**Risk:** Moving semantics out of the page removes all personality.
+**Risk:** Moving semantics out of the page removes personality.
 
 **Control:** Keep introductions, transitions, jokes and editorial examples in `#page.bst`.
 
-## Public tone becomes misleading
+### 20.13 Public tone becomes misleading
 
-**Risk:** Jokes obscure the real rule.
+**Risk:** A joke obscures the real rule.
 
-**Control:** Every playful section must still be backed by an accurate Basic or Advanced explanation.
+**Control:** Back every playful section with an accurate Basic or Advanced explanation.
 
-## Generated-output noise
+### 20.14 Generated-output noise
 
-**Risk:** Existing stale generated files make reviews unreliable.
+**Risk:** A documentation build changes many tracked release files.
 
-**Control:** Establish a clean release-build baseline before migration patches.
-
----
-
-# 20. Completion criteria for the whole migration
-
-The migration is complete only when:
-
-* every monolith section has a canonical destination
-* every normative rule has one owner
-* every canonical concept has a paired `-basic.bd`
-* every page imports both levels
-* every concept has an independent selector
-* Basic is the default
-* canonical files are directly readable
-* no canonical file identifies itself as being for agents
-* no public page treats the reader as an LLM
-* valid LLM-aware design and tooling references remain
-* every language page has one H1
-* every concept has a stable anchor
-* every page has correct Previous and Next navigation
-* the docs index reflects the learning sequence
-* all routes build successfully
-* generated HTML has been inspected
-* the authority map points only to canonical files
-* `AGENTS.md` routes language work through canonical files
-* `docs/language-overview.md` no longer owns active semantics
-* the progress matrix remains the implementation-status authority
-* the roadmap remains the planning authority
-* sidebar and glossary work can be added later without changing concept ownership
+**Control:** Record the starting state, keep generated output, inspect its diff and report unrelated churn. Do not require a clean worktree after the build.
 
 ---
 
-# 21. First implementation-plan target
+## 21. Current migration status
 
-The first agent implementation plan derived from this brief should cover only:
+### 21.1 Loops prototype
 
-1. Clean generated-output baseline
-2. `language_docs_css`
-3. `language_theme_head`
-4. `doc_level`
-5. `doc_pager`
-6. Loops concept split
-7. Basic and Advanced radio behavior
-8. Previous and Next links
-9. Initial language authority-routing changes
-10. Documentation check, release build and generated-page inspection
+The Loops route is the prototype for:
 
-That patch proves the architecture. It should not begin the broad semantic migration until the component, file naming, direct-reading quality and website interaction have been manually accepted.
+- granular Basic and Advanced pairs
+- independent native-radio selectors
+- stable concept anchors
+- direct reading of unsuffixed files
+- page-level Previous and Next navigation
+- generated-output inspection
+
+Its concept files are:
+
+```text
+conditional-loops.bd
+conditional-loops-basic.bd
+collection-loops.bd
+collection-loops-basic.bd
+range-loops.bd
+range-loops-basic.bd
+loop-control.bd
+loop-control-basic.bd
+```
+
+The prototype does not transfer language authority.
+
+### 21.2 Foundation lessons from the prototype
+
+The prototype established several requirements for later patches:
+
+- shared code-block styling must not depend on page-local helper identity
+- shared table styling belongs in `docs_content_css`
+- both language and codebase themes need the shared article stylesheet
+- the pager needs two-sided, Previous-only and Next-only forms
+- new docs helpers must be exported through the current explicit root export block
+- strict export syntax may require narrow entry or library repairs
+- Advanced direct-read parity must include important monolith examples
+- high-level framing cannot live only in the public page
+- the monolith and `AGENTS.md` remain protected
+- generated release artifacts may remain in the workspace
+
+### 21.3 Next route work
+
+Do not start another broad migration route until the shared foundation corrections have passed review.
+
+After the foundation is stable, continue with the route order in Section 16.3.
+
+---
+
+## 22. Completion criteria
+
+The content migration is ready for final authority review only when:
+
+- every monolith section has a detailed destination
+- every normative rule has one planned unsuffixed owner
+- every detailed concept has a paired `-basic.bd`
+- every page imports both levels
+- every concept has an independent selector
+- Basic is the default
+- detailed files are directly readable
+- important monolith examples are preserved
+- no detailed file identifies itself as being for agents
+- no public page treats the reader as an LLM
+- legitimate LLM-aware design and tooling references remain
+- every language page has one H1
+- every concept has a stable anchor
+- every page has correct navigation
+- the docs index reflects the learning sequence
+- all routes build successfully
+- generated HTML has been inspected
+- every monolith section has passed parity review
+- deferred and outside-scope behaviour is preserved
+- implementation conflicts have been reported
+- the progress matrix remains the implementation-status authority
+- the roadmap remains the planning authority
+- `docs/language-overview.md` remains unchanged
+- `AGENTS.md` remains unchanged
+- sidebar and glossary work can be added later without changing content ownership
+
+At that point:
+
+- the monolith still remains available
+- the user performs or explicitly authorises the final authority switch
+- `AGENTS.md` routing is updated only in that separate approved patch
+- monolith retention or removal is decided separately
+
+---
+
+## 23. Required final report for each migration patch
+
+Every implementation agent should report:
+
+### Source changes
+
+List every edited and created source file.
+
+### Protected files
+
+State that these remained untouched:
+
+```text
+AGENTS.md
+docs/language-overview.md
+```
+
+Also list any other user-protected files named by the route plan.
+
+### Parity result
+
+State:
+
+- which monolith headings were reviewed
+- which detailed files received each rule
+- whether any important example was replaced or omitted
+- whether unresolved discrepancies remain
+
+### Basic result
+
+State that each Basic file is a manually written simplification consistent with its detailed partner.
+
+### Import/export repairs
+
+State either:
+
+```text
+No additional import/export repairs were required.
+```
+
+or list each repair, the compiler diagnostic that required it and the exact surface changed.
+
+### Validation
+
+Report the exact results of:
+
+```sh
+bean check docs
+bean build docs --release
+```
+
+Do not claim commands that were not run.
+
+### Generated output
+
+List the generated routes inspected. State that generated artifacts were retained and that generated HTML was not edited manually.
+
+### Editing method
+
+State that:
+
+- no migration script was written or run
+- no automated multi-file prose replacement was used
+- all prose and source changes were made manually, file by file
+
+### Remaining uncertainty
+
+Report semantic ambiguity, implementation conflict or incomplete parity honestly rather than hiding it.
