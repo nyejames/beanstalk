@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: active
+STATUS: blocked
 CURRENT_SLICE: Phase 5B production-library and integration-fixture migration to strict `export:` blocks
-LAST_ACCEPTED_COMMIT: `f4adfa7b1` (`refactor: unify active and imported module roots`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 4 is committed. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
+LAST_ACCEPTED_COMMIT: `c754a4f95` (`feat: parse strict module export blocks`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; Phase 5A is committed and Phase 5B made no source changes. Concurrent user-owned `docs/src/**` migration edits remain unstaged and uncommitted.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -187,9 +187,9 @@ DOCS_IMPACT:
 NEXT_ACTION:
 - Delegate Phase 5B production-library and integration-fixture migration to the verified `codex-cli-beanstalk` wrapper, then run the full gate while preserving user-owned docs edits.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
-NEXT_WORKER_ORDER: codex-cli only
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 5A, then launch and review Phase 5B
+NEXT_WORKER_ORDER: none until codex-cli usage capacity resets
+STOP_REASON: codex-cli rejected the clean Phase 5B launch because its usage limit is exhausted until 2026-07-18 07:04 local time; the explicit codex-cli-only worker constraint forbids provider fallback
+NEXT_RESUME_ACTION: retry `.codex-worker/tasks/hash-root-phase-5b.md` with codex-cli after usage capacity resets
 
 ---
 
