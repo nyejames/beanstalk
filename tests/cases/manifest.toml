@@ -4179,6 +4179,11 @@ path = "template_slots_unknown_insert_target_failure"
 tags = ["integration","templates", "diagnostics"]
 
 [[case]]
+id = "template_named_slots_ignore_surrounding_whitespace"
+path = "template_named_slots_ignore_surrounding_whitespace"
+tags = ["integration", "templates", "slots", "whitespace"]
+
+[[case]]
 id = "template_style_code_success"
 path = "template_style_code_success"
 tags = ["integration","templates"]

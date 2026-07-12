@@ -263,6 +263,13 @@ pub(super) fn route_tir_fill_against_schema(
             continue;
         }
 
+        // Formatting whitespace around explicit insert contributions carries no
+        // value when the wrapper has nowhere to render loose content. Discard it
+        // while preserving diagnostics for every meaningful loose contribution.
+        if tir_nodes_are_whitespace_only_text(&chunk.nodes, store, string_table) {
+            continue;
+        }
+
         if schema.positional_slots.is_empty() {
             return Err(Box::new(loose_content_without_default_slot_error(
                 fill_location,

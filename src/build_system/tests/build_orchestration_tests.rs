@@ -502,7 +502,7 @@ fn build_directory_project_respects_custom_entry_root() {
 }
 
 #[test]
-fn build_directory_project_requires_root_page_in_configured_entry_root() {
+fn build_directory_project_requires_artifact_root_in_configured_entry_root() {
     let root = temp_dir("missing_homepage");
     let src = root.join("src");
     fs::create_dir_all(src.join("about")).expect("should create about folder");
@@ -533,7 +533,7 @@ fn build_directory_project_requires_root_page_in_configured_entry_root() {
     assert!(
         rendered_messages
             .iter()
-            .any(|message| message.contains("require a '#page.bst' homepage")),
+            .any(|message| message.contains("require an artifact-producing module root")),
         "expected homepage error message"
     );
 

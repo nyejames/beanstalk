@@ -995,6 +995,51 @@ fn loose_content_without_default_or_positional_slots_produces_diagnostic() {
 }
 
 #[test]
+fn named_only_slots_discard_loose_whitespace_around_insert_contributions() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("title");
+
+    let mut store = TemplateIrStore::new();
+    let wrapper = build_single_slot_template(&mut store, SlotKey::Named(name));
+    let insert_template =
+        build_slot_insert_template(&mut store, SlotKey::Named(name), &mut string_table);
+
+    let leading_whitespace = build_text_node(
+        &mut store,
+        &mut string_table,
+        "\n    ",
+        TemplateSegmentOrigin::Body,
+    );
+    let trailing_whitespace = build_text_node(
+        &mut store,
+        &mut string_table,
+        "\n",
+        TemplateSegmentOrigin::Body,
+    );
+    let mut builder = TemplateIrBuilder::new(&mut store);
+    let insert_node = builder.push_insert_contribution_node(insert_template, empty_location());
+    let fill = build_fill_template(
+        &mut store,
+        vec![leading_whitespace, insert_node, trailing_whitespace],
+    );
+
+    let routed = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect("formatting whitespace should not require a default slot");
+
+    let insert_body_node = template_root_node_id(insert_template, &store);
+    assert_eq!(
+        routed.contributions.nodes_for_slot(&SlotKey::Named(name)),
+        &[insert_body_node]
+    );
+    assert!(
+        routed
+            .contributions
+            .nodes_for_slot(&SlotKey::Default)
+            .is_empty()
+    );
+}
+
+#[test]
 fn extra_loose_content_beyond_positional_capacity_produces_diagnostic() {
     let mut string_table = StringTable::new();
 

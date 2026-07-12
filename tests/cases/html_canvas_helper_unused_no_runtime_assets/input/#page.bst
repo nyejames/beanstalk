@@ -1,7 +1,9 @@
 import @html { canvas, Canvas, get_canvas }
 
 #[canvas:
-  Canvas helper import stays unused at runtime.
-  320
-  180
+  [$insert("id"):unused_canvas]
+  [$insert("style"):
+    width: 320px;
+    height: 180px;
+  ]
 ]

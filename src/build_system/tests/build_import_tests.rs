@@ -317,7 +317,15 @@ fn build_html_project_unreachable_html_canvas_helper_import_does_not_emit_runtim
     fs::write(root.join("config.bst"), "project #= \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @html { canvas, get_canvas_context }\n#[canvas:\n  Unused helper import\n  320\n  180\n]\n",
+        r#"import @html { canvas, get_canvas_context }
+#[canvas:
+  [$insert("id"):unused_canvas]
+  [$insert("style"):
+    width: 320px;
+    height: 180px;
+  ]
+]
+"#,
     )
     .expect("should write page");
 
