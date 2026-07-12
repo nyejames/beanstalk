@@ -929,7 +929,7 @@ body {
 
 
 
-            <p>Use <code>copy</code> when two values need to change independently.</p><pre style=""><code class='codeblock'>
+            <p>Use <code>copy</code> when two stored values need to change independently.</p><pre style=""><code class='codeblock'>
     names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
     copied_names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> names
 
@@ -937,11 +937,13 @@ body {
     ;
     </code></pre><p>Changing <code>names</code> does not add <code>&quot;Linus&quot;</code> to <code>copied_names</code>.</p><p>This is different from a normal assignment:</p><pre style=""><code class='codeblock'>
     shared_names <span class='bst-code-operator'>=</span> names
-    </code></pre><p>A normal assignment creates another shared view. <code>copy</code> creates an independent value.</p>
+    </code></pre><p>A normal assignment creates another shared view. <code>copy</code> creates an independent value.</p><p><code>copy</code> works on a stored name or field:</p><pre style=""><code class='codeblock'>
+    copied_title <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> page.title
+    </code></pre><p>Do not add <code>copy</code> to literals, constructor calls or computed expressions. Those expressions already create fresh results.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p><code>copy</code> requests an independent value.</p><pre style=""><code class='codeblock'>
+        <p><code>copy</code> requests an independent value from an existing place.</p><pre style=""><code class='codeblock'>
     items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;a&quot;</span>, <span class='bst-code-string'>&quot;b&quot;</span><span class='bst-code-parenthesis'>}</span>
     independent_items <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> items
 
@@ -950,7 +952,14 @@ body {
 
     io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> original length<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>items.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> copied length<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>independent_items.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h3>Contract</h3><ul><li>Source code does not silently copy an existing value when another name is created.</li><li>When a value is copyable and an independent value is required, write <code>copy</code>.</li><li>The copied value keeps the same semantic type.</li><li>The receiving binding chooses its own mutability.</li><li>Copying is separate from ownership transfer and separate from exclusive access.</li></ul><p>Expressions that construct a new result from existing inputs are not implicit copies of one input.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Copy targets</h3><p>The operand must be a place with stable storage:</p><ul><li>a visible value binding</li><li>a field projection such as <code>copy config.title</code></li><li>a parenthesized place such as <code>copy (items)</code></li></ul><p>Literals, templates, constructor calls, function calls and computed expressions are not copy targets.</p><pre style=""><code class='codeblock'>
+    copied_title <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> config.title
+    copied_items <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-parenthesis'>(</span>items<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>These forms are invalid:</p><pre style=""><code class='codeblock'>
+    copied_number <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-number'>42</span>
+    copied_result <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> make_value<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    copied_template <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> text<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Fresh expressions already create their own result values.</p><h3>Contract</h3><ul><li>Source code does not silently copy an existing value when another name is created.</li><li>When a stored value is copyable and an independent value is required, write <code>copy</code>.</li><li>The copied value keeps the same semantic type.</li><li>The receiving binding chooses its own mutability.</li><li>Copying is separate from ownership transfer and separate from exclusive access.</li></ul><p>Expressions that construct a new result from existing inputs are not implicit copies of one input.</p><pre style=""><code class='codeblock'>
     total <span class='bst-code-operator'>=</span> left <span class='bst-code-operator'>+</span> right
     label <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>first_name<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span>last_name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     </code></pre><p>Those expressions create new result values through their own language rules.</p>

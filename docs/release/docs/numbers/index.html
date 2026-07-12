@@ -862,11 +862,14 @@ body {
     same <span class='bst-code-operator'>=</span> left is right
     different <span class='bst-code-operator'>=</span> left is not right
     ready <span class='bst-code-operator'>=</span> loaded and valid
+    retry <span class='bst-code-operator'>=</span> timed_out or disconnected
     blocked <span class='bst-code-operator'>=</span> not ready
     </code></pre><p>Division has two forms:</p><pre style=""><code class='codeblock'>
     real_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
     whole_result <span class='bst-code-operator'>=</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span> <span class='bst-code-number'>2</span>
-    </code></pre><p><code>/</code> produces a real <code>Float</code> result. <code>//</code> performs integer division and produces an <code>Int</code> when both values are <code>Int</code>.</p>
+    </code></pre><p><code>/</code> produces a real <code>Float</code> result. <code>//</code> performs integer division and produces an <code>Int</code>.</p><p>Plain string slices can be joined with <code>+</code>:</p><pre style=""><code class='codeblock'>
+    greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello, &quot;</span> <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    </code></pre><p>Use templates when text needs interpolation or a larger structure.</p>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
@@ -874,8 +877,13 @@ body {
     same <span class='bst-code-operator'>=</span> left is right
     different <span class='bst-code-operator'>=</span> left is not right
     ready <span class='bst-code-operator'>=</span> has_input and is_valid
+    should_retry <span class='bst-code-operator'>=</span> timed_out or disconnected
     blocked <span class='bst-code-operator'>=</span> not ready
-    </code></pre><p>Symbolic equality and symbolic logical-not forms are not language operators.</p><h3>Arithmetic results</h3><ul><li><code>Int + Int</code>, <code>Int - Int</code>, <code>Int * Int</code> and <code>Int % Int</code> produce <code>Int</code>.</li><li><code>/</code> is real division. <code>Int / Int</code> produces <code>Float</code>.</li><li><code>//</code> is integer division. <code>Int // Int</code> produces <code>Int</code> and truncates toward zero.</li><li>Mixed <code>Int</code> and <code>Float</code> arithmetic produces <code>Float</code>.</li><li><code>^</code> performs exponentiation and follows checked numeric rules.</li><li>Numeric comparisons such as <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> produce <code>Bool</code>.</li></ul><h3>Spacing</h3><p>Symbolic binary operators require spaces on both sides.</p><pre style=""><code class='codeblock'>
+    </code></pre><ul><li><code>and</code> and <code>or</code> require <code>Bool</code> operands.</li><li><code>not</code> requires one <code>Bool</code> operand.</li><li>Symbolic equality and symbolic logical-not forms are not language operators.</li></ul><h3>Arithmetic results</h3><ul><li><code>Int</code>, <code>Int</code> with <code>+</code>, <code>-</code>, <code>*</code>, <code>%</code>, <code>^</code>, <code>//</code> produces <code>Int</code></li><li><code>Int</code>, <code>Int</code> with <code>/</code> produces <code>Float</code></li><li><code>Float</code>, <code>Float</code> with <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code>, <code>^</code> produces <code>Float</code></li><li>mixed <code>Int</code> and <code>Float</code> with <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code>, <code>^</code> produces <code>Float</code></li></ul><p><code>//</code> is integer division and is valid only for two <code>Int</code> operands.</p><h3>Plain string concatenation</h3><p>Two plain string slices can use <code>+</code>.</p><pre style=""><code class='codeblock'>
+    prefix <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello, &quot;</span>
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    greeting <span class='bst-code-operator'>=</span> prefix <span class='bst-code-operator'>+</span> name
+    </code></pre><p>This is the narrow plain-string operator surface. Templates remain the general tool for interpolation and structured string construction.</p><h3>Comparisons</h3><ul><li><code>Int</code> and <code>Float</code> support equality and ordering, including mixed numeric comparisons.</li><li><code>Char</code> supports equality and ordering.</li><li><code>Bool</code> supports equality only.</li><li>Plain string slices support <code>is</code> and <code>is not</code>.</li><li>Choices and options have additional equality rules in their own references.</li></ul><h3>Precedence and associativity</h3><p>From highest to lowest:</p><ul><li>level 6: unary <code>not</code>, unary <code>-</code></li><li>level 5: <code>^</code></li><li>level 4: <code>*</code>, <code>/</code>, <code>//</code>, <code>%</code></li><li>level 3: <code>+</code>, <code>-</code></li><li>level 2: <code>is</code>, <code>is not</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li><li>level 1: <code>and</code></li><li>level 0: <code>or</code></li></ul><p><code>^</code> is right-associative. Other binary operators are left-associative.</p><p>Parentheses override normal precedence.</p><h3>Spacing</h3><p>Symbolic binary operators require spaces on both sides.</p><pre style=""><code class='codeblock'>
     total <span class='bst-code-operator'>=</span> left <span class='bst-code-operator'>+</span> right
     count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     </code></pre><p>These forms are invalid:</p><pre style=""><code class='codeblock'>

@@ -1,0 +1,83 @@
+Match patterns describe the values an arm accepts.
+
+### Supported patterns
+
+Literal patterns:
+
+[codeblock, $code("bst"):
+    if value is:
+        1 => io.line("one")
+        "ok" => io.line("text")
+        true => io.line("true")
+        else =>
+    ;
+]
+
+Choice variants:
+
+[codeblock, $code("bst"):
+    if status is:
+        Ready => io.line("ready")
+        Status::Waiting => io.line("waiting")
+    ;
+]
+
+Choice payload captures:
+
+[codeblock, $code("bst"):
+    if response is:
+        Success => io.line("done")
+        Err(message) => io.line(message)
+        Pending(retry_count, message as pending_message) =>
+            io.line(pending_message)
+    ;
+]
+
+Option patterns:
+
+- `none`
+- literal or relational present-value patterns
+- `|name|` to capture any present value
+
+General capture:
+
+A bare pattern name that is not a known choice variant binds the complete
+scrutinee value for that arm.
+
+Relational patterns:
+
+```text
+< value
+<= value
+> value
+>= value
+```
+
+Relational patterns support `Int`, `Float`, `Char` and `String`. String ordering
+is backend-defined in the current Alpha surface.
+
+### Choice payload captures
+
+- Payload captures must list every declared field.
+- Captures stay in declaration order.
+- The source name before `as` must exactly match the declared field name.
+- `as local_name` changes only the arm-local binding.
+- Duplicate local bindings are invalid.
+- Wildcard payload captures are not supported.
+- Named assignment syntax such as `Err(message = text)` is not payload-pattern syntax.
+- Nested payload patterns are deferred.
+
+### Exhaustiveness
+
+- A non-choice full match requires `else =>`.
+- A choice match may omit `else =>` only when every variant is covered.
+- Any guarded choice arm requires `else =>`.
+- The same choice variant cannot be matched more than once.
+- Payload exhaustiveness is tag-level. One valid payload capture arm covers every value of that variant.
+- A statement match may use bodyless `else =>`.
+- A value-producing match must produce the required values on every selected path.
+
+An unconditional general capture covers every remaining value. A later arm or
+default is unreachable.
+
+Capture bindings are arm-local and follow the no-shadowing rule.

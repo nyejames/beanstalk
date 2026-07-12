@@ -19,16 +19,23 @@ page_head #= codebase_theme_head
 
     Smaller detailed references are being prepared without changing the active authority during the migration.
 
-    Foundational language routes:
+    Foundations:
 
     - @../../language-overview (Language basics)
     - @../../bindings (Values and bindings)
     - @../../numbers (Numbers)
     - @../../casts (Casts)
 
-    Control flow:
+    Functions and control flow:
 
+    - @../../functions (Functions)
+    - @../../branching (Branching)
     - @../../loops (Loops)
+
+    Nominal data:
+
+    - @../../structs (Structs)
+    - @../../choices (Choices)
 
     Each route combines a Basic teaching layer with detailed Advanced references. The unsuffixed Beandown files remain replacements under parity review and do not supersede `docs/language-overview.md` yet.
 ]

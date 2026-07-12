@@ -1,9 +1,12 @@
-Comments begin with two minus signs:
+In ordinary Beanstalk code, comments begin with two minus signs:
 
 [codeblock, $code("bst"):
-    -- This line is ignored by the compiler.
+    -- This source-code line is ignored by the compiler.
     score = 10
 ]
+
+Template and Beandown bodies are content. Two minus signs inside those bodies
+are text rather than source comments.
 
 Use `regular_snake_case` for values and functions:
 

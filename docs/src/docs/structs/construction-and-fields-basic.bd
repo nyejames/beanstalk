@@ -1,0 +1,34 @@
+Create a struct by calling its type name.
+
+[codeblock, $code("bst"):
+    Player = |
+        name String,
+        score Int = 0,
+    |
+
+    player = Player("Ada")
+]
+
+The constructor uses the default score.
+
+Named fields make larger constructors easier to read:
+
+[codeblock, $code("bst"):
+    player = Player(
+        name = "Ada",
+        score = 10
+    )
+]
+
+Read fields with a dot:
+
+[codeblock, $code("bst"):
+    name = player.name
+]
+
+To change a field, the struct binding must be mutable:
+
+[codeblock, $code("bst"):
+    player ~= Player("Ada")
+    player.score = 10
+]

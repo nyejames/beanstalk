@@ -1,13 +1,45 @@
+import @./function-declarations {
+    content as function_declarations,
+}
+
+import @./function-declarations-basic {
+    content as function_declarations_basic,
+}
+
+import @./parameters-and-defaults {
+    content as parameters_and_defaults,
+}
+
+import @./parameters-and-defaults-basic {
+    content as parameters_and_defaults_basic,
+}
+
+import @./calls-and-access {
+    content as calls_and_access,
+}
+
+import @./calls-and-access-basic {
+    content as calls_and_access_basic,
+}
+
+import @./returns-and-multiple-values {
+    content as returns_and_multiple_values,
+}
+
+import @./returns-and-multiple-values-basic {
+    content as returns_and_multiple_values_basic,
+}
+
 import @styles/docs {
     navbar,
     section,
-    codeblock,
     language_theme_head,
+    doc_level,
     doc_pager,
 }
 
 page_title #= "Functions"
-page_description #= "Function declarations, returns, calls, and Alpha-scope result handling in Beanstalk."
+page_description #= "Function declarations, parameters, calls, access and return values in Beanstalk."
 page_head #= language_theme_head
 
 #[navbar]
@@ -17,92 +49,49 @@ page_head #= language_theme_head
 
     # Functions
 
-    [codeblock, $code("bst"):
-        -- The simplest possible function
-        main ||:
-            io.line("Hello from a function")
-        ;
+    Functions are named, statically checked and deliberately ordinary. Their signatures show the values they need, the access they request and every value they can return.
+
+    There are no hidden closure captures or distant conversion rules. The call stays readable from the source.
+]
+
+#[section:
+    [doc_level:
+        [$insert("key"):function-declarations]
+        [$insert("title"):Function declarations]
+        [$insert("advanced"):[function_declarations]]
+
+        [function_declarations_basic]
     ]
+]
 
-    ## The function signature
-    Function names come first, followed by parameters inside vertical pipes.
-    The arrow symbol defines return slots.
-    Functions can return multiple values.
+#[section:
+    [doc_level:
+        [$insert("key"):parameters-and-defaults]
+        [$insert("title"):Parameters and defaults]
+        [$insert("advanced"):[parameters_and_defaults]]
 
-    [codeblock, $code("bst"):
-
-        get_doubled |value Int| -> Int:
-            return value * 2
-        ;
-
-        pair || -> String, Int:
-            return "Ana", 2
-        ;
-
-        doubled = get_doubled(21)
-        name, count = pair()
+        [parameters_and_defaults_basic]
     ]
+]
 
-    ## Arguments
-    Positional arguments come before named arguments.
-    Mutable access to an existing place must be explicit at the call site.
+#[section:
+    [doc_level:
+        [$insert("key"):calls-and-access]
+        [$insert("title"):Calls and access]
+        [$insert("advanced"):[calls_and_access]]
 
-    [codeblock, $code("bst"):
-        update |value ~Int|:
-            value += 1
-        ;
-
-        value ~= 1
-        update(~value)
-
-        -- Fresh values can satisfy mutable parameters without '~'.
-        update(1)
+        [calls_and_access_basic]
     ]
+]
 
-    ## Error-returning functions
-    A function can mark one return slot with `!`.
-    Error-returning calls must be handled with propagation or a catch block.
-    A value-producing catch block returns fallback success values with `then`
-    on every reachable recovery path, or exits explicitly with `return` /
-    `return!`.
+#[section:
+    [doc_level:
+        [$insert("key"):returns-and-multiple-values]
+        [$insert("title"):Returns and multiple values]
+        [$insert("advanced"):[returns_and_multiple_values]]
 
-    [codeblock, $code("bst"):
-        parse_number |text String| -> Int, Error!:
-
-            if text.is_empty():
-                return! Error("Missing number", 200)
-            ;
-
-            return 42
-        ;
-
-        with_fallback || -> Int:
-            value = parse_number("") catch:
-                then 0
-            ;
-            return value
-        ;
-
-        bubble_up |text String| -> Int, Error!:
-            value = parse_number(text)!
-            return value
-        ;
-
-        recover |text String| -> Int:
-            value = parse_number(text) catch |err|:
-                io.line(err.message)
-                then 0
-            ;
-
-            return value
-        ;
+        [returns_and_multiple_values_basic]
     ]
-
-    ## Function values
-
-    General closures, anonymous function values, generic function values and higher-order polymorphism are outside the current language design scope.
-
-    Reactivity is the constrained UI-oriented mechanism for cases that would otherwise lean on closures.
 ]
 
 #[section:

@@ -59,6 +59,28 @@ Public route:
 
 `docs/src/docs/casts/#page.bst`
 
+### Functions
+
+- `docs/src/docs/functions/function-declarations.bd`
+- `docs/src/docs/functions/parameters-and-defaults.bd`
+- `docs/src/docs/functions/calls-and-access.bd`
+- `docs/src/docs/functions/returns-and-multiple-values.bd`
+
+Public route:
+
+`docs/src/docs/functions/#page.bst`
+
+### Branching
+
+- `docs/src/docs/branching/statement-if.bd`
+- `docs/src/docs/branching/value-producing-if.bd`
+- `docs/src/docs/branching/pattern-matching.bd`
+- `docs/src/docs/branching/patterns-and-exhaustiveness.bd`
+
+Public route:
+
+`docs/src/docs/branching/#page.bst`
+
 ### Loops
 
 - `docs/src/docs/loops/conditional-loops.bd`
@@ -69,6 +91,28 @@ Public route:
 Public route:
 
 `docs/src/docs/loops/#page.bst`
+
+### Structs
+
+- `docs/src/docs/structs/struct-declarations.bd`
+- `docs/src/docs/structs/construction-and-fields.bd`
+- `docs/src/docs/structs/receiver-methods.bd`
+- `docs/src/docs/structs/mutable-receivers.bd`
+
+Public route:
+
+`docs/src/docs/structs/#page.bst`
+
+### Choices
+
+- `docs/src/docs/choices/choice-declarations.bd`
+- `docs/src/docs/choices/variant-construction.bd`
+- `docs/src/docs/choices/payload-patterns.bd`
+- `docs/src/docs/choices/choice-equality.bd`
+
+Public route:
+
+`docs/src/docs/choices/#page.bst`
 
 Each unsuffixed file has a paired `-basic.bd` teaching version.
 

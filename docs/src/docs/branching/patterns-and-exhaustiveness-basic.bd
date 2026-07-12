@@ -1,0 +1,30 @@
+Patterns can match exact values, ranges, choice variants or option shapes.
+
+[codeblock, $code("bst"):
+    if status is:
+        Ready => io.line("ready")
+        Waiting => io.line("waiting")
+    ;
+]
+
+A choice match does not need `else =>` when every variant is covered.
+
+Payload variants expose their fields through captures:
+
+[codeblock, $code("bst"):
+    if response is:
+        Success => io.line("done")
+        Err(message) => io.line(message)
+    ;
+]
+
+The capture name must match the field name.
+
+Use `as` when the local name should be different:
+
+[codeblock, $code("bst"):
+    Err(message as error_text) => io.line(error_text)
+]
+
+A normal value match needs `else =>` because the compiler cannot list every
+possible value for types such as `Int` or `String`.

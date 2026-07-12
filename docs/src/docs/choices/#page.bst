@@ -1,105 +1,104 @@
-import @html {center}
-import @styles/docs {navbar, title, section, codeblock, theme_head}
+import @./choice-declarations {
+    content as choice_declarations,
+}
+
+import @./choice-declarations-basic {
+    content as choice_declarations_basic,
+}
+
+import @./variant-construction {
+    content as variant_construction,
+}
+
+import @./variant-construction-basic {
+    content as variant_construction_basic,
+}
+
+import @./payload-patterns {
+    content as payload_patterns,
+}
+
+import @./payload-patterns-basic {
+    content as payload_patterns_basic,
+}
+
+import @./choice-equality {
+    content as choice_equality,
+}
+
+import @./choice-equality-basic {
+    content as choice_equality_basic,
+}
+
+import @styles/docs {
+    navbar,
+    section,
+    language_theme_head,
+    doc_level,
+    doc_pager,
+}
 
 page_title #= "Choices"
-page_description #= "Choices in Beanstalk."
-page_head #= theme_head
+page_description #= "Choice declarations, variants, payload patterns and structural equality in Beanstalk."
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: CHOICES]
 
 #[section, $md:
+    @../ (Documentation) / Choices
 
-    # Choices (enums)
-    Choices are a way to define a set of possible values.
-    The Alpha compiler supports unit variants and record-body payload variants.
+    # Choices
 
-    You create and access choices using a double colon.
+    Choices make alternatives explicit. A value is one named variant, optionally carrying a small record payload.
 
-    [codeblock, $code("bst"):
-        Status :: Ready, Busy, Offline;
+    Pattern matching opens the payload safely. Structural equality is available only when every possible payload can support it.
+]
 
-        current Status = Status::Busy
+#[section:
+    [doc_level:
+        [$insert("key"):choice-declarations]
+        [$insert("title"):Choice declarations]
+        [$insert("advanced"):[choice_declarations]]
 
-        pass_status |status Status| -> Status:
-            return status
-        ;
-
-        selected = pass_status(current)
+        [choice_declarations_basic]
     ]
+]
 
-    Choices work with assignment and pattern matching.
+#[section:
+    [doc_level:
+        [$insert("key"):variant-construction]
+        [$insert("title"):Variant construction]
+        [$insert("advanced"):[variant_construction]]
 
-    [codeblock, $code("bst"):
-        Status :: Ready, Busy;
-
-        current ~= Status::Ready
-        current = Status::Busy
-
-        label ~= "unset"
-        if current is:
-            Ready => label = "ready"
-            Busy => label = "busy"
-        ;
+        [variant_construction_basic]
     ]
+]
 
-    ## Payload variants
-    Payload variants must use record-body syntax.
+#[section:
+    [doc_level:
+        [$insert("key"):payload-patterns]
+        [$insert("title"):Payload patterns]
+        [$insert("advanced"):[payload_patterns]]
 
-    [codeblock, $code("bst"):
-        Response ::
-            Success,
-            Err |
-                message String,
-            |,
-            Pending |
-                retry_count Int,
-                message String,
-            |,
-        ;
-
-        -- Unit variant construction
-        ok = Response::Success
-
-        -- Payload variant construction
-        error = Response::Err("bad")
-        pending = Response::Pending(3, message = "waiting")
+        [payload_patterns_basic]
     ]
+]
 
-    Payload fields are accessed only through pattern matching.
-    Captures use the declared field names, and they may be renamed with `as` for the arm-local binding.
+#[section:
+    [doc_level:
+        [$insert("key"):choice-equality]
+        [$insert("title"):Choice equality]
+        [$insert("advanced"):[choice_equality]]
 
-    [codeblock, $code("bst"):
-        if response is:
-            Success => io.line("done")
-            Err(message) => io.line(message)
-            Pending(retry_count, message as pending_message) => io.line(pending_message)
-        ;
+        [choice_equality_basic]
     ]
+]
 
-    Choice equality is deferred until structural equality is implemented.
-    Use pattern matching to branch on variants and compare extracted payload fields inside the matching arm.
-
-    ## Invalid syntax
-    Unit variants are values, not constructor calls.
-
-    [codeblock, $code("bst"):
-        -- Invalid: empty constructor call on a unit variant
-        bad = Response::Success()
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../structs/]
+        [$insert("previous_title"):Structs]
+        [$insert("next_path"):../errors/]
+        [$insert("next_title"):Errors, options and assertions]
     ]
-
-    Payload shorthand is not supported.
-
-    [codeblock, $code("bst"):
-        -- Invalid: shorthand payload declaration
-        Response :: Err String, Success;
-    ]
-
-    ## Deferred features
-    - Direct payload field access (e.g. `response.message`).
-    - Generic choice declarations.
-    - Recursive choice declarations.
-    - Unit and payload choice equality.
-    - Nested payload patterns and nested exhaustiveness.
-
 ]

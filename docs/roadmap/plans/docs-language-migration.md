@@ -2092,49 +2092,68 @@ Update Basic only when the answer is yes.
 
 **Control:** Require an explicit semantic decision before adding implementation-derived behaviour to a detailed language contract.
 
-### 20.7 Toggle group collisions
+### 20.7 Context-sensitive syntax is overgeneralised
+
+**Risk:** A rule that is valid in ordinary code is described as universal even
+though template or content contexts tokenize it differently.
+
+**Control:** Check the owning tokenizer or parser context before using words
+such as always or everywhere. Record explicit exceptions in the detailed
+reference. Comment syntax inside template and Beandown bodies is the first
+known example.
+
+### 20.8 Closed compiler tables are copied incompletely
+
+**Risk:** A detailed reference lists a few examples from a compiler-owned table
+and silently omits supported rows.
+
+**Control:** When the compiler owns a closed table, inspect the complete table
+and migrate it as one unit. Cast policies, cast traits, operator precedence and
+operator type policy are current examples.
+
+### 20.9 Toggle group collisions
 
 **Risk:** Selecting Advanced in one concept changes another concept.
 
 **Control:** Require unique names and IDs for every component.
 
-### 20.8 Hidden accessibility regression
+### 20.10 Hidden accessibility regression
 
 **Risk:** Inputs are removed from keyboard or assistive access.
 
 **Control:** Visually clip radio inputs. Never apply `display: none` to the inputs.
 
-### 20.9 Imported Beandown content loses styling
+### 20.11 Imported Beandown content loses styling
 
 **Risk:** Imported code blocks or tables render without the docs site's article styling.
 
 **Control:** Keep shared code and table rules in `docs_content_css` and include it in both language and codebase theme heads.
 
-### 20.10 Export-block regressions
+### 20.12 Export-block regressions
 
 **Risk:** A new helper exists in `docs.bst` but is not exported through the current root entry.
 
 **Control:** Update the explicit export block in `docs/src/#page.bst`. Make further repairs only when a compiler diagnostic identifies the owner.
 
-### 20.11 Oversized concepts
+### 20.13 Oversized concepts
 
 **Risk:** One toggle hides an entire long page.
 
 **Control:** Split by semantic responsibility. Each concept should be independently understandable and useful to toggle.
 
-### 20.12 Public tone becomes sterile
+### 20.14 Public tone becomes sterile
 
 **Risk:** Moving semantics out of the page removes personality.
 
 **Control:** Keep introductions, transitions, jokes and editorial examples in `#page.bst`.
 
-### 20.13 Public tone becomes misleading
+### 20.15 Public tone becomes misleading
 
 **Risk:** A joke obscures the real rule.
 
 **Control:** Back every playful section with an accurate Basic or Advanced explanation.
 
-### 20.14 Generated-output noise
+### 20.16 Generated-output noise
 
 **Risk:** A documentation build changes many tracked release files.
 
@@ -2187,26 +2206,53 @@ The prototype established several requirements for later patches:
 
 ### 21.3 Foundational language batch
 
-The next accepted batch covers:
+The completed foundational batch covers:
 
 - Language Basics
 - Values and Bindings
 - Numbers
 - Casts
 - navigation from Getting Started through Functions
-- the focused-reference index for those completed replacement sets
+- the focused-reference index for those replacement sets
 
-Each route keeps the monolith authoritative and uses paired Basic and detailed
-unsuffixed files.
+Review found four mandatory follow-up corrections:
 
-### 21.4 Next route work
+- `--` comment syntax is ordinary-code context, not template-body or Beandown context
+- `copy` accepts places rather than arbitrary expressions
+- the operator reference needs the complete type policy and precedence table
+- the cast reference needs the complete builtin policy and core-trait tables
 
-After the foundational batch passes review, continue with Functions and
-Branching.
+### 21.4 Functions, branching and nominal data batch
 
-Those routes should be migrated before Errors because function calls, return
-slots, value-producing blocks and control flow are prerequisites for the error
-model.
+The next batch covers:
+
+- Functions
+- Branching
+- Structs
+- Choices
+- navigation through Errors
+- focused-reference indexing for those routes
+
+The batch must preserve two unresolved implementation/design discrepancies in
+its final report:
+
+- parameter-alias return syntax exists in the parser but is absent from the monolith
+- option payload equality is accepted by the monolith but is not handled by the current nested choice-payload equality query
+
+Neither discrepancy transfers authority or authorises compiler changes.
+
+### 21.5 Next route work
+
+After this batch passes review, continue with:
+
+1. Errors, Options and Assertions
+2. Collections and Maps
+3. Templates
+4. Constants and Compile-Time Behaviour
+
+Errors should precede Collections because collection operations use the typed
+error path. Templates should precede Constants because const-template rules
+depend on the template surface.
 
 ---
 

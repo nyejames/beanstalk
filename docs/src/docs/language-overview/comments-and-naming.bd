@@ -1,11 +1,22 @@
-`--` starts a single-line comment.
+In ordinary Beanstalk code, `--` starts a single-line comment.
 
 [codeblock, $code("bst"):
     -- Explain why this value exists.
     retry_count = 3
 ]
 
-Everything after `--` on that source line is comment text.
+Everything after `--` on that source-code line is comment text.
+
+### Template and Beandown text
+
+Template bodies are content, not ordinary code-token context.
+
+Inside a template body, `--` is ordinary body text. A Beandown `.bd` file is
+the body of an implicit compile-time Markdown template, so `--` is text there
+too.
+
+Use template directives such as `$note` or `$todo` when template-authored
+content should be ignored.
 
 ### Naming conventions
 
@@ -31,5 +42,5 @@ Everything after `--` on that source line is comment text.
 A visible name cannot be redeclared while it remains in scope.
 
 The complete no-shadowing contract is documented by
-@../bindings (Values and bindings). Import aliases and facade API
+@../bindings/#shadowing (Values and bindings). Import aliases and facade API
 names have additional collision rules in the Libraries documentation.

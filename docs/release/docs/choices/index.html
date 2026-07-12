@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Choices | Beanstalk</title>
-    <meta name="description" content="Choices in Beanstalk.">
+    <meta name="description" content="Choice declarations, variants, payload patterns and structural equality in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,101 +661,327 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> CHOICES</h1>
-    <section class="container"><h1>Choices (enums)</h1><p>    Choices are a way to define a set of possible values.     The Alpha compiler supports unit variants and record-body payload variants.</p><p>    You create and access choices using a double colon.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy,</span> <span class='bst-code-struct'>Offline;</span>
+    <section class="container"><p><a href="../">Documentation</a> / Choices</p><h1>Choices</h1><p>Choices make alternatives explicit. A value is one named variant, optionally carrying a small record payload.</p><p>Pattern matching opens the payload safely. Structural equality is available only when every possible payload can support it.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Choice declarations
+    </legend>
 
-    current <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="choice-declarations-level"
+                id="choice-declarations-basic"
+                value="basic"
+                checked
+            >
 
-    pass_status <span class='bst-code-operator'>|</span>status <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> status
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="choice-declarations-level"
+                id="choice-declarations-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="choice-declarations">
+                    Choice declarations
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="choice-declarations-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="choice-declarations-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A choice defines a value that can take one of several named forms.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready,</span>
+        <span class='bst-code-struct'>Waiting,</span>
+        <span class='bst-code-struct'>Failed</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
     ;
+    </code></pre><p><code>Ready</code> and <code>Waiting</code> are unit variants.</p><p><code>Failed</code> carries one payload field named <code>message</code>.</p><p>A choice is its own type. Another choice with similar variants is still a different type.</p>
+    </div>
 
-    selected <span class='bst-code-operator'>=</span> pass_status<span class='bst-code-parenthesis'>(</span>current<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>    Choices work with assignment and pattern matching.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy;</span>
-
-    current <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
-    current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
-
-    label <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;unset&quot;</span>
-    <span class='bst-code-keyword'>if</span> current is<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;ready&quot;</span>
-        <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A choice is a nominal tagged union.</p><p>Each value contains one declared variant.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready,</span>
+        <span class='bst-code-struct'>Waiting,</span>
+        <span class='bst-code-struct'>Failed</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
     ;
-    </code></pre><h2>Payload variants</h2><p>    Payload variants must use record-body syntax.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><h3>Variant forms</h3><p>A unit variant has no payload:</p><p>```beanstalk Ready ```</p><p>A payload variant uses a record body:</p><p>```beanstalk Failed | message String | ```</p><h3>Contract</h3><ul><li>The declaration form is <code>Name :: variants ;</code>.</li><li>Choice and variant names use <code>PascalCase</code>.</li><li>A choice must declare at least one variant.</li><li>Variant names must be unique.</li><li>A payload record must contain at least one field.</li><li>Payload field names must be unique.</li><li>Payload fields require explicit types.</li><li>Payload fields are immutable.</li><li>Payload fields do not support defaults.</li><li>Mutable payload field declarations are invalid.</li><li>Shorthand payload declarations such as <code>Failed String</code> are invalid.</li><li>Constructor-style declarations such as <code>Failed(String)</code> are invalid.</li><li>Recursive choice declarations are deferred.</li><li>A choice has nominal identity. Matching variants and payload shapes do not make two choices interchangeable.</li></ul><h3>Generic choices</h3><p>Choices may introduce declaration-site generic parameters.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>None,</span>
+    ;
+    </code></pre><p>Generic inference and instance restrictions are documented by <a href="../generics">Generics</a>.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Variant construction
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="variant-construction-level"
+                id="variant-construction-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="variant-construction-level"
+                id="variant-construction-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="variant-construction">
+                    Variant construction
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="variant-construction-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="variant-construction-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Create a unit variant without parentheses:</p><pre style=""><code class='codeblock'>
+    current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    </code></pre><p>Create a payload variant with its values:</p><pre style=""><code class='codeblock'>
+    failure <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;network&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Named arguments also work:</p><pre style=""><code class='codeblock'>
+    failure <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;network&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Payload values cannot be changed after construction. Match the choice to read them.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Choice values are constructed through the choice name and variant name.</p><h3>Unit variants</h3><p>A unit variant is a value without a constructor call.</p><pre style=""><code class='codeblock'>
+    current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    </code></pre><p>This form is invalid:</p><pre style=""><code class='codeblock'>
+    current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Payload variants</h3><p>A payload variant requires constructor parentheses.</p><pre style=""><code class='codeblock'>
+    failed <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;network&quot;</span><span class='bst-code-parenthesis'>)</span>
+    named <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;network&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h3>Argument rules</h3><ul><li>Positional arguments fill payload fields in declaration order.</li><li>Positional arguments must come before named arguments.</li><li>A named argument must match a payload field.</li><li>Each payload field must be supplied exactly once.</li><li>Payload fields have no defaults.</li><li>Extra or missing arguments are invalid.</li><li>Argument values are checked and contextually coerced against field types.</li></ul><p>Constructed payload fields are immutable.</p><p>Direct payload field mutation is invalid.</p><p>Use pattern matching to inspect payload fields.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Payload patterns
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="payload-patterns-level"
+                id="payload-patterns-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="payload-patterns-level"
+                id="payload-patterns-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="payload-patterns">
+                    Payload patterns
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="payload-patterns-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="payload-patterns-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Match a payload variant to use its fields.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> status is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ready&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The capture name matches the field name.</p><p>Use <code>as</code> when the local name should be clearer:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_text<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>error_text<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Payload values are immutable. Pattern matching reads them without exposing direct field mutation.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Choice payloads are inspected through pattern matching.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> status is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ready&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Waiting</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;waiting&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h3>Capture contract</h3><ul><li>A payload pattern must include every declared field.</li><li>Captures stay in declaration order.</li><li>Each source capture name must exactly match its declared field name.</li><li><code>as local_name</code> renames only the arm-local binding.</li><li>Duplicate local binding names are invalid.</li><li>Payload captures are immutable arm-local bindings.</li><li>A valid payload arm covers the complete variant regardless of payload values.</li></ul><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Success,</span>
-        <span class='bst-code-struct'>Err</span> <span class='bst-code-operator'>|</span>
-            message <span class='bst-code-struct'>String,</span>
-        <span class='bst-code-operator'>|</span>,
         <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span>
             retry_count <span class='bst-code-struct'>Int,</span>
             message <span class='bst-code-struct'>String,</span>
         <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Complete,</span>
     ;
 
-    <span class='bst-code-comment'>-- Unit variant construction</span>
-    ok <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span>
-
-    <span class='bst-code-comment'>-- Payload variant construction</span>
-    error <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>
-    pending <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>3</span>, message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;waiting&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>    Payload fields are accessed only through pattern matching.     Captures use the declared field names, and they may be renamed with <code>as</code> for the arm-local binding.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
+            io.line<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-struct'>Complete</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>    Choice equality is deferred until structural equality is implemented.     Use pattern matching to branch on variants and compare extracted payload fields inside the matching arm.</p><h2>Invalid syntax</h2><p>    Unit variants are values, not constructor calls.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Invalid: empty constructor call on a unit variant</span>
-    bad <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>    Payload shorthand is not supported.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Invalid: shorthand payload declaration</span>
-    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
-    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. <code>response.message</code>).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Unit and payload choice equality.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
+    </code></pre><h3>Deferred and rejected forms</h3><p>Direct payload field access is deferred:</p><pre style=""><code class='codeblock'>
+    message <span class='bst-code-operator'>=</span> response.message
+    </code></pre><p>Payload field mutation is rejected.</p><p>Wildcard payload captures are not supported.</p><p>Named assignment is not match syntax:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-operator'>=</span> text<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Nested payload patterns and nested exhaustiveness are deferred.</p><p>See <a href="../branching/#patterns-and-exhaustiveness">Patterns and exhaustiveness</a> for match-level rules.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Choice equality
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="choice-equality-level"
+                id="choice-equality-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="choice-equality-level"
+                id="choice-equality-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="choice-equality">
+                    Choice equality
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="choice-equality-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="choice-equality-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Choices can use <code>is</code> and <code>is not</code> when their payloads are equality-safe.</p><pre style=""><code class='codeblock'>
+    first <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    second <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+
+    same <span class='bst-code-operator'>=</span> first is second
+    </code></pre><p>Two choice values are equal when they use the same variant and their payload values are equal.</p><p>A choice with a collection, struct or another unsupported payload cannot use structural equality. Pattern matching still works.</p>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Two values of the same choice type support structural equality when every possible payload field supports equality.</p><pre style=""><code class='codeblock'>
+    left <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    right <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+
+    same <span class='bst-code-operator'>=</span> left is right
+    different <span class='bst-code-operator'>=</span> left is not right
+    </code></pre><h3>Structural comparison</h3><p>Equality compares:</p><ol><li>the active variant tag</li><li>each payload field for that variant</li></ol><p>Two different nominal choice types are never comparable, even when their variants have matching shapes.</p><p>A choice cannot be compared with a non-choice value.</p><p>Choices support equality and inequality. They do not support ordering operators.</p><h3>Supported payload equality</h3><ul><li><code>Int</code></li><li><code>Float</code></li><li><code>Bool</code></li><li><code>Char</code></li><li><code>String</code></li><li>choices whose payloads all support equality</li><li>options whose inner type supports equality</li></ul><p>The rule applies after generic choice parameters are replaced by concrete type arguments.</p><h3>Unsupported payload equality</h3><ul><li>structs</li><li>collections</li><li>maps</li><li>functions</li><li>fallible result carriers</li><li>external opaque types</li><li>template values as a distinct equality surface</li></ul><p>If any variant contains an unsupported payload field, equality for the whole choice type is rejected.</p><p>Payload matching remains available regardless of equality support.</p>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../structs/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Structs</span>
+            </a>
+
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../errors/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Errors, options and assertions</span>
+            </a>
+
+            
+
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

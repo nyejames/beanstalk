@@ -11,6 +11,7 @@ Beanstalk uses words for equality and logic:
     same = left is right
     different = left is not right
     ready = loaded and valid
+    retry = timed_out or disconnected
     blocked = not ready
 ]
 
@@ -22,4 +23,12 @@ Division has two forms:
 ]
 
 `/` produces a real `Float` result. `//` performs integer division and produces
-an `Int` when both values are `Int`.
+an `Int`.
+
+Plain string slices can be joined with `+`:
+
+[codeblock, $code("bst"):
+    greeting = "Hello, " + "Ada"
+]
+
+Use templates when text needs interpolation or a larger structure.

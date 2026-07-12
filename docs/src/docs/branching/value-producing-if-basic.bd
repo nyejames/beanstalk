@@ -1,0 +1,22 @@
+An `if` can choose a value.
+
+The short form fits on one line:
+
+[codeblock, $code("bst"):
+    label = if ready then "ready" else "waiting"
+]
+
+Use block form when a branch needs more room:
+
+[codeblock, $code("bst"):
+    label = if ready:
+        then "ready"
+    else
+        then "waiting"
+    ;
+]
+
+`then` provides the value for the surrounding assignment.
+
+Both branches must provide the value or leave the function in another valid
+way.

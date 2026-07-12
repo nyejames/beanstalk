@@ -783,10 +783,10 @@ body {
 
 
 
-            <p>Comments begin with two minus signs:</p><pre style=""><code class='codeblock'>
-    <span class='bst-code-comment'>-- This line is ignored by the compiler.</span>
+            <p>In ordinary Beanstalk code, comments begin with two minus signs:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- This source-code line is ignored by the compiler.</span>
     score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
-    </code></pre><p>Use <code>regular_snake_case</code> for values and functions:</p><pre style=""><code class='codeblock'>
+    </code></pre><p>Template and Beandown bodies are content. Two minus signs inside those bodies are text rather than source comments.</p><p>Use <code>regular_snake_case</code> for values and functions:</p><pre style=""><code class='codeblock'>
     player_score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>
 
     double_score <span class='bst-code-operator'>|</span>score <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
@@ -800,10 +800,10 @@ body {
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p><code>--</code> starts a single-line comment.</p><pre style=""><code class='codeblock'>
+        <p>In ordinary Beanstalk code, <code>--</code> starts a single-line comment.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-comment'>-- Explain why this value exists.</span>
     retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
-    </code></pre><p>Everything after <code>--</code> on that source line is comment text.</p><h3>Naming conventions</h3><ul><li>Variables and functions use <code>regular_snake_case</code>.</li><li>Structs, choices, type aliases and generic parameters use <code>PascalCase</code>.</li><li>Trait names use all-caps identifiers such as <code>DISPLAY_TEXT</code>.</li><li>Names should describe their role rather than their storage or implementation detail.</li></ul><pre style=""><code class='codeblock'>
+    </code></pre><p>Everything after <code>--</code> on that source-code line is comment text.</p><h3>Template and Beandown text</h3><p>Template bodies are content, not ordinary code-token context.</p><p>Inside a template body, <code>--</code> is ordinary body text. A Beandown <code>.bd</code> file is the body of an implicit compile-time Markdown template, so <code>--</code> is text there too.</p><p>Use template directives such as <code>$note</code> or <code>$todo</code> when template-authored content should be ignored.</p><h3>Naming conventions</h3><ul><li>Variables and functions use <code>regular_snake_case</code>.</li><li>Structs, choices, type aliases and generic parameters use <code>PascalCase</code>.</li><li>Trait names use all-caps identifiers such as <code>DISPLAY_TEXT</code>.</li><li>Names should describe their role rather than their storage or implementation detail.</li></ul><pre style=""><code class='codeblock'>
     retry_count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>3</span>
 
     load_profile <span class='bst-code-operator'>|</span>user_id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
@@ -813,7 +813,7 @@ body {
     <span class='bst-code-struct'>UserProfile</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         display_name <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings">Values and bindings</a>. Import aliases and facade API names have additional collision rules in the Libraries documentation.</p>
+    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings/#shadowing">Values and bindings</a>. Import aliases and facade API names have additional collision rules in the Libraries documentation.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">

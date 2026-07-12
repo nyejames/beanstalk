@@ -1,4 +1,4 @@
-Use `copy` when two values need to change independently.
+Use `copy` when two stored values need to change independently.
 
 [codeblock, $code("bst"):
     names ~= {"Ada", "Grace"}
@@ -18,3 +18,12 @@ This is different from a normal assignment:
 
 A normal assignment creates another shared view. `copy` creates an independent
 value.
+
+`copy` works on a stored name or field:
+
+[codeblock, $code("bst"):
+    copied_title = copy page.title
+]
+
+Do not add `copy` to literals, constructor calls or computed expressions. Those
+expressions already create fresh results.

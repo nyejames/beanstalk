@@ -1,83 +1,104 @@
-import @html {center}
-import @styles/docs {navbar, title, section, codeblock, theme_head}
+import @./struct-declarations {
+    content as struct_declarations,
+}
+
+import @./struct-declarations-basic {
+    content as struct_declarations_basic,
+}
+
+import @./construction-and-fields {
+    content as construction_and_fields,
+}
+
+import @./construction-and-fields-basic {
+    content as construction_and_fields_basic,
+}
+
+import @./receiver-methods {
+    content as receiver_methods,
+}
+
+import @./receiver-methods-basic {
+    content as receiver_methods_basic,
+}
+
+import @./mutable-receivers {
+    content as mutable_receivers,
+}
+
+import @./mutable-receivers-basic {
+    content as mutable_receivers_basic,
+}
+
+import @styles/docs {
+    navbar,
+    section,
+    language_theme_head,
+    doc_level,
+    doc_pager,
+}
 
 page_title #= "Structs"
-page_description #= "Structs in Beanstalk."
-page_head #= theme_head
+page_description #= "Nominal structs, construction, fields and receiver methods in Beanstalk."
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: STRUCTS]
 
 #[section, $md:
+    @../ (Documentation) / Structs
 
-    # The Struct
-    A struct is a collection of named fields, similar to a struct in other languages.
+    # Structs
 
-    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.
+    Structs give data a name, a shape and a clear owner. Matching fields are not enough to make two types interchangeable.
 
-    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.
-    `this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.
-    Source-authored receiver methods must be declared in the same file as their user-defined struct or choice receiver type.
-
-    Compiler-owned builtin operations are not user extension methods. Use free functions for values
-    owned by another file, package, builtin type, or external opaque type.
-
-    Structs can be assigned with default arguments, these can be any constant expression.
-
-    [codeblock, $code("bst"):
-        Person = |
-            name String,
-            age Int,
-        |
-
-        -- Create a new instance of the type
-        person ~= Person("Alice", 30)
-
-        -- Access fields using dot notation
-        io.line(person.name) -- "Alice"
-        io.line(person.age)  -- 30
-
-        -- Defining a struct, then defining a method for it
-        Vector2 = |
-            x Float = 0,
-            y Float = 0,
-        |
-
-        reset |this ~Vector2|:
-            this.x = 0
-            this.y = 0
-        ;
-
-        vec = Vector2(12, 87)
-        ~vec.reset()
-    ]
-
+    Methods stay just as explicit. They are top-level functions tied to the type they belong to, with shared or mutable access visible in the receiver.
 ]
 
-#[section, $md:
-    ## Methods
-    Methods in Beanstalk are created using the special `this` receiver parameter.
+#[section:
+    [doc_level:
+        [$insert("key"):struct-declarations]
+        [$insert("title"):Struct declarations]
+        [$insert("advanced"):[struct_declarations]]
 
-    You define a receiver by making the first parameter literally named `this`.
-
-    [codeblock, $code("bst"):
-        -- Define a struct
-        Rectangle = |
-            width Float,
-            height Float,
-        |
-
-        -- Define an immutable method for the Rectangle struct
-        area |this Rectangle|:
-            return this.width * this.height
-        ;
-
-        rect = Rectangle(10, 5)
-        io.line(rect.area()) -- 50
+        [struct_declarations_basic]
     ]
+]
 
-    `this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.
-    Receiver methods are visible through the receiver type; they are not imported, aliased, or re-exported independently.
+#[section:
+    [doc_level:
+        [$insert("key"):construction-and-fields]
+        [$insert("title"):Construction and fields]
+        [$insert("advanced"):[construction_and_fields]]
 
-    Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.
+        [construction_and_fields_basic]
+    ]
+]
+
+#[section:
+    [doc_level:
+        [$insert("key"):receiver-methods]
+        [$insert("title"):Receiver methods]
+        [$insert("advanced"):[receiver_methods]]
+
+        [receiver_methods_basic]
+    ]
+]
+
+#[section:
+    [doc_level:
+        [$insert("key"):mutable-receivers]
+        [$insert("title"):Mutable receivers]
+        [$insert("advanced"):[mutable_receivers]]
+
+        [mutable_receivers_basic]
+    ]
+]
+
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../loops/]
+        [$insert("previous_title"):Loops]
+        [$insert("next_path"):../choices/]
+        [$insert("next_title"):Choices]
+    ]
 ]

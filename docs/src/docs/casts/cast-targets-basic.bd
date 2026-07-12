@@ -9,13 +9,13 @@ These are supported cast targets:
 - `Float`
 - `Error`
 
+Not every source type can convert to every target.
+
 An annotation gives the cast its target:
 
 [codeblock, $code("bst"):
-    parse_count |text String| -> Int, Error!:
-        count Int = cast! text
-        return count
-    ;
+    count Int = cast! text
+    label String = cast count
 ]
 
 Without that annotation, the compiler cannot know which conversion you want:
