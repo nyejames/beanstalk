@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3 entry-root export-surface identity plumbing
-LAST_ACCEPTED_COMMIT: `2413c538a` (`refactor: discover generic source library roots`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The entry-root worker made no source changes before the provider blocker. This plan checkpoint is the only tracked change and `main` is two commits ahead of `origin/main`. Concurrent user-owned plan and documentation edits must remain unstaged.
+CURRENT_SLICE: Phase 4 active/imported module-root role transition
+LAST_ACCEPTED_COMMIT: `845b8e180` (`refactor: carry module root export identity`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main`; this is the sole worktree and source of truth after the user completed the squash consolidation. The accepted entry-root identity slice is committed and this plan checkpoint is the only tracked change. Concurrent user-owned plan and documentation edits must remain unstaged.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: language overview, project-structure docs, libraries docs and progress matrix use canonical `config.bst`; module-root and inline `export` wording remains for later phases.
-- code: `project_config.rs`, `projects/settings.rs`, dev-server watch/config tests, HTML scaffold, output routing, fixtures and benchmarks use only `config.bst`. `create_project_modules/source_tree_index.rs` owns the single entry-root scan and passes prepared `ModuleRootTable` data plus entry candidates forward. `source_libraries/root_file.rs` owns generic hash/config filename identity plus deterministic direct-child source-library root discovery. Source-library preflight requires exactly one generic root and `path_resolution.rs` canonicalizes it into the existing temporary facade map. The temporary `MOD_FILE_NAME` remains isolated for current header/file-role consumers. Entry-root header roles and facade data still encode the temporary `#mod.bst` / `#page.bst` model for the remaining Phase 3 work.
+- code: `project_config.rs`, `projects/settings.rs`, dev-server watch/config tests, HTML scaffold, output routing, fixtures and benchmarks use only `config.bst`. `create_project_modules/source_tree_index.rs` owns the single entry-root scan and passes prepared `ModuleRootTable` data plus entry candidates forward. `source_libraries/root_file.rs` owns generic hash/config filename identity plus deterministic direct-child source-library root discovery. Source-library preflight requires exactly one generic root. Entry-root `ModuleRootTable` and `ProjectPathResolver` now expose export-file identity, while header import resolution carries one `ModuleRootBoundary` with the actual prepared export file instead of synthesizing `#mod.bst`. The temporary `MOD_FILE_NAME` uses remain isolated to current Beandown/source-library file-role consumers.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -175,6 +175,7 @@ VALIDATION_STATE:
 - Phase 2 final gate: `just validate` passed cross-target Clippy, 3309 unit tests, 1735 integration cases, clean docs and bench-check 28/28.
 - Phase 3 generic import identity: Codex CLI added the generic root/config classifier, arbitrary hash-root direct-import rejection and exact dynamic diagnostic rendering. Parent moved the remaining temporary `#mod.bst` helpers into the same owner with no forwarding shim. Focused root-file (4), header (165) and Stage 0 (138) tests passed. Full `just validate` passed cross-target Clippy, 3314 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 - Phase 3 generic source-library roots: Codex CLI added deterministic direct-child `#*.bst` discovery, threaded unique cosmetic roots through the existing temporary facade map and added structured missing/multiple-root diagnostics with sorted candidate paths. Parent reviewed stage ownership and temporary-map duplication, updated the progress matrix and ran full `just validate`: cross-target Clippy, 3319 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
+- Phase 3 entry-root export identity: Codex CLI renamed prepared entry-root facade maps to export-file identity and added `ModuleRootBoundary` so namespace resolution consumes the Stage 0-selected export path. Parent corrected the worker's dropped no-export-root boundary regression by making the carried export file optional, preserving missing-facade enforcement. Full `just validate` passed cross-target Clippy, 3320 unit tests, 1736 integration cases, clean docs and bench-check 28/28 at -2 ms average.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -182,11 +183,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate a behavior-preserving entry-root export-surface identity slice: rename prepared facade maps to export-file naming and carry the actual prepared export file through module-root import-boundary records so header namespace resolution no longer synthesizes `#mod.bst`. Keep Stage 0's temporary `#mod.bst` selection and all file roles unchanged for the later atomic role transition.
-DELEGATION_DECISION: codex-cli - blocked before edits by the account usage limit; do not substitute another provider because the user explicitly requested Codex CLI
-NEXT_WORKER_ORDER: codex-cli after usage reset
-STOP_REASON: Codex CLI usage limit reached before the worker read or edited source; the provider reported retry availability at 03:15 local time
-NEXT_RESUME_ACTION: rerun `.codex-worker/tasks/phase3-entry-root-export-surface-identity.md` through the reviewed Codex CLI launcher after the usage reset
+- Begin Phase 4 with a bounded active/imported module-root role data-model slice, preserving execution behavior until the role is threaded through header parsing and reachable compilation. Coordinate the remaining Phase 3 duplicate-root diagnostic with the atomic role cutover so the repository never enters a broken mixed state.
+DELEGATION_DECISION: codex-cli - accepted the entry-root identity slice using the isolated runtime; the ordinary wrapper path still needs the user-level isolation and launch fixes recorded in the parent handoff
+NEXT_WORKER_ORDER: codex-cli after wrapper update
+STOP_REASON: the reviewed user-level wrapper and orchestrator skill are read-only in this parent sandbox and still require durable isolated-home, standalone-binary, CA and Desktop-variable sanitization changes before the next worker should be launched normally
+NEXT_RESUME_ACTION: verify the updated one-command wrapper path, then prepare the bounded Phase 4 active/imported role worker envelope
 
 ---
 
@@ -702,13 +703,13 @@ After Phase 2, path resolution should consume module-root data instead of discov
   - [x] accept precomputed `ModuleRootTable` / `SourceTreeIndex` data;
   - [x] replace `ModuleRootDiscoveryPolicy::Disabled` with an explicit empty or bounded table for single-file mode;
   - [x] do not call filesystem discovery internally during normal directory builds.
-- [ ] Replace `module_root_facades` with root-file/export-surface naming.
+- [x] Replace `module_root_facades` with root-file/export-surface naming.
 - [x] Implement nearest-root lookup via parent walk + map lookup, not linear `Vec` scan.
-- [ ] Update namespace/root lookup owners that currently synthesize or check hard-coded facade paths:
-  - [ ] `src/compiler_frontend/headers/import_environment/namespace_imports.rs`
-  - [ ] `src/compiler_frontend/headers/import_environment/builder.rs`
-  - [ ] `src/compiler_frontend/headers/facade_data.rs`
-  - [ ] `src/compiler_frontend/headers/symbol_collection.rs`
+- [x] Update namespace/root lookup owners that currently synthesize or check hard-coded facade paths:
+  - [x] `src/compiler_frontend/headers/import_environment/namespace_imports.rs`
+  - [x] `src/compiler_frontend/headers/import_environment/builder.rs`
+  - [x] `src/compiler_frontend/headers/facade_data.rs`
+  - [x] `src/compiler_frontend/headers/symbol_collection.rs` (reviewed; no synthesized facade path remained)
 - [x] Update source-library facade/root discovery:
   - [x] each source-library root may contain one non-config `#*.bst` root file;
   - [x] existing `libraries/html/#mod.bst` remains valid as a cosmetic root name;
@@ -720,8 +721,8 @@ After Phase 2, path resolution should consume module-root data instead of discov
 - [x] Run path resolver tests.
 - [x] Run import/facade/source-library tests.
 - [x] Run `just validate`.
-- [ ] Grep audit:
-  - [ ] remaining `MOD_FILE_NAME` usages are gone or migration-only;
+- [x] Grep audit:
+  - [x] remaining `MOD_FILE_NAME` usages are gone or migration-only;
   - [x] remaining `PAGE_FILE_NAME` usages are gone;
   - [x] remaining `CONFIG_FILE_NAME` usages point only to canonical `config.bst` handling;
   - [x] no direct hash-file import bypass exists in the current import classifier.
