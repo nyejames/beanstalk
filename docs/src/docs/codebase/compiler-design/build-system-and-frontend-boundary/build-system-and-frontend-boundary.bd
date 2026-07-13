@@ -107,7 +107,7 @@ Config rejects these by design:
 - standalone templates
 - direct top-level const-template page fragments
 
-For example, config rejects this entry-file-only page-fragment form:
+For example, config rejects this active-module-root-only page-fragment form:
 
 [codeblock, $code("bst"):
     #[$md:

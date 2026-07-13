@@ -19,7 +19,7 @@ Dependency sorting owns:
 - source-order stability among otherwise independent declarations
 - finalising `ModuleSymbols.declarations` in sorted order
 - appending builtin declarations
-- appending the implicit entry `start` header after sorted declarations
+- appending the implicit active-root `start` header after sorted declarations
 
 It doesn't use executable function/start body references.
 It doesn't use body-local declarations.
@@ -38,28 +38,28 @@ Cross-file constant cycles are dependency cycles.
 Same-file symbol hints that don't materialise as headers are not always dependency-sort errors.
 When a hint looks like a same-file declaration reference but no graph header exists, Stage 3 defers to AST type/expression resolution so the later stage can report the more precise semantic diagnostic.
 
-## Facades
+## Module public surfaces
 
-Module-root facades, `#mod.bst` files that belong to a project module root, participate in dependency sorting like other top-level declaration providers.
+Module root files participate in dependency sorting like other top-level declaration providers. Their hash filenames are cosmetic.
 
-They remain boundary export layers for visibility.
+Their `export:` blocks remain boundary layers for visibility.
 They are still declarations.
-Public authored declarations, public re-exports, exported constants and exported type surfaces must be ordered before declarations in outside modules that import them through the facade.
+Public authored declarations, grouped re-exports, exported constants and exported type surfaces must be ordered before declarations in outside modules that import them through the public surface.
 
-Other files inside the same module should not depend on symbols declared directly inside the module-root facade.
+Other files inside the same module should not depend on private symbols declared directly inside the module root.
 Header import visibility enforces that boundary.
-Dependency sorting should not make facade-private implementation details look like normal local dependencies.
+Dependency sorting should not make root-private implementation details look like normal cross-boundary dependencies.
 
 ## Source libraries
 
-Source-library facades, such as builder-provided `@html`, also participate in dependency sorting.
+Source-library root surfaces, such as builder-provided `@html`, also participate in dependency sorting.
 Their declarations are first-class providers to the consuming module, not opaque blobs.
 
 Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
 
-Source-library facade export edges may use the public import path rather than the concrete `#mod.bst` header path.
-Stage 3 treats those as satisfied facade-export edges, not as new graph nodes.
-This lets public source-library API names order consumers without leaking facade filesystem identity into the dependency graph.
+Source-library export edges may use the public import path rather than the concrete cosmetic root-file path.
+Stage 3 treats those as satisfied public-export edges, not as new graph nodes.
+This lets public source-library API names order consumers without leaking root-file filesystem identity into the dependency graph.
 
 ## Header/dependency/AST contract
 
@@ -72,7 +72,7 @@ After dependency sorting:
 - AST must not rediscover top-level declarations from raw file tokens.
 - AST must not rebuild file import visibility from scratch.
 - AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment.
-- The implicit entry `start` header is never a dependency participant and is always emitted after sorted declarations.
+- The implicit active-root `start` header is never a dependency participant and is always emitted after sorted declarations.
 
 AST may register nominal identity and generic parameter metadata before constants so constructors are name-resolvable.
 Unresolved field and variant constructor shells stay in AST-owned side tables until semantic `TypeId`s are checked and final member definitions are written to `TypeEnvironment`.
@@ -91,4 +91,4 @@ Then the compiler has two declaration-order systems forever.
 
 - @../header-parsing (Stage 2: Header parsing): where dependency edges are discovered
 - @../ast-construction (Stage 4: AST construction): the consumer of sorted headers
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): facade and source-library ordering rules
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): module public-surface and source-library ordering rules

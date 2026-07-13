@@ -31,5 +31,5 @@ Beanstalk does not allow a visible name to be redeclared.
     ;
 ]
 
-Import, facade and namespace collisions add more specific rules, but they build
+Import, module public-surface and namespace collisions add more specific rules, but they build
 on the same no-shadowing principle.

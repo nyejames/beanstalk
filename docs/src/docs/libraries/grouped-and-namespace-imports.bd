@@ -59,7 +59,7 @@ Runtime top-level bindings are not importable. See @#module-visibility (Module v
 
 ### Namespaced access
 
-Source and facade namespace imports are shallow. External package namespaces can expose nested package-local symbols. Use field-access syntax on the namespace record, but do not pass the namespace itself as a first-class value. Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.
+Source and module namespace imports are shallow. External package namespaces can expose nested package-local symbols. Use field-access syntax on the namespace record, but do not pass the namespace itself as a first-class value. Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.
 
 ### Imports are compile-time declarations
 

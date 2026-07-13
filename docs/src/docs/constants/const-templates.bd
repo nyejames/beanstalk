@@ -18,7 +18,7 @@ It does not contribute a page fragment by itself.
 
 ### Direct top-level const fragments
 
-In an HTML entry file, the direct top-level const-template form contributes a
+In an active HTML module root, the direct top-level const-template form contributes a
 compile-time page fragment.
 
 [codeblock, $code("bst"):
@@ -29,9 +29,9 @@ compile-time page fragment.
 
 The direct form:
 
-- is valid only as top-level entry-file fragment syntax
+- is valid only as top-level active-root fragment syntax
 - must fully fold
-- records its position relative to runtime entry fragments
+- records its position relative to active-root runtime fragments
 - is handed to the project builder
 - never becomes HIR runtime code
 

@@ -1,18 +1,19 @@
-# Entry start and page fragments
+# Active-root start and page fragments
 
 Implicit `start`, const/runtime split and builder-owned assembly.
 
 ## Contract
 
-- Input: entry-file top-level runtime statements and top-level const templates
+- Input: active module-root top-level runtime statements and top-level const templates
 - Output: an implicit `start()` header, runtime fragment strings and compile-time fragment metadata
-- Decides: which top-level forms are runtime code and which fold into builder metadata
+- Decides: which active-root forms are runtime code, which fold into builder metadata and which imported-root bodies are suppressed
 - Must not decide: HTML page assembly, route selection, backend lowering
 - Invariant: HIR carries runtime code only and doesn't own document structure
 
 ## Main paths
 
 - `src/compiler_frontend/headers/parse_file_headers.rs`
+- `src/compiler_frontend/headers/types.rs`
 - `src/compiler_frontend/ast/module_ast/finalization/`
 - `src/projects/html_project/html_project_builder.rs`
 

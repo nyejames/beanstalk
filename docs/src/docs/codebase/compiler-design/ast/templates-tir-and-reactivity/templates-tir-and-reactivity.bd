@@ -61,7 +61,7 @@ Runtime slot applications are routed during AST preparation and lower through or
 
 ## Page fragments
 
-Top-level runtime templates remain runtime code inside entry `start()`.
+Top-level runtime templates remain runtime code inside active-root `start()`.
 Top-level const templates fold in AST into compile-time fragments with runtime insertion indexes.
 Builders merge compile-time fragments into the runtime fragment list.
 
@@ -123,4 +123,4 @@ Ordinary alias and exclusivity rules still apply to the underlying values.
   (Memory borrow validation): subscription and invalidation semantics
 - @../../../memory-management/runtime-and-backend-lowering
   (Runtime memory lowering): liveness of reactive sources and mounted fragments
-- @../../entry-start-and-page-fragments (Entry start and page fragments): top-level const page fragments
+- @../../entry-start-and-page-fragments (Active-root start and page fragments): top-level const page fragments

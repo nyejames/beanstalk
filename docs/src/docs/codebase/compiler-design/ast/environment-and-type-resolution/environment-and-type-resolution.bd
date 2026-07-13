@@ -61,11 +61,11 @@ Expression and type resolution should use the active `ScopeContext`, not global 
 All user-visible names go through one collision policy.
 Same-file declarations, source imports, external imports, type aliases, prelude symbols and builtins can't silently shadow each other.
 
-## Public facade API validation
+## Public module API validation
 
-`module_ast/environment/public_surface.rs` owns semantic public facade API validation after type and trait identities are resolved.
+`module_ast/environment/public_surface.rs` owns semantic public module API validation after type and trait identities are resolved.
 
-Public facade APIs must not expose private facade-only types in:
+Public module APIs must not expose private root-only types in:
 
 - signatures
 - fields
@@ -74,8 +74,8 @@ Public facade APIs must not expose private facade-only types in:
 - exported constant types
 - exported trait metadata
 
-Receiver methods are visible through a facade when the facade exposes the receiver type's source surface.
-Type aliases in `#mod.bst` don't automatically re-export private implementation methods.
+Receiver methods are visible across a module boundary when the root `export:` block exposes the receiver type's source surface.
+Type aliases in the root don't automatically re-export private implementation methods.
 
 ## TypeEnvironment boundary
 
@@ -106,7 +106,7 @@ Common mistakes:
 - resolving names through global maps instead of `ScopeContext`
 - rebuilding import visibility in AST
 - cloning member lists for lookup instead of using semantic views
-- leaking private facade-only types through public API surfaces
+- leaking private root-only types through public API surfaces
 - treating receiver methods as independently importable symbols
 - resolving fixed collection capacity as a backend allocation hint
 - modelling maps as collection capacity variants
@@ -116,4 +116,4 @@ Common mistakes:
 - @../ (AST internals): AST phase owners and input/output boundary
 - @../../stages/ast-construction (Stage 4: AST construction): where environment construction lives
 - @../../type-identity-and-coercion (Type identity and coercion): `TypeId`, `DataType` and coercion boundaries
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): `ScopeContext` visibility and facade rules
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): `ScopeContext` visibility and module-boundary rules

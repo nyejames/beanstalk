@@ -408,11 +408,11 @@ body {
                 
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Entry files and implicit start</td>
+             <td style="padding: 0.2em 0.5em;  "> Active module roots and implicit start</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, and fragment-order coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;  "> Only module entry files run top-level runtime code. The implicit <code>start</code> function is build-system-owned and not importable or callable as a user declaration.</td>
+     <td style="padding: 0.2em 0.5em;  "> Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. The implicit <code>start</code> function is build-system-owned and not importable or callable as a user declaration.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -474,17 +474,17 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Beandown <code>.bd</code> content assets</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted compiler-integrated import, synthetic content constant, markdown folding, facade re-export, direct API, diagnostics, and integration coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted compiler-integrated import, synthetic content constant, markdown folding, module-root re-export, direct API, diagnostics, and integration coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML builder / frontend</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>.bd</code> files are builder-supported source assets that synthesize one private compile-time <code>content #String</code> constant from an implicit <code>$md</code> template body. Nested templates with no explicit directive also default to <code>$md</code>, and any explicit nested directive overrides that default. They import extensionlessly into <code>.bst</code>, can be re-exported by <code>#mod.bst</code>, and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>.bd</code> files are builder-supported source assets that synthesize one private compile-time <code>content #String</code> constant from an implicit <code>$md</code> template body. Nested templates with no explicit directive also default to <code>$md</code>, and any explicit nested directive overrides that default. They import extensionlessly into <code>.bst</code>, can be re-exported through a module root's <code>export:</code> block, and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Plain Markdown <code>.md</code> content assets</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad extensionless import, grouped alias, facade re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and entry-rejection coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad extensionless import, grouped alias, module-root re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and module-root rejection coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML builder / frontend</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>.md</code> files are plain Markdown content assets that render to HTML at compile time and synthesize one private <code>content #String</code> constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory facade scope. Links/images render literally and are not tracked assets in V1.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>.md</code> files are plain Markdown content assets that render to HTML at compile time and synthesize one private <code>content #String</code> constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory module-root scope. Links/images render literally and are not tracked assets in V1.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -586,7 +586,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Traits</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad declaration, conformance, visibility, generic-bound receiver-call, trait-name rejection, core cast trait metadata, incompatibility metadata, facade leak, and diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration, conformance, visibility, generic-bound receiver-call, trait-name rejection, core cast trait metadata, incompatibility metadata, public API leak, and diagnostics coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend static semantics</td>
      <td style="padding: 0.2em 0.5em;  "> Static trait declarations, explicit same-file nominal conformances, reusable evidence, trait incompatibility metadata, and generic bounds are implemented. Dynamic trait values, trait aliases/composition, associated items, inheritance, generic traits/methods, conditional/specialized conformance, default methods, and standard trait taxonomy remain deferred or outside scope.</td>
         </tr>
@@ -610,9 +610,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Paths and imports</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad source import, namespace import, grouped import, external package, facade, module-boundary, collision, and project-structure coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad source import, namespace import, grouped import, external package, public-surface, module-boundary, collision, and project-structure coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;  "> Source and facade namespace records are shallow. External package namespace records support nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through <code>#mod.bst</code> facades.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source and module namespace records are shallow. External package namespace records support nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through the target root's <code>export:</code> public surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -727,9 +727,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Source library roots</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, generic library root discovery, collision detection, and public-surface enforcement coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level <code>#</code> constants in <code>config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share module-root and visibility rules. Authored config entries are folded known top-level <code>#</code> constants in <code>config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -743,9 +743,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Project-local libraries</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted config-defined library folders, import resolution, and facade-gating coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted config-defined library folders, import resolution, generic hash-root, and public-surface coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <code>library_folders</code>, with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. Public export/file-role handling still goes through <code>#mod.bst</code> until the generic module-root role migration lands.</td>
+     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <code>library_folders</code>, with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. The filename after <code>#</code> has no semantic role and the root's strict <code>export:</code> block defines its public surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -788,7 +788,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Receiver methods</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad same-file struct/choice receiver, aligned generic receiver, imported receiver type, namespace receiver type, facade exposure, nonlocal/builtin/external receiver rejection, duplicate, collision, and mutability coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad same-file struct/choice receiver, aligned generic receiver, imported receiver type, namespace receiver type, module-boundary exposure, nonlocal/builtin/external receiver rejection, duplicate, collision, and mutability coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;  "> Source-authored receiver methods travel with receiver type visibility. They are never grouped-imported, aliased, or exposed as namespace-record fields.</td>
         </tr>
@@ -866,7 +866,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> HTML-Wasm</td>
      <td style="padding: 0.2em 0.5em;  "> Experimental</td>
-     <td style="padding: 0.2em 0.5em;  "> Backend experiment and integration path for future Wasm output. Ordinary entry `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend experiment and integration path for future Wasm output. Ordinary active-root `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.</td>
      <td style="padding: 0.2em 0.5em;  "> Keep behind <code>--html-wasm</code>. Tests may pin current behavior, but Alpha support is JS / HTML.</td>
         </tr>
 
@@ -1009,10 +1009,10 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Explicit facade export/re-export syntax</td>
+             <td style="padding: 0.2em 0.5em;  "> Module-root export/re-export syntax</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad authored export, grouped re-export, alias, source/external symbol, privacy, duplicate, and placement coverage.</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>#mod.bst</code> exposes public authored declarations with <code>export</code> and public grouped re-exports with <code>export import</code> or <code>export @path { ... }</code>. Bare namespace exports, wildcard exports, function alias values, and automatic method re-export through type aliases remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted authored export, grouped re-export, alias, source/external symbol, privacy, duplicate, placement, and strict-block rejection coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> A module root's single strict <code>export:</code> block exposes public authored declarations and grouped re-exports. Legacy inline <code>export</code> forms, bare namespace exports, wildcard exports, function alias values, and automatic method re-export through type aliases are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1039,8 +1039,8 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Namespace / wildcard imports</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Source, facade, external package, nested external value/type traversal, and wildcard rejection coverage.</td>
-     <td style="padding: 0.2em 0.5em;  "> Namespace imports are compile-time records. Source/facade records stay shallow. External package records can expose nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Wildcard imports remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source, module public surface, external package, nested external value/type traversal, and wildcard rejection coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Namespace imports are compile-time records. Source and module records stay shallow. External package records can expose nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Wildcard imports remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1053,14 +1053,14 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic functions</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad declaration, body validation, inference, instantiation, import/facade, diagnostics, fallible return, and non-value-use coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration, body validation, inference, instantiation, module-boundary import, diagnostics, fallible return, and non-value-use coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Generic free functions infer from immediate call arguments and immediate expected result context only. They emit concrete instances before HIR and are not first-class values.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds on generics</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad declaration-site bound, visible evidence, facade privacy, receiver-call, nominal generic instance, and negative diagnostic coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration-site bound, visible evidence, module public-surface privacy, receiver-call, nominal generic instance, and negative diagnostic coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Bounds use <code>is</code>. Concrete generic calls and nominal generic instances require visible reusable evidence. File-local evidence-backed dispatch remains outside scope.</td>
         </tr>
 

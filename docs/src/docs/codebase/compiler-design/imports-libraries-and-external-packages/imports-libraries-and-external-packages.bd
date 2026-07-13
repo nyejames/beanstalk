@@ -6,7 +6,7 @@ It may validate semantic use of visible symbols, but it must not rebuild import 
 ## Main owners
 
 - Stage 0 discovers source libraries, builder-supported source assets and provider-backed external files.
-- Header import preparation resolves import paths, aliases, facade exports, namespace records, source-library surfaces, external package symbols, prelude/builtin names, receiver-method visibility and collision rules.
+- Header import preparation resolves import paths, aliases, module-root exports, namespace records, source-library surfaces, external package symbols, prelude/builtin names, receiver-method visibility and collision rules.
 - Dependency sorting uses header-provided dependency edges.
 - AST uses `ScopeContext` to resolve expressions and type references through the active visibility maps.
 - HIR carries stable external IDs only.
@@ -14,34 +14,33 @@ It may validate semantic use of visible symbols, but it must not rebuild import 
 
 No stage after header import preparation should rebuild import visibility from raw source syntax.
 
-## Source libraries and facades
+## Source libraries and module public surfaces
 
-Source libraries are normal modules behind explicit `#mod.bst` facades.
+Source libraries are normal modules with one unique non-config `#*.bst` root.
 They participate in module-level dependency sorting.
 
-A facade is an API boundary, not an opaque blob.
-Public authored declarations, public grouped re-exports, exported constants and exported type surfaces still need to be ordered before outside declarations that import them through the facade.
+The root filename is cosmetic. Its strict `export:` block is the API boundary.
+Public authored declarations, grouped re-exports, exported constants and exported type surfaces still need to be ordered before outside declarations that import them through the module boundary.
 
-Ordinary facade imports and unmarked facade declarations remain private to the facade file.
+Ordinary root imports and declarations outside `export:` remain private to the root file.
 Grouped public re-exports define the public API name.
 
-Facade public API maps are built from:
+Module public API maps are built from:
 
-- public authored `#mod.bst` headers
-- `export import @path { Symbol }`
-- `export @path { Symbol }`
-- grouped aliases inside those exports
+- public authored headers inside the root's `export:` block
+- grouped imports inside `export:`
+- grouped aliases inside those imports
 
-Bare namespace exports, wildcard exports and legacy `#import` are outside the current surface.
+Legacy inline `export`, bare namespace exports, wildcard exports and legacy `#import` are outside the current surface.
 
 ## Namespace records
 
-Source and facade namespace imports create shallow field-access-only import records.
+Source namespace imports create shallow field-access-only import records.
 Import records are not first-class values.
-Import source child paths directly rather than walking source/facade path segments through namespace fields.
+Import source child paths directly rather than walking source path segments through namespace fields.
 
 External package namespace imports can expose recursive child namespace records for package-local symbol paths such as `io.input.*`.
-That recursion belongs to virtual package metadata, not source facades.
+That recursion belongs to virtual package metadata, not source module surfaces.
 
 ## External packages
 
@@ -69,8 +68,8 @@ The HTML `@html` library's `Canvas` wrapper is the shape to copy: the raw `@web/
 
 External import providers live under `LibrarySet` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
 
-Grouped imports for virtual external packages resolve through external package metadata before source/module facade enforcement.
-Source imports still go through facade checks before source target resolution, so virtual package lookup doesn't weaken source-library or module privacy.
+Grouped imports for virtual external packages resolve through external package metadata before source module-boundary enforcement.
+Source imports still go through module public-surface checks before source target resolution, so virtual package lookup doesn't weaken source-library or module privacy.
 
 Provider-backed external JavaScript is the main current example.
 The frontend registers typed package metadata.
@@ -110,7 +109,7 @@ Same-file declarations, source imports, external imports, type aliases, prelude 
 Aliases have two different rules depending on where they appear:
 
 - Ordinary import aliases are file-local. They can't be independently re-exported.
-- An alias authored inside an explicit grouped facade re-export defines the public API name for that exported symbol.
+- An alias authored inside a grouped import in `export:` defines the public API name for that exported symbol.
 
 Both kinds must not collide with visible names. Leading-case mismatches warn.
 
@@ -121,23 +120,24 @@ Ordinary examples:
     import @core/io { io as CoreIo }
 ]
 
-Facade export alias examples:
+Module export alias example:
 
 [codeblock, $code("bst"):
-    export import @some/path { Symbol as PublicName }
-    export @some/path { Symbol as PublicName }
+    export:
+        import @some/path { Symbol as PublicName }
+    ;
 ]
 
-The grouped alias in a facade re-export is the public API name. It isn't a file-local-only alias that happens to be exported.
+The grouped alias inside `export:` is the public API name. It isn't a file-local-only alias that happens to be exported.
 
 ## Related reading
 
-- @../stages/header-parsing (Stage 2: Header parsing): where imports, aliases and facade exports are parsed
-- @../stages/dependency-sorting (Stage 3: Dependency sorting): how source-library facades participate in ordering
+- @../stages/header-parsing (Stage 2: Header parsing): where imports, aliases and module exports are parsed
+- @../stages/dependency-sorting (Stage 3: Dependency sorting): how source-library root surfaces participate in ordering
 - @../stages/ast-construction (Stage 4: AST construction): `ScopeContext` visibility consumption
 - @../backend/external-js-and-runtime-assets (External JavaScript and runtime assets): provider-backed JS and runtime asset planning
 
-If a lookup path needs to behave differently for source imports, facade imports and external packages, put that distinction in the visibility/import layer.
+If a lookup path needs to behave differently for source imports, module-boundary imports and external packages, put that distinction in the visibility/import layer.
 Don't hide it in expression resolution.
 
 ## HIR handoff

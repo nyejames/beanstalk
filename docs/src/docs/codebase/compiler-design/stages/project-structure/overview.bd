@@ -4,11 +4,12 @@ Build-system-owned config, discovery and source preparation.
 
 ## Contract
 
-- Input: project entry file or directory and builder metadata
-- Output: module inputs, parsed `config.bst`, discovered source assets and string-table base
-- Decides: config keys, source discovery, source kinds, external provider resolution
+- Input: project input file or directory and builder metadata
+- Output: module inputs, parsed `config.bst`, prepared source-library roots, one source-tree index, discovered source assets and string-table base
+- Decides: config keys, module-root discovery, source kinds, external provider resolution
 - Must not decide: semantic compilation, HIR shape, borrow validation
-- Invariant: config compilation stops at AST because config doesn't produce runtime code
+- Invariant: config compilation stops at AST because config produces no runtime code
+- Invariant: directory builds perform one expensive source-tree indexing pass after config establishes discovery roots
 
 ## Main paths
 

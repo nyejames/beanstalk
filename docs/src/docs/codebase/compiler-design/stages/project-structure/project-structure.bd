@@ -13,9 +13,9 @@ It finds the files, config and builder surfaces that the frontend needs.
 Important owners:
 
 - `src/build_system/project_config.rs` and `src/build_system/project_config/` own `config.bst` parsing, AST-backed value extraction and shape validation.
-- `compilation.rs`, `project_roots.rs` and `frontend_orchestration.rs` own single-file/directory dispatch, root interpretation, path-resolver setup and per-module frontend orchestration.
-- `entry_discovery.rs`, `module_inventory.rs`, `reachable_file_discovery.rs`, `import_scanning.rs` and `source_loading.rs` own entry discovery, import-graph traversal and source loading.
-- `source_library_discovery.rs`, `facade_validation.rs`, `collision_detection.rs`, `project_structure_diagnostics.rs` and `source_discovery_error.rs` own source-library scanning, facade preflight, import-name collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
+- `compilation.rs`, `project_roots.rs` and `frontend_orchestration.rs` own single-file/directory dispatch, root interpretation, prepared resolver setup and per-module frontend orchestration.
+- `source_tree_index.rs`, `module_inventory.rs`, `reachable_file_discovery.rs`, `import_scanning.rs` and `source_loading.rs` own one-pass root discovery, import-graph traversal and source loading.
+- `source_library_discovery.rs`, `root_validation.rs`, `collision_detection.rs`, `project_structure_diagnostics.rs` and `source_discovery_error.rs` own source-library root preflight, import-name collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
 
 ## What Stage 0 owns
 
@@ -27,9 +27,10 @@ Stage 0 owns:
 - allowing config imports only from core/builder libraries
 - rejecting project-local and relative config imports by design
 - stopping config compilation at AST because config doesn't need HIR
-- discovering module roots from build-system entry files
+- building one source-tree index after config establishes `entry_root`, library folders and output folders
+- selecting exactly one cosmetic non-config `#*.bst` root per module directory
 - expanding each module to reachable `.bst` files and builder-supported source assets through imports
-- detecting source-library roots visible to imports
+- preparing canonical source-library roots and their unique hash-root public-surface files before resolver construction
 - recognising external package prefixes so virtual imports aren't treated as filesystem paths
 - resolving source-kind candidates through the builder-provided registry
 - resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
@@ -51,8 +52,11 @@ The build system needs folded config values and typed errors, not backend-facing
 
 ## Source discovery
 
-Stage 0 expands each module to reachable `.bst` files and builder-supported source assets through imports.
-It also detects source-library roots and recognises external package prefixes so virtual imports don't become filesystem lookups.
+Stage 0 indexes directory projects once, then reuses that immutable root table for module inventory and nearest-root lookup. Output folders and irrelevant hidden or generated trees are skipped by the index owner.
+
+`ProjectPathResolver` consumes `PreparedSourceLibraryRoots` plus the source-tree index. Resolver construction performs no filesystem discovery. This keeps path resolution a lookup layer and prevents hidden rescans per module.
+
+Reachable-file discovery expands each selected module to imported `.bst` files and builder-supported source assets. It also recognises external package prefixes so virtual imports don't become filesystem lookups.
 
 Plain Markdown `.md` and Beandown `.bd` files are builder-supported source assets.
 They are discovered through the same extensionless source import candidate path as `.bst` files when the builder declares support.

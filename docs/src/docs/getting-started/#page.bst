@@ -215,7 +215,7 @@ page_head #= language_theme_head
     - `lib/` is created empty by default for project-local source libraries.
     - `dev/` and `release/` are output folders.
     - .beanstalk_manifest files are build-system metadata for safe stale-output cleanup.
-    - `src/#page.bst` is the default HTML page entry with a starter page.
+    - `src/#page.bst` is the conventional module root with a starter page. The filename is cosmetic.
 
     ### Using --force
 

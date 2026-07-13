@@ -88,9 +88,15 @@ The current frontend parallelism cases are:
   per-module frontend scheduling.
 
 Use `just bench-frontend-check` for before/after validation because it does not write local
-history or tracked summaries. Use `just bench-frontend` only when you intentionally want a recorded
-run; it appends raw local data under `benchmarks/local-data/` and updates the concise tracked
-monthly summary. Raw local data, expanded counter tables, and profile artifacts stay untracked.
+history or tracked summaries. The unset Rayon environment is the `default` thread identity. A
+positive `RAYON_NUM_THREADS` value creates a distinct fixed thread identity and invalid, empty or
+zero values are rejected. Reports compare only runs with the exact same identity and label that
+identity explicitly.
+
+Use `just bench-frontend` only when you intentionally want a recorded run. Default-thread runs
+append raw local data under `benchmarks/local-data/` and may update the concise tracked monthly
+summary. Recorded fixed-thread runs stay in local JSONL and never update tracked summaries. Raw
+local data, expanded counter tables and profile artifacts stay untracked.
 
 ### Profiling commands
 
@@ -200,7 +206,7 @@ Stage movement should explain a benchmark result, not replace it. Treat it as a 
 
 Detailed run data is local-only in `benchmarks/local-data/runs.jsonl`. Do not commit raw local history.
 
-Raw records include per-case means, medians, standard deviations, stage timings, counters, suite kind, primary metric name, system identity, and commit metadata when available. Counters include work-volume counters and implementation-pressure counters.
+Raw records include per-case means, medians, standard deviations, stage timings, counters, suite kind, primary metric name, exact thread identity, system identity and commit metadata when available. Counters include work-volume counters and implementation-pressure counters.
 
 The tracked Markdown summaries under `benchmarks/summaries/` are the public record. They must stay concise.
 
@@ -323,8 +329,8 @@ allocation, lookup, folding, import, and lowering pressure.
 - `pattern-stress.bst`: pattern and match coverage including exhaustive choice arms, guards, payload capture, and relational patterns.
 - `collection-stress.bst`: collection operations and loop coverage with mutations, range loops, nested iteration, and fallible fallback patterns.
 - `environment-stress.bst`: AST environment building, type alias expansion, nominal structs and choices, receiver catalog construction, generic declarations and instantiations, and body validation/type resolution.
-- `module-graph/`: small multi-file project with imports, facade exports, cross-file constants, and templates.
-- `import-fanout/`: multi-file project with repeated imports, aliases, facade wrapper declarations, and cross-file constants for string-table interning and module-graph resolution.
+- `module-graph/`: small multi-file project with cross-file imports, constants and templates.
+- `import-fanout/`: multi-file project with repeated imports, aliases, wrapper declarations and cross-file constants for string-table interning and module-graph resolution.
 - `module-root-stress/`: directory project with config parsing, multiple
   reachable module directories, and irrelevant non-Beanstalk trees for Stage 0
   module-root/path-resolution attribution.

@@ -239,7 +239,7 @@ Use this matrix to choose the smallest useful reading set for a compiler task. `
 - `docs/src/docs/codebase/compiler-design/build-system-and-frontend-boundary/build-system-and-frontend-boundary.bd`: `BackendBuilder`, `LibrarySet`, config compilation and source-file kinds
 - `docs/src/docs/codebase/compiler-design/diagnostics-paths-and-symbols/diagnostics-paths-and-symbols.bd`: `CompilerDiagnostic`, `CompilerError`, `StringTable`, source locations and style directives
 - `docs/src/docs/codebase/compiler-design/type-identity-and-coercion/type-identity-and-coercion.bd`: `TypeEnvironment`, `TypeId`, `DataType` and contextual coercion
-- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/imports-libraries-and-external-packages.bd`: source libraries, facades, external packages, provider imports and visibility
+- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/imports-libraries-and-external-packages.bd`: source libraries, module public surfaces, external packages, provider imports and visibility
 - `docs/src/docs/codebase/compiler-design/entry-start-and-page-fragments/entry-start-and-page-fragments.bd`: implicit `start`, const/runtime fragment split and builder-owned fragment assembly
 - `docs/src/docs/codebase/compiler-design/parallelism-and-determinism/parallelism-and-determinism.bd`: string-table merge, parallel inventory and serial AST emission
 - `docs/src/docs/codebase/compiler-design/ast/overview.bd`: environment, expressions, constants, templates and generics

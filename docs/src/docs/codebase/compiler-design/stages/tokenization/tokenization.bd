@@ -72,7 +72,7 @@ The compiler does not pretend it prepended wrapper source text.
 
 - @../header-parsing (Stage 2: Header parsing): source-kind headers and fused Stage 1/2 scheduling
 - @../../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): style directive registry
-- @../../entry-start-and-page-fragments (Entry start and page fragments): where Beandown and Markdown content surfaces
+- @../../entry-start-and-page-fragments (Active-root start and page fragments): where Beandown and Markdown content surfaces
 
 ## Numeric text
 

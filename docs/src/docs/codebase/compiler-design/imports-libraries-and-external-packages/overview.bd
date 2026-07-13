@@ -1,12 +1,12 @@
 # Imports, libraries and external packages
 
-Header-built visibility, facade boundaries and stable external IDs.
+Header-built visibility, module public surfaces and stable external IDs.
 
 ## Contract
 
-- Input: raw import syntax, source libraries, facades and builder-provided external packages
+- Input: raw import syntax, source libraries, module-root public surfaces and builder-provided external packages
 - Output: a file-local `ScopeContext` and stable external IDs for HIR
-- Decides: import resolution, alias rules, facade API surfaces, external package identity
+- Decides: import resolution, alias rules, module public surfaces, external package identity
 - Must not decide: expression semantics, backend runtime names, target feature support
 - Invariant: no stage after header import preparation rebuilds visibility from raw source syntax
 

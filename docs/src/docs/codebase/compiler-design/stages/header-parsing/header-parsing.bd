@@ -21,13 +21,14 @@ Related paths:
 Header parsing owns:
 
 - import and re-export parsing
-- facade-only `export` parsing and public/private facade metadata
+- strict root-only `export:` block parsing and public/private module metadata
 - import path validation and normalization
 - file-local import/visibility environment construction
 - declaration shell parsing for constants, functions, structs, choices, type aliases, traits and conformance metadata
 - top-level dependency edge generation
 - start-body token separation
 - top-level const fragment placement metadata
+- active/imported/normal file-role handling so only the active root produces `StartFunction`
 - source-kind preparation hooks that turn non-`.bst` inputs into ordinary headers
 
 Header parsing doesn't type-check executable bodies or fold expressions.
@@ -48,7 +49,7 @@ Header dependency edges include every top-level declaration dependency needed be
 
 Executable function/start body references don't participate in dependency sorting.
 Body-local declarations don't participate in dependency sorting.
-The implicit entry start header is always appended last.
+The implicit active-root start header is always appended last.
 
 ## Declaration shells
 
@@ -63,7 +64,7 @@ Examples:
 - type alias shell: name and target type annotation
 - trait shell: name, requirement signature shells and requirement type-reference dependency edges
 - conformance shell: target type reference, trait references and declaration source context
-- start shell: entry-file executable token body, excluded from dependency sorting
+- start shell: active-root executable token body, excluded from dependency sorting
 
 Parameterized generic aliases are rejected before shell creation.
 
@@ -84,7 +85,7 @@ Header parsing/import preparation builds the file-local import environment used 
 It validates and normalizes:
 
 - source imports
-- facade re-exports
+- module-root grouped re-exports
 - external package imports
 - aliases
 - prelude/builtin reservations
@@ -131,5 +132,5 @@ If AST needs a new kind of top-level dependency, add it to headers and dependenc
 
 - @../tokenization (Stage 1: Tokenization): tokenization and fused Stage 1/2 scheduling
 - @../dependency-sorting (Stage 3: Dependency sorting): how header-provided edges become declaration order
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): import visibility, facades and external packages
-- @../../entry-start-and-page-fragments (Entry start and page fragments): start-body separation and top-level const fragments
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): import visibility, module public surfaces and external packages
+- @../../entry-start-and-page-fragments (Active-root start and page fragments): start-body separation and top-level const fragments

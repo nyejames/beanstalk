@@ -122,11 +122,11 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Notes] ]
 
         [data:
-            [: Entry files and implicit start]
+            [: Active module roots and implicit start]
             [: Supported]
-            [: Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.]
+            [: Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, and fragment-order coverage.]
             [: Frontend / HTML builder]
-            [: Only module entry files run top-level runtime code. The implicit [$html:<code>start</code>] function is build-system-owned and not importable or callable as a user declaration.]
+            [: Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. The implicit [$html:<code>start</code>] function is build-system-owned and not importable or callable as a user declaration.]
         ]
 
         [data:
@@ -188,17 +188,17 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Beandown [$html:<code>.bd</code>] content assets]
             [: Partial]
-            [: Targeted compiler-integrated import, synthetic content constant, markdown folding, facade re-export, direct API, diagnostics, and integration coverage.]
+            [: Targeted compiler-integrated import, synthetic content constant, markdown folding, module-root re-export, direct API, diagnostics, and integration coverage.]
             [: HTML builder / frontend]
-            [: [$html:<code>.bd</code>] files are builder-supported source assets that synthesize one private compile-time [$html:<code>content #String</code>] constant from an implicit [$html:<code>$md</code>] template body. Nested templates with no explicit directive also default to [$html:<code>$md</code>], and any explicit nested directive overrides that default. They import extensionlessly into [$html:<code>.bst</code>], can be re-exported by [$html:<code>#mod.bst</code>], and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.]
+            [: [$html:<code>.bd</code>] files are builder-supported source assets that synthesize one private compile-time [$html:<code>content #String</code>] constant from an implicit [$html:<code>$md</code>] template body. Nested templates with no explicit directive also default to [$html:<code>$md</code>], and any explicit nested directive overrides that default. They import extensionlessly into [$html:<code>.bst</code>], can be re-exported through a module root's [$html:<code>export:</code>] block, and must fully fold. They are not entries, config files, standalone HTML files, or general source handlers.]
         ]
 
         [data:
             [: Plain Markdown [$html:<code>.md</code>] content assets]
             [: Supported]
-            [: Broad extensionless import, grouped alias, facade re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and entry-rejection coverage.]
+            [: Broad extensionless import, grouped alias, module-root re-export, parser options, raw HTML, literal links/images, collision, direct-extension, and module-root rejection coverage.]
             [: HTML builder / frontend]
-            [: [$html:<code>.md</code>] files are plain Markdown content assets that render to HTML at compile time and synthesize one private [$html:<code>content #String</code>] constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory facade scope. Links/images render literally and are not tracked assets in V1.]
+            [: [$html:<code>.md</code>] files are plain Markdown content assets that render to HTML at compile time and synthesize one private [$html:<code>content #String</code>] constant. They do not parse Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata, or same-directory module-root scope. Links/images render literally and are not tracked assets in V1.]
         ]
 
         [data:
@@ -300,7 +300,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Traits]
             [: Partial]
-            [: Broad declaration, conformance, visibility, generic-bound receiver-call, trait-name rejection, core cast trait metadata, incompatibility metadata, facade leak, and diagnostics coverage.]
+            [: Broad declaration, conformance, visibility, generic-bound receiver-call, trait-name rejection, core cast trait metadata, incompatibility metadata, public API leak, and diagnostics coverage.]
             [: Frontend static semantics]
             [: Static trait declarations, explicit same-file nominal conformances, reusable evidence, trait incompatibility metadata, and generic bounds are implemented. Dynamic trait values, trait aliases/composition, associated items, inheritance, generic traits/methods, conditional/specialized conformance, default methods, and standard trait taxonomy remain deferred or outside scope.]
         ]
@@ -324,9 +324,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Paths and imports]
             [: Supported]
-            [: Broad source import, namespace import, grouped import, external package, facade, module-boundary, collision, and project-structure coverage.]
+            [: Broad source import, namespace import, grouped import, external package, public-surface, module-boundary, collision, and project-structure coverage.]
             [: Frontend / HTML builder]
-            [: Source and facade namespace records are shallow. External package namespace records support nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through [$html:<code>#mod.bst</code>] facades.]
+            [: Source and module namespace records are shallow. External package namespace records support nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through the target root's [$html:<code>export:</code>] public surface.]
         ]
 
         [data:
@@ -436,9 +436,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Source library roots]
             [: Partial]
-            [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, library root discovery, collision detection, and facade enforcement coverage.]
+            [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, generic library root discovery, collision detection, and public-surface enforcement coverage.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share visibility and facade rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
+            [: Source libraries and regular modules share module-root and visibility rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
         ]
 
         [data:
@@ -452,9 +452,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Project-local libraries]
             [: Partial]
-            [: Targeted config-defined library folders, import resolution, and facade-gating coverage.]
+            [: Targeted config-defined library folders, import resolution, generic hash-root, and public-surface coverage.]
             [: Frontend / HTML]
-            [: Project-local source libraries are discovered from [$html:<code>library_folders</code>], with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. Public export/file-role handling still goes through [$html:<code>#mod.bst</code>] until the generic module-root role migration lands.]
+            [: Project-local source libraries are discovered from [$html:<code>library_folders</code>], with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. The filename after [$html:<code>#</code>] has no semantic role and the root's strict [$html:<code>export:</code>] block defines its public surface.]
         ]
 
         [data:
@@ -492,7 +492,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Receiver methods]
             [: Supported]
-            [: Broad same-file struct/choice receiver, aligned generic receiver, imported receiver type, namespace receiver type, facade exposure, nonlocal/builtin/external receiver rejection, duplicate, collision, and mutability coverage.]
+            [: Broad same-file struct/choice receiver, aligned generic receiver, imported receiver type, namespace receiver type, module-boundary exposure, nonlocal/builtin/external receiver rejection, duplicate, collision, and mutability coverage.]
             [: JS / HTML]
             [: Source-authored receiver methods travel with receiver type visibility. They are never grouped-imported, aliased, or exposed as namespace-record fields.]
         ]
@@ -560,7 +560,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: HTML-Wasm]
             [: Experimental]
-            [: Backend experiment and integration path for future Wasm output. Ordinary entry `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.]
+            [: Backend experiment and integration path for future Wasm output. Ordinary active-root `start` execution and non-reactive runtime page fragments use the shared HTML builder slot/hydration contract. Reactive mounting remains unsupported.]
             [: Keep behind [$html:<code>--html-wasm</code>]. Tests may pin current behavior, but Alpha support is JS / HTML.]
         ]
 
@@ -693,10 +693,10 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
-            [: Explicit facade export/re-export syntax]
+            [: Module-root export/re-export syntax]
             [: Supported]
-            [: Broad authored export, grouped re-export, alias, source/external symbol, privacy, duplicate, and placement coverage.]
-            [: [$html:<code>#mod.bst</code>] exposes public authored declarations with [$html:<code>export</code>] and public grouped re-exports with [$html:<code>export import</code>] or [$html:<code>export @path { ... }</code>]. Bare namespace exports, wildcard exports, function alias values, and automatic method re-export through type aliases remain deferred.]
+            [: Targeted authored export, grouped re-export, alias, source/external symbol, privacy, duplicate, placement, and strict-block rejection coverage.]
+            [: A module root's single strict [$html:<code>export:</code>] block exposes public authored declarations and grouped re-exports. Legacy inline [$html:<code>export</code>] forms, bare namespace exports, wildcard exports, function alias values, and automatic method re-export through type aliases are rejected.]
         ]
 
         [data:
@@ -723,8 +723,8 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Namespace / wildcard imports]
             [: Partial]
-            [: Source, facade, external package, nested external value/type traversal, and wildcard rejection coverage.]
-            [: Namespace imports are compile-time records. Source/facade records stay shallow. External package records can expose nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Wildcard imports remain deferred.]
+            [: Source, module public surface, external package, nested external value/type traversal, and wildcard rejection coverage.]
+            [: Namespace imports are compile-time records. Source and module records stay shallow. External package records can expose nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Wildcard imports remain deferred.]
         ]
 
         [data:
@@ -737,14 +737,14 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Generic functions]
             [: Partial]
-            [: Broad declaration, body validation, inference, instantiation, import/facade, diagnostics, fallible return, and non-value-use coverage.]
+            [: Broad declaration, body validation, inference, instantiation, module-boundary import, diagnostics, fallible return, and non-value-use coverage.]
             [: Generic free functions infer from immediate call arguments and immediate expected result context only. They emit concrete instances before HIR and are not first-class values.]
         ]
 
         [data:
             [: Trait bounds on generics]
             [: Partial]
-            [: Broad declaration-site bound, visible evidence, facade privacy, receiver-call, nominal generic instance, and negative diagnostic coverage.]
+            [: Broad declaration-site bound, visible evidence, module public-surface privacy, receiver-call, nominal generic instance, and negative diagnostic coverage.]
             [: Bounds use [$html:<code>is</code>]. Concrete generic calls and nominal generic instances require visible reusable evidence. File-local evidence-backed dispatch remains outside scope.]
         ]
 

@@ -5,7 +5,7 @@ A `.bd` file sees a deliberately small compile-time scope. The implicit template
 Exported compile-time constants and const records from the same-directory module root are visible inside a `.bd` file. This is the primary way to parameterise Beandown content.
 
 [codeblock, $code("bst"):
-    -- docs/#mod.bst
+    -- docs/#docs.bst
     export:
         site_name #= "Beanstalk"
     ;

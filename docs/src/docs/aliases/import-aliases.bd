@@ -1,4 +1,4 @@
-Import aliases rename an imported symbol for local use inside one file. They are distinct from type aliases and from public facade re-export names.
+Import aliases rename an imported symbol for local use inside one file. They are distinct from type aliases and from public module re-export names.
 
 ### Definition and syntax
 
@@ -106,9 +106,9 @@ A grouped import cannot use a single alias for the whole group.
     }
 ]
 
-### Facade and public-name distinction
+### Local and public-name distinction
 
-An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself does not choose a special facade role. The current export syntax is owned by @../project-structure (Project Structure) and @../libraries (Libraries). Do not treat a local import alias as a public API rename.
+An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself has no semantic role. The current export syntax is owned by @../project-structure (Project Structure) and @../libraries (Libraries). Do not treat a local import alias as a public API rename.
 
 [codeblock, $code("bst"):
     -- Ordinary local import alias

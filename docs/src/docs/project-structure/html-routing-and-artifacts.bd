@@ -46,5 +46,5 @@ In the experimental `--html-wasm` mode, the builder can emit a route folder cont
 ### Related concepts
 
 - For module root rules see @#module-roots (Module roots).
-- For root activity see @#entry-runtime-and-fragments (Entry runtime and fragments).
+- For root activity see @#entry-runtime-and-fragments (Active-root runtime and fragments).
 - For project layout see @#project-layout (Project layout).

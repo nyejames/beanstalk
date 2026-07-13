@@ -6,7 +6,7 @@ One owner for top-level discovery and dependency edges.
 
 - Input: tokens from Stage 1
 - Output: declaration shells, import environment and dependency edges
-- Decides: top-level declaration shape, import visibility, facade exports, dependency edges
+- Decides: top-level declaration shape, import visibility, module-root `export:` metadata, root-body separation and dependency edges
 - Must not decide: body semantics, type resolution, template semantics
 - Invariant: header parsing is the only stage that discovers module-wide top-level declarations
 

@@ -116,7 +116,7 @@ page_head #= language_theme_head
 #[section:
     [doc_level:
         [$insert("key"):entry-runtime-and-fragments]
-        [$insert("title"):Entry runtime and fragments]
+        [$insert("title"):Active-root runtime and fragments]
         [$insert("advanced"):[entry_runtime_and_fragments]]
 
         [entry_runtime_and_fragments_basic]

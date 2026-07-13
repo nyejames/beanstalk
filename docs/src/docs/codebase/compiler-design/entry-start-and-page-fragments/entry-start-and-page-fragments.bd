@@ -1,31 +1,32 @@
 
-A module entry file has an implicit `start()` function for top-level runtime code.
-Non-entry files contribute declarations only.
+The active module root has an implicit `start()` function for top-level runtime code.
+Imported module roots contribute their public declaration surface without replaying root code. Normal files contribute declarations only.
 
 Page fragments split before HIR.
 Runtime fragments remain code.
 Compile-time fragments become builder metadata.
 
-## Entry start
+## Active-root start
 
-Header parsing captures the entry file's top-level runtime code as a `HeaderKind::StartFunction`.
+Header parsing captures the active module root's top-level runtime code as a `HeaderKind::StartFunction`.
 The implicit `start` header isn't part of dependency sorting.
 It's appended after sorted declarations and lowered by AST.
 
-That means top-level declaration order and entry runtime order stay separate:
+That means top-level declaration order and active-root runtime order stay separate:
 
 - constants, type aliases, structs, choices, function signatures and type annotations can affect dependency sorting
 - executable body references don't affect top-level declaration order
-- entry runtime code runs through implicit `start`
-- non-entry files can't contain top-level runtime statements
+- active-root runtime code runs through implicit `start`
+- imported-root runtime code and direct fragments are suppressed in the importer
+- normal files can't contain top-level runtime statements
 
 ## Runtime and const fragments
 
-Entry-file page fragments are split like this:
+Active-root page fragments are split like this:
 
 - top-level runtime templates remain runtime code inside `start()`
 - `start()` returns runtime fragment strings in source order
-- entry-file top-level const templates fold in AST into compile-time fragments
+- active-root top-level const templates fold in AST into compile-time fragments
 - each compile-time fragment records a runtime insertion index
 - builders merge compile-time fragments into the runtime fragment list
 - HIR doesn't carry compile-time page fragments or a separate ordered start-fragment stream
@@ -52,7 +53,7 @@ The wrong shape defines a named constant template and later emits it at top leve
     [message]
 ]
 
-Here `intro` is a named constant template and a top-level reference to it is an ordinary runtime expression. This does **not** make `intro` a compile-time page fragment. The correct compile-time fragment form is the direct entry-file-only const-template shown below:
+Here `intro` is a named constant template and a top-level reference to it is an ordinary runtime expression. This does **not** make `intro` a compile-time page fragment. The correct compile-time fragment form is the direct active-root-only const-template shown below:
 
 [codeblock, $code("bst"):
     page_title #= "Demo"
@@ -68,19 +69,23 @@ Here `intro` is a named constant template and a top-level reference to it is an 
     [message]
 ]
 
-This direct top-level const-template form is entry-file-only. It must fold and
+This direct top-level const-template form is active-root-only. It must fold and
 may become a compile-time page fragment.
 
 A reference to `message` at top level is runtime code inside the implicit `start`. A constant template referenced through an ordinary runtime top-level expression doesn't become a compile-time fragment merely because its value can fold.
 
-Templates assigned to variables or returned from functions are not page fragments by themselves. Only direct top-level const-template forms of the shape shown above in an HTML entry file contribute compile-time page fragments.
+Templates assigned to variables or returned from functions are not page fragments by themselves. Only direct top-level const-template forms of the shape shown above in an active HTML module root contribute compile-time page fragments.
+
+## Imported root suppression
+
+Header preparation assigns each file one explicit role: active module root, imported module root or normal. Both root roles may contain `export:` declarations, but only the active root produces a start header and fragment activity. An imported root's top-level runtime body is skipped before AST, so importing a public API cannot execute or emit the imported module's page content.
 
 ## Builder merge
 
-Builders receive resolved const top-level fragments and the entry runtime fragment count.
+Builders receive resolved const top-level fragments and `ModuleRootActivity`, including the runtime fragment count.
 They own route-level assembly.
 
-The HTML builder merges compile-time fragments into the runtime fragment list, creates runtime fragment slots for `start()` output and then assembles the final page artifacts.
+The HTML builder merges compile-time fragments into the runtime fragment list, creates runtime fragment slots for active-root `start()` output and then assembles the final page artifacts.
 
 HIR only models the runtime code needed to produce runtime fragments.
 It doesn't need to know that the HTML builder is making a document.

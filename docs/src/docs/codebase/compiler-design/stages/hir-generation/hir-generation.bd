@@ -38,7 +38,7 @@ HIR owns:
 - hashmap literals and map member operations as first-class HIR operations for borrow validation and backend feature validation
 - module constants as compile-time metadata
 - advisory private const-fact metadata projected from AST for future optimisation consumers
-- function-origin metadata such as entry start versus normal functions
+- function-origin metadata such as active-root start versus normal functions
 - doc fragments, rendered path usages, warnings and other module metadata that survives from AST into builder-facing compiled modules
 - stable external function IDs selected during AST resolution
 - builtin runtime cast expressions and fallible cast operations that survive AST folding
@@ -147,4 +147,4 @@ That keeps the memory model simple: the user sees a value, HIR creates a local w
 - @../../../memory-management/borrow-validation
   (Memory borrow validation): hidden locals, roots and the HIR side-table handoff
 - @../../type-identity-and-coercion (Type identity and coercion): `TypeId` links carried by HIR
-- @../../entry-start-and-page-fragments (Entry start and page fragments): why compile-time fragments stay outside HIR
+- @../../entry-start-and-page-fragments (Active-root start and page fragments): why compile-time fragments stay outside HIR

@@ -141,6 +141,6 @@ A broken type link in HIR is a compiler invariant failure, not a user diagnostic
 ## Related reading
 
 - @../stages/ast-construction (Stage 4: AST construction): where `TypeEnvironment` is built
-- @../ast/environment-and-type-resolution (AST environment and type resolution): type resolution and facade API validation
+- @../ast/environment-and-type-resolution (AST environment and type resolution): type resolution and public module API validation
 - @../stages/hir-generation (Stage 5: HIR generation): `frontend_type_id` links and HIR validation
 - @../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): rendering type names through `DiagnosticRenderContext`

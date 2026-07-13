@@ -28,7 +28,7 @@ It extracts doc fragments, assembles const top-level fragments, propagates react
 AST owns:
 
 - semantic declaration resolution from header shells into canonical `TypeId`, function signature, constant, nominal type, trait and receiver-method metadata
-- public `#mod.bst` API surface validation, including private type leakage in exported signatures, fields, aliases, constants and trait metadata
+- public module-root API surface validation, including private type leakage in exported signatures, fields, aliases, constants and trait metadata
 - executable body parsing
 - body-local declarations
 - expression parsing and type checking
@@ -47,7 +47,7 @@ Internal substeps can move as long as the stage still consumes sorted headers, r
 ## Important subowners
 
 - `type_resolution/` owns parsed type-reference resolution to canonical `TypeId`, including source-visible lookup, aliases, fixed collection capacity, maps and generic nominal instantiation.
-- `module_ast/environment/public_surface.rs` owns semantic public facade API validation after type and trait identities are resolved.
+- `module_ast/environment/public_surface.rs` owns semantic public module API validation after type and trait identities are resolved.
 - `generic_functions/` owns generic free-function templates, call inference and concrete instance emission before HIR.
 - `generic_bounds.rs` owns static trait-bound validation for concrete nominal generic instances.
 - `templates/` owns template parsing, composition, folding, slot routing, render plans, control-flow validation and template structural metadata traversal.

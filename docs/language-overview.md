@@ -73,7 +73,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
 | References | Shared immutable access is the default for stack and heap values. |
 | Constants | `#` marks compile-time constants: `name #= value`. |
-| Facade exports | `export` is reserved everywhere and valid only in `#mod.bst` to mark public facade declarations or grouped re-exports. |
+| Module exports | `export:` is a strict block valid only in a module root file. It contains public declarations and grouped re-exports. |
 | Copies | Copies must be explicit unless an expression constructs a new value from references. |
 | Parameters/fields | Function parameters and struct/choice fields use `|...|`. Defaults use `=`. |
 | Results/options | Error returns use `Error!`; options use `T?`. |
@@ -206,7 +206,7 @@ so both sides of each token require spacing (e.g. `count ~= 1`).
 Runtime numeric operations are checked. Integer overflow, divide/modulo by zero, invalid integer
 exponents, and non-finite Float results are failures. When the enclosing function has builtin
 `Error!` as its error return slot, numeric failures recover through that builtin `Error` channel.
-Custom fallible channels, non-fallible functions, and entry-file top-level runtime code use trap
+Custom fallible channels, non-fallible functions, and active-root top-level runtime code use trap
 mode. Statically known numeric failures are compile-time diagnostics, even inside builtin
 `Error!` functions.
 
@@ -624,8 +624,8 @@ Core rules:
 - Template bodies capture variables from the surrounding scope.
 - Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$md`). Regular quoted string literals still support escapes.
 - Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]` or `[: [`[This is text inside sqauare brackets as a string]`]]`.
-- Only direct top-level template expressions in an HTML entry file contribute page fragments.
-- Top-level runtime templates run in entry `start()` order.
+- Only direct top-level template expressions in an active HTML module root contribute page fragments.
+- Top-level runtime templates run in active-root `start()` order.
 - Top-level const templates fold at compile time and are merged separately.
 - Templates assigned to variables or returned from functions do not contribute page fragments by themselves.
 - Runtime Float interpolation and `Float -> String` casts use the same Beanstalk formatter as
@@ -847,26 +847,19 @@ Rules:
 
 Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted flat compile-time scope:
 - exported compile-time constants and const records from `@html`, such as `[p: body]`;
-- exported compile-time constants and const records from the same-directory `#mod.bst`, when one exists.
+- exported compile-time constants and const records from the same-directory module root, when one exists.
 
-Same-directory facade constants override `@html` constants on name collision. Functions, structs, choices, type aliases, traits, methods, external/runtime APIs, and the generated self `content` constant are not visible in the `.bd` body.
+Same-directory module-root constants override `@html` constants on name collision. Functions, structs, choices, type aliases, traits, methods, external/runtime APIs, and the generated self `content` constant are not visible in the `.bd` body.
 
-Facades can re-export Beandown content explicitly:
+Module roots can re-export Beandown content explicitly:
 
 ```beanstalk
--- src/#mod.bst
-import @core/text {length as private_length}
-
-export page_label #= "Documentation"
-
-export title_length |title String| -> Int:
-    return private_length(title)
+-- src/#docs.bst
+export:
+    import @docs/intro {
+        content as intro_content,
+    }
 ;
-
-export @components/card {
-    CardData as Card,
-    render_card,
-}
 ```
 
 Use `.bst` files for pages, composition, imports, functions, and richer compile-time setup. Use `.bd` for small markdown-first content fragments consumed by `.bst`.
@@ -897,11 +890,11 @@ Rules:
 - Direct extension imports such as `import @docs/intro.md` are invalid; use `import @docs/intro`.
 - `.md` files are never page entries, module roots, config files, or standalone project types.
 - `.md` files have no Beanstalk imports, declarations, interpolation, templates, frontmatter, or metadata.
-- `.md` files do not see same-directory facade constants or `@html` constants. They have no Beanstalk scope.
+- `.md` files do not see same-directory module-root constants or `@html` constants. They have no Beanstalk scope.
 - Raw HTML is preserved in V1. This feature does not add a sanitizer or raw-HTML policy key.
 - Markdown links and images render literal `href` and `src` values in V1. They are not tracked assets and are not rewritten.
 - `.bd` remains the Beanstalk-aware content format. Use `.bd` when content needs `$md`,
-  nested templates, or the restricted same-directory facade constant scope.
+  nested templates, or the restricted same-directory module-root constant scope.
 
 ### If Statements and Pattern Matching
 
@@ -1040,7 +1033,7 @@ Receiver method visibility is tied to receiver type visibility.
 - A source-authored receiver method is visible wherever its receiver type is visible.
 - Receiver methods are not imported, aliased, or re-exported independently.
 - Namespace imports may make the receiver type visible, but receiver methods are not namespace fields.
-- A `#mod.bst` facade exposes a type's same-file receiver methods when it exposes the type.
+- A module root exposes a type's same-file receiver methods across the boundary when its `export:` block exposes the type.
 - Use free functions for private helpers or operations on types owned by other files or packages.
 
 ## Traits
@@ -1277,7 +1270,7 @@ Aliases can target builtins, structs, choices, options, collections, fully concr
 
 ## Module System, Config, and Imports
 
-A module is a directory-scoped set of Beanstalk source files compiled into one output. A directory becomes a module root when it contains one or more `#*.bst` files. A project contains one or more modules plus libraries and other builder inputs.
+A module is a directory-scoped set of Beanstalk source files compiled together. A directory becomes a module root when it contains exactly one non-config `#*.bst` file. More than one root file in the same directory is rejected. A project contains one or more modules plus libraries and other builder inputs.
 
 ### Project config
 
@@ -1332,53 +1325,52 @@ import @docs {
 
 Rules:
 - Imports target exported symbols, not file-level start functions.
-- Source and facade namespace imports create shallow, field-access-only import records.
+- Source namespace imports create shallow, field-access-only import records.
 - External package namespace imports can expose nested package-local symbol paths such as `io.input.*`.
 - Import records are not first-class values.
-- Import source child paths directly; do not traverse source or facade path segments through namespace fields.
+- Import source child paths directly. Do not traverse source path segments through namespace fields.
 - Ordinary import aliases are file-local, cannot be independently re-exported, and must not collide with visible names.
-- An alias authored inside an explicit grouped facade re-export defines the public API name for that exported symbol.
+- An alias authored inside a grouped re-export in `export:` defines the public API name for that exported symbol.
 - Alias leading-case mismatches warn.
 
 ```beanstalk
 import @some/path { Symbol as LocalName }
 
-export import @some/path { Symbol as PublicName }
-export @some/path { Symbol as PublicName }
+export:
+    import @some/path { Symbol as PublicName }
+;
 ```
 
-`LocalName` is file-local. `PublicName` is the exported API name created by the explicit facade re-export.
+`LocalName` is file-local. `PublicName` is the exported API name created by the grouped re-export.
 - Grouped imports cannot use a trailing group-level alias.
 - Direct symbol-path imports such as `import @core/math/sin` are invalid.
 - `.bst` source imports are extensionless.
 - Direct project/local JavaScript imports require `.js` and a builder `.js` external import provider.
 - Invalid namespace path stems require explicit aliases.
-- Direct imports of `#mod.bst`, `#page.bst`, and `config.bst` are invalid.
+- Direct imports of any `#*.bst` root file and `config.bst` are invalid.
 
-### Module roots, entry files, facades, and libraries
+### Module roots, runtime, public APIs, and libraries
 
 | File/root | Role |
 |---|---|
-| `#page.bst` or other builder entry | Owns top-level runtime/start code |
-| implicit `start` | Contains entry-file top-level runtime code; build-system-only; not importable |
-| non-entry `.bst` files | Declarations only; no top-level executable statements |
-| `#mod.bst` | Only outward-facing module export surface |
-| module root without `#mod.bst` | Exports nothing outside itself |
+| one non-config `#*.bst` file per module directory | Module root with a cosmetic filename |
+| active module root | Owns top-level runtime/start code and direct page fragments |
+| imported module root | Provides only its `export:` public surface; root runtime is suppressed |
+| implicit `start` | Contains active-root top-level runtime code; build-system-only; not importable |
+| normal `.bst` files | Declarations only; no top-level executable statements |
 | `config.bst` | Affects build behavior; creates no language-visible imports |
 
 Execution and visibility:
-- Only the module entry file executes top-level runtime code automatically.
+- The active module root executes top-level runtime code automatically.
 - Other files contribute declarations that must be imported explicitly.
-- `#page.bst` may import same-module files but exports nothing unless `#mod.bst` exposes declarations.
-- `#mod.bst` is an API facade, not a runtime entry or shared implementation file.
-- `#mod.bst` may contain private imports plus private or public authored top-level functions, structs, choices, type aliases, traits, and `#` constants.
-- `#mod.bst` may not contain top-level runtime statements, runtime templates/start code, or `#[...]` page fragments.
-- Public authored facade declarations require `export`.
-- Regular `import` in `#mod.bst` is private to that facade file.
-- `export import @path { Symbol }` and `export @path { Symbol }` re-export imported symbols through the facade; grouped aliases define the public API name.
-- Public facade APIs must not expose private facade-only types in signatures, fields, aliases, generic bounds, or exported constant types.
-- Receiver methods are visible through a facade when the facade exposes the receiver type's source surface. Type aliases in `#mod.bst` do not automatically re-export private implementation methods.
-- Bare namespace exports such as `export @path`, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
+- An imported module root never replays its top-level runtime code or page fragments in the importer.
+- A module root may contain private imports, private declarations, one strict `export:` block, runtime start code and direct page fragments.
+- Declarations outside `export:` stay private to the module. A root with no `export:` exports nothing.
+- Grouped imports inside `export:` re-export symbols, and grouped aliases define the public API name.
+- Public APIs must not expose private root-only types in signatures, fields, aliases, generic bounds, or exported constant types.
+- Receiver methods are visible across a module boundary when `export:` exposes the receiver type's source surface. Type aliases do not automatically re-export private implementation methods.
+- Legacy inline `export`, bare namespace exports, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
+- API-only roots with no runtime code or direct fragments produce no HTML artifact.
 
 Import resolution:
 - `@./x` resolves from the importing file’s directory.
@@ -1388,7 +1380,7 @@ Import resolution:
 - Other non-relative imports resolve from the configured module entry root.
 - Configured library folders are scan roots; each direct child directory becomes an import prefix.
 - `/lib` is the default scan folder when `library_folders` is omitted.
-- Importing a folder across or into a module boundary requires that folder to expose `#mod.bst`.
+- Importing a folder across or into a module boundary requires one unique `#*.bst` root, and only declarations in its `export:` block are visible.
 - Sibling `name.bst` and `name/` folder imports are ambiguous; `.js` files are excluded from that collision rule.
 - Grouped imports expand into individual symbol imports.
 - Circular imports are compilation errors.
@@ -1400,9 +1392,9 @@ Library categories:
 - project libraries: source libraries discovered from configured library folders;
 - external packages: virtual packages provided by backend metadata.
 
-Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules behind `#mod.bst` facades.
+Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules with one cosmetic `#*.bst` root and an `export:` public surface.
 
-The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
+The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Its cosmetic root filename is currently `libraries/html/#mod.bst`, but its public API comes from the root's `export:` block. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
 
 ### External platform package imports
 
@@ -1443,8 +1435,8 @@ Deferred library-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules
 - source-library HIR caching
 - user-authored external binding files
-- wildcard imports/exports and namespace facade exports such as `export @path`
-- automatic docs/API extraction from `#mod.bst`
+- wildcard imports/exports and namespace exports
+- automatic docs/API extraction from module-root `export:` blocks
 - seeded random, full date/time/time-zone/calendar APIs, Temporal-backed calendar implementation, locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals, browser animation scheduling packages, and non-JS lowerings for JS-backed core packages
 
 ### Binding Modes, Top-Level Declarations, and Constants
@@ -1467,9 +1459,9 @@ maybe_name #String? = none
 Rules:
 - `#` marks compile-time constants; it does not control visibility.
 - Top-level functions, structs, choices, type aliases, and `#` constants in ordinary files are importable inside the same module by default.
-- Cross-module visibility is controlled by the nearest `#mod.bst` facade.
+- Cross-module visibility is controlled by the nearest module root's `export:` block.
 - Runtime top-level bindings and expressions are start-body code, not importable declarations.
-- `#[...]` is entry-file-only top-level const-template syntax; it must fully fold and may contribute compile-time page fragments.
+- `#[...]` is active-module-root-only top-level const-template syntax. It must fully fold and may contribute compile-time page fragments.
 
 Top-level dependency ordering includes constants, type aliases, structs, choices, function signatures, and type annotations. Executable body statements do not affect top-level declaration order.
 

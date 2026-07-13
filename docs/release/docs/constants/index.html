@@ -728,7 +728,7 @@ body {
     </code></pre><h3>Declaration forms</h3><pre style=""><code class='codeblock'>
     name <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> value
     name <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Type</span> <span class='bst-code-operator'>=</span> value
-    </code></pre><ul><li>Every constant must have an initializer.</li><li>A constant is immutable.</li><li>A mutable marker cannot be combined with <code>#</code>.</li><li>Without an annotation, the initializer supplies the type.</li><li>An explicit annotation supplies a compile-time receiving type.</li><li>The initializer must fully fold.</li><li>A constant may reference only compile-time values.</li></ul><p><code>#</code> controls compile-time evaluation. It does not control visibility.</p><p>Top-level constants follow ordinary module and facade visibility rules.</p><p>Body-local constant declarations remain local to their scope.</p><p>A top-level runtime binding without <code>#</code> belongs to entry <code>start</code> code rather than the importable constant surface.</p>
+    </code></pre><ul><li>Every constant must have an initializer.</li><li>A constant is immutable.</li><li>A mutable marker cannot be combined with <code>#</code>.</li><li>Without an annotation, the initializer supplies the type.</li><li>An explicit annotation supplies a compile-time receiving type.</li><li>The initializer must fully fold.</li><li>A constant may reference only compile-time values.</li></ul><p><code>#</code> controls compile-time evaluation. It does not control visibility.</p><p>Top-level constants follow ordinary module and public-surface visibility rules.</p><p>Body-local constant declarations remain local to their scope.</p><p>A top-level runtime binding without <code>#</code> belongs to active-root <code>start</code> code rather than the importable constant surface.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -926,7 +926,7 @@ body {
     heading <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-parenthesis'>[</span>title<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>A direct top-level const template in an HTML entry can also become part of the generated page:</p><pre style=""><code class='codeblock'>
+    </code></pre><p>A direct top-level const template in an active HTML module root can also become part of the generated page:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Compile</span><span class='bst-code-operator'>-</span>time heading
     <span class='bst-code-parenthesis'>]</span>
@@ -940,11 +940,11 @@ body {
     heading <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-parenthesis'>[</span>site_name<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>This creates a compile-time <code>String</code> value.</p><p>It does not contribute a page fragment by itself.</p><h3>Direct top-level const fragments</h3><p>In an HTML entry file, the direct top-level const-template form contributes a compile-time page fragment.</p><pre style=""><code class='codeblock'>
+    </code></pre><p>This creates a compile-time <code>String</code> value.</p><p>It does not contribute a page fragment by itself.</p><h3>Direct top-level const fragments</h3><p>In an active HTML module root, the direct top-level const-template form contributes a compile-time page fragment.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>md<span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Compile</span><span class='bst-code-operator'>-</span>time heading
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>The direct form:</p><ul><li>is valid only as top-level entry-file fragment syntax</li><li>must fully fold</li><li>records its position relative to runtime entry fragments</li><li>is handed to the project builder</li><li>never becomes HIR runtime code</li></ul><h3>Const template <code>if</code></h3><pre style=""><code class='codeblock'>
+    </code></pre><p>The direct form:</p><ul><li>is valid only as top-level active-root fragment syntax</li><li>must fully fold</li><li>records its position relative to active-root runtime fragments</li><li>is handed to the project builder</li><li>never becomes HIR runtime code</li></ul><h3>Const template <code>if</code></h3><pre style=""><code class='codeblock'>
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> show_heading<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Visible</span> heading
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>

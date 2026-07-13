@@ -6,7 +6,7 @@ Sorted shells become semantic identities and visibility.
 
 - Input: sorted declaration headers and header-built visibility
 - Output: populated `TypeEnvironment`, resolved signatures and `ScopeContext`
-- Decides: type identity, generic instances, public facade API, member lookup
+- Decides: type identity, generic instances, public module API, member lookup
 - Must not decide: body expression semantics, HIR control flow, backend lowering
 - Invariant: `TypeId` equality in the active environment is the only semantic comparison rule
 

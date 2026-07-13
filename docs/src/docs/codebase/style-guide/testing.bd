@@ -175,6 +175,7 @@ Use one `expect.toml` per case with backend-specific assertion blocks.
     [backends.html]
     mode = "success"
     warnings = "forbid"
+    artifacts_must_not_exist = ["unexpected.html"]
 
     [backends.html_wasm]
     mode = "success"
@@ -195,6 +196,7 @@ Use one `expect.toml` per case with backend-specific assertion blocks.
 ]
 
 - Use artifact assertions for structure: file presence, Wasm validity, exports, imports, expected snippets, absence of forbidden output.
+- Use `artifacts_must_not_exist` for success cases whose contract requires an exact normalized output path to be absent. Paths reported as `NotBuilt` are ignored because they were never emitted.
 - Use strict goldens only where exact emitted text is contractual.
 - Prefer semantic or rendered-output assertions for behavior-first cases.
 - Strengthen artifact assertions when a golden can pass while structural behavior is wrong.

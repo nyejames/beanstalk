@@ -3,7 +3,7 @@ A `.bd` file sees compile-time constants from its module root and `@html` helper
 ### A constant capture
 
 [codeblock, $code("bst"):
-    -- docs/#mod.bst
+    -- docs/#docs.bst
     export:
         site_name #= "Beanstalk"
     ;

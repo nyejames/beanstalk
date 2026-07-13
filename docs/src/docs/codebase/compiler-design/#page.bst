@@ -80,7 +80,7 @@ page_head #= codebase_theme_head
     - @./diagnostics-paths-and-symbols (Diagnostics, paths and symbols)
     - @./type-identity-and-coercion (Type identity and coercion)
     - @./imports-libraries-and-external-packages (Imports, libraries and external packages)
-    - @./entry-start-and-page-fragments (Entry start and page fragments)
+    - @./entry-start-and-page-fragments (Active-root start and page fragments)
     - @./parallelism-and-determinism (Parallelism and determinism)
     - @../memory-management (Memory management)
 ]

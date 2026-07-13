@@ -40,8 +40,15 @@ A module root can serve two roles depending on context:
 
 A module root with no builder-relevant top-level activity (no runtime code, no const fragments, no runtime fragments) is API-only. It is a valid module root that exports declarations but produces no builder artifact.
 
+### Migrating facade-era projects
+
+- Rename the project config file to plain `config.bst`.
+- Keep one non-config `#*.bst` root per source directory. Merge old `#page.bst` and `#mod.bst` roles when they shared a directory.
+- Replace inline `export` declarations and imports with one strict `export:` block in the module root.
+- Import the module directory or library prefix. Do not import the hash-root filename directly.
+
 ### Related concepts
 
 - For the export block see @#public-api (Public API).
-- For root activity and page fragments see @#entry-runtime-and-fragments (Entry runtime and fragments).
+- For root activity and page fragments see @#entry-runtime-and-fragments (Active-root runtime and fragments).
 - For HTML routes see @#html-routing-and-artifacts (HTML routing and artifacts).

@@ -30,13 +30,19 @@ The HTML builder owns:
 The HTML builder doesn't compile frontend semantics.
 It consumes modules that have already passed HIR generation and borrow validation.
 
+## Root activity and artifact eligibility
+
+Each compiled module carries `ModuleRootActivity` from header and AST preparation. The metadata records non-trivial root body activity plus const and runtime fragment counts. The builder uses `has_html_artifact_activity()` to select route-producing modules without scanning HIR or rediscovering source syntax.
+
+API-only modules remain available for imports, public API validation and external package metadata, but they don't emit HTML, runtime glue or tracked assets. Homepage selection only considers artifact-producing modules. A directory project with no artifact-producing entry-root module reports the existing missing-homepage configuration diagnostic.
+
 ## Page fragments
 
-AST gives the builder resolved const top-level fragments and the entry runtime fragment count. The HTML builder owns the target-independent page-fragment plan shared by HTML-JS and HTML-Wasm:
+The compiled module gives the builder resolved const top-level fragments and `ModuleRootActivity`, including the runtime fragment count. The HTML builder owns the target-independent page-fragment plan shared by HTML-JS and HTML-Wasm:
 
 1. Merge compile-time fragments into the runtime fragment list at their recorded insertion indices.
 2. Create placeholders or slots for runtime fragments.
-3. Execute entry `start` once through the selected runtime path.
+3. Execute active-root `start` once through the selected runtime path.
 4. Hydrate returned runtime fragments into the slots in source order.
 5. Assemble the final route HTML artifact.
 
@@ -84,4 +90,4 @@ The HTML builder decides which file paths become emitted assets, chooses output 
 - @../wasm-lowering (Wasm lowering): the HTML-Wasm execution path
 - @../external-js-and-runtime-assets (External JavaScript and runtime assets): build-level runtime assets and glue
 - @../tracked-assets (Tracked assets): frontend-rendered path usages and asset emission
-- @../../entry-start-and-page-fragments (Entry start and page fragments): the shared page-fragment contract
+- @../../entry-start-and-page-fragments (Active-root start and page fragments): the shared page-fragment contract

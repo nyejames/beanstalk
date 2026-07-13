@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 9 documentation reconciliation. The Phase 10 artifact-absence contract and cosmetic source-library integration coverage are accepted and ready for checkpoint.
-LAST_ACCEPTED_COMMIT: `5a3026580` (`fix: isolate benchmark thread identities`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `5a3026580`; the accepted artifact-contract runner and fixture changes are uncommitted. The docs migration is committed separately and paused.
+CURRENT_SLICE: Phase 9 documentation reconciliation is complete and ready for checkpoint. Next is the whole-plan test and benchmark coverage audit.
+LAST_ACCEPTED_COMMIT: `852ef451f` (`test: assert absent build artifacts`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `852ef451f`; Phase 9 documentation source, generated routes and this plan are modified. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -18,8 +18,8 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - this plan
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
-- docs: the completed migration remains outside this implementation slice. Compiler-design source-discovery and import pages still need Phase 9 reconciliation after code slices are accepted.
-- code: source-library root canonicalization and hash-root discovery have one Stage 0 owner. Integration expectations can now forbid emitted artifact paths, the API-only module fixture forbids `api/index.html` and one configured library fixture proves `#alpha.bst` and `#mod.bst` have identical root semantics. Remaining work is documentation reconciliation and whole-plan final review.
+- docs: language, compiler-design, project-structure, library, benchmark, testing and progress documentation now use generic module roots, strict `export:` blocks, active/imported root roles and `ModuleRootActivity`. Generated routes were rebuilt from source.
+- code: implementation is complete through the artifact-absence contract. Remaining work is the whole-plan test/benchmark coverage audit and final review.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -190,18 +190,19 @@ VALIDATION_STATE:
 - Phase 10 resolver preflight: Codex CLI introduced immutable `PreparedSourceLibraryRoots`, moved source-library canonicalization and direct-child hash-root discovery into one Stage 0/build-system preflight and migrated directory, single-file, config and direct Beandown construction. Resolver constructors now consume prepared data without filesystem calls. Ollama performed the user-requested final review and found no correction. Both workers passed all-target tests (3344), integration cases (1753/1753), frontend benchmarks, Clippy and diff checks; Codex also passed `just validate`.
 - Phase 10 benchmark identity: Ollama added format-v5 default/fixed Rayon thread identity to local history, exact-identity comparison and report selection, visible fixed-thread output and default-only tracked summaries. A separate Ollama final review fixed non-Unicode environment handling and consolidated summary policy. Parent validation passed formatting, the 447-test xtask suite, the default frontend run with a case-set-changed +4 ms comparison, fixed 1/2/4-thread runs at approximately 123/82/59 ms, `just bench-check` at -3 ms with no slower cases, `just bench-report` and full `just validate` with 3336 unit tests and 1753 integration cases. No benchmark history or tracked summary changed.
 - Phase 10 artifact contract: Ollama added success-only `artifacts_must_not_exist` integration expectations, exact normalized path handling and `NotBuilt` exclusion. The API-only fixture now forbids `api/index.html`, while the configured multiple-library fixture uses both `#alpha.bst` and `#mod.bst`. A separate Ollama final review consolidated parsing and moved new behavior coverage through the runner's success boundary. Parent formatting and 48 focused runner tests passed; full `just validate` passed cross-target Clippy, 3342 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms with no slower cases.
+- Phase 9 documentation: the parent reconciled language, compiler-design, project-structure, library, benchmark, testing and progress documentation with the landed implementation. Two Ollama read-only reviews found stale facade/entry terminology and misleading fixture labels; every finding was corrected. `cargo run --quiet -- build docs --release` rebuilt 72 files successfully after the final correction and `git diff --check` passed.
 
 DOCS_IMPACT:
-- progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
-- other docs stale: `docs/language-overview.md`, compiler-design source discovery/import pages, docs-site project-structure/libraries/getting-started pages, `README.md` examples, `benchmarks/README.md` for thread-identity isolation and `style-guide/testing.bd` for artifact-absence assertions
-- authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
+- progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
+- other docs: reconciled across language, compiler-design, aliases, constants, templates, project structure, libraries, getting started, benchmarks and testing guidance
+- generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit the accepted artifact-contract slice, then reconcile Phase 9 docs against the completed migration and current implementation.
-DELEGATION_DECISION: ollama - explicit user override for each implementation slice and its pre-commit final review, with codex-cli only after a clean Ollama availability blocker
-NEXT_WORKER_ORDER: ollama, then codex-cli only after a clean availability blocker, then parent-direct
+- Commit the reviewed Phase 9 documentation slice, then audit every unchecked test and benchmark matrix item against current coverage.
+DELEGATION_DECISION: parent-direct for the Phase 9 documentation because the orchestrator contract keeps official docs parent-owned. Two Ollama read-only review passes were completed and all findings were corrected.
+NEXT_WORKER_ORDER: parent coverage audit, then Ollama for any implementation gap found
 STOP_REASON: none
-NEXT_RESUME_ACTION: checkpoint the reviewed resolver preflight, then launch the benchmark-identity correction through Ollama without editing documentation.
+NEXT_RESUME_ACTION: checkpoint Phase 9, then map the remaining test and benchmark checklist items to exact coverage.
 
 ---
 
@@ -1000,47 +1001,48 @@ Language semantics and project structure changed. Docs must be updated in the sa
 
 ### Checklist
 
-- [ ] Update `docs/language-overview.md`:
-  - [ ] syntax summary: `export:` block;
-  - [ ] config file: `config.bst`;
-  - [ ] module roots: one non-config `#*.bst` file per directory;
-  - [ ] imports: no direct hash-file imports;
-  - [ ] root code/import execution separation;
-  - [ ] API-only module behavior.
-- [ ] Update `docs/compiler-design-overview.md`:
-  - [ ] Stage 0 source tree index;
-  - [ ] path resolver no longer owns expensive discovery;
-  - [ ] active/imported module root roles;
-  - [ ] header parsing/export block ownership;
-  - [ ] builder artifact policy from root activity metadata.
-- [ ] Update docs-site pages:
-  - [ ] project structure;
-  - [ ] libraries/imports;
-  - [ ] getting started / `bean new`;
-  - [ ] config/getting started if relevant;
-  - [ ] progress matrix.
-- [ ] Update `README.md` examples if they use alternate config filenames, or treat `#page.bst` or `#mod.bst` as semantic names.
-- [ ] Update `benchmarks/README.md` if metric names or benchmark protocol changed.
-- [ ] Update `bean new html` scaffold output and tests if not already completed in Phase 1:
-  - [ ] `src/projects/html_project/new_html_project/scaffold.rs`
-  - [ ] scaffold summary/replacement tests
-  - [ ] docs-site getting-started scaffold tree.
-- [ ] Add breaking-change notes:
-  - [ ] `config.bst` is the only project config filename, with no compatibility path;
-  - [ ] merge `#mod.bst` and `#page.bst` into one root file if both existed;
-  - [ ] replace inline `export` with `export:` block.
+- [x] Update `docs/language-overview.md`:
+  - [x] syntax summary: `export:` block;
+  - [x] config file: `config.bst`;
+  - [x] module roots: one non-config `#*.bst` file per directory;
+  - [x] imports: no direct hash-file imports;
+  - [x] root code/import execution separation;
+  - [x] API-only module behavior.
+- [x] Update `docs/compiler-design-overview.md`:
+  - [x] Stage 0 source tree index;
+  - [x] path resolver no longer owns expensive discovery;
+  - [x] active/imported module root roles;
+  - [x] header parsing/export block ownership;
+  - [x] builder artifact policy from root activity metadata.
+- [x] Update docs-site pages:
+  - [x] project structure;
+  - [x] libraries/imports;
+  - [x] getting started / `bean new`;
+  - [x] config/getting started if relevant;
+  - [x] progress matrix.
+- [x] Review `README.md` examples. No alternate config filename or semantic hash-root example needed changing.
+- [x] Update `benchmarks/README.md` for exact default/fixed thread identity and tracked-summary policy.
+- [x] Confirm `bean new html` scaffold output and tests were completed in Phase 1:
+  - [x] `src/projects/html_project/new_html_project/scaffold.rs`
+  - [x] scaffold summary/replacement tests
+  - [x] docs-site getting-started scaffold tree.
+- [x] Add breaking-change notes:
+  - [x] `config.bst` is the only project config filename, with no compatibility path;
+  - [x] merge `#mod.bst` and `#page.bst` into one root file if both existed;
+  - [x] replace inline `export` with `export:` block.
 
 ### Review / audit / validation
 
-- [ ] Run docs build/check if available.
-- [ ] Run `just validate`.
-- [ ] Grep docs for stale terms:
-  - [ ] alternate project config filenames
-  - [ ] `#mod.bst` as the only facade
-  - [ ] `#page.bst` as special required entry filename
-  - [ ] `export import`
-  - [ ] inline `export ` examples.
-- [ ] Update active context capsule.
+- [x] Run `cargo run --quiet -- build docs --release` and inspect all generated routes.
+- [x] Follow the documentation-only gate in `style-guide/validation.bd`. Do not additionally run `just validate` for this slice.
+- [x] Grep docs for stale terms:
+  - [x] alternate project config filenames
+  - [x] `#mod.bst` as the only facade
+  - [x] `#page.bst` as special required entry filename
+  - [x] `export import`
+  - [x] inline `export ` examples.
+- [x] Complete two Ollama read-only reviews and resolve every finding.
+- [x] Update active context capsule.
 
 ---
 

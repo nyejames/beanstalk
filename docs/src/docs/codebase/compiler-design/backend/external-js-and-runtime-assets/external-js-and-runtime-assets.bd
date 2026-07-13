@@ -70,4 +70,4 @@ This keeps runtime asset planning consistent across provider-created external pa
 - @../ (Backend overview): backend boundaries
 - @../js-lowering (JavaScript lowering): the emitted JS bundle and referenced external functions
 - @../../stages/header-parsing (Stage 2: Header parsing): external import providers and source-kind preparation
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): external package identity and facade rules
+- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): external package identity and module-boundary rules

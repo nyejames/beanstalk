@@ -8,7 +8,7 @@ A constant template is finished during compilation.
     ]
 ]
 
-A direct top-level const template in an HTML entry can also become part of the
+A direct top-level const template in an active HTML module root can also become part of the
 generated page:
 
 [codeblock, $code("bst"):

@@ -4,11 +4,12 @@ Builder-owned routes, fragments and project artifacts.
 
 ## Contract
 
-- Input: compiled modules, backend settings and builder metadata
+- Input: compiled modules, `ModuleRootActivity`, backend settings and builder metadata
 - Output: HTML route artifacts, tracked assets and cleanup policy
-- Decides: route layout, fragment merge, backend selection, asset emission
+- Decides: artifact eligibility, route layout, fragment merge, backend selection and asset emission
 - Must not decide: frontend semantics, HIR shape, target code generation
-- Invariant: the HTML builder owns the shared page-fragment plan for both HTML-JS and HTML-Wasm
+- Invariant: API-only modules remain importable but emit no route artifact
+- Invariant: the HTML builder owns the shared page-fragment plan for HTML-JS and HTML-Wasm
 
 ## Main paths
 
