@@ -1,0 +1,25 @@
+`config.bst` at the project root controls build settings with strict keys.
+
+### A minimal config
+
+[codeblock, $code("bst"):
+    project #= "html"
+    entry_root #= "src"
+]
+
+### Strict keys
+
+Only known config keys are accepted. Unknown keys are rejected. Every value must fold at compile time.
+
+Common keys:
+
+- `project`: selects the builder, currently only `"html"`.
+- `entry_root`: the source folder, usually `"src"`.
+- `library_folders`: where to find source libraries. Defaults to `lib` when omitted.
+- `dev_folder` and `output_folder`: where builds are written.
+
+### Remember
+
+- Only `config.bst` has config semantics.
+- Values must be compile-time constants.
+- HTML-specific settings belong to the HTML builder.

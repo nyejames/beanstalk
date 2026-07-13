@@ -1,0 +1,34 @@
+Declarations are private to their module. The export block makes them public.
+
+### An internal helper file
+
+[codeblock, $code("bst"):
+    -- src/components/utils.bst
+    internal_value #= 42
+]
+
+### The root module uses it directly
+
+[codeblock, $code("bst"):
+    -- src/#page.bst
+    import @components/utils {internal_value}
+]
+
+Same-module imports see everything. No export block needed.
+
+### Other modules need the export block
+
+[codeblock, $code("bst"):
+    -- src/#page.bst
+    export:
+        import @components/utils {internal_value}
+    ;
+]
+
+Now a nested module at `src/pages/` can import `internal_value` through `@components/utils`.
+
+### Remember
+
+- Same module: all declarations are visible.
+- Cross module: only exported declarations are visible.
+- Runtime bindings are never importable.

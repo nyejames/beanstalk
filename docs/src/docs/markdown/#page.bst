@@ -1,146 +1,105 @@
-import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
+import @./markdown-files {
+    content as markdown_files,
+}
 
-page_title #= "Markdown Imports"
-page_description #= "Plain .md content imports for HTML projects."
-page_head #= theme_head
+import @./markdown-files-basic {
+    content as markdown_files_basic,
+}
+
+import @./markdown-imports {
+    content as markdown_imports,
+}
+
+import @./markdown-imports-basic {
+    content as markdown_imports_basic,
+}
+
+import @./rendering-contract {
+    content as rendering_contract,
+}
+
+import @./rendering-contract-basic {
+    content as rendering_contract_basic,
+}
+
+import @./choosing-a-content-format {
+    content as choosing_a_content_format,
+}
+
+import @./choosing-a-content-format-basic {
+    content as choosing_a_content_format_basic,
+}
+
+import @styles/docs {
+    navbar,
+    section,
+    language_theme_head,
+    doc_level,
+    doc_pager,
+}
+
+page_title #= "Plain Markdown"
+page_description #= "Plain Markdown content imports for HTML projects."
+page_head #= language_theme_head
 
 #[navbar]
-#[title, center: MARKDOWN IMPORTS]
 
 #[section, $md:
-    Plain Markdown files use the `.md` extension for raw Markdown content fragments in HTML projects.
-    They are helpers for `.bst` pages and modules, not pages themselves.
+    @../ (Documentation) / Plain Markdown
 
-    A `.md` file is rendered to HTML at compile time and exposed as one generated constant:
+    # Plain Markdown
 
-    [codeblock, $code("bst"):
-        content #String = "<rendered html>"
-    ]
+    Plain Markdown is the least magical content format in a Beanstalk project.
 
-    Use `.md` when the file should be plain Markdown with no Beanstalk syntax. Use @./beandown
-    when the content needs nested templates, `$md`, or same-directory facade constants.
+    The compiler can import it, render it and hand the result to the HTML builder.
+    It never pretends the file contains Beanstalk code.
 ]
 
-#[section, $md:
-    ## Importing a Markdown file
+#[section:
+    [doc_level:
+        [$insert("key"):markdown-files]
+        [$insert("title"):Markdown files]
+        [$insert("advanced"):[markdown_files]]
 
-    Project shape:
-
-    [codeblock, $code("text"):
-        src/
-        ├── #page.bst
-        └── docs/
-            └── intro.md
+        [markdown_files_basic]
     ]
-
-    Markdown source:
-
-    [codeblock, $code("text"):
-        # Welcome
-
-        This is **plain Markdown**.
-    ]
-
-    Beanstalk page:
-
-    [codeblock, $code("bst"):
-        import @docs/intro
-
-        [: [intro.content] ]
-    ]
-
-    Grouped aliases work too:
-
-    [codeblock, $code("bst"):
-        import @docs/intro {
-            content as intro_html,
-        }
-
-        [: [intro_html] ]
-    ]
-
-    Do not include the `.md` extension in the import path.
-    `import @docs/intro.md` is rejected; use `import @docs/intro`.
 ]
 
-#[section, $md:
-    ## What .md does not do
+#[section:
+    [doc_level:
+        [$insert("key"):markdown-imports]
+        [$insert("title"):Markdown imports]
+        [$insert("advanced"):[markdown_imports]]
 
-    Plain Markdown files do not parse Beanstalk source syntax.
-
-    - `--` is Markdown text, not a Beanstalk comment.
-    - `$100` is text, not a template directive.
-    - `["[not_a_template]"]` is text, not a Beanstalk template.
-    - `["[: body]"]` is text, not a template body.
-
-    `.md` files do not support Beanstalk imports, declarations, interpolation, templates,
-    frontmatter, metadata blocks, summaries, table-of-contents extraction, or raw-source retention.
-    They also do not see same-directory `#mod.bst` constants or `@html` constants.
-]
-
-#[section, $md:
-    ## HTML, links, and assets
-
-    Raw HTML is preserved in V1. There is no sanitizer or raw-HTML policy key in this feature.
-
-    Markdown links and images render their authored paths literally:
-
-    [codeblock, $code("text"):
-        [Next](./next.md)
-        ![Diagram](./diagram.png)
+        [markdown_imports_basic]
     ]
-
-    V1 does not rewrite those paths and does not copy linked or image assets. Use normal Beanstalk
-    asset paths when a file should participate in tracked-asset output.
 ]
 
-#[section, $md:
-    ## .md and .bd compared
+#[section:
+    [doc_level:
+        [$insert("key"):rendering-contract]
+        [$insert("title"):Rendering contract]
+        [$insert("advanced"):[rendering_contract]]
 
-    [styled_table:
-        [header: [: Feature] [: `.md`] [: `.bd`] ]
+        [rendering_contract_basic]
+    ]
+]
 
-        [data:
-            [: Parser]
-            [: CommonMark-style dependency]
-            [: Beanstalk `$md`]
-        ]
+#[section:
+    [doc_level:
+        [$insert("key"):choosing-a-content-format]
+        [$insert("title"):Choosing a content format]
+        [$insert("advanced"):[choosing_a_content_format]]
 
-        [data:
-            [: Beanstalk syntax]
-            [: No]
-            [: Yes, template body rules]
-        ]
+        [choosing_a_content_format_basic]
+    ]
+]
 
-        [data:
-            [: Generated member]
-            [: `content #String`]
-            [: `content #String`]
-        ]
-
-        [data:
-            [: Same-directory facade constants]
-            [: No]
-            [: Yes]
-        ]
-
-        [data:
-            [: Frontmatter or metadata]
-            [: No]
-            [: No]
-        ]
-
-        [data:
-            [: Raw HTML]
-            [: Preserved V1]
-            [: Through Beanstalk/template semantics]
-        ]
-
-        [data:
-            [: Links and images]
-            [: Literal output V1]
-            [: Template-rendered output]
-        ]
+#[section:
+    [doc_pager:
+        [$insert("previous_path"):../beandown/]
+        [$insert("previous_title"):Beandown]
+        [$insert("next_path"):../libraries/core/]
+        [$insert("next_title"):Core libraries]
     ]
 ]

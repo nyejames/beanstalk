@@ -1,0 +1,26 @@
+Source libraries are Beanstalk source under `lib/`. Each direct child folder becomes an import prefix.
+
+### A simple library
+
+[codeblock, $code("text"):
+    lib/
+    └── blog/
+        ├── #api.bst
+        └── helpers/dates.bst
+]
+
+`#api.bst` is just a cosmetic root filename. Any `#*.bst` name works.
+
+### Importing from a library
+
+[codeblock, $code("bst"):
+    import @blog {post_title}
+]
+
+`@blog` resolves to `lib/blog/`. The library's public surface comes from its export block.
+
+### Remember
+
+- `lib/` is the default library folder.
+- Each direct child becomes a prefix.
+- Internal files are hidden unless re-exported.

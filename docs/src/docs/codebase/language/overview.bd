@@ -144,6 +144,39 @@ replacement can be checked against one stable baseline.
 - `docs/src/docs/reactivity/runtime-sinks.bd`
 - `docs/src/docs/reactivity/reactivity-scope.bd`
 
+### Project structure
+
+- `docs/src/docs/project-structure/project-layout.bd`
+- `docs/src/docs/project-structure/project-config.bd`
+- `docs/src/docs/project-structure/module-roots.bd`
+- `docs/src/docs/project-structure/public-api.bd`
+- `docs/src/docs/project-structure/entry-runtime-and-fragments.bd`
+- `docs/src/docs/project-structure/html-routing-and-artifacts.bd`
+
+### Libraries and imports
+
+- `docs/src/docs/libraries/import-paths.bd`
+- `docs/src/docs/libraries/grouped-and-namespace-imports.bd`
+- `docs/src/docs/libraries/module-visibility.bd`
+- `docs/src/docs/libraries/public-reexports.bd`
+- `docs/src/docs/libraries/source-libraries.bd`
+- `docs/src/docs/libraries/core-builder-and-external-packages.bd`
+
+### Beandown
+
+- `docs/src/docs/beandown/beandown-files.bd`
+- `docs/src/docs/beandown/implicit-markdown.bd`
+- `docs/src/docs/beandown/content-imports.bd`
+- `docs/src/docs/beandown/template-scope.bd`
+- `docs/src/docs/beandown/beandown-limits.bd`
+
+### Plain Markdown
+
+- `docs/src/docs/markdown/markdown-files.bd`
+- `docs/src/docs/markdown/markdown-imports.bd`
+- `docs/src/docs/markdown/rendering-contract.bd`
+- `docs/src/docs/markdown/choosing-a-content-format.bd`
+
 Each unsuffixed file has a paired `-basic.bd` teaching version.
 
 Each public route imports both levels.

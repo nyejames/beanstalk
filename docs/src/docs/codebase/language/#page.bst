@@ -51,6 +51,13 @@ page_head #= codebase_theme_head
 
     - @../../reactivity (Reactivity)
 
+    Projects and imported content:
+
+    - @../../project-structure (Project structure)
+    - @../../libraries (Libraries and imports)
+    - @../../beandown (Beandown)
+    - @../../markdown (Plain Markdown)
+
     Each route combines a Basic teaching layer with detailed Advanced references. The unsuffixed Beandown files remain replacements under parity review and do not supersede `docs/language-overview.md` yet.
 ]
 

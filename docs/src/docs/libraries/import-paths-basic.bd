@@ -1,0 +1,24 @@
+Imports make names visible. Each path reaches a declaration surface.
+
+### A relative import
+
+[codeblock, $code("bst"):
+    import @./card {render_card}
+]
+
+`@./card` resolves to `card.bst` in the same directory as the importing file.
+
+### A library prefix import
+
+[codeblock, $code("bst"):
+    import @helper {double}
+]
+
+`@helper` resolves from a configured source-library folder. Each direct child directory of `lib/` becomes a prefix.
+
+### Remember
+
+- `@./` means same directory.
+- `@../` is not supported.
+- Source imports omit the file extension.
+- JavaScript imports keep `.js`.

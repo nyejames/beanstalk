@@ -39,8 +39,8 @@ page_head #= theme_head
     - @./project-structure (Project structure)
     - @./libraries (Libraries and imports)
     - @./libraries/core (Core libraries)
-    - @./beandown (Beandown content files)
-    - @./markdown (Plain Markdown imports)
+    - @./beandown (Beandown)
+    - @./markdown (Plain Markdown)
 
     ## Compiler and codebase internals
 

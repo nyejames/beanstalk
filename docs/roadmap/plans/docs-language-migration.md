@@ -2435,14 +2435,66 @@ remain accurate:
 
 The Aliases, Generics, Traits and Reactivity batch is complete and has passed correction review.
 
+### Project Structure, Libraries, Beandown and Plain Markdown batch
+
+This batch landed on the `main` branch after the hash-root module and strict `export:` refactor.
+
+Route pairs landed:
+
+- Project Structure: `project-layout`, `project-config`, `module-roots`, `public-api`, `entry-runtime-and-fragments`, `html-routing-and-artifacts`
+- Libraries and Imports: `import-paths`, `grouped-and-namespace-imports`, `module-visibility`, `public-reexports`, `source-libraries`, `core-builder-and-external-packages`
+- Beandown: `beandown-files`, `implicit-markdown`, `content-imports`, `template-scope`, `beandown-limits`
+- Plain Markdown: `markdown-files`, `markdown-imports`, `rendering-contract`, `choosing-a-content-format`
+
+Generated pages built and inspected for all four routes.
+
+#### Module-system lessons
+
+- The hash-root suffix after `#` has no semantic role. `#page.bst`, `#mod.bst`, `#api.bst` and `#anything.bst` are all equivalent module root spellings.
+- A source directory may contain at most one non-config `#*.bst` root file. Two or more are rejected with `BST-CONFIG-0001`.
+- `export:` is the only public API marker. It is valid only in the module root file. Legacy inline `export` syntax is rejected.
+- Direct imports of hash-root files are rejected. Import the module through its directory path.
+- API-only roots (no builder-relevant top-level activity) produce no HTML artifact. Artifact policy belongs to the builder.
+- HTML routes come from directory position under `entry_root`, not from the hash-root filename.
+- The old `#page.bst` / `#mod.bst` semantic distinction has been removed from the documentation. The stale model must not survive.
+
+#### Content-import lessons
+
+- `.bd` and `.md` both expose imported `content #String` but use different renderer and parser paths.
+- `.bd` is implicit `$md` and const-required. The body must fold at compile time.
+- `.md` does not parse Beanstalk syntax at all. It uses a CommonMark-compatible renderer with GFM extensions.
+- Renderer capabilities must be probed separately. `.md` supports fenced code, pipe tables and raw HTML; `.bd` does not.
+- Neither imported content file automatically creates a page fragment. The caller controls insertion.
+- `.bd` sees same-directory module root constants and `@html` compile-time helpers. `.md` has no Beanstalk scope.
+
+#### Probe results
+
+All mandatory probes (7.1 through 7.17) were run and recorded. Key findings:
+
+- 7.1: `#api.bst`, `#anything.bst` confirmed as equivalent module roots. Two roots in one directory rejected with `BST-CONFIG-0001`.
+- 7.2: Direct hash-root imports rejected. Parent-directory `..` imports rejected with `BST-IMPORT-0016`.
+- 7.3: Active root runtime runs. Imported root runtime does not. Cross-module private file import rejected with `BST-IMPORT-0011`.
+- 7.4: API-only roots produce no HTML artifact. Build with only API-only entry root rejected with `BST-CONFIG-0001`.
+- 7.5: `export:` block syntax verified. Legacy inline `export` rejected with `BST-SYNTAX-0001`. Empty block rejected with `BST-RULE-0080`. Duplicate blocks rejected with `BST-RULE-0085`. Export in normal file rejected with `BST-RULE-0077`. Runtime statements in block rejected with `BST-RULE-0080`.
+- 7.6: Same-module imports see all declarations. Cross-module imports require export block. Re-exported original names accessible; alias names are public API names.
+- 7.7: Unknown config key rejected. Runtime binding rejected. Struct support declaration accepted. Const-record projection works inline. Separate helper constant rejected (not a config key).
+- 7.8: Routes are directory-based. `#home.bst` and `#api.bst` both produce `index.html` in their directory.
+- 7.9: Source libraries work with custom and default `lib/`. Internal files hidden cross-prefix.
+- 7.10: Namespace, grouped and aliased imports verified.
+- 7.11: Import cycles between same-module files accepted. Circular constant dependencies rejected with `BST-RULE-0033`.
+- 7.12: `.bd` import exposes `content`. Extension import rejected with `BST-IMPORT-0024`.
+- 7.13: Same-directory module root constants and `@html` helpers visible in `.bd`. Runtime values not visible (rejected with `BST-RULE-0034`). Constants from normal files in same directory not visible.
+- 7.14: Top-level declaration-like text in `.bd` is template body content, not compiled declarations.
+- 7.15: `.md` import exposes `content`. Both namespace and grouped imports work.
+- 7.16: Plain Markdown renderer supports headings, emphasis, links, lists, nested lists, inline code, fenced code with language class, tables, task lists, strikethrough, footnotes, raw HTML. Smart punctuation disabled. Beanstalk syntax not interpreted.
+- 7.17: `.bd` does not support fenced code, pipe tables or raw HTML (all escaped or literal). `.md` supports all three. `[name]` in `.bd` is a template insertion. In `.md` it is literal text.
+
 Continue with:
 
-1. Project Structure
-2. Libraries and Imports
-3. Beandown
-4. Plain Markdown
-5. Core-library language surfaces
-6. Final whole-language parity and authority review
+1. Core-library language surfaces
+2. HTML builder library surface
+3. IO and input surface
+4. Final whole-language parity and authority review
 
 ---
 

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Markdown Imports | Beanstalk</title>
-    <meta name="description" content="Plain .md content imports for HTML projects.">
+    <title>Plain Markdown | Beanstalk</title>
+    <meta name="description" content="Plain Markdown content imports for HTML projects.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,132 +661,275 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> MARKDOWN IMPORTS</h1>
-    <section class="container"><p>Plain Markdown files use the <code>.md</code> extension for raw Markdown content fragments in HTML projects. They are helpers for <code>.bst</code> pages and modules, not pages themselves.</p><p>A <code>.md</code> file is rendered to HTML at compile time and exposed as one generated constant:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&lt;rendered html&gt;&quot;</span>
-    </code></pre><p>Use <code>.md</code> when the file should be plain Markdown with no Beanstalk syntax. Use @./beandown when the content needs nested templates, <code>$md</code>, or same-directory facade constants.</p></section>
-    <section class="container"><h2>Importing a Markdown file</h2><p>Project shape:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    src<span class='bst-code-operator'>/</span>
-    ├── <span class='bst-code-operator'>#</span>page.bst
-    └── docs<span class='bst-code-operator'>/</span>
-        └── intro.md
-    </code></pre><p>Markdown source:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    <section class="container"><p><a href="../">Documentation</a> / Plain Markdown</p><h1>Plain Markdown</h1><p>Plain Markdown is the least magical content format in a Beanstalk project.</p><p>The compiler can import it, render it and hand the result to the HTML builder. It never pretends the file contains Beanstalk code.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Markdown files
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="markdown-files-level"
+                id="markdown-files-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="markdown-files-level"
+                id="markdown-files-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="markdown-files">
+                    Markdown files
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="markdown-files-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="markdown-files-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>A <code>.md</code> file is plain Markdown. The compiler renders it and hands the HTML to the builder.</p><h3>The simplest content file</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Welcome</span>
 
     <span class='bst-code-struct'>This</span> is <span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>plain <span class='bst-code-struct'>Markdown</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>.
-    </code></pre><p>Beanstalk page:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><h3>Why it is portable</h3><p>No Beanstalk syntax is interpreted. The file is pure Markdown. You can use it with any Markdown tool.</p><h3>Remember</h3><ul><li><code>.md</code> uses a separate renderer, not Beandown&#39;s <code>$md</code>.</li><li>No Beanstalk captures, directives or templates.</li><li>The result is a <code>content #String</code> constant.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>A <code>.md</code> file is plain Markdown content. It uses a separate plain-Markdown renderer and is not Beandown.</p><h3>What it is</h3><p>A <code>.md</code> file is rendered to HTML at compile time and exposed as one generated constant:</p><pre style=""><code class='codeblock'>
+    content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&lt;rendered html&gt;&quot;</span>
+    </code></pre><p>The renderer is CommonMark-compatible with GFM extensions. It is not the Beanstalk md renderer used by Beandown.</p><h3>What it is not</h3><ul><li>It is not Beandown. Beanstalk template syntax is not interpreted.</li><li>It has no captures, directives or declarations.</li><li>It does not see same-directory module root constants or <code>@html</code> constants.</li><li>It has no Beanstalk scope at all.</li></ul><h3>Beanstalk syntax is not interpreted</h3><ul><li>Double-dash is Markdown text, not a Beanstalk comment.</li><li>Dollar-prefixed text is text, not a template directive.</li><li>Double-bracket template bodies and single-bracket insertions are text, not template syntax.</li><li>Template delimiters, insertions and directives are literal text.</li></ul><h3>Compile-time imported content</h3><p>The rendered HTML is a compile-time String constant. It folds before the importing file uses it. It is not a runtime value.</p><h3>Output type</h3><p>The exported field is <code>content</code>, a compile-time String constant. It is the only generated member.</p><h3>Target and builder availability</h3><p>Plain Markdown is available in HTML project builds. The renderer is registered by the HTML builder.</p><h3>File ownership and relative path</h3><p>A <code>.md</code> file belongs to the module that contains its directory. It follows the same import path resolution as <code>.bst</code> and <code>.bd</code> files.</p><h3>Related concepts</h3><ul><li>For import syntax see <a href="#markdown-imports">Markdown imports</a>.</li><li>For renderer features see <a href="#rendering-contract">Rendering contract</a>.</li><li>For choosing between formats see <a href="#choosing-a-content-format">Choosing a content format</a>.</li><li>For Beandown see <a href="../beandown/#beandown-files">Beandown files</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Markdown imports
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="markdown-imports-level"
+                id="markdown-imports-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="markdown-imports-level"
+                id="markdown-imports-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="markdown-imports">
+                    Markdown imports
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="markdown-imports-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="markdown-imports-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Import a <code>.md</code> file the same way as any other source file.</p><h3>Import and use</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>docs<span class='bst-code-operator'>/</span>intro <span class='bst-code-parenthesis'>{</span>content <span class='bst-code-keyword'>as</span> intro_html<span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>intro_html<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The <code>content</code> constant is the rendered HTML string.</p><h3>Do not include the extension</h3><p><code>import @docs/intro.md</code> is rejected. Use <code>import @docs/intro</code>.</p><h3>Remember</h3><ul><li><code>content</code> is the only exported name.</li><li>The result is compile-time HTML, not a runtime value.</li><li>Links and images are literal, not tracked assets.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Plain Markdown content is imported with the same extensionless source import syntax as Beanstalk and Beandown source assets.</p><h3>Import syntax</h3><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>docs<span class='bst-code-operator'>/</span>intro
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>intro.content<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Grouped aliases work too:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>docs<span class='bst-code-operator'>/</span>intro <span class='bst-code-parenthesis'>{</span>
-        content <span class='bst-code-keyword'>as</span> intro_html,
-    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>A namespace import exposes <code>content</code> as a field. A grouped import brings it directly:</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>docs<span class='bst-code-operator'>/</span>intro <span class='bst-code-parenthesis'>{</span>content <span class='bst-code-keyword'>as</span> intro_html<span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>intro_html<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Do not include the <code>.md</code> extension in the import path. <code>import @docs/intro.md</code> is rejected; use <code>import @docs/intro</code>.</p></section>
-    <section class="container"><h2>What .md does not do</h2><p>Plain Markdown files do not parse Beanstalk source syntax.</p><ul><li><code>--</code> is Markdown text, not a Beanstalk comment.</li><li><code>$100</code> is text, not a template directive.</li><li><code>[not_a_template]</code> is text, not a Beanstalk template.</li><li><code>[: body]</code> is text, not a template body.</li></ul><p><code>.md</code> files do not support Beanstalk imports, declarations, interpolation, templates, frontmatter, metadata blocks, summaries, table-of-contents extraction, or raw-source retention. They also do not see same-directory <code>#mod.bst</code> constants or <code>@html</code> constants.</p></section>
-    <section class="container"><h2>HTML, links, and assets</h2><p>Raw HTML is preserved in V1. There is no sanitizer or raw-HTML policy key in this feature.</p><p>Markdown links and images render their authored paths literally:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Next</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>(</span>.<span class='bst-code-operator'>/</span>next.md<span class='bst-code-parenthesis'>)</span>
-    <span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Diagram</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>(</span>.<span class='bst-code-operator'>/</span>diagram.png<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>V1 does not rewrite those paths and does not copy linked or image assets. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.</p></section>
-    <section class="container"><h2>.md and .bd compared</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><h3>Aliases</h3><p>Use <code>as</code> to give the imported content a local name. This is the standard form when multiple content files are imported into the same page.</p><h3>Insertion into templates and pages</h3><p>Insert the imported content into a template body. The caller decides where it appears. Imported content does not become a page fragment automatically.</p><h3>Import path and module visibility</h3><p>Content imports follow the same path resolution and module visibility rules as normal source imports. <code>@./intro</code> resolves from the importing file&#39;s directory. <code>@docs/intro</code> resolves from the entry root. Cross-module imports require the module root&#39;s <code>export:</code> block to re-export the content.</p><h3>No automatic page fragment</h3><p>Importing a <code>.md</code> file and inserting its content into a template does not create a page fragment. Only direct top-level templates in the active module root become page fragments.</p><h3>Direct extension imports are rejected</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>docs<span class='bst-code-operator'>/</span>intro.md <span class='bst-code-parenthesis'>{</span>content<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>This is rejected with <code>BST-IMPORT-0024</code>. Use <code>import @docs/intro</code> without the <code>.md</code> extension.</p><h3>Dependency tracking</h3><p>Imported content participates in normal dependency tracking. The <code>.md</code> file is compiled before the importing file uses its <code>content</code> constant.</p><h3>Distinction from asset imports</h3><p><code>.md</code> content imports are not asset imports. They produce a compile-time <code>#String</code> constant, not a tracked asset path. Markdown links and images render literal <code>href</code> and <code>src</code> values. They are not tracked assets and are not rewritten. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.</p><h3>Related concepts</h3><ul><li>For the rendering contract see <a href="#rendering-contract">Rendering contract</a>.</li><li>For choosing between formats see <a href="#choosing-a-content-format">Choosing a content format</a>.</li><li>For import path resolution see <a href="../libraries/#import-paths">Import paths</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Rendering contract
+    </legend>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.md`</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> `.bd`</th> 
-    </tr>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="rendering-contract-level"
+                id="rendering-contract-basic"
+                value="basic"
+                checked
+            >
 
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="rendering-contract-level"
+                id="rendering-contract-advanced"
+                value="advanced"
+            >
 
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="rendering-contract">
+                    Rendering contract
+    </h2>
 
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="rendering-contract-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="rendering-contract-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Parser</td>
-     <td style="padding: 0.2em 0.5em;  "> CommonMark-style dependency</td>
-     <td style="padding: 0.2em 0.5em;  "> Beanstalk `$md`</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Beanstalk syntax</td>
-     <td style="padding: 0.2em 0.5em;  "> No</td>
-     <td style="padding: 0.2em 0.5em;  "> Yes, template body rules</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generated member</td>
-     <td style="padding: 0.2em 0.5em;  "> `content #String`</td>
-     <td style="padding: 0.2em 0.5em;  "> `content #String`</td>
-        </tr>
+            <p>Plain Markdown supports common formatting through a CommonMark-compatible renderer.</p><h3>Supported forms</h3><ul><li>Headings, paragraphs, emphasis, bold</li><li>Links, ordered and unordered lists, nested lists</li><li>Inline code and fenced code blocks</li><li>Tables, task lists, strikethrough, footnotes</li><li>Raw HTML is preserved</li></ul><h3>One clear limitation</h3><p>Beanstalk template syntax is not interpreted. Dollar-prefixed directives are just text. Bracket-delimited template bodies are just text. Use Beandown if you need Beanstalk-aware content.</p><h3>Remember</h3><ul><li>The renderer is CommonMark-compatible with GFM extensions.</li><li>It is not the same as Beandown&#39;s md renderer.</li><li>Smart punctuation is disabled.</li></ul>
+    </div>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Same-directory facade constants</td>
-     <td style="padding: 0.2em 0.5em;  "> No</td>
-     <td style="padding: 0.2em 0.5em;  "> Yes</td>
-        </tr>
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>The plain Markdown renderer uses a CommonMark-compatible parser with GFM extensions. This is a different renderer from Beanstalk&#39;s md renderer.</p><h3>Supported features</h3><ul><li>Headings: <code>#</code>, <code>##</code>, <code>###</code> and deeper render as <code>&lt;h1&gt;</code>, <code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code> etc.</li><li>Paragraphs: separated by blank lines, rendered as <code>&lt;p&gt;</code>.</li><li>Emphasis: <code>*italic*</code> renders as <code>&lt;em&gt;</code>, <code>**bold**</code> renders as <code>&lt;strong&gt;</code>.</li><li>Links: standard Markdown link syntax renders as <code>&lt;a href=&quot;...&quot;&gt;</code>.</li><li>Unordered lists: <code>- item</code> renders as <code>&lt;ul&gt;&lt;li&gt;</code>.</li><li>Ordered lists: <code>1. item</code> renders as <code>&lt;ol&gt;&lt;li&gt;</code>.</li><li>Nested lists: indentation creates nested <code>&lt;ul&gt;</code> or <code>&lt;ol&gt;</code>.</li><li>Inline code: single backticks render as <code>&lt;code&gt;</code>.</li><li>Fenced code blocks: triple backticks render as pre and code elements. A language tag adds a class attribute.</li><li>Tables: pipe table syntax renders as <code>&lt;table&gt;</code> with <code>&lt;thead&gt;</code>, <code>&lt;th&gt;</code>, <code>&lt;tbody&gt;</code> and <code>&lt;td&gt;</code>.</li><li>Task lists: bracketed checkbox syntax renders as disabled checkboxes.</li><li>Strikethrough: <code>~~text~~</code> renders as <code>&lt;del&gt;</code>.</li><li>Footnotes: caret-bracketed syntax renders footnote anchors and text.</li><li>Raw HTML: HTML tags in the source are preserved in the output.</li></ul><h3>Unsupported extensions</h3><ul><li>Beanstalk template syntax is not interpreted. Dollar-prefixed directives, double-bracket template bodies and single-bracket insertions are literal text.</li><li>Smart punctuation is disabled. <code>--</code> remains <code>--</code>, not an em dash.</li><li>There is no sanitizer or raw-HTML policy key. Raw HTML is preserved as-is.</li></ul><h3>Ordinary Markdown links versus Beanstalk md links</h3><p>In plain Markdown, links use ordinary Markdown syntax. The href and src values are rendered literally. They are not rewritten or tracked as assets.</p><p>In Beanstalk&#39;s md renderer (used by Beandown), at-path link syntax creates Beanstalk-aware links. This syntax is not available in plain Markdown.</p><h3>Renderer configuration</h3><p>The renderer uses <code>pulldown-cmark</code> with the following options enabled:</p><ul><li><code>ENABLE_TABLES</code></li><li><code>ENABLE_TASKLISTS</code></li><li><code>ENABLE_STRIKETHROUGH</code></li><li><code>ENABLE_FOOTNOTES</code></li><li><code>ENABLE_GFM</code></li></ul><p>Smart punctuation is not enabled. The renderer is registered by the HTML builder.</p><h3>Related concepts</h3><ul><li>For Beandown&#39;s md renderer see <a href="../beandown/#implicit-markdown">Implicit Markdown</a>.</li><li>For choosing between formats see <a href="#choosing-a-content-format">Choosing a content format</a>.</li><li>For Markdown file structure see <a href="#markdown-files">Markdown files</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Choosing a content format
+    </legend>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Frontmatter or metadata</td>
-     <td style="padding: 0.2em 0.5em;  "> No</td>
-     <td style="padding: 0.2em 0.5em;  "> No</td>
-        </tr>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="choosing-a-content-format-level"
+                id="choosing-a-content-format-basic"
+                value="basic"
+                checked
+            >
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Raw HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Preserved V1</td>
-     <td style="padding: 0.2em 0.5em;  "> Through Beanstalk/template semantics</td>
-        </tr>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="choosing-a-content-format-level"
+                id="choosing-a-content-format-advanced"
+                value="advanced"
+            >
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Links and images</td>
-     <td style="padding: 0.2em 0.5em;  "> Literal output V1</td>
-     <td style="padding: 0.2em 0.5em;  "> Template-rendered output</td>
-        </tr>
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="choosing-a-content-format">
+                    Choosing a content format
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="choosing-a-content-format-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="choosing-a-content-format-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Three formats, one choice.</p><h3><code>.md</code> for plain Markdown</h3><p>Use when the content is ordinary Markdown with no Beanstalk syntax needed.</p><h3><code>.bd</code> for Beanstalk-aware Markdown</h3><p>Use when the content needs compile-time constants, nested templates or builder helpers.</p><h3><code>.bst</code> for full Beanstalk</h3><p>Use when runtime values, control flow, imports or page fragments are needed.</p><h3>Remember</h3><ul><li><code>.md</code> is portable. <code>.bd</code> is Beanstalk-aware. <code>.bst</code> is full power.</li><li>Start with <code>.md</code> or <code>.bd</code> for content. Reach for <code>.bst</code> when content becomes logic.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Choose the content format based on what the content needs.</p><h3>Use <code>.md</code> when</h3><ul><li>The content is ordinary Markdown.</li><li>No Beanstalk values, captures or templates are needed.</li><li>Portability matters. The file can be used with any Markdown tool.</li><li>Fenced code blocks, pipe tables or raw HTML preservation are needed.</li><li>The content should not see Beanstalk scope.</li></ul><h3>Use <code>.bd</code> when</h3><ul><li>The content needs compile-time Beanstalk constants from the same-directory module root.</li><li>Nested templates or builder helpers such as <code>codeblock</code> are needed.</li><li>The <code>$md</code> Markdown subset is sufficient for the content&#39;s formatting needs.</li><li>Beanstalk-aware link syntax <code>@path (label)</code> is useful.</li></ul><h3>Use <code>.bst</code> templates when</h3><ul><li>Runtime values or runtime control flow are needed.</li><li>Full slot and wrapper composition is needed.</li><li>The content is part of broader program logic.</li><li>Imports, declarations or page fragments are needed in the same file.</li></ul><h3>Distinguishing raw asset files</h3><p>Raw asset files such as images, stylesheets or JavaScript files are not content imports. They are tracked assets handled by the builder. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.</p><h3>Distinguishing core and library source</h3><p>Core library source and project source libraries are not content formats. They provide typed declarations and functions. See <a href="../libraries/#core-builder-and-external-packages">Core, builder and external packages</a>.</p><h3>Related concepts</h3><ul><li>For Beandown see <a href="../beandown/#beandown-files">Beandown files</a>.</li><li>For plain Markdown see <a href="#markdown-files">Markdown files</a>.</li><li>For templates see <a href="../templates/#template-basics">Template basics</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../beandown/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Beandown</span>
+            </a>
+
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../libraries/core/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Core libraries</span>
+            </a>
+
             
 
-    </table></section>
+
+
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

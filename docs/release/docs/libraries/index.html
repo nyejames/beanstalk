@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Libraries | Beanstalk</title>
-    <meta name="description" content="How Beanstalk libraries, source libraries, core packages, and JavaScript imports work.">
+    <title>Libraries and imports | Beanstalk</title>
+    <meta name="description" content="Import paths, module visibility, source libraries, and builder-provided packages.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -239,6 +239,348 @@ body {
         border-bottom-width: 1px;
         padding: 0rem 2rem 0rem 2rem;
     }</style>
+    <style>.container pre {
+        max-width: 100%;
+        margin-block: 1.25em;
+        padding: 1em;
+        overflow-x: auto;
+        border-radius: 5px;
+        background-color: hsla(0, 0%, 42%, 0.12);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        max-width: 100%;
+        margin-block: 1.5em;
+    }
+
+    th,
+    td {
+        border: 1px solid;
+        border-color: light-dark(hsl(0, 0%, 75%), hsl(0, 0%, 30%));
+        padding: 0.5em;
+        vertical-align: top;
+        text-align: left;
+    }
+
+    thead tr,
+    tbody tr:first-child,
+    table > tr:first-child {
+        background-color: light-dark(hsla(107, 100%, 36%, 0.15), hsla(107, 60%, 30%, 0.25));
+        font-weight: 700;
+    }
+
+    td p,
+    th p {
+        margin-block: 0.35em;
+    }
+
+    td p:first-child,
+    th p:first-child {
+        margin-top: 0;
+    }
+
+    td p:last-child,
+    th p:last-child {
+        margin-bottom: 0;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+    }
+
+    th code,
+    td code {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+        table {
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            padding: 0.4em;
+        }
+    }</style>
+    <style>.doc-level,
+    .doc-pager {
+        --doc-level-accent: #3f8f4e;
+        --doc-level-accent-hover: #337740;
+        --doc-level-border: #d7dfd8;
+        --doc-level-switch-background: #f1f5f1;
+        --doc-level-selected-background: #ffffff;
+        --doc-level-text: #202722;
+        --doc-level-muted: #687169;
+        --doc-level-focus: #2877d4;
+    }
+
+    .doc-level {
+        min-inline-size: 0;
+        margin: 2rem 0;
+        padding: 0;
+        border: 0;
+        color: var(--doc-level-text);
+    }
+
+    .visually-hidden,
+    .doc-level__input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .doc-level__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-block-end: 1.25rem;
+    }
+
+    .doc-level__title {
+        margin: 0;
+    }
+
+    .doc-level__switch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+        gap: 0.2rem;
+        flex: none;
+        padding: 0.22rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        background: var(--doc-level-switch-background);
+    }
+
+    .doc-level__option {
+        padding: 0.42rem 0.8rem;
+        border-radius: 0.55rem;
+        color: var(--doc-level-muted);
+        font-size: 0.875rem;
+        font-weight: 650;
+        line-height: 1.3;
+        text-align: center;
+        cursor: pointer;
+        user-select: none;
+
+        transition:
+            color 130ms ease,
+            background-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-level__option:hover {
+        color: var(--doc-level-accent-hover);
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        color: var(--doc-level-accent);
+        background: var(--doc-level-selected-background);
+        box-shadow:
+            0 1px 2px rgb(20 40 24 / 10%),
+            0 0 0 1px rgb(63 143 78 / 8%);
+    }
+
+    .doc-level__input--basic:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--basic,
+    .doc-level__input--advanced:focus-visible
+        ~ .doc-level__header
+        .doc-level__option--advanced {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-level__panel {
+        display: none;
+    }
+
+    .doc-level__input--basic:checked
+        ~ .doc-level__panel--basic,
+    .doc-level__input--advanced:checked
+        ~ .doc-level__panel--advanced {
+        display: block;
+    }
+
+    .doc-pager {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-block: 3rem 1rem;
+    }
+
+    .doc-pager--single {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .doc-pager--single .doc-pager__link {
+        width: min(100%, 32rem);
+    }
+
+    .doc-pager--single .doc-pager__link--previous {
+        justify-self: start;
+    }
+
+    .doc-pager--single .doc-pager__link--next {
+        justify-self: end;
+    }
+
+    .doc-pager__link {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-inline-size: 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--doc-level-border);
+        border-radius: 0.75rem;
+        color: var(--doc-level-text);
+        text-decoration: none;
+        background: var(--doc-level-selected-background);
+
+        transition:
+            color 130ms ease,
+            border-color 130ms ease,
+            box-shadow 130ms ease;
+    }
+
+    .doc-pager__link:hover {
+        color: var(--doc-level-accent-hover);
+        border-color: var(--doc-level-accent);
+        box-shadow: 0 1px 3px rgb(20 40 24 / 10%);
+    }
+
+    .doc-pager__link:focus-visible {
+        outline: 3px solid var(--doc-level-focus);
+        outline-offset: 2px;
+    }
+
+    .doc-pager__link--next {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .doc-pager__direction {
+        color: var(--doc-level-muted);
+        font-size: 0.8rem;
+        font-weight: 650;
+        letter-spacing: 0.03rem;
+        text-transform: uppercase;
+    }
+
+    .doc-pager__title {
+        font-size: 1rem;
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .doc-level__input--basic:checked
+            ~ .doc-level__panel--basic,
+        .doc-level__input--advanced:checked
+            ~ .doc-level__panel--advanced {
+            animation: doc-level-enter 150ms ease-out;
+        }
+
+        @keyframes doc-level-enter {
+            from {
+                opacity: 0;
+                transform: translateY(0.2rem);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    }
+
+    @media (max-width: 36rem) {
+        .doc-level__header {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .doc-level__switch {
+            align-self: flex-start;
+        }
+
+        .doc-pager {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .doc-pager__link--next {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .doc-pager--single .doc-pager__link {
+            width: 100%;
+            justify-self: stretch;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .doc-level,
+        .doc-pager {
+            --doc-level-accent: #80c98c;
+            --doc-level-accent-hover: #a0d9a9;
+            --doc-level-border: #3a493d;
+            --doc-level-switch-background: #202a22;
+            --doc-level-selected-background: #303c32;
+            --doc-level-text: #edf2ee;
+            --doc-level-muted: #a8b3aa;
+            --doc-level-focus: #75b7ff;
+        }
+    }
+
+    @media print {
+        .doc-level__input,
+        .doc-level__switch,
+        .doc-pager {
+            display: none;
+        }
+
+        .doc-level__panel {
+            display: block;
+        }
+
+        .doc-level__panel--advanced {
+            margin-block-start: 1.5rem;
+            padding-block-start: 1.5rem;
+            border-block-start: 1px solid;
+        }
+
+        .doc-level__panel--basic::before,
+        .doc-level__panel--advanced::before {
+            display: block;
+            margin-block-end: 0.75rem;
+            font-weight: 700;
+        }
+
+        .doc-level__panel--basic::before {
+            content: "Basic";
+        }
+
+        .doc-level__panel--advanced::before {
+            content: "Advanced";
+        }
+    }</style>
 
   </head>
   <body style="">
@@ -319,513 +661,483 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> LIBRARIES</h1>
-    <section class="container"><p>Libraries are named import surfaces. They let a Beanstalk file pull declarations from another place without depending on that place&#39;s private implementation layout.</p><p>Beanstalk currently has four library shapes:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><p><a href="../">Documentation</a> / Libraries and imports</p><h1>Libraries and imports</h1><p>Imports make names visible. Module roots decide what crosses a module boundary. Source libraries give reusable modules stable prefixes.</p><p>Those are separate jobs. Keeping them separate is what stops a filesystem from quietly becoming an API.</p></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Import paths
+    </legend>
 
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Library kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example import</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> What it exposes</th> 
-    </tr>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="import-paths-level"
+                id="import-paths-basic"
+                value="basic"
+                checked
+            >
 
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="import-paths-level"
+                id="import-paths-advanced"
+                value="advanced"
+            >
 
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="import-paths">
+                    Import paths
+    </h2>
 
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="import-paths-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="import-paths-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
                 
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Source library</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>import @helper {double}</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Normal <code>.bst</code> source behind a <code>#mod.bst</code> facade.</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Builder source library</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>import @html {center}</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Builder-provided <code>.bst</code> source. The HTML builder provides <code>@html</code>.</td>
-        </tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Core external package</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>import @core/math {sin, PI}</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Typed functions and constants registered by the builder. These do not have to come from <code>.bst</code> files.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> JavaScript library</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>import @./drawing.js {draw}</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> An annotated <code>.js</code> file parsed into Beanstalk-visible types and functions.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Builder runtime library</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>import @web/canvas {get_canvas}</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> A builder-owned JavaScript library bundled with the project builder.</td>
-        </tr>
-            
-
-    </table><p>The current canvas library is exposed as <code>@web/canvas</code>. This page calls it the canvas library, but examples use the current full import path.</p></section>
-    <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">Core IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
-    <section class="container"><h1>Import forms</h1><p>Imports target a declaration surface, not a raw folder dump.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Import one or more named declarations.</span>
-    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>sin, <span class='bst-code-struct'>PI</span><span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>html <span class='bst-code-parenthesis'>{</span>center<span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas <span class='bst-code-parenthesis'>{</span>get_canvas, <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-comment'>-- Import a whole surface as a namespace.</span>
-    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas
-
-    <span class='bst-code-comment'>-- Import a project-local JavaScript file.</span>
-    <span class='bst-code-comment'>-- JavaScript imports keep the .js extension.</span>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>drawing.js <span class='bst-code-parenthesis'>{</span>draw<span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-comment'>-- Import a project-local source library.</span>
+            <p>Imports make names visible. Each path reaches a declaration surface.</p><h3>A relative import</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span>render_card<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p><code>@./card</code> resolves to <code>card.bst</code> in the same directory as the importing file.</p><h3>A library prefix import</h3><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>General rules:</p><ul><li><code>@./</code> resolves relative to the importing file.</li><li>parent-directory imports with <code>..</code> are not supported.</li><li><code>.bst</code>, <code>.bd</code>, and <code>.md</code> source imports are extensionless.</li><li>direct <code>.js</code> imports keep the <code>.js</code> extension.</li><li>source-library imports use their library prefix directly, such as <code>@helper</code> or <code>@html</code>.</li><li>non-relative imports whose first path segment matches a source-library prefix resolve from that library root.</li><li>other non-relative source imports resolve from the project&#39;s configured <code>entry_root</code>.</li><li>core and builder runtime packages use their registered package path, such as <code>@core/math</code> or <code>@web/canvas</code>.</li><li>specific symbol imports use grouped syntax. Direct symbol-path imports such as <code>import @core/math/sin</code> are rejected.</li><li>direct imports of special files such as <code>#mod.bst</code>, <code>#page.bst</code>, and <code>config.bst</code> are rejected.</li><li>Beandown <code>.bd</code> and plain Markdown <code>.md</code> content files both expose generated <code>content</code> constants.</li><li>folder imports across module boundaries require a <code>#mod.bst</code> facade. Import concrete same-module files directly when no facade is intended.</li></ul><p>Source and facade namespace imports are shallow. External package namespaces can expose nested package-local symbols such as <code>io.input.new</code>. Use <code>math.sin(1.0)</code> or <code>canvas.fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)</code> for values and <code>canvas.Canvas2d</code> in type position, but do not pass the namespace record itself as a value. Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.</p></section>
-    <section class="container"><h1>Source libraries</h1><p>Source libraries are normal Beanstalk source roots. A project-local source library usually lives under a configured <code>library_folders</code> folder. Each direct child directory of that folder becomes an import prefix.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+    </code></pre><p><code>@helper</code> resolves from a configured source-library folder. Each direct child directory of <code>lib/</code> becomes a prefix.</p><h3>Remember</h3><ul><li><code>@./</code> means same directory.</li><li><code>@../</code> is not supported.</li><li>Source imports omit the file extension.</li><li>JavaScript imports keep <code>.js</code>.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Import paths resolve declaration surfaces, not file bytes. Each path family reaches a different kind of importable target.</p><h3>Path families</h3><ul><li><strong>Relative current directory</strong>: <code>@./file</code> resolves from the importing file&#39;s directory. The file extension is omitted.</li><li><strong>Relative parent directory</strong>: <code>@../file</code> is not supported. Imports with <code>..</code> are rejected with <code>BST-IMPORT-0016</code>.</li><li><strong>Module path</strong>: non-relative imports whose first segment does not match a source-library prefix resolve from the configured <code>entry_root</code>. Example: <code>@components/card</code> resolves to <code>src/components/card.bst</code> when <code>entry_root</code> is <code>src</code>.</li><li><strong>Source-library prefix</strong>: a non-relative import whose first segment matches a configured source-library prefix resolves from that library root. Example: <code>@helper {double}</code> when <code>lib/helper/</code> is a source library.</li><li><strong>Core package</strong>: <code>@core/math</code>, <code>@core/text</code>, etc. are registered by the builder as external packages.</li><li><strong>Builder source-library package</strong>: <code>@html</code> is a builder-provided source library.</li><li><strong>External package</strong>: <code>@web/canvas</code> is a builder-owned runtime package.</li><li><strong>JavaScript file</strong>: <code>@./drawing.js</code> imports a project-local annotated JavaScript file. The <code>.js</code> extension is kept.</li></ul><h3>Resolution rules</h3><ul><li><code>@./</code> resolves relative to the importing file.</li><li><code>.bst</code>, <code>.bd</code> and <code>.md</code> source imports are extensionless.</li><li>Direct <code>.js</code> imports keep the <code>.js</code> extension.</li><li>Non-relative imports whose first segment matches a source-library prefix resolve from that library root.</li><li>Other non-relative imports resolve from the project&#39;s configured <code>entry_root</code>.</li><li>Core and builder runtime packages use their registered package path.</li><li>Specific symbol imports use grouped syntax. Direct symbol-path imports such as <code>import @core/math/sin</code> are rejected.</li><li>Direct imports of hash-root files and <code>config.bst</code> are rejected.</li><li>Beandown <code>.bd</code> and plain Markdown <code>.md</code> content files both expose generated <code>content</code> constants. See <a href="../beandown/#content-imports">Beandown content imports</a> and <a href="../markdown/#markdown-imports">Markdown imports</a>.</li><li>The imported public surface of a module root comes from its <code>export:</code> block. See <a href="#module-visibility">Module visibility</a>.</li></ul><h3>Relative imports inside a module</h3><p>Files in the same module can import ordinary sibling source files directly. Same-module imports bypass the public-surface boundary. See <a href="#module-visibility">Module visibility</a>.</p><h3>Cross-module imports</h3><p>Imports that cross into another module boundary can only access what that module&#39;s <code>export:</code> block makes public. Cross-module imports cannot bypass the public API. See <a href="#module-visibility">Module visibility</a>.</p><h3>Content-file imports</h3><p>Beandown and plain Markdown content files are imported with the same extensionless syntax. Their import shape is covered by the Beandown and Plain Markdown pages, not here.</p><h3>Related concepts</h3><ul><li>For grouped and namespace imports see <a href="#grouped-and-namespace-imports">Grouped and namespace imports</a>.</li><li>For visibility rules see <a href="#module-visibility">Module visibility</a>.</li><li>For source libraries see <a href="#source-libraries">Source libraries</a>.</li><li>For core, builder and external packages see <a href="#core-builder-and-external-packages">Core, builder and external packages</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Grouped and namespace imports
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="grouped-and-namespace-imports-level"
+                id="grouped-and-namespace-imports-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="grouped-and-namespace-imports-level"
+                id="grouped-and-namespace-imports-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="grouped-and-namespace-imports">
+                    Grouped and namespace imports
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="grouped-and-namespace-imports-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="grouped-and-namespace-imports-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Grouped imports bring multiple symbols. Namespace imports bring a whole surface.</p><h3>Two colliding render symbols</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
+    import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Two modules both export <code>render</code>. Aliases keep them apart.</p><h3>A namespace alias</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-keyword'>as</span> math
+
+    result <span class='bst-code-operator'>=</span> math.sin<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>math</code> gives you field access to the whole math package.</p><h3>Remember</h3><ul><li>Use <code>as</code> to rename individual symbols.</li><li>Namespace imports are field-access-only, not first-class values.</li><li>An import alias must not hide an existing name.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Grouped and namespace imports provide compact syntax for importing multiple symbols or a whole declaration surface.</p><h3>Grouped symbol imports</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>sin, cos, <span class='bst-code-struct'>PI</span><span class='bst-code-parenthesis'>}</span>
+
+    import <span class='bst-code-operator'>@</span>components <span class='bst-code-parenthesis'>{</span>
+        render <span class='bst-code-keyword'>as</span> render_component,
+        <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiButton,</span>
+        <span class='bst-code-struct'>Card,</span>
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Each entry in a grouped import brings one symbol into the file. <code>as</code> creates a file-local alias. Grouped imports expand into individual symbol imports.</p><h3>Namespace imports</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math
+
+    angle <span class='bst-code-operator'>=</span> math.PI
+    result <span class='bst-code-operator'>=</span> math.sin<span class='bst-code-parenthesis'>(</span>angle<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A namespace import brings the whole surface as a field-access-only record. Use <code>math.sin(1.0)</code> for values and <code>math.PI</code> for constants, but do not pass the namespace record itself as a value.</p><h3>Namespace alias</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-keyword'>as</span> math
+
+    import <span class='bst-code-operator'>@</span>vendor<span class='bst-code-operator'>/</span>drawing.js <span class='bst-code-keyword'>as</span> drawing
+    </code></pre><p>A namespace alias gives the namespace a local name. This is the standard form for external package namespaces.</p><h3>Grouped symbol alias</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>
+        sin <span class='bst-code-keyword'>as</span> sine,
+        <span class='bst-code-struct'>PI</span> <span class='bst-code-keyword'>as</span> pi,
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Each entry can have its own alias. There is no trailing group-level alias.</p><h3>Importable symbol categories</h3><ul><li>functions</li><li>structs</li><li>choices</li><li>type aliases</li><li>traits</li><li>compile-time constants</li></ul><p>Runtime top-level bindings are not importable. See <a href="#module-visibility">Module visibility</a>.</p><h3>Namespaced access</h3><p>Source and facade namespace imports are shallow. External package namespaces can expose nested package-local symbols. Use field-access syntax on the namespace record, but do not pass the namespace itself as a first-class value. Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.</p><h3>Imports are compile-time declarations</h3><p>Import records are not first-class runtime values. They exist at compile time to make names visible.</p><h3>Collision and no-shadowing policy</h3><ul><li>Ordinary import aliases are file-local.</li><li>An import alias cannot hide an existing visible name.</li><li>If <code>render</code> is already declared in the file, <code>import @other { render }</code> is an error. Pick a different local name.</li><li>Leading-case mismatches warn. For example, importing a struct with a lowercase alias or a function with an uppercase alias triggers a warning.</li></ul><h3>No trailing alias for a group</h3><p>A grouped import cannot have a trailing group-level alias. Each entry gets its own alias individually.</p><h3>Related concepts</h3><ul><li>For import alias rules see <a href="../aliases/#import-aliases">Import aliases</a>.</li><li>For import path resolution see <a href="#import-paths">Import paths</a>.</li><li>For visibility rules see <a href="#module-visibility">Module visibility</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Module visibility
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="module-visibility-level"
+                id="module-visibility-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="module-visibility-level"
+                id="module-visibility-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="module-visibility">
+                    Module visibility
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="module-visibility-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="module-visibility-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Declarations are private to their module. The export block makes them public.</p><h3>An internal helper file</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/components/utils.bst</span>
+    internal_value <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    </code></pre><h3>The root module uses it directly</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#page.bst</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>internal_value<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Same-module imports see everything. No export block needed.</p><h3>Other modules need the export block</h3><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#page.bst</span>
+    export<span class='bst-code-operator'>:</span>
+        import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>internal_value<span class='bst-code-parenthesis'>}</span>
+    ;
+    </code></pre><p>Now a nested module at <code>src/pages/</code> can import <code>internal_value</code> through <code>@components/utils</code>.</p><h3>Remember</h3><ul><li>Same module: all declarations are visible.</li><li>Cross module: only exported declarations are visible.</li><li>Runtime bindings are never importable.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Module visibility controls which declarations cross a module boundary. Normal declarations are private to their module. The <code>export:</code> block marks what other modules can see.</p><h3>Same-module internal visibility</h3><p>Files within the same module can import each other&#39;s declarations directly. A module is defined by its root directory. All <code>.bst</code> files in that directory (and its subdirectories that do not have their own root) belong to the same module.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/components/utils.bst</span>
+    internal_value <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    internal_fn <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;internal&quot;</span>
+    ;
+    </code></pre><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#page.bst (same module)</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>internal_value, internal_fn<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Same-module imports bypass the public-surface boundary. The importing file sees all declarations in the target file.</p><h3>Cross-module public boundary</h3><p>A different module can only access declarations marked public by the module root&#39;s <code>export:</code> block. Cross-module imports cannot bypass the public API.</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#page.bst (root module)</span>
+    export<span class='bst-code-operator'>:</span>
+        import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>
+            internal_value,
+            internal_fn,
+        <span class='bst-code-parenthesis'>}</span>
+    ;
+    </code></pre><pre style=""><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/pages/#page.bst (different module)</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>internal_value<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>The nested module can import <code>internal_value</code> because the root module&#39;s export block re-exports it. Without the export block, the import is rejected with <code>BST-IMPORT-0011</code>.</p><h3>Root-private declarations</h3><p>Declarations in the module root file outside the <code>export:</code> block are private to the root. They are not available to other modules even through the public surface.</p><h3>Direct root import rejection</h3><p>Direct imports of hash-root files are rejected. Import the module through its directory path, not through the root filename.</p><h3>Runtime top-level bindings not importable</h3><p>Runtime top-level bindings are start-body code. They are not importable declarations. Only compile-time constants, functions, structs, choices, type aliases and traits are importable.</p><h3>Receiver method visibility</h3><p>Receiver methods are visible through a module&#39;s public surface when the module exports the receiver type&#39;s source surface. A type alias in the export block does not automatically re-export private implementation methods. Export the receiver type&#39;s source surface or a wrapper explicitly.</p><h3>Import cycles</h3><p>Circular imports between files in the same module are accepted when the declarations resolve in dependency order. Circular constant dependencies are rejected with <code>BST-RULE-0033</code>.</p><h3>No public access through filesystem tricks</h3><p>There is no way to bypass the module public-surface boundary by choosing a different import path. All cross-module imports go through the same resolution and visibility check.</p><h3>Related concepts</h3><ul><li>For the export block see <a href="../project-structure/#public-api">Public API</a>.</li><li>For import path families see <a href="#import-paths">Import paths</a>.</li><li>For re-export syntax see <a href="#public-reexports">Public re-exports</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Public re-exports
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="public-reexports-level"
+                id="public-reexports-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="public-reexports-level"
+                id="public-reexports-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="public-reexports">
+                    Public re-exports
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="public-reexports-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="public-reexports-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>The export block can re-export imported symbols so other modules can use them.</p><h3>A public re-export</h3><pre style=""><code class='codeblock'>
+    export<span class='bst-code-operator'>:</span>
+        import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span>
+            <span class='bst-code-struct'>CardData</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Card,</span>
+            render_card,
+        <span class='bst-code-parenthesis'>}</span>
+    ;
+    </code></pre><p>Other modules can now import <code>CardData</code> and <code>render_card</code> through the module&#39;s public surface.</p><h3>Local alias is not public</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>CardData</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>LocalCard</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><p><code>LocalCard</code> is file-local. It is not public. Only imports inside the <code>export:</code> block become public re-exports.</p><h3>Remember</h3><ul><li>Re-exports go inside the <code>export:</code> block.</li><li>The <code>as</code> alias defines the public API name.</li><li>Legacy inline <code>export</code> syntax is rejected.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>The <code>export:</code> block can re-export grouped imports from other files, creating a public API surface that exposes imported declarations under controlled names.</p><h3>Grouped re-export</h3><pre style=""><code class='codeblock'>
+    export<span class='bst-code-operator'>:</span>
+        import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span>
+            <span class='bst-code-struct'>CardData</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Card,</span>
+            render_card,
+        <span class='bst-code-parenthesis'>}</span>
+
+        import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>
+            <span class='bst-code-struct'>PI,</span>
+            sin,
+        <span class='bst-code-parenthesis'>}</span>
+    ;
+    </code></pre><p>The original symbol names (<code>CardData</code>, <code>render_card</code>, <code>PI</code>, <code>sin</code>) become accessible to cross-module imports. The public alias names (such as <code>Card</code>) are public names of the module&#39;s API surface.</p><h3>Renamed public re-export</h3><p>The <code>as</code> alias inside an export-block re-export defines the public API name. The original source name is what the module imports privately. The alias is what other modules see when importing the module&#39;s public surface.</p><h3>Exported imported types, constants and functions</h3><p>Any importable declaration can be re-exported: functions, structs, choices, type aliases, traits and compile-time constants.</p><h3>Re-export does not make local import alias automatically public</h3><p>A private <code>import @path { Symbol as LocalName }</code> outside the export block creates a file-local alias. It does not become public. Only an <code>import</code> inside the <code>export:</code> block creates a public re-export.</p><h3>Public name collisions</h3><p>Public names in the export block must not collide with each other. Duplicate public names are rejected.</p><h3>Invalid unknown or private targets</h3><p>Re-exporting a symbol that does not exist in the target file is rejected. Re-exporting a private declaration that is not visible in the target file is rejected.</p><h3>No legacy inline export syntax</h3><p>Legacy inline <code>export</code> syntax (without the <code>:</code> block delimiter) is rejected with <code>BST-SYNTAX-0001</code>. The strict <code>export:</code> block is the only public API marker. See <a href="../project-structure/#public-api">Public API</a> for the full export-block rules.</p><h3>Related concepts</h3><ul><li>For the export block see <a href="../project-structure/#public-api">Public API</a>.</li><li>For visibility rules see <a href="#module-visibility">Module visibility</a>.</li><li>For import alias rules see <a href="../aliases/#import-aliases">Import aliases</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Source libraries
+    </legend>
+
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="source-libraries-level"
+                id="source-libraries-basic"
+                value="basic"
+                checked
+            >
+
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="source-libraries-level"
+                id="source-libraries-advanced"
+                value="advanced"
+            >
+
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="source-libraries">
+                    Source libraries
+    </h2>
+
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="source-libraries-basic"
+                    >
+                        Basic
+                    </label>
+
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="source-libraries-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
+
+            <div class="doc-level__panel doc-level__panel--basic">
+                
+
+
+
+            <p>Source libraries are Beanstalk source under <code>lib/</code>. Each direct child folder becomes an import prefix.</p><h3>A simple library</h3><pre style=""><code class='codeblock'>
+    lib<span class='bst-code-operator'>/</span>
+    └── blog<span class='bst-code-operator'>/</span>
+        ├── <span class='bst-code-operator'>#</span>api.bst
+        └── helpers<span class='bst-code-operator'>/</span>dates.bst
+    </code></pre><p><code>#api.bst</code> is just a cosmetic root filename. Any <code>#*.bst</code> name works.</p><h3>Importing from a library</h3><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span>post_title<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p><code>@blog</code> resolves to <code>lib/blog/</code>. The library&#39;s public surface comes from its export block.</p><h3>Remember</h3><ul><li><code>lib/</code> is the default library folder.</li><li>Each direct child becomes a prefix.</li><li>Internal files are hidden unless re-exported.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Source libraries are normal Beanstalk source roots discovered from configured library folders. Each direct child directory becomes an import prefix.</p><h3>Configuration</h3><pre style=""><code class='codeblock'>
+    library_folders <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
+        <span class='bst-code-string'>&quot;lib&quot;</span>,
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>When <code>library_folders</code> is omitted, <code>/lib</code> is the default scan folder.</p><h3>Directory structure</h3><pre style=""><code class='codeblock'>
     project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
     ├── config.bst
     ├── src<span class='bst-code-operator'>/</span>
     │   └── <span class='bst-code-operator'>#</span>page.bst
     └── lib<span class='bst-code-operator'>/</span>
         └── helper<span class='bst-code-operator'>/</span>
-            ├── <span class='bst-code-operator'>#</span>mod.bst
+            ├── <span class='bst-code-operator'>#</span>api.bst
             └── utils.bst
-    </code></pre><p>In config:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    project <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html&quot;</span>
-    library_folders <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-string'>&quot;lib&quot;</span>,
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The direct child folder <code>lib/helper</code> becomes the <code>@helper</code> library prefix. The library&#39;s public surface is controlled by <code>lib/helper/#mod.bst</code>. Ordinary project source under <code>entry_root</code> is not automatically a source-library prefix. If a nested page module needs declarations from another module, expose them through that module&#39;s <code>#mod.bst</code> facade instead of bypassing into private files.</p><p>A minimal library facade can define declarations directly:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- lib/helper/#mod.bst</span>
+    </code></pre><p>The direct child folder <code>lib/helper</code> becomes the <code>@helper</code> library prefix. The library&#39;s public surface is controlled by its module root (<code>#api.bst</code>).</p><h3>Generic hash-root naming</h3><p>The library root filename after <code>#</code> has no semantic role. <code>#api.bst</code>, <code>#mod.bst</code> and <code>#page.bst</code> are all equivalent root spellings for a source library. See <a href="../project-structure/#module-roots">Module roots</a>.</p><h3>One root per library module</h3><p>Each library directory may contain at most one <code>#*.bst</code> root file. Two or more hash-root files in one library directory are rejected with <code>BST-CONFIG-0001</code>.</p><h3>Public surface</h3><p>Outside importers can only see declarations and grouped re-exports marked public by the library root&#39;s <code>export:</code> block. Internal implementation files are not public unless the root re-exports them.</p><h3>Internal child files</h3><p>Files without <code>#</code> in the library directory are normal source files within the library module. They are hidden from cross-prefix imports unless the library root re-exports them.</p><h3>Custom scan roots</h3><p><code>library_folders</code> accepts one string or a collection of strings. Each configured folder becomes a scan root. Its direct child directories become import prefixes.</p><h3>Duplicate or ambiguous prefixes</h3><p>Duplicate library folders are rejected. Absolute paths and paths containing <code>..</code> are rejected. Nested paths such as <code>lib/helpers</code> are rejected. Each entry must be a direct folder name relative to the project root.</p><h3>Source libraries compile as Beanstalk source</h3><p>Source libraries are not opaque external packages. They are normal Beanstalk source files compiled through the same frontend pipeline. The project does not own the library&#39;s filesystem location in the same way it owns <code>src/</code>, but the compiler treats the source as ordinary Beanstalk.</p><h3>API-only source-library roots</h3><p>A source-library root with no builder-relevant top-level activity is API-only. It exports declarations but produces no HTML artifact. See <a href="../project-structure/#html-routing-and-artifacts">HTML routing and artifacts</a>.</p><h3>Project library versus core, builder and external packages</h3><p>Source libraries are project-local Beanstalk source. Core packages (<code>@core/math</code>), builder source libraries (<code>@html</code>) and external packages (<code>@web/canvas</code>) are builder-provided. See <a href="#core-builder-and-external-packages">Core, builder and external packages</a> for the distinction.</p><h3>Related concepts</h3><ul><li>For module root rules see <a href="../project-structure/#module-roots">Module roots</a>.</li><li>For the export block see <a href="../project-structure/#public-api">Public API</a>.</li><li>For import path resolution see <a href="#import-paths">Import paths</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><fieldset class="doc-level">
+        <legend class="visually-hidden">
+            Choose the explanation level: Core, builder and external packages
+    </legend>
 
-    export double <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
-    ;
-    </code></pre><p>A page can then import from that source library:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- src/#page.bst</span>
+    <input
+        class="doc-level__input doc-level__input--basic"
+        type="radio"
+        name="core-builder-and-external-packages-level"
+                id="core-builder-and-external-packages-basic"
+                value="basic"
+                checked
+            >
 
-    import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
+            <input
+                class="doc-level__input doc-level__input--advanced"
+                type="radio"
+                name="core-builder-and-external-packages-level"
+                id="core-builder-and-external-packages-advanced"
+                value="advanced"
+            >
 
-    value <span class='bst-code-operator'>=</span> double<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
-    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Facades can also wrap declarations imported from elsewhere. This is how a library exposes a stable public name without exposing the implementation path:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- lib/helper/#mod.bst</span>
+            <header class="doc-level__header">
+                <h2 class="doc-level__title" id="core-builder-and-external-packages">
+                    Core, builder and external packages
+    </h2>
 
-    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>sin <span class='bst-code-keyword'>as</span> internal_sin<span class='bst-code-parenthesis'>}</span>
+    <div class="doc-level__switch">
+        <label
+            class="doc-level__option doc-level__option--basic"
+            for="core-builder-and-external-packages-basic"
+                    >
+                        Basic
+                    </label>
 
-    export sine <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Float</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Float</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> internal_sin<span class='bst-code-parenthesis'>(</span>x<span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><p>Facades can also re-export a grouped public surface directly:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- lib/helper/#mod.bst</span>
+                    <label
+                        class="doc-level__option doc-level__option--advanced"
+                        for="core-builder-and-external-packages-advanced"
+                    >
+                        Advanced
+                    </label>
+                </div>
+            </header>
 
-    export <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>
-        double,
-        label <span class='bst-code-keyword'>as</span> helper_label,
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <code>export</code> in <code>#mod.bst</code></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <code>#mod.bst</code> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver type&#39;s source surface or a wrapper explicitly</li><li><code>#mod.bst</code> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <code>#mod.bst</code></li><li>bare namespace exports such as <code>export @./utils</code> and wildcard exports remain deferred</li></ul></section>
-    <section class="container"><h1>Builder source libraries</h1><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides the <code>@html</code> source library used throughout these docs.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>html <span class='bst-code-parenthesis'>{</span>center<span class='bst-code-parenthesis'>}</span>
-    import <span class='bst-code-operator'>@</span>styles<span class='bst-code-operator'>/</span>docs <span class='bst-code-parenthesis'>{</span>title<span class='bst-code-parenthesis'>}</span>
+            <div class="doc-level__panel doc-level__panel--basic">
+                
 
-    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>title, center<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HOME</span><span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Builder source libraries follow the same source-library idea as project-local libraries:</p><ul><li>the builder registers a library prefix.</li><li>imports use that prefix directly.</li><li>the source files are still Beanstalk source.</li><li>the project does not own the library&#39;s filesystem location.</li></ul><p>This is useful for builder-specific components, templates, styles, or helper declarations that should feel like normal Beanstalk code.</p></section>
-    <section class="container"><h1>Core external packages</h1><p>Some libraries are not source files. <code>@core/math</code> is registered as an external package by the builder. It exposes typed functions and constants that the frontend can type-check and the backend can lower directly.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
+
+
+            <p>Different packages come from different places. The builder decides what is available.</p><h3>Why @html is available</h3><p>The HTML builder provides <code>@html</code> as a builder source library. It is normal Beanstalk source bundled with the builder. Another builder may expose different packages.</p><h3>Three kinds</h3><ul><li><strong>Source libraries</strong>: your own Beanstalk source under <code>lib/</code>.</li><li><strong>Core packages</strong>: typed external functions and constants from the builder, such as <code>@core/math</code>.</li><li><strong>External packages</strong>: builder-owned runtime packages such as <code>@web/canvas</code>.</li></ul><h3>Remember</h3><ul><li>The builder selects which packages exist.</li><li>External packages expose free functions and opaque types only.</li><li>No package manager yet. Use <code>lib/</code> for local libraries.</li></ul>
+    </div>
+
+    <div class="doc-level__panel doc-level__panel--advanced">
+        <p>Beanstalk distinguishes compiler core source libraries, builder-provided source libraries, external packages and host packages. Each has a different provider and visibility model.</p><h3>Compiler core source libraries</h3><p>Core packages are typed external packages registered by the builder. They expose opaque external types, compile-time constants and external free functions. They are not <code>.bst</code> source files.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>sin, <span class='bst-code-struct'>PI,</span> clamp<span class='bst-code-parenthesis'>}</span>
 
     angle <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>PI</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>2.0</span>
     wave <span class='bst-code-operator'>=</span> sin<span class='bst-code-parenthesis'>(</span>angle<span class='bst-code-parenthesis'>)</span>
-    bounded <span class='bst-code-operator'>=</span> clamp<span class='bst-code-parenthesis'>(</span>wave, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Core libraries require explicit imports unless they are part of the prelude. The <code>io</code> namespace alias and compiler-owned <code>Error</code> are available without explicit imports. Prelude external symbols do not override source declarations or explicit imports.</p><h3>Builder-provided source libraries</h3><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides <code>@html</code>.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>html <span class='bst-code-parenthesis'>{</span>center<span class='bst-code-parenthesis'>}</span>
 
-    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>bounded<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><code>@core/math</code> currently exposes functions such as <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>atan2</code>, <code>log</code>, <code>pow</code>, <code>sqrt</code>, <code>min</code>, <code>max</code>, and <code>clamp</code>. It also exposes constants such as <code>PI</code>, <code>TAU</code>, and <code>E</code>.</p><p>In the JavaScript backend, these math functions currently lower to JavaScript <code>Math</code> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul><p>Other builders may expose a different core surface.</p></section>
-    <section class="container"><h1>JavaScript libraries</h1><p>The HTML builder can import annotated JavaScript files. A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its <code>@bst.*</code> comments and supported exports.</p><p>Beanstalk source imports the <code>.js</code> file directly:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- src/#page.bst</span>
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>center<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HOME</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Builder source libraries follow the same source-library idea as project-local libraries. The builder registers a library prefix, imports use that prefix directly, and the source files are still Beanstalk source.</p><h3>External and host packages</h3><p>External packages are virtual packages provided by backend metadata. The HTML builder&#39;s <code>@web/canvas</code> is a builder-owned JavaScript library bundled with the project builder.</p><pre style=""><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas <span class='bst-code-parenthesis'>{</span>get_canvas, <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>External packages expose free functions and opaque types only. They do not expose receiver methods. Use free functions for raw external APIs, or a source-owned wrapper type when method-style ergonomics are wanted.</p><h3>Source declarations versus opaque external values</h3><p>Source library and builder source library imports provide typed Beanstalk declarations from <code>.bst</code> files. Core and external package imports provide opaque external values registered by the builder. The frontend can type-check both, but only source declarations have visible internal structure.</p><h3>Builder-selected availability</h3><p>The builder decides which packages exist. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. The HTML builder currently opts into optional core packages such as <code>@core/math</code>, <code>@core/text</code>, <code>@core/random</code> and <code>@core/time</code>. Other builders may expose a different core surface.</p><h3>Target-specific reachability rejection</h3><p>The HTML-Wasm mode has a stricter backend support surface. JS-backed packages need a Wasm lowering before they can be used by that backend path. The builder rejects unsupported reachable features at lowering time.</p><h3>External calls are positional-only</h3><p>External package free functions use positional parameters. Named arguments, default parameters and reactive parameters are source-language features not available in external signatures.</p><h3>Namespace and alias rules</h3><p>External aliases follow normal file-local collision and case-convention rules. Explicit external imports must not collide with visible source symbols. External opaque types can be passed, returned and used by external functions, but cannot be constructed with struct syntax or field-accessed.</p><h3>Absence of package-manager semantics</h3><p>There is no package manager, remote fetching, lockfiles or version resolution yet. The practical model is: use <code>lib/&lt;name&gt;/#*.bst</code> for project-local Beanstalk libraries, use <code>@core/...</code>, <code>@html</code> and <code>@web/canvas</code> for builder-provided libraries, and use small annotated <code>.js</code> wrapper files when a project needs browser JavaScript directly.</p><h3>Current feature availability</h3><p>The <a href="../progress">progress matrix</a> is the source of truth for current package and backend support.</p><h3>Related concepts</h3><ul><li>For source libraries see <a href="#source-libraries">Source libraries</a>.</li><li>For import path families see <a href="#import-paths">Import paths</a>.</li><li>For core library API details see <a href="../libraries/core">Core libraries</a>.</li></ul>
+    </div>
+    </fieldset></section>
+    <section class="container"><nav class="doc-pager" aria-label="Language documentation">
+        <a
+            class="doc-pager__link doc-pager__link--previous"
+            href="../project-structure/"
+                rel="prev"
+            >
+                <span class="doc-pager__direction">← Previous</span>
+                <span class="doc-pager__title">Project structure</span>
+            </a>
 
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>drawing.js <span class='bst-code-parenthesis'>{</span>draw_number<span class='bst-code-parenthesis'>}</span>
+            <a
+                class="doc-pager__link doc-pager__link--next"
+                href="../beandown/"
+                rel="next"
+            >
+                <span class="doc-pager__direction">Next →</span>
+                <span class="doc-pager__title">Beandown</span>
+            </a>
 
-    value <span class='bst-code-operator'>=</span> draw_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    io.line<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>value<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>The JavaScript file describes its Beanstalk-facing surface with doc comments:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig draw_number <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> drawNumber<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>7</span>;
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The Beanstalk-facing name is <code>draw_number</code>. The JavaScript export name is <code>drawNumber</code>. They do not need to match. The <code>@bst.sig</code> annotation binds to the next supported JavaScript export after the annotation.</p><p>Every JavaScript export in a Beanstalk JS library must be annotated with <code>@bst.sig</code>. Keep private helpers unexported.</p><p>Source-authored <code>@bst.sig</code> comments should expose free functions and opaque types. <code>this</code> receiver signatures are being kept out of the source receiver-method surface.</p><p>JS libraries may import registered runtime modules such as <code>@beanstalk/runtime</code> with named static imports only. The named runtime import list may span multiple lines.</p><p>Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use <code>bstOk</code> / <code>bstErr</code> helpers or return the wrapper shape manually.</p></section>
-    <section class="container"><h1>Writing JavaScript Beanstalk can import</h1><p>A Beanstalk-compatible JavaScript library should be small, explicit, and typed from Beanstalk&#39;s point of view.</p><p>Supported public export forms:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig free_function <span class='bst-code-operator'>|</span>x <span class='bst-code-struct'>Float</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Float</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> freeFunction<span class='bst-code-parenthesis'>(</span>x<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2.0</span>;
-    <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig arrow_function <span class='bst-code-operator'>|</span>x <span class='bst-code-struct'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>const</span> arrowFunction <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>(</span>x<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>+</span> <span class='bst-code-number'>1</span>;
-    <span class='bst-code-parenthesis'>}</span>;
-    </code></pre><p>Unsupported public export forms include:</p><ul><li>default exports</li><li>re-exports such as <code>export { name }</code></li><li>class exports</li><li>CommonJS exports such as <code>module.exports</code> or <code>exports.name</code></li><li><code>export const</code> values that are not arrow functions</li><li>expression-bodied arrow exports</li></ul><p>JavaScript parameters must be plain parameters. Rest parameters, destructuring parameters, optional parameters, and default parameter values are rejected.</p><p>The signature subset currently supports:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
-    </tr>
-
-
-
-                
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.opaque Canvas2d</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares an opaque external type. Beanstalk can name it and pass it through external functions, but does not know its internal fields.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name |x Float| -&gt; Float</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a Beanstalk-facing function named <code>name</code> with one parameter and one success return.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name || -&gt; Int</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a function with no parameters and one success return.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name |id String| -&gt; Canvas, Error!</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a fallible function. <code>Error!</code> must be the final return slot.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig fill |ctx ~Canvas2d, x Float|</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a free function whose first parameter takes mutable access to a <code>Canvas2d</code> value.</td>
-        </tr>
             
 
-    </table><p>Built-in signature types are <code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>String</code>, and <code>Char</code>. Other type names must be declared with <code>@bst.opaque</code> before they are used in a signature.</p><p>Current JS signature limitations:</p><ul><li>no collection types</li><li>no option types</li><li>no generic parameters</li><li>no callback/function parameter types</li><li>no multi-success returns</li><li>no <code>Void</code>, <code>None</code>, <code>Unit</code>, or <code>()</code> return spelling; omit <code>-&gt;</code> for no success return</li></ul></section>
-    <section class="container"><h1>Fallible JavaScript functions</h1><p>A JavaScript signature that returns <code>Error!</code> must return Beanstalk&#39;s result wrapper shape. The easiest way is to import the registered runtime helpers from <code>@beanstalk/runtime</code>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-parenthesis'>{</span> bstOk, bstErr <span class='bst-code-parenthesis'>}</span> from <span class='bst-code-string'>&quot;@beanstalk/runtime&quot;</span>;
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.opaque <span class='bst-code-struct'>CanvasElement</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig get_canvas <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>CanvasElement,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> getCanvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>const</span> canvas <span class='bst-code-operator'>=</span> document.getElementById<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>;
-
-        <span class='bst-code-keyword'>if</span> <span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>!</span>canvas <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> canvas.tagName <span class='bst-code-operator'>!</span><span class='bst-code-operator'>=</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;CANVAS&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-            <span class='bst-code-keyword'>return</span> bstErr<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>404</span>, <span class='bst-code-string'>&quot;Canvas element not found&quot;</span><span class='bst-code-parenthesis'>)</span>;
-        <span class='bst-code-parenthesis'>}</span>
-
-        <span class='bst-code-keyword'>return</span> bstOk<span class='bst-code-parenthesis'>(</span>canvas<span class='bst-code-parenthesis'>)</span>;
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>In Beanstalk, call fallible JS functions the same way as other fallible functions:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>canvas_helpers.js <span class='bst-code-parenthesis'>{</span>get_canvas<span class='bst-code-parenthesis'>}</span>
-
-    result <span class='bst-code-operator'>=</span> get_canvas<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;game&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
-        then <span class='bst-code-string'>&quot;missing canvas&quot;</span>
-    ;
-
-    io.line<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>JavaScript library files may currently import registered Beanstalk runtime modules with named static imports only. Arbitrary JavaScript imports, dynamic imports, default imports, namespace imports, and npm-style dependency graphs are not supported by the JS provider yet.</p><p>If you are adapting an existing JS library, bundle or flatten its dependencies first, then expose a narrow annotated wrapper file to Beanstalk.</p></section>
-    <section class="container"><h1>Mutable JavaScript free functions</h1><p>JavaScript-backed external packages expose free functions only. Put the opaque value in the first parameter when a function acts on that value, and add <code>~</code> when the function mutates it. <code>this</code> receiver-style signatures are rejected for JS imports and builder-owned external packages.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.opaque <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig set_fill_style <span class='bst-code-operator'>|</span>ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, color <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> setFillStyle<span class='bst-code-parenthesis'>(</span>ctx, color<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        ctx.fillStyle <span class='bst-code-operator'>=</span> color;
-    <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig fill_rect <span class='bst-code-operator'>|</span>ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, x <span class='bst-code-struct'>Float,</span> y <span class='bst-code-struct'>Float,</span> width <span class='bst-code-struct'>Float,</span> height <span class='bst-code-struct'>Float</span><span class='bst-code-operator'>|</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> fillRect<span class='bst-code-parenthesis'>(</span>ctx, x, y, width, height<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        ctx.fillRect<span class='bst-code-parenthesis'>(</span>x, y, width, height<span class='bst-code-parenthesis'>)</span>;
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The first JavaScript parameter receives the opaque context object. Beanstalk calls these as ordinary free functions:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas <span class='bst-code-parenthesis'>{</span>get_canvas, context_<span class='bst-code-number'>2</span>d, <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, set_fill_style, fill_rect<span class='bst-code-parenthesis'>}</span>
-
-    run <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        canvas_ref <span class='bst-code-operator'>=</span> get_canvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d <span class='bst-code-operator'>=</span> context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>(</span>canvas_ref<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
-        fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
-    ;
-    </code></pre><p>Source libraries can wrap raw external values in ordinary Beanstalk structs when they want method-style ergonomics.</p></section>
-    <section class="container"><h1>The canvas library</h1><p>The HTML builder&#39;s canvas library is a built-in JS-backed package exposed as <code>@web/canvas</code>. It is useful because it shows the whole path from authored JavaScript to Beanstalk imports.</p><p>A page can import and use it like this:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas
-
-    run <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        canvas_ref <span class='bst-code-operator'>=</span> canvas.get_canvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        ctx <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> canvas.context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>(</span>canvas_ref<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        canvas.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
-        canvas.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
-    ;
-
-    result <span class='bst-code-operator'>=</span> run<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;game&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
-        then <span class='bst-code-string'>&quot;error&quot;</span>
-    ;
-
-    io.line<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>The higher-level <code>@html</code> source library exposes a source-owned <code>Canvas</code> wrapper and convenience <code>get_canvas()</code> helper for the built-in canvas component:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>html <span class='bst-code-parenthesis'>{</span>canvas, <span class='bst-code-struct'>Canvas,</span> get_canvas<span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>canvas<span class='bst-code-operator'>:</span>
-        <span class='bst-code-number'>640</span>
-        <span class='bst-code-number'>480</span>
-    <span class='bst-code-parenthesis'>]</span>
-
-    draw <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        drawing <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> get_canvas<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        <span class='bst-code-operator'>~</span>drawing.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;#202020&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-operator'>~</span>drawing.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>640.0</span>, <span class='bst-code-number'>480.0</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
-    ;
-    </code></pre><p>The JavaScript source lives inside the HTML builder:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    src<span class='bst-code-operator'>/</span>projects<span class='bst-code-operator'>/</span>html_project<span class='bst-code-operator'>/</span>external_libraries<span class='bst-code-operator'>/</span>web<span class='bst-code-operator'>/</span>canvas<span class='bst-code-operator'>/</span>
-    ├── canvas.js
-    └── mod.rs
-    </code></pre><p><code>canvas.js</code> is ordinary JavaScript plus Beanstalk annotations. It declares opaque types such as <code>CanvasElement</code> and <code>Canvas2d</code>, plus free functions such as <code>get_canvas</code>, <code>context_2d</code>, <code>fill_rect</code>, <code>set_fill_style</code>, <code>begin_path</code>, <code>move_to</code>, <code>line_to</code>, and <code>stroke</code>.</p><p>The Rust registration code does the builder-owned part:</p><ul><li>embeds the <code>canvas.js</code> source with <code>include_str!</code></li><li>parses it with the same JS parser used for project-local <code>.js</code> imports</li><li>registers the package path <code>@web/canvas</code></li><li>registers its opaque types and free functions in the external package registry</li><li>records the canvas JS file as a runtime asset that the HTML builder must emit</li><li>records runtime imports such as <code>@beanstalk/runtime</code> so the build can emit the runtime module and import map</li></ul><p>This means <code>@web/canvas</code> behaves like a normal import to Beanstalk code, but the project author does not need to keep <code>canvas.js</code> in their own project.</p></section>
-    <section class="container"><h1>What the HTML builder emits</h1><p>JavaScript imports do more than type-check. The build output also needs callable runtime JavaScript.</p><p>For a project-local <code>@./drawing.js</code> import, the HTML builder emits:</p><ul><li>the original JavaScript asset under Beanstalk&#39;s generated JS output area</li><li>generated glue that adapts Beanstalk calls to JS exports</li><li>runtime modules such as <code>beanstalk-runtime.js</code> when the JS file imports registered runtime helpers</li><li>an import map when generated modules need stable runtime specifiers such as <code>@beanstalk/runtime</code></li></ul><p>Builder runtime libraries such as <code>@web/canvas</code> use the same emission path. The difference is that the source asset is bundled with the builder instead of being read from the user&#39;s project.</p><p>The HTML-Wasm mode currently has a stricter backend support surface. JS-backed packages need a Wasm lowering before they can be used by that backend path.</p></section>
-    <section class="container"><h1>Converting an existing JavaScript file</h1><p>To make an existing JavaScript file importable from Beanstalk:</p><ol><li>Create a small wrapper file rather than exposing the whole library.</li><li>Use named ESM exports only.</li><li>Keep private helpers unexported.</li><li>Add <code>@bst.opaque</code> declarations for objects Beanstalk should treat as external handles.</li><li>Add one <code>@bst.sig</code> comment immediately before every exported function.</li><li>Use Beanstalk-facing snake_case names in <code>@bst.sig</code>.</li><li>Use one plain JavaScript parameter for each Beanstalk ABI parameter.</li><li>Return the expected raw value for non-fallible functions.</li><li>Return <code>bstOk(value)</code> or <code>bstErr(code, message)</code> for <code>Error!</code> functions.</li><li>Import the wrapper from Beanstalk with its <code>.js</code> extension.</li></ol><p>Example wrapper shape:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-parenthesis'>{</span> bstOk, bstErr <span class='bst-code-parenthesis'>}</span> from <span class='bst-code-string'>&quot;@beanstalk/runtime&quot;</span>;
-
-    <span class='bst-code-keyword'>function</span> privateLookup<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>return</span> document.getElementById<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>;
-    <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.opaque <span class='bst-code-struct'>ElementHandle</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-
-    <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig get_element <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>ElementHandle,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
-     <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
-    export <span class='bst-code-keyword'>function</span> getElement<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-        <span class='bst-code-keyword'>const</span> element <span class='bst-code-operator'>=</span> privateLookup<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>;
-
-        <span class='bst-code-keyword'>if</span> <span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>!</span>element<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
-            <span class='bst-code-keyword'>return</span> bstErr<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>404</span>, <span class='bst-code-string'>&quot;Element not found&quot;</span><span class='bst-code-parenthesis'>)</span>;
-        <span class='bst-code-parenthesis'>}</span>
-
-        <span class='bst-code-keyword'>return</span> bstOk<span class='bst-code-parenthesis'>(</span>element<span class='bst-code-parenthesis'>)</span>;
-    <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Beanstalk usage:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>dom_helpers.js <span class='bst-code-parenthesis'>{</span>get_element, <span class='bst-code-struct'>ElementHandle</span><span class='bst-code-parenthesis'>}</span>
-
-    load <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        element <span class='bst-code-struct'>ElementHandle</span> <span class='bst-code-operator'>=</span> get_element<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;loaded&quot;</span>
-    ;
-    </code></pre></section>
-    <section class="container"><h1>How builders provide libraries</h1><p>Project builders own the library set they expose. A builder can combine several mechanisms in one project:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-
-        
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Mechanism</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Builder action</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
-    </tr>
 
 
-
-                
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Mandatory core</td>
-     <td style="padding: 0.2em 0.5em;  "> Start from the compiler's required core surface.</td>
-     <td style="padding: 0.2em 0.5em;  "> Prelude-level runtime and host pieces required by every builder.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Optional core package</td>
-     <td style="padding: 0.2em 0.5em;  "> Register typed external functions, constants, and backend lowerings.</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>@core/math</code> registers math functions and constants.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Source library root</td>
-     <td style="padding: 0.2em 0.5em;  "> Register a source-library prefix to a filesystem root.</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>@html</code> resolves to builder-provided Beanstalk source.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> External import provider</td>
-     <td style="padding: 0.2em 0.5em;  "> Register a provider for file extensions such as <code>.js</code>.</td>
-     <td style="padding: 0.2em 0.5em;  "> The HTML builder registers the JS provider for project-local JavaScript imports.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Builder runtime package</td>
-     <td style="padding: 0.2em 0.5em;  "> Register a virtual package plus runtime asset metadata.</td>
-     <td style="padding: 0.2em 0.5em;  "> <code>@web/canvas</code> is bundled JS parsed and emitted by the HTML builder.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Config key registry</td>
-     <td style="padding: 0.2em 0.5em;  "> Register backend-specific config keys before Stage 0 config validation.</td>
-     <td style="padding: 0.2em 0.5em;  "> The HTML builder registers keys such as <code>html_lang</code> and <code>redirect_index_html</code>.</td>
-        </tr>
-            
-
-    </table><p>This separation keeps the compiler frontend generic. The frontend needs typed import surfaces, source roots, and provider results. The builder decides which surfaces exist and how their compiled output is emitted.</p></section>
-    <section class="container"><h1>Current limits</h1><p>Library support is intentionally narrow while the language is still in alpha.</p><p>Current limits to expect:</p><ul><li>no package manager yet</li><li>no remote fetching or lockfiles yet</li><li>no source-library version resolution yet</li><li>no wildcard imports yet</li><li>no arbitrary JavaScript dependency graphs through the JS provider yet</li><li>no direct <code>.js</code> imports from <code>config.bst</code></li><li>no direct cross-module bypass into another module&#39;s private JavaScript file</li><li>no automatic documentation extraction from <code>#mod.bst</code> yet</li><li>no HIR cache for source libraries yet</li></ul><p>The practical model for now is:</p><ul><li>use <code>lib/&lt;name&gt;/#mod.bst</code> for project-local Beanstalk libraries.</li><li>use <code>@core/...</code>, <code>@html</code>, and <code>@web/canvas</code> for builder-provided libraries.</li><li>use small annotated <code>.js</code> wrapper files when a project needs browser JavaScript directly.</li></ul></section>
+    </nav></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

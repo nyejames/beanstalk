@@ -1,0 +1,36 @@
+Only the active module root owns top-level runtime and page-fragment activity. Imported module roots do not replay their root body when used for API access.
+
+### Active root runtime
+
+The active module root's top-level runtime code becomes an implicit `start` function for that module. This includes top-level bindings, function calls and other runtime statements.
+
+### Normal files
+
+Normal source files do not execute top-level runtime statements independently. They contribute declarations that the module root imports and invokes. Helper files export reusable declarations. The root file orchestrates them.
+
+### Page fragments
+
+Two forms of direct top-level template in a module root become page fragments:
+
+- A const fragment uses the `#` prefix before the opening bracket. It must fold at compile time and is emitted as static HTML.
+- A runtime fragment uses the plain bracket form without `#`. It is evaluated by the module's implicit start function and inserted into the page at runtime.
+
+Assigned or returned templates are not page fragments by themselves. Only direct top-level templates in the active module root become fragments.
+
+### Source order
+
+The HTML builder preserves source order between static and runtime fragments. Static fragments are emitted immediately. Runtime fragments use generated slots in the HTML document, then the embedded JavaScript calls the module start function and fills those slots.
+
+### Imported roots
+
+Imported module roots do not replay their root runtime activity. When a module root is imported for its public API, its top-level runtime code, start body and page fragments are not executed. Only its exported declarations remain available.
+
+### Do not put page fragments in helper files
+
+Helper files should export reusable declarations. The module root should import and use them. Page-producing top-level templates belong in the active module root only.
+
+### Related concepts
+
+- For template semantics see @../templates/#template-basics (Template basics).
+- For compile-time templates see @../constants/#const-templates (Const templates).
+- For module root roles see @#module-roots (Module roots).
