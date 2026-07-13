@@ -1,4 +1,5 @@
 debug/
+tmp/
 target/
 docs/dev/
 test_output/
