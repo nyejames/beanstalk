@@ -2,31 +2,29 @@ use super::*;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
-use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::{
-    install_same_store_control_flow_body_refs, materialize_body_content_ref,
-};
+use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::install_same_store_control_flow_body_refs;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotKey, TemplateConstValueKind, TemplateContent, TemplateSegmentOrigin, TemplateType,
+    SlotKey, TemplateConstValueKind, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_body_parser::{
     NestedTemplateParseOptions, TemplateBodyParseRequest, parse_template_body,
 };
 use crate::compiler_frontend::ast::templates::template_body_sentinels::TemplateBodyControlContext;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateControlFlowTirReference, TemplateControlFlowValidationMode, TemplateFallbackBranch,
-    TemplateLoopControlFlow, TemplateLoopHeader, validate_const_required_template_control_flow,
+    TemplateBranchChain, TemplateBranchSelector, TemplateControlFlow,
+    TemplateControlFlowTirReference, TemplateControlFlowValidationMode, TemplateLoopControlFlow,
+    TemplateLoopHeader, validate_const_required_template_control_flow,
     validate_runtime_template_control_flow_slot_artifacts,
 };
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     TemplateHeadParseRequest, parse_template_head,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBuilder,
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
-    TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateRef, TemplateTirPhase,
-    TemplateTirReference, TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
-    finalized_template_tir_id,
+    ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBranch,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
+    TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateRef,
+    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
+    TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -2029,30 +2027,16 @@ fn const_required_template_option_capture_present_folds_then_branch() {
         ValueMode::ImmutableOwned,
     );
     let scrutinee = Expression::coerced(present_value, option_string_type_id);
-    let mut template = {
-        let store = context.template_ir_store();
-        let mut store = store.borrow_mut();
-        option_capture_template(
-            scrutinee,
-            capture_name,
-            capture_path,
-            string_type_id,
-            &mut string_table,
-            &mut store,
-        )
-    };
 
-    {
-        let store = context.template_ir_store();
-        let mut store = store.borrow_mut();
-        let mut registry = context.template_ir_registry.borrow_mut();
-        ensure_manual_template_has_tir_reference(
-            &mut template,
-            &mut store,
-            &mut registry,
-            &string_table,
-        );
-    }
+    let template = const_required_option_capture_template_with_direct_tir(
+        scrutinee,
+        capture_name,
+        capture_path,
+        string_type_id,
+        &context,
+        &mut string_table,
+    );
+
     {
         let registry = context.template_ir_registry.borrow();
         validate_const_required_template_control_flow(&template, &registry, &string_table)
@@ -2081,30 +2065,16 @@ fn const_required_template_option_capture_absent_folds_else_branch() {
         &mut type_environment,
         SourceLocation::default(),
     );
-    let mut template = {
-        let store = context.template_ir_store();
-        let mut store = store.borrow_mut();
-        option_capture_template(
-            scrutinee,
-            capture_name,
-            capture_path,
-            string_type_id,
-            &mut string_table,
-            &mut store,
-        )
-    };
 
-    {
-        let store = context.template_ir_store();
-        let mut store = store.borrow_mut();
-        let mut registry = context.template_ir_registry.borrow_mut();
-        ensure_manual_template_has_tir_reference(
-            &mut template,
-            &mut store,
-            &mut registry,
-            &string_table,
-        );
-    }
+    let template = const_required_option_capture_template_with_direct_tir(
+        scrutinee,
+        capture_name,
+        capture_path,
+        string_type_id,
+        &context,
+        &mut string_table,
+    );
+
     {
         let registry = context.template_ir_registry.borrow();
         validate_const_required_template_control_flow(&template, &registry, &string_table)
@@ -2366,15 +2336,26 @@ fn imported_const_template_context(
         .with_visible_source_bindings(visible_bindings)
 }
 
-fn option_capture_template(
+/// Builds a const-required option-capture template fixture directly as a
+/// same-store TIR branch-chain root in the context's module store.
+///
+/// WHAT: constructs the branch body (text "Hello " plus the capture reference)
+///       and fallback body (text "Guest") as TIR nodes, wraps them in a
+///       `BranchChain` node, finishes the template record, and returns a
+///       `Template` whose `tir_reference` points at that root.
+/// WHY: manual fixtures no longer need detached content or its TIR materializer.
+///      Validation and folding already consume the authoritative
+///      branch-chain root through the registry-backed `TirView`.
+fn const_required_option_capture_template_with_direct_tir(
     scrutinee: Expression,
     capture_name: StringId,
     capture_path: InternedPath,
     inner_type_id: TypeId,
+    context: &ScopeContext,
     string_table: &mut StringTable,
-    store: &mut TemplateIrStore,
 ) -> Template {
     let location = SourceLocation::default();
+
     let capture_reference = Expression::reference_with_type_id(
         capture_path.clone(),
         DataType::StringSlice,
@@ -2383,87 +2364,93 @@ fn option_capture_template(
         ValueMode::ImmutableOwned,
         ConstRecordState::RuntimeValue,
     );
-    let hello = Expression::string_slice(
-        string_table.intern("Hello "),
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    );
-    let guest = Expression::string_slice(
-        string_table.intern("Guest"),
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    );
-    let branch_content = TemplateContent::new(vec![hello, capture_reference]);
-    let fallback_content = TemplateContent::new(vec![guest]);
-    let branch_body_tir_reference =
-        materialize_body_content_ref(&branch_content, location.clone(), store, string_table)
-            .expect("manual branch body should materialize into the test store");
-    let fallback_body_tir_reference =
-        materialize_body_content_ref(&fallback_content, location.clone(), store, string_table)
-            .expect("manual fallback body should materialize into the test store");
+
+    let hello_id = string_table.intern("Hello ");
+    let guest_id = string_table.intern("Guest");
+
+    let store_handle = context.template_ir_store();
+
+    let (template_id, store_owner, store_id) = {
+        let mut store = store_handle.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+
+        let hello_node = builder.push_text_node(
+            hello_id,
+            "Hello ".len() as u32,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+        let capture_node = builder.push_dynamic_expression_node(
+            capture_reference,
+            TemplateSegmentOrigin::Body,
+            None,
+            location.clone(),
+        );
+        let branch_body =
+            builder.push_sequence_node(vec![hello_node, capture_node], location.clone());
+
+        let guest_node = builder.push_text_node(
+            guest_id,
+            "Guest".len() as u32,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+        let fallback_body = builder.push_sequence_node(vec![guest_node], location.clone());
+
+        let selector = TemplateBranchSelector::OptionPresentCapture {
+            scrutinee,
+            pattern: Box::new(MatchPattern::OptionPresentCapture {
+                name: capture_name,
+                binding_path: capture_path,
+                inner_type_id,
+                location: location.clone(),
+                binding_location: location.clone(),
+            }),
+        };
+        let branch = TemplateIrBranch::new(selector, branch_body, location.clone());
+        let branch_chain_root =
+            builder.push_branch_chain_node(vec![branch], Some(fallback_body), location.clone());
+
+        let summary = TemplateIrSummary {
+            estimated_output_bytes: "Hello ".len() + "Guest".len(),
+            text_node_count: 2,
+            text_byte_count: "Hello ".len() + "Guest".len(),
+            dynamic_expression_count: 1,
+            max_depth: 2,
+            has_control_flow: true,
+            is_const_evaluable_shape: false,
+            ..TemplateIrSummary::default()
+        };
+
+        let template_id = builder.finish_template(
+            branch_chain_root,
+            Style::default(),
+            TemplateType::String,
+            summary,
+            location,
+        );
+
+        let store_owner = Arc::clone(&store.owner());
+        let store_id = store.store_id();
+        (template_id, store_owner, store_id)
+    };
+
+    let overlay_set_id = context
+        .template_ir_registry
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
 
     let mut template = Template::empty();
     template.kind = TemplateType::String;
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: Some(branch_body_tir_reference),
-                selector: TemplateBranchSelector::OptionPresentCapture {
-                    scrutinee,
-                    pattern: Box::new(MatchPattern::OptionPresentCapture {
-                        name: capture_name,
-                        binding_path: capture_path,
-                        inner_type_id,
-                        location: location.clone(),
-                        binding_location: location.clone(),
-                    }),
-                },
-                location: location.clone(),
-            }],
-            fallback: Some(TemplateFallbackBranch {
-                body_tir_reference: Some(fallback_body_tir_reference),
-                location: location.clone(),
-            }),
-            location,
-        },
-    )));
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store_id, template_id),
+        store_owner,
+        is_composed: false,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id,
+    });
 
     template
-}
-
-/// Materializes a manually built template fixture into `store` and sets its
-/// finalized TIR reference so const-required control-flow validation can read
-/// same-store body roots instead of falling back to `TemplateContent`.
-///
-/// WHAT: manual fixtures such as `option_capture_template` do not run through
-///       `Template::new`, so they lack parser-emitted TIR. Converting them
-///       into the test store gives validation the same-store body roots it now
-///       requires.
-/// WHY: keeps manual fixtures aligned with the production invariant that
-///      const-required bodies are validated through finalized TIR.
-fn ensure_manual_template_has_tir_reference(
-    template: &mut Template,
-    store: &mut TemplateIrStore,
-    registry: &mut TemplateIrRegistry,
-    string_table: &StringTable,
-) {
-    if template.tir_reference.is_some() {
-        return;
-    }
-
-    install_same_store_control_flow_body_refs(template, store, string_table)
-        .expect("manual template fixture should install same-store body roots");
-
-    let template_id = finalized_template_tir_id(template, store, string_table)
-        .expect("manual template fixture should convert to TIR");
-
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: Arc::clone(&store.owner()),
-        is_composed: false,
-        phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-        overlay_set_id: registry.allocate_overlay_set(TemplateOverlaySet::empty()),
-    });
 }
 
 fn parse_template_error(
