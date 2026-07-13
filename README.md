@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A language for creating reliable software inside elegant codebases
+  A language for creating reliable software in elegant codebases
 </em></p>
 
 # 🌱
@@ -12,7 +12,7 @@
 
 <p><a href="https://nyejames.github.io/beanstalk/">The documentation site</a> was created using <a href="https://github.com/nyejames/beanstalk/blob/main/docs/src">Beanstalk</a>. </p>
 
-<p>The language is in active development and changes quickly. <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> has more info if you want to get involved.</p>
+<p>Development is moving quickly. <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> has more info if you want to get involved.</p>
 </div>
 <br>
 <br>
@@ -44,11 +44,12 @@ The HTML build system will generate an HTML page from this code:
 
 </div>
 
-Templates are first-class language values. They are the main way you create strings in Beanstalk, but are far more powerful than regular string formatters. 
+Templates are first-class language values in Beanstalk.
+They are the main way you create strings, but are far more powerful than regular string formatters. 
 
 ![Beanstalk code snippet](./docs/assets/code-snippet.webp)
 
-Markdown lives inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
+Markdown can live inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
 
 This makes content-heavy pages quick to build and easy to format. 
 
@@ -60,6 +61,7 @@ No more TypeScript framework lasagne, build-tool linguini or 17 package dependen
 It's the CLI bundled with the compiler and build system.
 
 Installation scripts will arrive for Beta, for now it's best to install manually from a tagged release.
+(of which there are 0 atm, so you'll have to build from source)
 
 ### Create a project
 
@@ -74,7 +76,7 @@ cd my-site
 bean dev .
 ```
 
-The dev server rebuilds the project when files change and refreshes the browser output automatically.
+The dev server hot-reloads the project when files change automatically.
 
 ### Release build
 
@@ -119,13 +121,16 @@ This compiles the project using the configured Beanstalk builder and writes outp
 
 Developers are using coding agents increasingly as part of their workflow.
 
-Programmers should own the final design and architecture. Agents can handle repetitive churn, provided the compiler gives them a strict, fast feedback environment for producing reliable code.
+Programmers should own the final design and architecture. 
+Agents can handle repetitive churn. 
+Compilers should give detailed, fast feedback for producing reliable code.
 
 A small syntax, strict rules, fast tooling and stable diagnostics make generated changes easier to inspect and validate.
 
 Compiler diagnostics should carry stable codes, structured facts and source metadata for editors, development servers and coding agents.
 
-Beanstalk has very little training data, but this may be useful later: examples can grow around the language that exists and the agent will have to follow your codebase style more strictly when there's no legacy patterns to hallucinate.
+Beanstalk has very little training data, but this may be useful later: 
+examples can grow around the language that exists and the agent will have to follow your codebase style more strictly when there's no legacy patterns to hallucinate.
 
 <div align="center">
   
@@ -173,5 +178,7 @@ Beanstalk has very little training data, but this may be useful later: examples 
 Here is the current <a href="https://nyejames.github.io/beanstalk/docs/progress/">progress matrix</a>.
 
 The compiler already has broad frontend, backend and build-system tooling in place.
+
+The language semantics and implementation is still settling.
 
 <br>
