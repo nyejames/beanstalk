@@ -13,11 +13,10 @@ use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExp
 use crate::compiler_frontend::ast::expressions::expression_types::{
     CastHandling, ResolvedCastEvidence,
 };
-use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, TemplateSegmentOrigin, TemplateType,
+use crate::compiler_frontend::ast::templates::template::{ReactiveSubscription, TemplateType};
+use crate::compiler_frontend::ast::templates::{
+    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::builtins::casts::targets::{BuiltinCastPolicyId, BuiltinCastTarget};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -32,7 +31,7 @@ use crate::compiler_frontend::hir::reactivity::{
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::{
-    location, materialize_runtime_template_handoff_for_test, register_local, setup_builder,
+    location, register_local, runtime_template_expression, setup_builder,
 };
 use crate::compiler_frontend::hir::tests::symbol;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -56,26 +55,6 @@ fn string_expr(
         location,
         ValueMode::ImmutableOwned,
     )
-}
-
-fn runtime_template_expression(
-    location: crate::compiler_frontend::ast::ast_nodes::SourceLocation,
-    content: Vec<Expression>,
-    string_table: &StringTable,
-) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-
-    for expression in content {
-        template.content.add(expression);
-    }
-
-    let mut store = TemplateIrStore::new();
-    template.kind = TemplateType::StringFunction;
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
-
-    Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn find_format_float_statements(
@@ -384,17 +363,18 @@ fn reactive_float_template_subscription_keeps_lazy_formatter_expression() {
         type_id: builtin_type_ids::FLOAT,
         location: loc.clone(),
     };
-    let mut template = Template::empty();
-    template.location = loc.clone();
-    template.content.add_reactive_subscription(
-        value_ref,
-        TemplateSegmentOrigin::Head,
-        subscription,
-    );
-    let mut store = TemplateIrStore::new();
-    template.kind = TemplateType::StringFunction;
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, &string_table);
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
+            children: vec![OwnedRuntimeTemplateNode::DynamicExpression {
+                expression: Box::new(value_ref),
+                reactive_subscription: Some(subscription),
+                location: loc.clone(),
+            }],
+            location: loc.clone(),
+        }),
+        location: loc.clone(),
+    };
 
     let mut builder = setup_builder(&mut string_table);
     register_local(

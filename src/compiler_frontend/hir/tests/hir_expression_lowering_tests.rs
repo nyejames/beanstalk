@@ -18,21 +18,16 @@ use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry
 use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
-use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::{
-    install_same_store_control_flow_body_refs, materialize_body_content_ref,
-    materialize_text_aggregate_wrapper_ref,
-};
 use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, TemplateContent, TemplateSegmentOrigin,
+    ReactiveSubscription, SlotKey, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopControlKind, TemplateLoopHeader,
+    TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrStore, finalized_template_tir_id};
 use crate::compiler_frontend::ast::templates::{
-    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
+    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateBranch, OwnedRuntimeTemplateHandoff,
+    OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
@@ -145,115 +140,130 @@ fn field_symbol(
     parent.append(string_table.intern(field_name))
 }
 
-fn runtime_template_expression(
+/// Builds the neutral render node used by HIR expression fixtures.
+///
+/// WHAT: maps literal strings to `Text`, maps other expressions to
+///       `DynamicExpression`, and preserves their source locations.
+/// WHY: HIR tests should construct the owned AST/HIR boundary they consume.
+fn expressions_to_owned_render_node(
+    expressions: &[Expression],
+    string_table: &StringTable,
+    location: &SourceLocation,
+) -> OwnedRuntimeTemplateNode {
+    let children: Vec<OwnedRuntimeTemplateNode> = expressions
+        .iter()
+        .map(|expression| expression_to_owned_node(expression, string_table))
+        .collect();
+
+    OwnedRuntimeTemplateNode::Sequence {
+        children,
+        location: location.to_owned(),
+    }
+}
+
+fn expression_to_owned_node(
+    expression: &Expression,
+    string_table: &StringTable,
+) -> OwnedRuntimeTemplateNode {
+    match &expression.kind {
+        ExpressionKind::StringSlice(text) => {
+            let byte_len = string_table.resolve(*text).len() as u32;
+            OwnedRuntimeTemplateNode::Text {
+                text: *text,
+                byte_len,
+                reactive_subscription: None,
+                location: expression.location.to_owned(),
+            }
+        }
+        _ => OwnedRuntimeTemplateNode::DynamicExpression {
+            expression: Box::new(expression.clone()),
+            reactive_subscription: None,
+            location: expression.location.to_owned(),
+        },
+    }
+}
+
+/// Builds the aggregate-wrapper node for a loop's owning head wrapper.
+///
+/// WHAT: a `Sequence` of prefix `Text`, `AggregateOutput`, suffix `Text`.
+/// WHY: keeping this boundary shape local makes the aggregate splice explicit.
+fn text_aggregate_wrapper_node(
+    prefix: StringId,
+    suffix: StringId,
+    string_table: &StringTable,
+    location: &SourceLocation,
+) -> OwnedRuntimeTemplateNode {
+    let prefix_len = string_table.resolve(prefix).len() as u32;
+    let suffix_len = string_table.resolve(suffix).len() as u32;
+
+    OwnedRuntimeTemplateNode::Sequence {
+        children: vec![
+            OwnedRuntimeTemplateNode::Text {
+                text: prefix,
+                byte_len: prefix_len,
+                reactive_subscription: None,
+                location: location.to_owned(),
+            },
+            OwnedRuntimeTemplateNode::AggregateOutput {
+                location: location.to_owned(),
+            },
+            OwnedRuntimeTemplateNode::Text {
+                text: suffix,
+                byte_len: suffix_len,
+                reactive_subscription: None,
+                location: location.to_owned(),
+            },
+        ],
+        location: location.to_owned(),
+    }
+}
+
+pub(crate) fn runtime_template_expression(
     location: SourceLocation,
     content: Vec<Expression>,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-
-    for expr in content {
-        template.content.add(expr);
-    }
-
-    let mut store = TemplateIrStore::new();
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+    let body = expressions_to_owned_render_node(&content, string_table, &location);
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(body),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
-fn runtime_template_handoff_expression(
-    location: SourceLocation,
-    content: Vec<Expression>,
-    string_table: &StringTable,
-) -> Expression {
-    runtime_template_expression(location, content, string_table)
-}
-
-pub(crate) fn materialize_runtime_template_handoff_for_test(
-    template: &mut Template,
-    store: &mut TemplateIrStore,
-    string_table: &StringTable,
-) -> OwnedRuntimeTemplateHandoff {
-    // Runtime templates now reach HIR exclusively through the AST-owned
-    // handoff. Unresolved slot placeholders materialize as no-output `Slot`
-    // nodes; escaped `$insert(...)` helpers are rejected by materialization.
-    install_same_store_control_flow_body_refs(template, store, string_table)
-        .expect("test runtime-template body roots should materialize");
-    let template_id = finalized_template_tir_id(template, store, string_table)
-        .expect("test runtime template should materialize to TIR");
-
-    store
-        .owned_runtime_template_handoff_for_template(template_id)
-        .expect("test runtime template should materialize an owned handoff")
-        .expect("test runtime template should have an owned handoff")
-}
-
-fn install_control_flow_body_refs_for_test(
-    template: &mut Template,
-    store: &mut TemplateIrStore,
-    string_table: &StringTable,
-) {
-    install_same_store_control_flow_body_refs(template, store, string_table)
-        .expect("test control-flow body roots should materialize");
-}
-
-fn template_content_from_expressions(expressions: Vec<Expression>) -> TemplateContent {
-    let mut content = TemplateContent::default();
-    for expression in expressions {
-        content.add(expression);
-    }
-
-    content
-}
-
 fn runtime_template_bool_if_expression(
     condition: Expression,
-    then_content: TemplateContent,
-    else_content: Option<TemplateContent>,
+    then_content: Vec<Expression>,
+    else_content: Option<Vec<Expression>>,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let mut store = TemplateIrStore::new();
-    let then_body_ref =
-        materialize_body_content_ref(&then_content, location.clone(), &mut store, string_table)
-            .expect("test branch body should materialize");
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: Some(then_body_ref),
-                selector: TemplateBranchSelector::Bool(condition),
-                location: location.clone(),
-            }],
-            fallback: else_content.map(|content| {
-                let body_ref = materialize_body_content_ref(
-                    &content,
-                    location.clone(),
-                    &mut store,
-                    string_table,
-                )
-                .expect("test fallback body should materialize");
-                TemplateFallbackBranch {
-                    body_tir_reference: Some(body_ref),
-                    location: location.clone(),
-                }
-            }),
-            location,
-        },
-    )));
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+    let then_body = expressions_to_owned_render_node(&then_content, string_table, &location);
+    let fallback = else_content.map(|content| {
+        Box::new(expressions_to_owned_render_node(
+            &content,
+            string_table,
+            &location,
+        ))
+    });
+
+    let body = OwnedRuntimeTemplateNode::BranchChain {
+        branches: vec![OwnedRuntimeTemplateBranch {
+            selector: TemplateBranchSelector::Bool(condition),
+            body: then_body,
+            location: location.clone(),
+        }],
+        fallback,
+        location: location.clone(),
+    };
+
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(body),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
@@ -267,54 +277,44 @@ fn runtime_template_option_capture_expression(
     capture_name: crate::compiler_frontend::symbols::string_interning::StringId,
     capture_path: InternedPath,
     inner_type_id: TypeId,
-    then_content: TemplateContent,
-    else_content: Option<TemplateContent>,
+    then_content: Vec<Expression>,
+    else_content: Option<Vec<Expression>>,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let mut store = TemplateIrStore::new();
-    let then_body_ref =
-        materialize_body_content_ref(&then_content, location.clone(), &mut store, string_table)
-            .expect("test branch body should materialize");
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: Some(then_body_ref),
-                selector: TemplateBranchSelector::OptionPresentCapture {
-                    scrutinee,
-                    pattern: Box::new(MatchPattern::OptionPresentCapture {
-                        name: capture_name,
-                        binding_path: capture_path,
-                        inner_type_id,
-                        location: location.clone(),
-                        binding_location: location.clone(),
-                    }),
-                },
-                location: location.clone(),
-            }],
-            fallback: else_content.map(|content| {
-                let body_ref = materialize_body_content_ref(
-                    &content,
-                    location.clone(),
-                    &mut store,
-                    string_table,
-                )
-                .expect("test fallback body should materialize");
-                TemplateFallbackBranch {
-                    body_tir_reference: Some(body_ref),
+    let then_body = expressions_to_owned_render_node(&then_content, string_table, &location);
+    let fallback = else_content.map(|content| {
+        Box::new(expressions_to_owned_render_node(
+            &content,
+            string_table,
+            &location,
+        ))
+    });
+
+    let body = OwnedRuntimeTemplateNode::BranchChain {
+        branches: vec![OwnedRuntimeTemplateBranch {
+            selector: TemplateBranchSelector::OptionPresentCapture {
+                scrutinee,
+                pattern: Box::new(MatchPattern::OptionPresentCapture {
+                    name: capture_name,
+                    binding_path: capture_path,
+                    inner_type_id,
                     location: location.clone(),
-                }
-            }),
-            location,
-        },
-    )));
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+                    binding_location: location.clone(),
+                }),
+            },
+            body: then_body,
+            location: location.clone(),
+        }],
+        fallback,
+        location: location.clone(),
+    };
+
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(body),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
@@ -322,42 +322,31 @@ fn runtime_template_option_capture_expression(
 fn runtime_template_range_loop_expression(
     bindings: LoopBindings,
     range: RangeLoopSpec,
-    body_content: TemplateContent,
+    body_content: Vec<Expression>,
     aggregate_prefix: StringId,
     aggregate_suffix: StringId,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let mut store = TemplateIrStore::new();
-    let body_tir_reference =
-        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
-            .expect("test loop body should materialize");
-    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
-        Some(aggregate_prefix),
-        Some(aggregate_suffix),
-        location.clone(),
-        &mut store,
-        string_table,
-    );
-    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-        TemplateLoopControlFlow {
-            body_tir_reference: Some(body_tir_reference),
-            header: TemplateLoopHeader::Range {
-                bindings: Box::new(bindings),
-                range: Box::new(range),
-            },
-            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
-            #[cfg(test)]
-            location,
+    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let aggregate_wrapper =
+        text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
+
+    let node = OwnedRuntimeTemplateNode::Loop {
+        header: TemplateLoopHeader::Range {
+            bindings: Box::new(bindings),
+            range: Box::new(range),
         },
-    )));
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+        body: Box::new(body),
+        aggregate_wrapper: Some(Box::new(aggregate_wrapper)),
+        location: location.clone(),
+    };
+
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(node),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
@@ -365,83 +354,61 @@ fn runtime_template_range_loop_expression(
 fn runtime_template_collection_loop_expression(
     bindings: LoopBindings,
     iterable: Expression,
-    body_content: TemplateContent,
+    body_content: Vec<Expression>,
     aggregate_prefix: StringId,
     aggregate_suffix: StringId,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let mut store = TemplateIrStore::new();
-    let body_tir_reference =
-        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
-            .expect("test loop body should materialize");
-    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
-        Some(aggregate_prefix),
-        Some(aggregate_suffix),
-        location.clone(),
-        &mut store,
-        string_table,
-    );
-    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-        TemplateLoopControlFlow {
-            body_tir_reference: Some(body_tir_reference),
-            header: TemplateLoopHeader::Collection {
-                bindings: Box::new(bindings),
-                iterable: Box::new(iterable),
-            },
-            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
-            #[cfg(test)]
-            location,
+    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let aggregate_wrapper =
+        text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
+
+    let node = OwnedRuntimeTemplateNode::Loop {
+        header: TemplateLoopHeader::Collection {
+            bindings: Box::new(bindings),
+            iterable: Box::new(iterable),
         },
-    )));
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+        body: Box::new(body),
+        aggregate_wrapper: Some(Box::new(aggregate_wrapper)),
+        location: location.clone(),
+    };
+
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(node),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
 
 fn runtime_template_conditional_loop_expression(
     condition: Expression,
-    body_content: TemplateContent,
+    body_content: Vec<Expression>,
     aggregate_prefix: StringId,
     aggregate_suffix: StringId,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let mut store = TemplateIrStore::new();
-    let body_tir_reference =
-        materialize_body_content_ref(&body_content, location.clone(), &mut store, string_table)
-            .expect("test loop body should materialize");
-    let aggregate_wrapper_tir_reference = materialize_text_aggregate_wrapper_ref(
-        Some(aggregate_prefix),
-        Some(aggregate_suffix),
-        location.clone(),
-        &mut store,
-        string_table,
-    );
-    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-        TemplateLoopControlFlow {
-            body_tir_reference: Some(body_tir_reference),
-            header: TemplateLoopHeader::Conditional {
-                condition: Box::new(condition),
-            },
-            aggregate_wrapper_tir_reference: Some(aggregate_wrapper_tir_reference),
-            #[cfg(test)]
-            location,
+    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let aggregate_wrapper =
+        text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
+
+    let node = OwnedRuntimeTemplateNode::Loop {
+        header: TemplateLoopHeader::Conditional {
+            condition: Box::new(condition),
         },
-    )));
-    install_control_flow_body_refs_for_test(&mut template, &mut store, string_table);
-    let handoff =
-        materialize_runtime_template_handoff_for_test(&mut template, &mut store, string_table);
+        body: Box::new(body),
+        aggregate_wrapper: Some(Box::new(aggregate_wrapper)),
+        location: location.clone(),
+    };
+
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(node),
+        location: location.clone(),
+    };
 
     Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned)
 }
@@ -523,23 +490,13 @@ fn runtime_template_slot_placeholder_materializes_as_no_output_owned_node() {
 #[test]
 fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
     let mut string_table = StringTable::new();
-    let text = string_table.intern("content");
     let body_slot = string_table.intern("body");
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
     let mut helper = Template::empty();
     helper.location = location.clone();
-    helper.kind = crate::compiler_frontend::ast::templates::template::TemplateType::SlotInsert(
-        SlotKey::named(body_slot),
-    );
-    helper.content.add(Expression::string_slice(
-        text,
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    ));
-    let mut store = TemplateIrStore::new();
-    install_control_flow_body_refs_for_test(&mut helper, &mut store, builder.string_table);
+    helper.kind = TemplateType::SlotInsert(SlotKey::named(body_slot));
 
     let err = builder
         .lower_expression(&Expression::template(helper, ValueMode::ImmutableOwned))
@@ -561,11 +518,7 @@ fn escaped_slot_definition_helpers_fail_when_they_reach_hir_runtime_lowering() {
 
     let mut helper = Template::empty();
     helper.location = location.clone();
-    helper.kind = crate::compiler_frontend::ast::templates::template::TemplateType::SlotDefinition(
-        SlotKey::named(body_slot),
-    );
-    let mut store = TemplateIrStore::new();
-    install_control_flow_body_refs_for_test(&mut helper, &mut store, builder.string_table);
+    helper.kind = TemplateType::SlotDefinition(SlotKey::named(body_slot));
 
     let err = builder
         .lower_expression(&Expression::template(helper, ValueMode::ImmutableOwned))
@@ -582,17 +535,10 @@ fn escaped_slot_definition_helpers_fail_when_they_reach_hir_runtime_lowering() {
 fn runtime_template_without_handoff_reports_compiler_bug() {
     let mut string_table = StringTable::new();
     let location = location(2);
-    let hello = string_table.intern("hello");
     let mut builder = setup_builder(&mut string_table);
     let mut template = Template::empty();
     template.location = location.clone();
-    template.content.add(Expression::string_slice(
-        hello,
-        location.clone(),
-        ValueMode::ImmutableOwned,
-    ));
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.kind = TemplateType::StringFunction;
 
     let err = builder
         .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
@@ -610,12 +556,8 @@ fn top_level_loop_control_handoff_reports_compiler_bug() {
     let mut string_table = StringTable::new();
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: template.kind.clone(),
+        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::LoopControl {
             kind: TemplateLoopControlKind::Break,
             location: location.clone(),
@@ -1687,7 +1629,7 @@ fn runtime_template_handoff_expression_lowers_inline_to_accumulator() {
     let location = location(10);
     let mut builder = setup_builder(&mut string_table);
 
-    let expr = runtime_template_handoff_expression(
+    let expr = runtime_template_expression(
         location.clone(),
         vec![Expression::string_slice(
             hello,
@@ -1725,7 +1667,7 @@ fn runtime_template_handoff_expression_flattens_nested_linear_handoff() {
     let after = string_table.intern(" after");
     let location = location(10);
 
-    let inner_template = runtime_template_handoff_expression(
+    let inner_template = runtime_template_expression(
         location.clone(),
         vec![Expression::string_slice(
             inner,
@@ -1734,7 +1676,7 @@ fn runtime_template_handoff_expression_flattens_nested_linear_handoff() {
         )],
         &string_table,
     );
-    let outer_template = runtime_template_handoff_expression(
+    let outer_template = runtime_template_expression(
         location.clone(),
         vec![
             Expression::string_slice(before, location.clone(), ValueMode::ImmutableOwned),
@@ -1834,22 +1776,18 @@ fn reactive_linear_template_keeps_subscription_chunks_lazy() {
         type_id: builtin_type_ids::INT,
         location: location.clone(),
     };
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.content.add_reactive_subscription(
-        count_expression,
-        TemplateSegmentOrigin::Head,
-        subscription,
-    );
-    let mut store = TemplateIrStore::new();
-    install_control_flow_body_refs_for_test(&mut template, &mut store, builder.string_table);
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-    let handoff = materialize_runtime_template_handoff_for_test(
-        &mut template,
-        &mut store,
-        builder.string_table,
-    );
+    let handoff = OwnedRuntimeTemplateHandoff {
+        kind: TemplateType::StringFunction,
+        body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
+            children: vec![OwnedRuntimeTemplateNode::DynamicExpression {
+                expression: Box::new(count_expression),
+                reactive_subscription: Some(subscription),
+                location: location.clone(),
+            }],
+            location: location.clone(),
+        }),
+        location: location.clone(),
+    };
     let expression = Expression::runtime_template_handoff(handoff, ValueMode::ImmutableOwned);
 
     let lowered = builder
@@ -1945,16 +1883,16 @@ fn runtime_template_control_flow_bool_if_lowers_inline_without_helper_call() {
         location.clone(),
         ValueMode::ImmutableOwned,
     );
-    let then_content = template_content_from_expressions(vec![Expression::string_slice(
+    let then_content = vec![Expression::string_slice(
         shown,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
-    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+    )];
+    let else_content = vec![Expression::string_slice(
         hidden,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let expr = runtime_template_bool_if_expression(
         condition,
         then_content,
@@ -2061,12 +1999,12 @@ fn runtime_template_control_flow_bool_if_branch_preserves_fallible_propagation_c
         &mut builder.type_environment,
         location.clone(),
     );
-    let then_content = template_content_from_expressions(vec![propagated_call]);
-    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+    let then_content = vec![propagated_call];
+    let else_content = vec![Expression::string_slice(
         fallback,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let expr = runtime_template_bool_if_expression(
         condition,
         then_content,
@@ -2138,11 +2076,11 @@ fn runtime_template_control_flow_bool_if_without_else_appends_nothing_on_false_p
         location.clone(),
         ValueMode::ImmutableOwned,
     );
-    let then_content = template_content_from_expressions(vec![Expression::string_slice(
+    let then_content = vec![Expression::string_slice(
         shown,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let expr = runtime_template_bool_if_expression(
         condition,
         then_content,
@@ -2210,11 +2148,11 @@ fn runtime_template_control_flow_bool_if_coerces_dynamic_branch_chunks() {
         location.clone(),
         ValueMode::ImmutableOwned,
     );
-    let then_content = template_content_from_expressions(vec![Expression::int(
+    let then_content = vec![Expression::int(
         5,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let expr = runtime_template_bool_if_expression(
         condition,
         then_content,
@@ -2273,17 +2211,17 @@ fn runtime_template_control_flow_option_capture_lowers_match_and_payload_binding
         location.clone(),
         ValueMode::ImmutableOwned,
     );
-    let then_content = template_content_from_expressions(vec![reference_expr(
+    let then_content = vec![reference_expr(
         capture_path.clone(),
         builtin_type_ids::STRING,
         location.clone(),
         ValueMode::ImmutableReference,
-    )]);
-    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+    )];
+    let else_content = vec![Expression::string_slice(
         hidden,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let expr = runtime_template_option_capture_expression(
         scrutinee,
         capture_name,
@@ -2396,12 +2334,12 @@ fn runtime_template_control_flow_option_capture_without_else_appends_nothing_whe
         location.clone(),
         ValueMode::ImmutableOwned,
     );
-    let then_content = template_content_from_expressions(vec![reference_expr(
+    let then_content = vec![reference_expr(
         capture_path.clone(),
         builtin_type_ids::STRING,
         location.clone(),
         ValueMode::ImmutableReference,
-    )]);
+    )];
     let expr = runtime_template_option_capture_expression(
         scrutinee,
         capture_name,
@@ -2461,12 +2399,12 @@ fn runtime_template_control_flow_loop_range_lowers_inline_and_wraps_aggregate_wh
         builtin_type_ids::INT,
         location.clone(),
     );
-    let body_content = template_content_from_expressions(vec![reference_expr(
+    let body_content = vec![reference_expr(
         item_path,
         builtin_type_ids::INT,
         location.clone(),
         ValueMode::ImmutableReference,
-    )]);
+    )];
     let range = RangeLoopSpec {
         start: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
         end: reference_expr(
@@ -2542,12 +2480,12 @@ fn runtime_template_control_flow_loop_collection_materializes_iterable_and_lengt
         collection_type,
         location.clone(),
     );
-    let body_content = template_content_from_expressions(vec![reference_expr(
+    let body_content = vec![reference_expr(
         item_path,
         builtin_type_ids::INT,
         location.clone(),
         ValueMode::ImmutableReference,
-    )]);
+    )];
     let iterable = reference_expr(
         items_path,
         collection_type,
@@ -2613,11 +2551,11 @@ fn runtime_template_control_flow_conditional_loop_rechecks_condition_and_wraps_w
         builtin_type_ids::BOOL,
         location.clone(),
     );
-    let body_content = template_content_from_expressions(vec![Expression::string_slice(
+    let body_content = vec![Expression::string_slice(
         tick,
         location.clone(),
         ValueMode::ImmutableOwned,
-    )]);
+    )];
     let condition = reference_expr(
         keep_going_path,
         builtin_type_ids::BOOL,
@@ -2667,7 +2605,7 @@ fn runtime_template_control_flow_loop_empty_body_does_not_mark_iteration_emitted
         builtin_type_ids::INT,
         location.clone(),
     );
-    let body_content = TemplateContent::default();
+    let body_content: Vec<Expression> = vec![];
     let range = RangeLoopSpec {
         start: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
         end: reference_expr(
