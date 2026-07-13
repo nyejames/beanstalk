@@ -2330,6 +2330,21 @@ fn imported_module_root_prepare_output_has_imported_root_role() {
     assert!(output.file_imports.is_empty());
 }
 
+#[test]
+fn entry_hash_root_file_is_assigned_active_module_root_role() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#page.bst");
+    let entry_file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "greeting #= \"hello\"\n",
+        &file_path,
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_role, FileRole::ActiveModuleRoot);
+}
+
 // ------------------------------
 //  Export block parsing tests
 // ------------------------------

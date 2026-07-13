@@ -8102,3 +8102,13 @@ tags = ["integration", "diagnostics", "imports", "facades"]
 id = "legacy_inline_export_rejected"
 path = "legacy_inline_export_rejected"
 tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "beandown_same_directory_root_constant"
+path = "beandown_same_directory_root_constant"
+tags = ["integration", "beandown", "html", "imports", "module-roots"]
+
+[[case]]
+id = "hash_root_config_namesake_is_module_root"
+path = "hash_root_config_namesake_is_module_root"
+tags = ["integration", "config", "html", "module-roots"]

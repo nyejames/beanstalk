@@ -1222,6 +1222,47 @@ fn concrete_file_import_inside_module_root_is_accepted() {
 }
 
 #[test]
+fn nearest_root_parent_walk_chooses_nested_module_root_over_ancestor() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let entry_root = temp_dir.path().join("src");
+
+    fs::create_dir_all(entry_root.join("outer/inner/deep")).unwrap();
+    fs::write(entry_root.join("outer/#outer.bst"), b"").unwrap();
+    fs::write(entry_root.join("outer/inner/#inner.bst"), b"").unwrap();
+    fs::write(entry_root.join("outer/inner/deep/page.bst"), b"").unwrap();
+
+    let outer_root_file = fs::canonicalize(entry_root.join("outer/#outer.bst"))
+        .expect("outer root file should canonicalize");
+    let inner_root_file = fs::canonicalize(entry_root.join("outer/inner/#inner.bst"))
+        .expect("inner root file should canonicalize");
+    let outer_root_dir = outer_root_file
+        .parent()
+        .expect("outer root file should have a parent")
+        .to_path_buf();
+    let inner_root_dir = inner_root_file
+        .parent()
+        .expect("inner root file should have a parent")
+        .to_path_buf();
+
+    let table = ModuleRootTable::from_records(vec![
+        ModuleRootRecord::new(outer_root_dir, outer_root_file),
+        ModuleRootRecord::new(inner_root_dir.clone(), inner_root_file),
+    ]);
+
+    let deep_file = fs::canonicalize(entry_root.join("outer/inner/deep/page.bst"))
+        .expect("deep file should canonicalize");
+
+    let resolved = table
+        .module_root_for_file(&deep_file)
+        .expect("deep file should resolve to a module root");
+
+    assert_eq!(
+        resolved, inner_root_dir,
+        "nearest-root parent-walk should choose the nested module root over its ancestor"
+    );
+}
+
+#[test]
 fn import_case_sensitive_symbol_mismatch_rejected() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();

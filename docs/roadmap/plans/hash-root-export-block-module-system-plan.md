@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 9 documentation reconciliation is complete and ready for checkpoint. Next is the whole-plan test and benchmark coverage audit.
-LAST_ACCEPTED_COMMIT: `852ef451f` (`test: assert absent build artifacts`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `852ef451f`; Phase 9 documentation source, generated routes and this plan are modified. No unrelated changes are present.
+CURRENT_SLICE: The reviewed test-coverage slice is ready to checkpoint. Next is the final benchmark fixture.
+LAST_ACCEPTED_COMMIT: `74ce04813` (`docs: align hash-root module contracts`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `74ce04813`; the reviewed test-coverage slice and this plan are ready to commit. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -18,8 +18,9 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - this plan
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
-- docs: language, compiler-design, project-structure, library, benchmark, testing and progress documentation now use generic module roots, strict `export:` blocks, active/imported root roles and `ModuleRootActivity`. Generated routes were rebuilt from source.
-- code: implementation is complete through the artifact-absence contract. Remaining work is the whole-plan test/benchmark coverage audit and final review.
+- docs: Phase 9 is committed at `74ce04813`. Do not edit official docs during the worker slice.
+- tests: the accepted slice adds `#config.bst` as an ordinary active root, Beandown same-directory root constants through the real build, nearest-root parent lookup and explicit `ActiveModuleRoot` assignment. Existing cases own every other matrix contract.
+- benchmarks: a later slice must add one fixture covering skipped entry-root directories, mixed API/output roots and a cosmetic source-library root. Existing parallelism fixtures cover the other matrix shapes.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -191,6 +192,7 @@ VALIDATION_STATE:
 - Phase 10 benchmark identity: Ollama added format-v5 default/fixed Rayon thread identity to local history, exact-identity comparison and report selection, visible fixed-thread output and default-only tracked summaries. A separate Ollama final review fixed non-Unicode environment handling and consolidated summary policy. Parent validation passed formatting, the 447-test xtask suite, the default frontend run with a case-set-changed +4 ms comparison, fixed 1/2/4-thread runs at approximately 123/82/59 ms, `just bench-check` at -3 ms with no slower cases, `just bench-report` and full `just validate` with 3336 unit tests and 1753 integration cases. No benchmark history or tracked summary changed.
 - Phase 10 artifact contract: Ollama added success-only `artifacts_must_not_exist` integration expectations, exact normalized path handling and `NotBuilt` exclusion. The API-only fixture now forbids `api/index.html`, while the configured multiple-library fixture uses both `#alpha.bst` and `#mod.bst`. A separate Ollama final review consolidated parsing and moved new behavior coverage through the runner's success boundary. Parent formatting and 48 focused runner tests passed; full `just validate` passed cross-target Clippy, 3342 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms with no slower cases.
 - Phase 9 documentation: the parent reconciled language, compiler-design, project-structure, library, benchmark, testing and progress documentation with the landed implementation. Two Ollama read-only reviews found stale facade/entry terminology and misleading fixture labels; every finding was corrected. `cargo run --quiet -- build docs --release` rebuilt 72 files successfully after the final correction and `git diff --check` passed.
+- Coverage tests: Ollama added two integration cases and two focused invariants for the four audited gaps. A separate Ollama review found no correctness, redundancy, assertion or scope issue. Parent `just validate` passed cross-target Clippy, 3344 unit tests, 1755 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 
 DOCS_IMPACT:
 - progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
@@ -198,11 +200,11 @@ DOCS_IMPACT:
 - generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit the reviewed Phase 9 documentation slice, then audit every unchecked test and benchmark matrix item against current coverage.
-DELEGATION_DECISION: parent-direct for the Phase 9 documentation because the orchestrator contract keeps official docs parent-owned. Two Ollama read-only review passes were completed and all findings were corrected.
-NEXT_WORKER_ORDER: parent coverage audit, then Ollama for any implementation gap found
+- Commit the reviewed coverage tests, then launch the final benchmark-fixture slice through Ollama.
+DELEGATION_DECISION: parent checkpoint, then Ollama implementation worker for the bounded benchmark fixture.
+NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean Ollama availability blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: checkpoint Phase 9, then map the remaining test and benchmark checklist items to exact coverage.
+NEXT_RESUME_ACTION: checkpoint the coverage tests and refresh this state at the new commit.
 
 ---
 
@@ -1108,33 +1110,33 @@ This phase proves the refactor achieved its performance and simplification goals
 
 Integration cases under `tests/cases/` should cover:
 
-- [ ] arbitrary hash root file, e.g. `#home.bst`;
-- [ ] same behavior for existing `#page.bst` and `#mod.bst` as cosmetic names;
-- [ ] duplicate hash files in one directory;
-- [ ] `config.bst` accepted;
-- [ ] alternate filenames receive no config-specific handling;
-- [ ] direct hash-file import rejected;
-- [ ] direct `config.bst` / `config` import rejected;
-- [ ] module directory import resolves through `export:`;
-- [ ] module with no `export:` exports nothing;
+- [x] arbitrary hash root file, e.g. `#home.bst`;
+- [x] same behavior for existing `#page.bst` and `#mod.bst` as cosmetic names;
+- [x] duplicate hash files in one directory;
+- [x] `config.bst` accepted;
+- [x] alternate filenames receive no config-specific handling;
+- [x] direct hash-file import rejected;
+- [x] direct `config.bst` / `config` import rejected;
+- [x] module directory import resolves through `export:`;
+- [x] module with no `export:` exports nothing;
 - [x] API-only module produces no HTML artifact;
-- [ ] module with top-level template produces HTML artifact;
-- [ ] imported module root with top-level template does not execute in importer;
-- [ ] old inline `export` syntax rejected;
-- [ ] conformance inside `export:` rejected;
-- [ ] public API private type leakage still rejected;
+- [x] module with top-level template produces HTML artifact;
+- [x] imported module root with top-level template does not execute in importer;
+- [x] old inline `export` syntax rejected;
+- [x] conformance inside `export:` rejected;
+- [x] public API private type leakage still rejected;
 - [x] source-library root can use any single hash root filename;
-- [ ] Beandown same-directory root constants still work through root export/scope rules if currently supported.
+- [x] Beandown same-directory root constants still work through root export/scope rules if currently supported.
 
 Unit/focused tests should cover:
 
-- [ ] source tree index skip policy;
-- [ ] source tree index duplicate detection;
-- [ ] source tree index single discovery-run counter;
-- [ ] parent-walk nearest-root lookup;
-- [ ] generic hash-file import rejection;
-- [ ] active/imported module root role assignment;
-- [ ] export block parser invalid item cases.
+- [x] source tree index skip policy;
+- [x] source tree index duplicate detection;
+- [x] source tree index single discovery-run counter;
+- [x] parent-walk nearest-root lookup;
+- [x] generic hash-file import rejection;
+- [x] active/imported module root role assignment;
+- [x] export block parser invalid item cases.
 
 Benchmark fixtures should cover:
 
