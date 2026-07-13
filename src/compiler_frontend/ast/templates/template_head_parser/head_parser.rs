@@ -24,6 +24,7 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBodyParseMode, TemplateControlFlowValidationMode,
 };
@@ -65,9 +66,8 @@ pub(crate) struct ParsedTemplateHead {
 pub(crate) struct TemplateHeadParseRequest<'a, 'types> {
     pub(crate) context: &'a ScopeContext,
     pub(crate) type_interner: &'a mut AstTypeInterner<'types>,
-    pub(crate) template: &'a mut Template,
+    pub(crate) build_state: &'a mut TemplateBuildState,
     pub(crate) construction_context: &'a mut TemplateConstructionContext,
-    pub(crate) foldable: &'a mut bool,
     pub(crate) control_flow_validation: TemplateControlFlowValidationMode,
     pub(crate) string_table: &'a mut StringTable,
 }
@@ -254,14 +254,13 @@ pub fn parse_template_head(
     let TemplateHeadParseRequest {
         context,
         type_interner,
-        template,
+        build_state,
         construction_context,
-        foldable,
         control_flow_validation,
         string_table,
     } = request;
 
-    template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
+    build_state.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     // Each meaningful head item must be separated with a comma before another
     // item can start. Naming the state keeps suffix and body-boundary handling
@@ -414,7 +413,6 @@ pub fn parse_template_head(
                     context,
                     type_interner.environment(),
                     construction_context,
-                    foldable,
                     string_table,
                 )?;
                 defer_comma_advance = true;
@@ -459,7 +457,6 @@ pub fn parse_template_head(
                         &inserted_template,
                         context,
                         construction_context,
-                        foldable,
                         &value_location,
                     )?;
                 } else {
@@ -488,7 +485,6 @@ pub fn parse_template_head(
                             context,
                             type_environment: type_interner.environment(),
                             construction_context,
-                            foldable,
                         },
                         &value_location,
                         string_table,
@@ -527,7 +523,6 @@ pub fn parse_template_head(
                             context,
                             type_environment: type_interner.environment(),
                             construction_context,
-                            foldable,
                         },
                         &value_location,
                         string_table,
@@ -572,7 +567,6 @@ pub fn parse_template_head(
                         context,
                         type_environment: type_interner.environment(),
                         construction_context,
-                        foldable,
                     },
                     &value_location,
                     string_table,
@@ -631,7 +625,6 @@ pub fn parse_template_head(
                         context,
                         type_environment: type_interner.environment(),
                         construction_context,
-                        foldable,
                     },
                     &value_location,
                     string_table,
@@ -659,7 +652,7 @@ pub fn parse_template_head(
                 let handled_slot_insert = maybe_parse_slot_or_insert_helper_directive(
                     &spec.kind,
                     token_stream,
-                    template,
+                    build_state,
                     string_table,
                 )?;
 
@@ -670,7 +663,7 @@ pub fn parse_template_head(
                         token_stream,
                         context,
                         type_interner,
-                        template,
+                        build_state,
                         &directive_name,
                         spec,
                         string_table,
@@ -752,7 +745,7 @@ fn parse_style_directive_from_spec(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     directive_name: &str,
     spec: &StyleDirectiveSpec,
     string_table: &mut StringTable,
@@ -762,7 +755,7 @@ fn parse_style_directive_from_spec(
             token_stream,
             context,
             type_interner,
-            template,
+            build_state,
             directive_name,
             *kind,
             string_table,
@@ -771,7 +764,7 @@ fn parse_style_directive_from_spec(
             token_stream,
             context,
             type_interner,
-            template,
+            build_state,
             directive_name,
             handler_spec,
             string_table,
@@ -782,7 +775,7 @@ fn parse_style_directive_from_spec(
         // Any explicit style directive switches the template into style-controlled
         // whitespace mode. Individual formatters can opt into shared whitespace
         // passes explicitly via `Formatter` pre/post pass profiles.
-        mark_template_body_whitespace_style_controlled(template);
+        mark_template_body_whitespace_style_controlled(build_state);
     }
 
     directive_result.map(|_| false)

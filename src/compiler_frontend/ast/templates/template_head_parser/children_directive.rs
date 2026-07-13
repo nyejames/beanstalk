@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::const_values::resolver::classify_template_fro
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateConstructionContext, TemplateWrapperReference, wrapper_reference_for_template,
 };
@@ -39,7 +39,7 @@ pub(super) fn parse_children_style_directive(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     string_table: &mut StringTable,
 ) -> ChildrenDirectiveResult<()> {
     let directive_argument = parse_required_parenthesized_expression(
@@ -142,7 +142,7 @@ pub(super) fn parse_children_style_directive(
         }
     };
 
-    template.child_wrappers.push(wrapper_reference);
+    build_state.child_wrappers.push(wrapper_reference);
     Ok(())
 }
 
@@ -167,13 +167,8 @@ fn normalize_string_child_wrapper_reference(
         string_table.resolve(value).len(),
         argument_location.clone(),
     );
-    let reference = construction_context
-        .finish(Style::default(), TemplateType::String, argument_location)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "String child wrapper parser TIR finished without a durable reference.",
-            )
-        })?;
+    let reference =
+        construction_context.finish(Style::default(), TemplateType::String, argument_location);
 
     Ok(TemplateWrapperReference::new(
         reference.root,

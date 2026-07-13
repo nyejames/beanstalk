@@ -47,21 +47,13 @@ pub(crate) enum ControlFlowBodyKind {
 ///      step. Sharing it keeps the store-owner proof and replacement logic in
 ///      one place so callers only differ in how they build the root.
 pub(crate) fn replace_control_flow_body_tir_root(
-    template: &Template,
+    builder: &TemplateParserIrBuilderState,
     store: &mut TemplateIrStore,
     body_kind: ControlFlowBodyKind,
     new_body_root: TemplateIrNodeId,
     phase: TemplateTirPhase,
-    builder: Option<&TemplateParserIrBuilderState>,
 ) -> Option<TemplateControlFlowTirReference> {
-    let control_flow_node_id = template
-        .tir_reference
-        .as_ref()
-        .filter(|reference| Arc::ptr_eq(&reference.store_owner, &store.owner()))
-        .and_then(|reference| store.control_flow_node_id_for_template(reference.root.template_id))
-        .or_else(|| builder.and_then(|builder| builder.control_flow_node_id(store)));
-
-    let control_flow_node_id = control_flow_node_id?;
+    let control_flow_node_id = builder.control_flow_node_id(store)?;
 
     if store.replace_control_flow_body_node_by_id(control_flow_node_id, body_kind, new_body_root) {
         Some(TemplateControlFlowTirReference::with_phase(
@@ -84,19 +76,11 @@ pub(crate) fn replace_control_flow_body_tir_root(
 ///      render-unit preparation. Sharing the lookup keeps the installation path
 ///      consistent with body-root replacement.
 pub(crate) fn replace_loop_aggregate_wrapper_tir_root(
-    template: &Template,
+    builder: &TemplateParserIrBuilderState,
     store: &mut TemplateIrStore,
     new_aggregate_wrapper_root: TemplateIrNodeId,
-    builder: Option<&TemplateParserIrBuilderState>,
 ) -> bool {
-    let control_flow_node_id = template
-        .tir_reference
-        .as_ref()
-        .filter(|reference| Arc::ptr_eq(&reference.store_owner, &store.owner()))
-        .and_then(|reference| store.control_flow_node_id_for_template(reference.root.template_id))
-        .or_else(|| builder.and_then(|builder| builder.control_flow_node_id(store)));
-
-    let Some(control_flow_node_id) = control_flow_node_id else {
+    let Some(control_flow_node_id) = builder.control_flow_node_id(store) else {
         return false;
     };
 

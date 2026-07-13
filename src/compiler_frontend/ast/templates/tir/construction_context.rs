@@ -317,22 +317,22 @@ impl TemplateConstructionContext {
     /// Finalizes the builder state and returns the long-lived TIR reference.
     ///
     /// WHAT: seals accumulated children under a root sequence node, stores the
-    ///       finished `TemplateIr` entry, and returns the narrow
+    ///       finished `TemplateIr` entry, and returns the required
     ///       `TemplateTirReference` (store-qualified root + store-owner token).
     /// WHY: after this call, the builder state is consumed and the caller
-    ///      stores the returned reference on `Template.tir_reference`.
+    ///      constructs the durable `Template` with the returned reference.
     pub(crate) fn finish(
         &mut self,
         style: Style,
         kind: TemplateType,
         location: SourceLocation,
-    ) -> Option<TemplateTirReference> {
+    ) -> TemplateTirReference {
         self.debug_assert_registered_store();
 
-        {
+        let template_id = {
             let mut store = self.store.borrow_mut();
-            self.builder.finish(&mut store, style, kind, location);
-        }
+            self.builder.finish(&mut store, style, kind, location)
+        };
 
         // Allocate the canonical empty overlay set through the registry so the
         // reference carries a real registry-backed ID. In this carrier-only
@@ -344,7 +344,7 @@ impl TemplateConstructionContext {
             .allocate_overlay_set(TemplateOverlaySet::empty());
 
         self.builder
-            .finalized_reference(self.store_id, overlay_set_id)
+            .finalized_reference(template_id, self.store_id, overlay_set_id)
     }
 
     /// Debug-check that the direct store handle still matches its registry ID.

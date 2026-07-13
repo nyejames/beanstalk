@@ -38,7 +38,6 @@ pub(super) fn parse_reactive_subscription(
     context: &ScopeContext,
     type_environment: &TypeEnvironment,
     construction_context: &mut TemplateConstructionContext,
-    foldable: &mut bool,
     string_table: &mut StringTable,
 ) -> ReactiveSubscriptionResult<()> {
     let subscription_location = token_stream.current_location();
@@ -123,7 +122,6 @@ pub(super) fn parse_reactive_subscription(
             context,
             type_environment,
             construction_context,
-            foldable,
         },
         &subscription_location,
         string_table,

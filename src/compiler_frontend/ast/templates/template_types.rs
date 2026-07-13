@@ -9,8 +9,8 @@
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateControlFlow;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrId, TemplateIrNodeId, TemplateIrStore,
-    TemplateIrStoreOwner, TemplateTirReference, TemplateWrapperReference,
+    MaterializedTirTemplateClassification, TemplateIrId, TemplateIrStoreOwner,
+    TemplateTirReference, TemplateWrapperReference,
 };
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -83,10 +83,17 @@ impl Clone for Template {
 
 impl Template {
     /// Creates an empty template handle with default style and no TIR identity.
+    ///
+    /// Production parser construction no longer uses this; the durable
+    /// `Template` is constructed once after authoritative TIR identity exists.
+    /// Direct test fixtures may still use it until Phase 2D completes the
+    /// non-optional reference migration.
+    #[cfg(test)]
     pub fn empty() -> Template {
         Self::build_empty()
     }
 
+    #[cfg(test)]
     fn build_empty() -> Template {
         Template {
             control_flow: None,
@@ -99,33 +106,10 @@ impl Template {
         }
     }
 
-    /// Replace the template's effective style.
+    /// Refreshes the ordinary durable kind from authoritative TIR classification.
     ///
-    /// WHAT: replaces the style field without touching TIR identity or children.
-    /// WHY: composition and formatting passes may need to override the parsed
-    ///      style after construction while preserving the structural TIR root.
-    pub(crate) fn apply_style(&mut self, style: Style) {
-        self.style = style;
-    }
-
-    /// Mutate the effective style in place.
-    ///
-    /// WHAT: passes a mutable reference to the style into the caller's closure.
-    /// WHY: lets composition passes adjust individual style fields without
-    ///      taking ownership of the current style value.
-    pub(crate) fn apply_style_updates(&mut self, mut update: impl FnMut(&mut Style)) {
-        update(&mut self.style);
-    }
-
-    /// Applies generic string/string-function classification from an already
-    /// materialized current-state TIR classification.
-    ///
-    /// WHAT: updates only ordinary template kinds; helper, slot definition, and
-    /// comment templates keep their semantic marker kinds.
-    /// WHY: template construction and later mutation sites often need several
-    /// facts from the same current-state TIR tree. Reusing one classification
-    /// avoids repeated materialization while keeping kind ownership on
-    /// `Template`.
+    /// Helper, slot-definition, and comment markers remain semantic tags and
+    /// are not replaced with the generic string/runtime classification.
     pub(crate) fn refresh_kind_from_tir_classification(
         &mut self,
         classification: &MaterializedTirTemplateClassification,
@@ -166,13 +150,6 @@ impl Template {
         self.tir_reference
             .as_ref()
             .map(|reference| reference.root.template_id)
-    }
-
-    /// Returns the root node ID of the finalized TIR template.
-    pub(crate) fn tir_root_node_id(&self, store: &TemplateIrStore) -> Option<TemplateIrNodeId> {
-        self.tir_template_id()
-            .and_then(|template_id| store.get_template(template_id))
-            .map(|template_ir| template_ir.root)
     }
 
     /// Recursively remap interned string IDs in this template's live AST state

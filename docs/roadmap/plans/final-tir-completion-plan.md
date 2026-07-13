@@ -21,69 +21,37 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2A - introduce explicit parser-local template build state and construct the durable handle only after authoritative TIR exists
-LAST_ACCEPTED_COMMIT: `90e783ebd` (`test: remove obsolete control flow content walker`)
+CURRENT_SLICE: Phase 2A accepted - commit the parser-local state checkpoint
+LAST_ACCEPTED_COMMIT: `2fed82778` (`refactor: delete detached template content bridge`)
 BRANCH: `main`
-WORKTREE: Phase 1 is accepted and ready to commit on `main` at `90e783ebd`; the combined checkpoint deletes the detached content bridge, preserves production control-flow root ownership in `tir/control_flow_roots.rs`, removes latent dead test surfaces and passes the full gate
+WORKTREE: Phase 2A is reviewed, corrected and fully validated on `main` at `2fed82778`; the accepted checkpoint is ready to commit
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
 - Phase 1 removed detached content reconstruction from production and tests. TIR references are now required by the remaining fold fixtures.
 - The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
 - HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
+- `TemplateBuildState` is the single parser-local mutable owner. Production constructs durable `Template` only after required TIR identity exists.
+- Effective TIR classification owns foldability, including reactive text side-table subscriptions. Parse-time `can_fold` and `BodyOwnerSnapshot` are deleted.
 ACCEPTANCE_CRITERIA:
 - reuse `TemplateConstructionContext` for TIR/store/registry/location ownership and add only one narrow parser-local build-state record
 - pass build state, not `&mut Template`, through head/body parsing and remove `Template::empty()` as the parser accumulator
+- make effective TIR classification own foldability, including reactive subscriptions, and delete the parse-time `can_fold` boolean
 - make construction finish return required authoritative TIR identity before constructing the durable `Template`
 - preserve parser diagnostics, source locations, formatting, slots, wrappers, control flow, folding, reactivity and the AST/HIR boundary
 VALIDATION_STATE:
-- Phase 1A passed `cargo run --quiet -- build docs --release`: 72 files.
-- Current `main` last passed full `just validate` at the completed hash-root checkpoint `cf36d5945`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28.
-- Phase 1B family 7 focused validation passed: `cargo test --quiet reactive_template_metadata -- --format terse`, 17 passed.
-- Phase 1B family 7 passed full `just validate`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 8 focused validation passed: `cargo test --quiet docs_style_data_wrapper -- --format terse`, 1 passed, and `cargo test --quiet wrapper_tests -- --format terse`, 11 passed.
-- Phase 1B family 8 passed full `just validate`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 9 focused validation passed: `cargo test --quiet create_template_node -- --format terse`, 298 passed.
-- Phase 1B family 9 passed full `just validate`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 6 focused validation passed: `cargo test --quiet doc_fragment -- --format terse`, 5 passed, and `cargo test --quiet 'template_tests::' -- --format terse`, 10 passed.
-- Phase 1B family 6 passed full `just validate`: cross-target Clippy, 3357 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 5 focused validation passed: `cargo test --quiet const_required_template_option_capture -- --format terse`, 5 passed, and `cargo test --quiet head_tests -- --format terse`, 91 passed.
-- Phase 1B family 5 passed full `just validate`: cross-target Clippy, 3357 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 3A focused validation passed: `cargo test --quiet hir_expression_lowering_tests -- --format terse`, 65 passed, `cargo test --quiet float_formatting_lowering_tests -- --format terse`, 7 passed, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 3A passed full `just validate`: cross-target Clippy, 3357 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
-- Phase 1B family 3B focused validation passed: `cargo test --quiet hir_module_lowering_tests -- --format terse`, 7 passed.
-- Phase 1B family 3B passed full `just validate`: cross-target Clippy, 3357 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
-- Phase 1B family 2 focused validation passed: `cargo test --quiet normalize_ast_tests -- --format terse`, 19 passed.
-- Phase 1B family 2 passed full `just validate`: cross-target Clippy, 3356 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 1 ms average improvement, 2 faster and 0 slower.
-- Phase 1B family 1A focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 69 passed.
-- Phase 1B family 1A passed full `just validate`: cross-target Clippy, 3351 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 8 faster and 0 slower.
-- Phase 1B family 1B focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 67 passed.
-- Phase 1B family 1B passed full `just validate`: cross-target Clippy, 3349 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
-- Phase 1B family 1C focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 65 passed, `cargo test --quiet directive_style_tests -- --format terse`, 50 passed, `cargo test --quiet create_template_node -- --format terse`, 289 passed, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 1C passed full `just validate`: cross-target Clippy, 3347 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
-- Phase 1B family 1D focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 61 passed, `cargo test --quiet create_template_node -- --format terse`, 285 passed, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 1D passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 14 faster and 0 slower.
-- Phase 1B family 1E focused validation passed: the four edited tests passed, `cargo test --quiet create_template_node -- --format terse` passed 285 tests, and `cargo test --quiet --no-run --lib` passed without warnings.
-- Phase 1B family 1E passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
-- Phase 1B family 1F focused validation passed: one const-eval registry test, five struct-field-default tests, two field-member registry tests, one expression-dispatch registry test, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 1F passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 0 slower.
-- Phase 1B family 1G focused validation passed: one const-required option-capture head test, three option-capture folding tests, one coerced-template borrow test, 91 head tests, 11 template-folding tests, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 1G passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 5 faster and 0 slower.
-- Phase 1B family 1H1 focused validation passed: both const-required loop limit tests, 91 head tests, 285 create-template tests, and `cargo test --quiet --no-run --lib` without warnings.
-- Phase 1B family 1H1 passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 1 ms average improvement, 9 faster and 0 slower.
-- Phase 1B family 1H2 focused validation passed: all 32 fold-helper callers were already parser/direct-TIR-backed, 285 create-template tests, 61 parser TIR tests and 91 head tests passed. `cargo test --no-run --lib` completed with 13 dead bridge warnings, so the checkpoint remains unaccepted until Slice 1C deletes that owner.
-- Slice 1C bridge deletion focused validation passed: 285 create-template tests, 12 body-root tests and 441 TIR tests. `cargo test --no-run --lib` now passes with five latent dead-code warning groups in expression test support, fallible-carrier test vocabulary, match-pattern test vocabulary and `DataType` test vocabulary. Phase 1 hard-grep symbols remain only in stale comments.
-- Phase 1 terminal cleanup focused validation passed: 66 HIR expression lowering tests, 19 AST normalization tests, 285 create-template tests, 441 TIR tests, 91 head tests and a warning-free lib-test build. The exact bridge-symbol and stale `template.content.atoms` greps have zero hits.
-- Separate Ollama final review found one inaccurate formatter-view comment. The parent corrected it and the review's three stale field-comment observations before the full gate.
-- Phase 1 passed full `just validate`: cross-target Clippy, 3344 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
-- Re-run the required gate after every new TIR code slice.
+- Phase 1 focused gate passed 66 HIR expression, 19 normalization, 285 create-template, 441 TIR and 91 head tests plus a warning-free lib-test build.
+- Phase 1 full `just validate` passed at `2fed82778`: cross-target Clippy, 3344 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
+- Phase 2A focused validation passed 285 create-template, 91 head, 61 parser-TIR, 17 reactive metadata, 443 TIR, 7 slot-constant, 10 builtin-directive and 23 classification tests plus a warning-free lib-test build.
+- Separate read-only Ollama final review found no blocking issue. Its two low risks were covered by slot-focused tests and the planned later durable-kind thinning.
+- Phase 2A full `just validate` passed: cross-target Clippy, 3346 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 9 faster and 0 slower.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: after the Phase 1 commit, use an Ollama implementation worker for bounded Phase 2A parser-local state, with Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: Ollama implementation and separate Ollama final review completed; parent corrections and acceptance completed
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 1 checkpoint, reload the plan and inspect the Phase 2A construction owner before delegation
+NEXT_RESUME_ACTION: commit the accepted Phase 2A checkpoint, refresh its hash and inspect the smallest coherent Phase 2B deletion slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -302,13 +270,13 @@ Separate parser-local mutable state from the durable handle and make TIR the sol
 
 #### Slice 2A — Introduce explicit parser-local state
 
-- [ ] Reuse `TemplateConstructionContext` as the TIR/store/registry/location owner.
-- [ ] Add one small parser-local `TemplateBuildState` (or equivalent) for `kind`, `style`, direct-child wrapper refs, foldability, and control-flow parse metadata.
-- [ ] Audit the parse-time `can_fold` boolean against final effective-TIR classification. Delete it if classification already owns the complete decision; otherwise keep it parser-local and document the exact non-derivable fact it carries.
-- [ ] Change head/body parser requests to receive build state instead of `&mut Template`.
-- [ ] Remove `Template::empty()` as the parser accumulator.
-- [ ] Make construction finish return a non-optional `TemplateTirReference`; missing builder output is an internal invariant.
-- [ ] Construct the durable `Template` only after the authoritative reference exists.
+- [x] Reuse `TemplateConstructionContext` as the TIR/store/registry/location owner.
+- [x] Add one small parser-local `TemplateBuildState` (or equivalent) for `kind`, `style`, direct-child wrapper refs, foldability, and control-flow parse metadata.
+- [x] Audit the parse-time `can_fold` boolean against final effective-TIR classification. Delete it if classification already owns the complete decision; otherwise keep it parser-local and document the exact non-derivable fact it carries.
+- [x] Change head/body parser requests to receive build state instead of `&mut Template`.
+- [x] Remove `Template::empty()` as the parser accumulator.
+- [x] Make construction finish return a non-optional `TemplateTirReference`; missing builder output is an internal invariant.
+- [x] Construct the durable `Template` only after the authoritative reference exists.
 
 #### Slice 2B — Remove duplicate control-flow objects
 

@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::templates::template_body_parser::{
     NestedTemplateParseOptions, TemplateBodyParseRequest, parse_template_body,
 };
 use crate::compiler_frontend::ast::templates::template_body_sentinels::TemplateBodyControlContext;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchChain, TemplateBranchSelector, TemplateControlFlow,
     TemplateControlFlowTirReference, TemplateControlFlowValidationMode, TemplateLoopControlFlow,
@@ -2467,9 +2468,7 @@ fn parse_control_flow_template_after_body_parse(
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
 
-    let mut template = Template::empty();
-    template.location = token_stream.current_location();
-    let mut can_fold = true;
+    let mut build_state = TemplateBuildState::new();
 
     let mut construction_context = TemplateConstructionContext::new(
         Rc::clone(&context.template_ir_store),
@@ -2483,9 +2482,8 @@ fn parse_control_flow_template_after_body_parse(
         TemplateHeadParseRequest {
             context: &context,
             type_interner: &mut type_interner,
-            template: &mut template,
+            build_state: &mut build_state,
             construction_context: &mut construction_context,
-            foldable: &mut can_fold,
             control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
             string_table: &mut string_table,
         },
@@ -2494,7 +2492,7 @@ fn parse_control_flow_template_after_body_parse(
 
     parse_template_body(
         &mut token_stream,
-        &mut template,
+        &mut build_state,
         &mut construction_context,
         TemplateBodyParseRequest {
             context: &context,
@@ -2503,12 +2501,21 @@ fn parse_control_flow_template_after_body_parse(
             direct_child_wrappers: &[],
             control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
             control_context: TemplateBodyControlContext::normal(),
-            foldable: &mut can_fold,
             string_table: &mut string_table,
             default_style: None,
         },
     )
     .expect("template body should parse");
+
+    let template = Template {
+        control_flow: build_state.control_flow,
+        kind: build_state.kind,
+        style: build_state.style,
+        child_wrappers: build_state.child_wrappers,
+        tir_reference: None,
+        id: build_state.id,
+        location: construction_context.location().to_owned(),
+    };
 
     (template, context, string_table)
 }
@@ -2570,9 +2577,7 @@ fn parse_runtime_template_without_validation(
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
 
-    let mut template = Template::empty();
-    template.location = token_stream.current_location();
-    let mut can_fold = true;
+    let mut build_state = TemplateBuildState::new();
 
     let mut construction_context = TemplateConstructionContext::new(
         Rc::clone(&context.template_ir_store),
@@ -2586,9 +2591,8 @@ fn parse_runtime_template_without_validation(
         TemplateHeadParseRequest {
             context: &context,
             type_interner: &mut type_interner,
-            template: &mut template,
+            build_state: &mut build_state,
             construction_context: &mut construction_context,
-            foldable: &mut can_fold,
             control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
             string_table: &mut string_table,
         },
@@ -2597,7 +2601,7 @@ fn parse_runtime_template_without_validation(
 
     parse_template_body(
         &mut token_stream,
-        &mut template,
+        &mut build_state,
         &mut construction_context,
         TemplateBodyParseRequest {
             context: &context,
@@ -2606,7 +2610,6 @@ fn parse_runtime_template_without_validation(
             direct_child_wrappers: &[],
             control_flow_validation: TemplateControlFlowValidationMode::RuntimeCapable,
             control_context: TemplateBodyControlContext::normal(),
-            foldable: &mut can_fold,
             string_table: &mut string_table,
             default_style: None,
         },
@@ -2616,10 +2619,20 @@ fn parse_runtime_template_without_validation(
     // Finish the construction context to install a registry-backed `tir_reference`
     // without running render-unit preparation or runtime validation. This lets
     // focused tests call the view-based runtime validator directly.
-    let style = template.style.to_owned();
-    let kind = template.kind.to_owned();
-    let location = template.location.to_owned();
-    template.tir_reference = construction_context.finish(style, kind, location);
+    let style = build_state.style.to_owned();
+    let kind = build_state.kind.to_owned();
+    let location = construction_context.location().to_owned();
+    let tir_reference = construction_context.finish(style, kind, location);
+
+    let template = Template {
+        control_flow: build_state.control_flow,
+        kind: build_state.kind,
+        style: build_state.style,
+        child_wrappers: build_state.child_wrappers,
+        tir_reference: Some(tir_reference),
+        id: build_state.id,
+        location: construction_context.location().to_owned(),
+    };
 
     (template, context, string_table)
 }

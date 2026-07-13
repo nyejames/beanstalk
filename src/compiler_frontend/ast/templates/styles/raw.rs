@@ -11,10 +11,10 @@
 //!   preserved exactly as written. Raw strings inside templates use [`raw string`] syntax.
 
 use crate::compiler_frontend::ast::templates::template::BodyWhitespacePolicy;
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 
-pub(crate) fn configure_raw_style(template: &mut Template) {
-    template.apply_style_updates(|style| {
+pub(crate) fn configure_raw_style(build_state: &mut TemplateBuildState) {
+    build_state.apply_style_updates(|style| {
         style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
     });
 }

@@ -6,10 +6,9 @@
 //!   path coercion.
 //!
 //! WHY:
-//! - Head parsing needs one place for foldability and const-context checks so the
-//!   orchestration loop remains readable and consistent.
+//! - Head parsing needs one place for const-context checks so the orchestration
+//!   loop remains readable and consistent.
 
-use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -37,7 +36,6 @@ pub(super) struct TemplateHeadExpressionContext<'a> {
     pub(super) context: &'a ScopeContext,
     pub(super) type_environment: &'a TypeEnvironment,
     pub(super) construction_context: &'a mut TemplateConstructionContext,
-    pub(super) foldable: &'a mut bool,
 }
 
 /// Boxed diagnostic result shared by head-expression insertion helpers.
@@ -96,12 +94,11 @@ fn validate_template_head_value_type(
 }
 
 /// Handles a template-typed value found in the template head.
-/// Wrapper templates preserve slot semantics; runtime templates mark unfoldable.
+/// Wrapper templates preserve slot semantics while TIR classification owns constness.
 pub(super) fn handle_template_value_in_template_head(
     value: &Template,
     context: &ScopeContext,
     construction_context: &mut TemplateConstructionContext,
-    foldable: &mut bool,
     location: &SourceLocation,
 ) -> HeadExpressionResult<()> {
     if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
@@ -120,10 +117,6 @@ pub(super) fn handle_template_value_in_template_head(
             InvalidTemplateStructureReason::SlotInHead,
             location.to_owned(),
         )));
-    }
-
-    if matches!(value.kind, TemplateType::StringFunction) {
-        *foldable = false;
     }
 
     let head_expression = Expression::template(value.to_owned(), ValueMode::ImmutableOwned);
@@ -175,7 +168,6 @@ pub(super) fn push_template_head_expression(
             template_value,
             target.context,
             target.construction_context,
-            target.foldable,
             location,
         );
     }
@@ -212,11 +204,6 @@ pub(super) fn push_template_head_expression(
             InvalidTemplateStructureReason::RuntimeValueInConstTemplateHead,
             location.to_owned(),
         )));
-    }
-
-    if !expression.kind.is_foldable() && !expression_is_compile_time_constant {
-        ast_log!("Template is no longer foldable due to reference");
-        *target.foldable = false;
     }
 
     // Ordinary `[source]` insertion is a snapshot read. Keep reactive source identity only for
@@ -267,8 +254,6 @@ pub(super) fn push_template_head_reactive_subscription(
     }
 
     validate_template_head_value_type(&expression, location, target.type_environment)?;
-
-    *target.foldable = false;
 
     let subscription = ReactiveSubscription {
         source,

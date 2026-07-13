@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateDirectiveReason,
@@ -39,7 +39,7 @@ pub(super) fn apply_handler_style_directive(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     directive_name: &str,
     handler_spec: &StyleDirectiveHandlerSpec,
     string_table: &mut StringTable,
@@ -53,7 +53,7 @@ pub(super) fn apply_handler_style_directive(
         string_table,
     )?;
 
-    apply_style_directive_effects(template, handler_spec.effects);
+    apply_style_directive_effects(build_state, handler_spec.effects);
 
     if let Some(factory) = handler_spec.formatter_factory {
         let formatter = factory(parsed_argument.value.as_ref()).map_err(|_message| {
@@ -64,7 +64,7 @@ pub(super) fn apply_handler_style_directive(
             )
         })?;
 
-        template.apply_style_updates(|style| {
+        build_state.apply_style_updates(|style| {
             style.formatter = Some(formatter.clone());
         });
     }
@@ -72,10 +72,13 @@ pub(super) fn apply_handler_style_directive(
     Ok(())
 }
 
-fn apply_style_directive_effects(template: &mut Template, effects: StyleDirectiveEffects) {
+fn apply_style_directive_effects(
+    build_state: &mut TemplateBuildState,
+    effects: StyleDirectiveEffects,
+) {
     // Effects mutate semantic template style state. Formatter identity is set
     // separately by the optional formatter factory output.
-    template.apply_style_updates(|style| {
+    build_state.apply_style_updates(|style| {
         if let Some(style_id) = effects.style_id {
             style.id = style_id;
         }

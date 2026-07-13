@@ -124,7 +124,7 @@ pub(crate) struct TemplateParserIrBuilderState {
     /// WHY: cross-context template references may carry IDs from a different store;
     ///      the owner token lets head-reference handling reject those IDs without
     ///      comparing store handles or inspecting private vectors.
-    pub(crate) store_owner: Option<Arc<TemplateIrStoreOwner>>,
+    pub(crate) store_owner: Arc<TemplateIrStoreOwner>,
 
     /// When true, `finish` must not set `summary.has_formatter` even if the
     /// style carries a formatter.
@@ -152,7 +152,7 @@ impl TemplateParserIrBuilderState {
             template_id: None,
             children: Vec::new(),
             summary: TemplateIrSummary::default(),
-            store_owner: Some(store_owner),
+            store_owner,
             suppress_formatter_summary_on_finish: false,
             head_node_count: 0,
         }
@@ -169,10 +169,10 @@ impl TemplateParserIrBuilderState {
     ///      should be a small, explicitly named type rather than a trimmed builder state.
     pub(crate) fn finalized_reference(
         &self,
+        template_id: TemplateIrId,
         store_id: TemplateStoreId,
         overlay_set_id: TemplateOverlaySetId,
-    ) -> Option<TemplateTirReference> {
-        let store_owner = self.store_owner.clone()?;
+    ) -> TemplateTirReference {
         let phase = if self.suppress_formatter_summary_on_finish {
             // Render-unit preparation sets this flag only after every
             // control-flow body has passed through `format_tir_body_root`.
@@ -183,13 +183,13 @@ impl TemplateParserIrBuilderState {
             TemplateTirPhase::Parsed
         };
 
-        self.template_id.map(|template_id| TemplateTirReference {
+        TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
-            store_owner,
+            store_owner: Arc::clone(&self.store_owner),
             is_composed: false,
             phase,
             overlay_set_id,
-        })
+        }
     }
 
     /// Returns the in-progress root child nodes recorded by the parser.

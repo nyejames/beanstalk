@@ -24,6 +24,7 @@ use crate::compiler_frontend::ast::templates::template_body_sentinels::{
     loop_control_marker_location, malformed_loop_control_reason, orphan_loop_control_diagnostic,
     remap_else_if_inline_diagnostic,
 };
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBodyParseMode, TemplateBranchChain, TemplateBranchChainBodyScratch,
     TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
@@ -60,11 +61,10 @@ type BodyParseResult<T> = Result<T, Box<CompilerDiagnostic>>;
 /// Parses the body section of a template, consuming tokens until the explicit
 /// closing delimiter. Nested child templates are recursively parsed.
 ///
-/// `foldable` is set to `false` if a runtime (non-const) child template is
-/// encountered. Truncated source is reported as a user-facing EOF diagnostic.
+/// Truncated source is reported as a user-facing EOF diagnostic.
 pub(crate) fn parse_template_body(
     token_stream: &mut FileTokens,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     construction_context: &mut TemplateConstructionContext,
     input: TemplateBodyParseRequest<'_, '_>,
 ) -> BodyParseResult<TemplateControlFlowBodyScratch> {
@@ -75,7 +75,6 @@ pub(crate) fn parse_template_body(
         direct_child_wrappers,
         control_flow_validation,
         control_context,
-        foldable,
         string_table,
         default_style,
     } = input;
@@ -92,7 +91,6 @@ pub(crate) fn parse_template_body(
         type_interner,
         direct_child_wrappers,
         control_flow_validation,
-        foldable,
         string_table,
         newline_id,
         open_bracket_id,
@@ -102,10 +100,9 @@ pub(crate) fn parse_template_body(
 
     match body_mode {
         TemplateBodyParseMode::Normal => {
-            let owner = BodyOwnerSnapshot::from_template(template);
             let parse_input = BodyParseInput {
                 context,
-                owner: &owner,
+                build_state,
                 control_context: control_context.with_else_policy(ElseSentinelPolicy::Orphan),
                 inherited_wrappers: InheritedChildWrapperPolicy::Apply,
             };
@@ -115,11 +112,11 @@ pub(crate) fn parse_template_body(
         }
 
         TemplateBodyParseMode::If(input) => {
-            parser.parse_if_body(template, construction_context, *input, control_context)
+            parser.parse_if_body(build_state, construction_context, *input, control_context)
         }
 
         TemplateBodyParseMode::Loop(input) => {
-            parser.parse_loop_body(template, construction_context, *input, control_context)
+            parser.parse_loop_body(build_state, construction_context, *input, control_context)
         }
     }
 }
@@ -137,7 +134,6 @@ pub(crate) struct TemplateBodyParseRequest<'a, 'types> {
     pub(crate) direct_child_wrappers: &'a [TemplateWrapperReference],
     pub(crate) control_flow_validation: TemplateControlFlowValidationMode,
     pub(crate) control_context: TemplateBodyControlContext,
-    pub(crate) foldable: &'a mut bool,
     pub(crate) string_table: &'a mut StringTable,
     /// Source-kind policy applied to child templates without an explicit formatter.
     pub(crate) default_style: Option<Style>,
@@ -183,9 +179,9 @@ impl NestedTemplateParseOptions {
 }
 
 #[derive(Clone, Copy)]
-struct BodyParseInput<'context, 'owner> {
+struct BodyParseInput<'context, 'build> {
     context: &'context ScopeContext,
-    owner: &'owner BodyOwnerSnapshot,
+    build_state: &'build TemplateBuildState,
     control_context: TemplateBodyControlContext,
     inherited_wrappers: InheritedChildWrapperPolicy,
 }
@@ -195,7 +191,6 @@ struct TemplateBodyParser<'a, 'types> {
     type_interner: &'a mut AstTypeInterner<'types>,
     direct_child_wrappers: &'a [TemplateWrapperReference],
     control_flow_validation: TemplateControlFlowValidationMode,
-    foldable: &'a mut bool,
     string_table: &'a mut StringTable,
     // Cached interned IDs for common single-character literals that appear on
     // every newline and bracket token. Interning once per body parse avoids
@@ -245,7 +240,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                     if let Some(else_marker) = classify_direct_else_marker(self.token_stream) {
                         let sentinel_target = body_sentinel_target(
                             construction_context,
-                            input.owner.style.suppress_child_templates,
+                            input.build_state.style.suppress_child_templates,
                         );
                         return handle_direct_else_marker(
                             self.token_stream,
@@ -266,7 +261,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
                     // When child templates are suppressed (e.g. `$doc`), brackets are
                     // treated as balanced literal text rather than parsed as nested templates.
-                    if input.owner.style.suppress_child_templates {
+                    if input.build_state.style.suppress_child_templates {
                         consume_balanced_brackets_as_literal_text(
                             self.token_stream,
                             construction_context,
@@ -327,7 +322,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
     ///      policy directly; composition attaches wrappers to the whole chain.
     fn parse_if_body(
         &mut self,
-        template: &mut Template,
+        build_state: &mut TemplateBuildState,
         construction_context: &mut TemplateConstructionContext,
         input: TemplateIfBodyParseInput,
         control_context: TemplateBodyControlContext,
@@ -347,13 +342,14 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         //  Parse branch bodies
         // -------------------
 
-        let owner = BodyOwnerSnapshot::from_template(template);
+        let opening_location = construction_context.location().to_owned();
         loop {
+            let branch_location_snapshot = opening_location.clone();
             let mut branch_construction_context =
-                tir_only_body_construction_context(&owner, &branch_context);
+                tir_only_body_construction_context(&opening_location, &branch_context);
             let parse_input = BodyParseInput {
                 context: &branch_context,
-                owner: &owner,
+                build_state,
                 control_context: control_context.with_else_policy(ElseSentinelPolicy::SplitIf),
                 inherited_wrappers: InheritedChildWrapperPolicy::Skip,
             };
@@ -368,9 +364,9 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             }
 
             let (branch_body_tir_reference, branch_body_node_id) = finalize_tir_body_builder(
-                owner.style.clone(),
-                owner.kind.clone(),
-                owner.location.clone(),
+                build_state.style.clone(),
+                build_state.kind.clone(),
+                branch_location_snapshot,
                 &mut branch_construction_context,
             );
 
@@ -407,7 +403,8 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
                 TemplateBodyBoundary::Else { location } => {
                     let fallback_branch = self.parse_fallback_branch(
-                        &owner,
+                        build_state,
+                        &opening_location,
                         &input.else_context,
                         control_context,
                         location,
@@ -436,7 +433,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             input.location.clone(),
         );
 
-        template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
+        build_state.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
             TemplateBranchChain {
                 branches,
                 fallback,
@@ -460,7 +457,8 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
     ///      but start from a different sentinel and must begin on a fresh boundary.
     fn parse_fallback_branch(
         &mut self,
-        owner: &BodyOwnerSnapshot,
+        build_state: &TemplateBuildState,
+        opening_location: &SourceLocation,
         fallback_context: &ScopeContext,
         control_context: TemplateBodyControlContext,
         location: SourceLocation,
@@ -468,10 +466,10 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         ensure_else_boundary_after_sentinel(self.token_stream, &location, self.string_table)?;
 
         let mut else_construction_context =
-            tir_only_body_construction_context(owner, fallback_context);
+            tir_only_body_construction_context(opening_location, fallback_context);
         let parse_input = BodyParseInput {
             context: fallback_context,
-            owner,
+            build_state,
             control_context: control_context.with_else_policy(ElseSentinelPolicy::Duplicate),
             inherited_wrappers: InheritedChildWrapperPolicy::Skip,
         };
@@ -485,9 +483,9 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         else_construction_context.trim_leading_whitespace(self.string_table);
 
         let (fallback_body_tir_reference, fallback_body_node_id) = finalize_tir_body_builder(
-            owner.style.clone(),
-            owner.kind.clone(),
-            owner.location.clone(),
+            build_state.style.clone(),
+            build_state.kind.clone(),
+            opening_location.to_owned(),
             &mut else_construction_context,
         );
 
@@ -558,17 +556,17 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
     fn parse_loop_body(
         &mut self,
-        template: &mut Template,
+        build_state: &mut TemplateBuildState,
         construction_context: &mut TemplateConstructionContext,
         input: TemplateLoopBodyParseInput,
         control_context: TemplateBodyControlContext,
     ) -> BodyParseResult<TemplateControlFlowBodyScratch> {
-        let owner = BodyOwnerSnapshot::from_template(template);
+        let loop_location_snapshot = construction_context.location().to_owned();
         let mut body_construction_context =
-            tir_only_body_construction_context(&owner, &input.body_context);
+            tir_only_body_construction_context(&loop_location_snapshot, &input.body_context);
         let parse_input = BodyParseInput {
             context: &input.body_context,
-            owner: &owner,
+            build_state,
             control_context: control_context.enter_template_loop(),
             inherited_wrappers: InheritedChildWrapperPolicy::Skip,
         };
@@ -576,9 +574,9 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         self.parse_content(parse_input, &mut body_construction_context)?;
 
         let (body_tir_reference, body_node_id) = finalize_tir_body_builder(
-            owner.style.clone(),
-            owner.kind.clone(),
-            owner.location.clone(),
+            build_state.style.clone(),
+            build_state.kind.clone(),
+            loop_location_snapshot,
             &mut body_construction_context,
         );
 
@@ -588,7 +586,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             input.location.clone(),
         );
 
-        template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
+        build_state.control_flow = Some(TemplateControlFlow::Loop(Box::new(
             TemplateLoopControlFlow {
                 header: input.header,
                 body_tir_reference: Some(body_tir_reference),
@@ -612,11 +610,11 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
     ) -> BodyParseResult<()> {
         add_ast_counter(AstCounter::TemplateNestedTemplateParses, 1);
 
-        let nested_direct_child_wrappers = input.owner.child_wrappers.to_owned();
+        let nested_direct_child_wrappers = input.build_state.child_wrappers.to_owned();
 
         let parse_options = NestedTemplateParseOptions {
             parsing_mode: if matches!(
-                input.owner.kind,
+                input.build_state.kind,
                 TemplateType::Comment(CommentDirectiveKind::Doc)
             ) {
                 TemplateParsingMode::DocComment
@@ -656,15 +654,11 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         }
 
         match &child_template.kind {
-            TemplateType::StringFunction => {
-                *self.foldable = false;
-            }
-
             TemplateType::Comment(_) => {
                 return Ok(());
             }
 
-            TemplateType::String | TemplateType::SlotInsert(_) => {}
+            TemplateType::String | TemplateType::StringFunction | TemplateType::SlotInsert(_) => {}
 
             TemplateType::SlotDefinition(slot_key) => {
                 let inherited_direct_child_wrappers = match input.inherited_wrappers {
@@ -675,8 +669,8 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 let slot_placeholder = SlotPlaceholder::with_wrappers(
                     slot_key.to_owned(),
                     inherited_direct_child_wrappers,
-                    input.owner.child_wrappers.to_owned(),
-                    input.owner.style.skip_parent_child_wrappers,
+                    input.build_state.child_wrappers.to_owned(),
+                    input.build_state.style.skip_parent_child_wrappers,
                 );
 
                 // Slot definitions are recorded exclusively in parser TIR
@@ -701,7 +695,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         construction_context: &mut TemplateConstructionContext,
         marker: &DirectLoopControlMarker,
     ) -> BodyParseResult<()> {
-        if input.owner.style.suppress_child_templates {
+        if input.build_state.style.suppress_child_templates {
             return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
                 InvalidTemplateStructureReason::TemplateLoopControlInLiteralBody,
                 loop_control_marker_location(marker).clone(),
@@ -837,37 +831,15 @@ enum InheritedChildWrapperPolicy {
     Skip,
 }
 
-/// Lightweight read-only snapshot of the template fields needed for TIR-only
-/// body parsing. Control-flow branch/loop bodies no longer accumulate into a
-/// temporary `Template` shell for parse-content reads; they write directly
-/// into `TemplateConstructionContext`.
-struct BodyOwnerSnapshot {
-    kind: TemplateType,
-    style: Style,
-    child_wrappers: Vec<TemplateWrapperReference>,
-    location: SourceLocation,
-}
-
-impl BodyOwnerSnapshot {
-    fn from_template(template: &Template) -> Self {
-        Self {
-            kind: template.kind.clone(),
-            style: template.style.clone(),
-            child_wrappers: template.child_wrappers.clone(),
-            location: template.location.clone(),
-        }
-    }
-}
-
 fn tir_only_body_construction_context(
-    owner: &BodyOwnerSnapshot,
+    location: &SourceLocation,
     context: &ScopeContext,
 ) -> TemplateConstructionContext {
     TemplateConstructionContext::new(
         Rc::clone(&context.template_ir_store),
         context.template_ir_store_id,
         Rc::clone(&context.template_ir_registry),
-        owner.location.clone(),
+        location.to_owned(),
     )
 }
 
@@ -896,9 +868,7 @@ fn finalize_tir_body_builder(
     location: SourceLocation,
     construction_context: &mut TemplateConstructionContext,
 ) -> (TemplateControlFlowTirReference, TemplateIrNodeId) {
-    let tir_reference = construction_context
-        .finish(style, kind, location.clone())
-        .expect("control-flow body parser TIR builder state should be finalized");
+    let tir_reference = construction_context.finish(style, kind, location.clone());
 
     let store = construction_context.store();
     let template_ir = store

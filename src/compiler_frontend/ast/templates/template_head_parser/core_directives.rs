@@ -19,7 +19,7 @@ use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -37,7 +37,7 @@ type CoreDirectiveResult<T> = Result<T, Box<CompilerDiagnostic>>;
 pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     directive_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     string_table: &mut StringTable,
 ) -> CoreDirectiveResult<bool> {
     if matches!(
@@ -46,7 +46,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     ) {
         let slot_name = string_table.intern("slot");
         let slot_key = parse_optional_slot_target_argument(slot_name, token_stream, string_table)?;
-        template.kind = TemplateType::SlotDefinition(slot_key);
+        build_state.kind = TemplateType::SlotDefinition(slot_key);
         return Ok(true);
     }
 
@@ -56,7 +56,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     ) {
         let insert_name = string_table.intern("insert");
         let slot_name = parse_required_slot_name_argument(insert_name, token_stream)?;
-        template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
+        build_state.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
         return Ok(true);
     }
 
@@ -67,7 +67,7 @@ pub(super) fn parse_core_style_directive(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    template: &mut Template,
+    build_state: &mut TemplateBuildState,
     directive_name: &str,
     kind: CoreStyleDirectiveKind,
     string_table: &mut StringTable,
@@ -76,7 +76,7 @@ pub(super) fn parse_core_style_directive(
         CoreStyleDirectiveKind::Raw => {
             let raw_name = string_table.intern("raw");
             reject_unexpected_directive_arguments(raw_name, token_stream)?;
-            configure_raw_style(template);
+            configure_raw_style(build_state);
         }
 
         CoreStyleDirectiveKind::Children => {
@@ -88,7 +88,7 @@ pub(super) fn parse_core_style_directive(
                 token_stream,
                 context,
                 type_interner,
-                template,
+                build_state,
                 string_table,
             )?;
         }
@@ -96,27 +96,27 @@ pub(super) fn parse_core_style_directive(
         CoreStyleDirectiveKind::Fresh => {
             // `$fresh` opt-outs this template from parent-applied `$children(..)`
             // wrappers while still allowing local directives/wrappers in the same head.
-            template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
+            build_state.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
         }
 
         CoreStyleDirectiveKind::Note => {
             let note_name = string_table.intern("note");
             reject_unexpected_directive_arguments(note_name, token_stream)?;
-            template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
-            template.apply_style(Style::default());
+            build_state.kind = TemplateType::Comment(CommentDirectiveKind::Note);
+            build_state.apply_style(Style::default());
         }
 
         CoreStyleDirectiveKind::Todo => {
             let todo_name = string_table.intern("todo");
             reject_unexpected_directive_arguments(todo_name, token_stream)?;
-            template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
-            template.apply_style(Style::default());
+            build_state.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
+            build_state.apply_style(Style::default());
         }
 
         CoreStyleDirectiveKind::Doc => {
             let doc_name = string_table.intern("doc");
             reject_unexpected_directive_arguments(doc_name, token_stream)?;
-            apply_doc_comment_defaults(template);
+            apply_doc_comment_defaults(build_state);
         }
 
         CoreStyleDirectiveKind::Slot | CoreStyleDirectiveKind::Insert => {
@@ -136,28 +136,28 @@ pub(super) fn parse_core_style_directive(
     Ok(())
 }
 
-pub(crate) fn apply_doc_comment_defaults(template: &mut Template) {
-    template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
-    template.apply_style(Style::default());
+pub(crate) fn apply_doc_comment_defaults(build_state: &mut TemplateBuildState) {
+    build_state.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    build_state.apply_style(Style::default());
 
     // Doc comments use Markdown formatting with balanced bracket escaping.
     // Nested child templates are suppressed — `[...]` brackets in the body are
     // treated as literal text.
-    apply_markdown_style(template);
-    template.apply_style_updates(|style| {
+    apply_markdown_style(build_state);
+    build_state.apply_style_updates(|style| {
         style.suppress_child_templates = true;
     });
 }
 
-fn apply_markdown_style(template: &mut Template) {
-    template.apply_style_updates(|style| {
+fn apply_markdown_style(build_state: &mut TemplateBuildState) {
+    build_state.apply_style_updates(|style| {
         style.id = "markdown";
         style.formatter = Some(markdown_formatter());
     });
 }
 
-pub(super) fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
-    template.apply_style_updates(|style| {
+pub(super) fn mark_template_body_whitespace_style_controlled(build_state: &mut TemplateBuildState) {
+    build_state.apply_style_updates(|style| {
         style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
     });
 }

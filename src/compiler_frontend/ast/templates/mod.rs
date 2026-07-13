@@ -143,6 +143,7 @@ pub(crate) mod styles;
 pub(crate) mod template;
 pub(crate) mod template_body_parser;
 mod template_body_sentinels;
+mod template_build_state;
 pub(crate) mod template_control_flow;
 pub(crate) mod template_folding;
 pub(crate) mod template_head_parser;

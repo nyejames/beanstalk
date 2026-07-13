@@ -12,10 +12,10 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Style;
+use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateControlFlowBodyScratch, TemplateControlFlowTirReference,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     ControlFlowBodyKind, TemplateConstructionContext, TemplateIr, TemplateIrNodeId,
     TemplateIrStore, TemplateOverlaySetId, TemplateParserIrBuilderState, TemplateRef,
@@ -37,18 +37,17 @@ use std::sync::Arc;
 /// WHY: linear templates now carry their formatted root directly in TIR.
 ///      TIR formatting is the production authority for linear bodies.
 pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_reference_for_linear_template(
-    template: &mut Template,
+    tir_reference: &mut TemplateTirReference,
+    has_control_flow: bool,
     style: &Style,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<(), TemplateError> {
-    if template.control_flow.is_some() {
+    if has_control_flow {
         return Ok(());
     }
 
-    let Some(reference) = template.tir_reference.clone() else {
-        return Ok(());
-    };
+    let reference = tir_reference.clone();
 
     if reference.phase.is_at_least(TemplateTirPhase::Formatted) {
         return Ok(());
@@ -97,26 +96,25 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         original_template.location,
     ));
 
-    template.tir_reference = Some(TemplateTirReference {
+    *tir_reference = TemplateTirReference {
         root: TemplateRef::new(context.template_ir_store_id, formatted_template_id),
         store_owner,
         is_composed: reference.is_composed,
         phase: TemplateTirPhase::Formatted,
         overlay_set_id: reference.overlay_set_id,
-    });
+    };
 
     Ok(())
 }
 
 struct TirBodyRootInput<'a> {
-    owning_template: &'a Template,
     root_children: &'a [TemplateIrNodeId],
     style: &'a Style,
     child_wrappers: &'a [TemplateWrapperReference],
     body_root: TemplateIrNodeId,
     body_kind: ControlFlowBodyKind,
     body_phase: TemplateTirPhase,
-    builder: Option<&'a TemplateParserIrBuilderState>,
+    builder: &'a TemplateParserIrBuilderState,
 }
 
 /// Tries to derive a branch/fallback body TIR root from parser-emitted
@@ -136,7 +134,6 @@ fn try_sync_control_flow_body_tir_from_tir(
     string_table: &mut StringTable,
 ) -> Option<TemplateControlFlowTirReference> {
     let TirBodyRootInput {
-        owning_template,
         root_children,
         style,
         child_wrappers,
@@ -192,14 +189,7 @@ fn try_sync_control_flow_body_tir_from_tir(
     let composed_root =
         compose_tir_head_chain(&mut store, candidate_id, string_table, true).ok()?;
 
-    replace_control_flow_body_tir_root(
-        owning_template,
-        &mut store,
-        body_kind,
-        composed_root,
-        body_phase,
-        builder,
-    )
+    replace_control_flow_body_tir_root(builder, &mut store, body_kind, composed_root, body_phase)
 }
 
 /// Applies inherited `$children(..)` wrapper templates to direct child-template
@@ -216,7 +206,6 @@ fn try_sync_control_flow_body_tir_from_tir(
 /// WHY: lets `try_sync_control_flow_body_tir_from_tir` cover bodies with inherited
 ///      `$children(...)` wrappers without falling back to the content mirror.
 struct ControlFlowBodyPreparationContext<'a> {
-    owning_template: &'a Template,
     construction_context: &'a TemplateConstructionContext,
     style: &'a Style,
     child_wrappers: &'a [TemplateWrapperReference],
@@ -241,7 +230,6 @@ fn prepare_branch_or_fallback_body(
     body_kind: ControlFlowBodyKind,
 ) -> Result<(bool, Option<TemplateControlFlowTirReference>), TemplateError> {
     let ControlFlowBodyPreparationContext {
-        owning_template,
         construction_context,
         style,
         child_wrappers,
@@ -260,14 +248,13 @@ fn prepare_branch_or_fallback_body(
     // through body-only current-state materialization.
     let refreshed_ref = try_sync_control_flow_body_tir_from_tir(
         TirBodyRootInput {
-            owning_template,
             root_children: &root_children,
             style,
             child_wrappers,
             body_root,
             body_kind,
             body_phase,
-            builder: Some(construction_context.builder()),
+            builder: construction_context.builder(),
         },
         context,
         string_table,
@@ -294,11 +281,10 @@ fn prepare_branch_or_fallback_body(
 ///      body root owns the behavior without a finalized-content mirror
 ///      fallback.
 fn try_sync_loop_body_tir_from_tir(
-    owning_template: &Template,
+    builder: &TemplateParserIrBuilderState,
     style: &Style,
     child_wrappers: &[TemplateWrapperReference],
     body_root: TemplateIrNodeId,
-    builder: Option<&TemplateParserIrBuilderState>,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Option<TemplateControlFlowTirReference> {
@@ -325,12 +311,11 @@ fn try_sync_loop_body_tir_from_tir(
     .ok()?;
 
     replace_control_flow_body_tir_root(
-        owning_template,
+        builder,
         &mut store,
         ControlFlowBodyKind::LoopBody,
         body_root,
         control_flow_body_phase(),
-        builder,
     )
 }
 
@@ -363,7 +348,6 @@ fn prepare_loop_body(
     previous_body_tir_reference: Option<TemplateControlFlowTirReference>,
 ) -> Result<(bool, Option<TemplateControlFlowTirReference>), TemplateError> {
     let ControlFlowBodyPreparationContext {
-        owning_template,
         construction_context,
         style,
         child_wrappers,
@@ -373,11 +357,10 @@ fn prepare_loop_body(
     } = ctx;
 
     let refreshed_ref = try_sync_loop_body_tir_from_tir(
-        owning_template,
+        construction_context.builder(),
         style,
         child_wrappers,
         body_root,
-        Some(construction_context.builder()),
         context,
         string_table,
     );
@@ -409,30 +392,26 @@ pub(in crate::compiler_frontend::ast::templates) struct ControlFlowRenderUnitReq
 }
 
 pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_units(
-    owning_template: &mut Template,
+    build_state: &mut TemplateBuildState,
     construction_context: &mut TemplateConstructionContext,
     request: ControlFlowRenderUnitRequest<'_>,
 ) -> Result<(), TemplateError> {
-    // Take the control-flow value out of the owning template so the inner
-    // preparation work can mutably borrow both the control-flow value and the
-    // owning template (for parser-TIR body sync) without a simultaneous borrow
-    // of the same field.
-    let Some(mut control_flow) = owning_template.control_flow.take() else {
+    // Take the control-flow value out of the build state so the inner
+    // preparation work can mutably borrow the control-flow value and the
+    // construction context (for parser-TIR body sync) without a simultaneous
+    // borrow of the same field.
+    let Some(mut control_flow) = build_state.control_flow.take() else {
         return Err(CompilerError::compiler_error(
             "prepare_control_flow_render_units called on template without control flow",
         )
         .into());
     };
 
-    let result = prepare_control_flow_render_units_inner(
-        &mut control_flow,
-        owning_template,
-        construction_context,
-        request,
-    );
+    let result =
+        prepare_control_flow_render_units_inner(&mut control_flow, construction_context, request);
 
     // Always restore the control-flow value, even if inner preparation failed.
-    owning_template.control_flow = Some(control_flow);
+    build_state.control_flow = Some(control_flow);
     result
 }
 
@@ -440,7 +419,6 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
 ///
 fn prepare_control_flow_render_units_inner(
     control_flow: &mut TemplateControlFlow,
-    owning_template: &mut Template,
     construction_context: &mut TemplateConstructionContext,
     request: ControlFlowRenderUnitRequest<'_>,
 ) -> Result<(), TemplateError> {
@@ -475,7 +453,6 @@ fn prepare_control_flow_render_units_inner(
             {
                 let (refreshed, refreshed_ref) = prepare_branch_or_fallback_body(
                     ControlFlowBodyPreparationContext {
-                        owning_template,
                         construction_context,
                         style,
                         child_wrappers,
@@ -495,7 +472,6 @@ fn prepare_control_flow_render_units_inner(
                 (Some(fallback), Some(fallback_body_content)) => {
                     let (refreshed, refreshed_ref) = prepare_branch_or_fallback_body(
                         ControlFlowBodyPreparationContext {
-                            owning_template,
                             construction_context,
                             style,
                             child_wrappers,
@@ -532,7 +508,6 @@ fn prepare_control_flow_render_units_inner(
             // iteration.
             let (refreshed, refreshed_ref) = prepare_loop_body(
                 ControlFlowBodyPreparationContext {
-                    owning_template,
                     construction_context,
                     style,
                     child_wrappers,
@@ -573,10 +548,9 @@ fn prepare_control_flow_render_units_inner(
             // Install the composed TIR aggregate-wrapper subtree onto the owning
             // `Loop` node.
             let _aggregate_wrapper_installed = replace_loop_aggregate_wrapper_tir_root(
-                owning_template,
+                construction_context.builder(),
                 &mut template_ir_store,
                 aggregate_wrapper.tir_root,
-                Some(construction_context.builder()),
             );
         }
 

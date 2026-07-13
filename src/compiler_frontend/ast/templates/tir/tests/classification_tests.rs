@@ -9,18 +9,20 @@
 use super::super::builder::TemplateIrBuilder;
 use super::super::classification::{
     classify_effective_tir_view_template, classify_empty_overlay_tir_view_template,
-    same_store_tir_id, tir_node_is_const_evaluable_value_with_bindings,
-    tir_view_subtree_is_const_evaluable_value,
+    classify_materialized_current_tir_template, same_store_tir_id,
+    tir_node_is_const_evaluable_value_with_bindings, tir_view_subtree_is_const_evaluable_value,
 };
 use super::super::node::TemplateIrNodeKind;
 use super::super::registry::TemplateIrRegistry;
 use super::super::store::{TemplateIrStore, TemplateStoreState};
 use super::super::summary::TemplateIrSummary;
 use super::super::{TemplateRef, TemplateTirPhase, TemplateTirReference, TirView};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
+};
 use crate::compiler_frontend::ast::templates::template::{
-    SlotKey, Style, TemplateConstValueKind, TemplateSegmentOrigin, TemplateType,
+    ReactiveSubscription, SlotKey, Style, TemplateConstValueKind, TemplateSegmentOrigin,
+    TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -372,6 +374,89 @@ fn tir_view_classification_returns_renderable_string_for_text_root() {
     );
 
     assert_eq!(const_kind, TemplateConstValueKind::RenderableString);
+}
+
+#[test]
+fn materialized_classification_rejects_reactive_text() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let location = empty_location();
+    let source_path = InternedPath::from_single_str("main.bst/#reactive", &mut string_table);
+    let subscription = ReactiveSubscription {
+        source: ReactiveSource {
+            path: source_path,
+            kind: ReactiveSourceKind::Declaration,
+        },
+        type_id: builtin_type_ids::STRING,
+        location: location.clone(),
+    };
+
+    let template_id = {
+        let text = string_table.intern("reactive text");
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node_with_subscription(
+            text,
+            "reactive text".len() as u32,
+            TemplateSegmentOrigin::Body,
+            Some(subscription),
+            location.clone(),
+        );
+        let root = builder.push_sequence_node(vec![text_node], location.clone());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            location,
+        )
+    };
+
+    let classification = classify_materialized_current_tir_template(
+        &TemplateType::String,
+        &mut store,
+        template_id,
+        &string_table,
+    )
+    .expect("reactive text classification should succeed");
+
+    assert!(!classification.shape_const_evaluable);
+    assert_eq!(
+        classification.const_value_kind,
+        TemplateConstValueKind::NonConst
+    );
+}
+
+#[test]
+fn tir_view_classification_rejects_reactive_text() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst/#reactive", &mut string_table);
+    let subscription = ReactiveSubscription {
+        source: ReactiveSource {
+            path: source_path,
+            kind: ReactiveSourceKind::Declaration,
+        },
+        type_id: builtin_type_ids::STRING,
+        location: empty_location(),
+    };
+
+    let const_kind = classify_registry_view_template(
+        &mut string_table,
+        TemplateType::String,
+        move |builder, table| {
+            let text = table.intern("reactive text");
+            let text_node = builder.push_text_node_with_subscription(
+                text,
+                "reactive text".len() as u32,
+                TemplateSegmentOrigin::Body,
+                Some(subscription),
+                empty_location(),
+            );
+
+            builder.push_sequence_node(vec![text_node], empty_location())
+        },
+    );
+
+    assert_eq!(const_kind, TemplateConstValueKind::NonConst);
 }
 
 #[test]

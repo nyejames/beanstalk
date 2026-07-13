@@ -1008,8 +1008,14 @@ fn tir_tree_is_const_evaluable_value(
             )
         }),
 
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
+        TemplateIrNodeKind::Text { .. } => {
+            // A Text node carrying a reactive subscription in the side table is
+            // runtime content: its output must be invalidated when the source
+            // changes, so it is not const-evaluable even though the literal text
+            // itself is static.
+            store.node_reactive_subscription(node_id).is_none()
+        }
+        TemplateIrNodeKind::Slot { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. } => true,
 
@@ -1185,8 +1191,12 @@ fn tir_view_tree_is_const_evaluable_value(
             Ok(true)
         }
 
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
+        TemplateIrNodeKind::Text { .. } => {
+            // A Text node carrying a reactive subscription in the side table is
+            // runtime content, not a const-evaluable value.
+            Ok(context.store.node_reactive_subscription(node_id).is_none())
+        }
+        TemplateIrNodeKind::Slot { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. } => Ok(true),
 
@@ -1407,8 +1417,8 @@ fn string_function_child_is_structural_const_value(
                 && matches!(expression.kind, ExpressionKind::FunctionCall { .. })
         }
 
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
+        TemplateIrNodeKind::Text { .. } => store.node_reactive_subscription(root).is_none(),
+        TemplateIrNodeKind::Slot { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. } => true,
 
@@ -1440,8 +1450,8 @@ fn tir_tree_is_const_evaluable_standalone_value(
             )
         }),
 
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
+        TemplateIrNodeKind::Text { .. } => store.node_reactive_subscription(node_id).is_none(),
+        TemplateIrNodeKind::Slot { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. } => true,
 

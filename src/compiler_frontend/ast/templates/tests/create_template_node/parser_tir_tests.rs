@@ -1354,8 +1354,14 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
+    let has_control_flow = template.control_flow.is_some();
+    let tir_reference = template
+        .tir_reference
+        .as_mut()
+        .expect("parsed template should carry a TIR reference");
     install_formatted_tir_reference_for_linear_template(
-        &mut template,
+        tir_reference,
+        has_control_flow,
         &style,
         &context,
         &mut string_table,
@@ -1435,8 +1441,14 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
+    let has_control_flow = template.control_flow.is_some();
+    let tir_reference = template
+        .tir_reference
+        .as_mut()
+        .expect("parsed template should carry a TIR reference");
     install_formatted_tir_reference_for_linear_template(
-        &mut template,
+        tir_reference,
+        has_control_flow,
         &style,
         &context,
         &mut string_table,
@@ -1535,8 +1547,14 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
+    let has_control_flow = template.control_flow.is_some();
+    let tir_reference = template
+        .tir_reference
+        .as_mut()
+        .expect("parsed template should carry a TIR reference");
     install_formatted_tir_reference_for_linear_template(
-        &mut template,
+        tir_reference,
+        has_control_flow,
         &style,
         &context,
         &mut string_table,

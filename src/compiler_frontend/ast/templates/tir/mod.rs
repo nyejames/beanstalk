@@ -366,14 +366,13 @@ pub(crate) fn current_same_store_tir_roots_for_template(
         });
     }
 
-    if let Some(builder) = builder {
-        let builder_owner = builder.store_owner.as_ref()?;
-        if Arc::ptr_eq(builder_owner, &store_owner) {
-            return Some(SameStoreTirRoots {
-                roots: builder.root_children().to_owned(),
-                seed_template_id: None,
-            });
-        }
+    if let Some(builder) = builder
+        && Arc::ptr_eq(&builder.store_owner, &store_owner)
+    {
+        return Some(SameStoreTirRoots {
+            roots: builder.root_children().to_owned(),
+            seed_template_id: None,
+        });
     }
 
     None
