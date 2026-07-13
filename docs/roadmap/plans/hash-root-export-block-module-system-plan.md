@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: final review
-CURRENT_SLICE: Audit correction 2 is reviewed and fully validated. Checkpoint it, then repeat a focused audit over both required corrections.
-LAST_ACCEPTED_COMMIT: `c427bebc4` (`fix: unify source tree collision checks`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `c427bebc4`; the deterministic source-library correction, focused tests and this plan are ready to commit. No unrelated changes are present.
+CURRENT_SLICE: The focused audit correction is reviewed and fully validated. Checkpoint it, then complete parent documentation, plan and roadmap alignment.
+LAST_ACCEPTED_COMMIT: `4a50cee80` (`fix: stabilize source library ordering`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `4a50cee80`; the single-file collision preflight correction, direct regression test and this plan are ready to commit. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -21,7 +21,7 @@ RELEVANT_CONTEXT_NOW:
 - docs: Phase 9 is committed at `74ce04813`. Do not edit official docs during the worker slice.
 - tests: every integration and focused test-matrix contract is covered and committed at `ed70cb5b9`.
 - benchmarks: every benchmark-shape contract is covered through `d841133b5`.
-- final review: audit correction 1 is committed at `c427bebc4`. Audit correction 2 now provides canonical prefix iteration, sorted filesystem discovery and one resolver-owned most-specific source-library boundary used by logical paths, membership and provider checks. A separate Ollama review found no defect. Historic facade-named fixtures remain accepted regression identifiers. Progress and roadmap alignment remain parent-owned cleanup.
+- final review: audit corrections 1 and 2 are committed at `c427bebc4` and `4a50cee80`. The focused Codex CLI audit accepted those owners and its only required finding is now resolved by reusing the source-library-tree collision preflight in direct single-file Stage 0. A separate Ollama review found no defect. Historic facade-named fixtures remain accepted regression identifiers. Progress and roadmap alignment remain parent-owned cleanup.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -199,6 +199,8 @@ VALIDATION_STATE:
 - Whole-plan Codex CLI audit: required Stage 0 entry-tree collision consolidation and deterministic source-library ordering. Existing strict export, role activity, artifact routing and benchmark identity coverage is otherwise sufficient. Direct single-file root coverage and the parser visibility comment should be closed within the correction slices where local.
 - Audit correction 1: Ollama consolidated entry-root collision checks into `SourceTreeIndex`, retained separate source-library-tree validation and added focused plus integration coverage. Parent corrected the ignored fixture payload and made the intended single-file rejection contract explicit. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3349 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -2 ms average with no slower cases.
 - Audit correction 2: Ollama replaced unordered source-library registry, prepared-root and project-local discovery surfaces with canonical prefix ordering. Parent consolidated overlapping-root selection in `ProjectPathResolver::source_library_for_file` and reused it for logical paths, header membership and provider boundaries. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3357 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
+- Focused correction audit: Codex CLI found one required omission. Direct single-file Stage 0 validates source-library hash roots but does not invoke the existing source-library-tree collision validator before reachable discovery. The audit found no other defect in either correction.
+- Focused audit correction: Ollama added the existing source-library-tree collision preflight to direct single-file orchestration and a direct pipeline test that rejects an unimported `.bst` file/folder collision with `InvalidConfigReason::BstFileFolderCollision`. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3358 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 
 DOCS_IMPACT:
 - progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
@@ -206,9 +208,9 @@ DOCS_IMPACT:
 - generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit audit correction 2, then run a focused Codex CLI audit over both required audit corrections before final documentation and roadmap alignment.
-DELEGATION_DECISION: parent checkpoint, then Codex CLI audit worker as required by the final-review order.
-NEXT_WORKER_ORDER: Codex CLI audit, then parent-audit only after a clean availability blocker
+- Commit the focused audit correction, then align the progress matrix, plan completion state and roadmap link before the final whole-plan review.
+DELEGATION_DECISION: parent checkpoint and final alignment.
+NEXT_WORKER_ORDER: none until final Ollama review
 STOP_REASON: none
 NEXT_RESUME_ACTION: stage the intended correction files and commit the accepted slice.
 

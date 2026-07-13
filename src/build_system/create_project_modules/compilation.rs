@@ -26,6 +26,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use super::collision_detection::validate_source_library_tree_collisions;
 use super::frontend_orchestration::FrontendModuleBuildContext;
 use super::module_inventory;
 use super::project_roots;
@@ -122,6 +123,14 @@ pub(crate) fn compile_single_file_frontend(
     let prepared_source_library_roots = prepare_source_library_roots(&libraries.source_libraries);
     if let Err(messages) =
         validate_source_library_roots(&prepared_source_library_roots, string_table)
+    {
+        log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
+        log_stage_timing("stage0.single_file.total", total_start);
+        return Err(messages);
+    }
+
+    if let Err(messages) =
+        validate_source_library_tree_collisions(&libraries.source_libraries, string_table)
     {
         log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
         log_stage_timing("stage0.single_file.total", total_start);

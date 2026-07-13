@@ -1,8 +1,8 @@
 use super::compile_project_frontend;
 use crate::build_system::build::BackendBuilder;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
+use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidConfigReason};
 use crate::compiler_frontend::datatypes::display::display_type;
 use crate::compiler_frontend::external_packages::{
     CallTarget, ExternalAbiType, ExternalAccessKind, ExternalFunctionId, ExternalFunctionLowerings,
@@ -1566,6 +1566,61 @@ fn html_js_provider_fallible_function_with_error_return_compiles() {
             .iter()
             .any(|module| module_contains_external_module_export(module, "getCanvas")),
         "HIR should contain JS export metadata for fallible JS function"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_rejects_source_library_bst_folder_collision() {
+    let dir = temp_dir("single_file_source_library_collision");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+
+    // Source library with one valid hash root plus a .bst/folder collision.
+    let widget_lib = dir.join("lib").join("widgets");
+    fs::create_dir_all(widget_lib.join("widget")).expect("should create widget folder sibling");
+    fs::write(widget_lib.join("widget.bst"), "value #= 1\n")
+        .expect("should write colliding widget.bst");
+    fs::write(widget_lib.join("#mod.bst"), "value #= 2\n").expect("should write valid hash root");
+
+    // Main single file that does NOT import the ambiguous source-library path.
+    let main_path = dir.join("main.bst");
+    fs::write(&main_path, "x ~= 1\n").expect("should write main file");
+
+    let mut config = Config::new(main_path.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let mut libraries = LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("widgets", widget_lib);
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "single-file build should reject source-library .bst/folder collision"
+    );
+    let messages = result.err().expect("checked above");
+
+    assert!(
+        messages.error_diagnostics().any(|diagnostic| {
+            matches!(
+                &diagnostic.payload,
+                DiagnosticPayload::InvalidConfig {
+                    reason: InvalidConfigReason::BstFileFolderCollision { .. },
+                    ..
+                }
+            )
+        }),
+        "expected BstFileFolderCollision diagnostic, got {messages:?}"
     );
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
