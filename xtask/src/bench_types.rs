@@ -281,6 +281,11 @@ pub struct BenchmarkComparison {
     pub cases: Vec<BenchmarkCaseComparison>,
     /// Per-current-group comparison counts and average movement.
     pub groups: Vec<BenchmarkGroupComparison>,
+    /// Average of current per-case means in milliseconds.
+    ///
+    /// Lets the baseline summary line show absolute timing when no comparable
+    /// previous run exists (first run or a different thread identity).
+    pub current_suite_average_ms: f64,
 }
 
 impl BenchmarkComparison {
@@ -353,6 +358,7 @@ impl BenchmarkComparison {
         let groups = compare_groups(current, previous_cases, &cases);
 
         let comparison = Self {
+            current_suite_average_ms: Self::mean_of_case_means(current),
             overall_mean_delta_ms,
             change_kind,
             compared_case_count,
@@ -393,10 +399,23 @@ impl BenchmarkComparison {
             case_set_changed,
             cases: Vec::new(),
             groups,
+            current_suite_average_ms: Self::mean_of_case_means(current),
         };
 
         comparison.debug_assert_consistent();
         comparison
+    }
+
+    /// Mean of per-case mean timings for the current run.
+    ///
+    /// Avoids allocating a temporary Vec so the baseline summary line can
+    /// show absolute timing without reusing `calculate_mean`.
+    fn mean_of_case_means(cases: &[BenchmarkCaseResult]) -> f64 {
+        if cases.is_empty() {
+            0.0
+        } else {
+            cases.iter().map(|case| case.mean_ms).sum::<f64>() / cases.len() as f64
+        }
     }
 
     /// Check comparison aggregates while keeping detailed fields live.
@@ -455,7 +474,11 @@ impl BenchmarkComparison {
     /// Format the run-entry summary line for display in monthly summaries.
     ///
     /// Returns:
-    /// - "**baseline**; N cases" for the first run on a system.
+    /// - "**baseline**; N cases, avg ~Xms" for the first run on a system.
+    ///
+    ///   Includes the absolute current suite average so the user can see
+    ///   whether the run was fast or slow even when no comparable previous
+    ///   record exists (first run or a different thread identity).
     /// - "no measurable change: avg +0ms; N/N cases" when all shared cases
     ///   stayed within their thresholds.
     /// - terse faster/slower/mixed/case-set-changed lines otherwise.
@@ -466,7 +489,11 @@ impl BenchmarkComparison {
 
         match self.change_kind {
             BenchmarkChangeKind::Baseline => {
-                format!("**baseline**; {} cases", self.current_case_count)
+                format!(
+                    "**baseline**; {} cases, avg ~{}ms",
+                    self.current_case_count,
+                    self.current_suite_average_ms.round() as i64
+                )
             }
             BenchmarkChangeKind::NoMeasurableChange => {
                 format!(
@@ -710,6 +737,8 @@ pub struct BenchmarkRun {
     pub warmup_runs: usize,
     /// Number of measured iterations used for each case
     pub measured_iterations: usize,
+    /// Effective RAYON_NUM_THREADS setting: None for default threads, Some(n) for a fixed count.
+    pub thread_count: Option<u32>,
 }
 
 /// Calculate mean of a slice of values
@@ -973,10 +1002,6 @@ pub fn friendly_stage_label(stage_name: &str) -> &str {
         "stage0.directory.result_sort" => "result sort",
         "stage0.directory.failure_aggregation" => "failure aggregation",
         "stage0.directory.success_merge" => "success merge",
-        "stage0.path_resolver.total" => "path resolver",
-        "stage0.path_resolver.source_library_roots" => "library roots",
-        "stage0.path_resolver.source_library_facades" => "library facades",
-        "stage0.path_resolver.module_root_discovery" => "module roots",
         "stage0.module_root_discovery.total" => "module roots",
         "stage0.reachable_discovery.total" => "reachable discovery",
         "stage0.reachable_discovery.import_scan" => "import scan",

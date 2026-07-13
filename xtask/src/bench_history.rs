@@ -22,7 +22,7 @@ use std::process::Command;
 pub const RUNS_JSONL_PATH: &str = "benchmarks/local-data/runs.jsonl";
 
 /// Current on-disk format version. Bumped when the JSONL schema changes.
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
 
 /// A single benchmark run as stored in runs.jsonl.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +40,11 @@ pub struct LocalRunRecord {
     pub primary_metric_name: String,
     pub suite_average_ms: f64,
     pub suite_case_spread_ms: f64,
+    /// Effective RAYON_NUM_THREADS: None for default threads, Some(n) for a fixed count.
+    ///
+    /// Old records (format version <= 4) do not carry this field and are
+    /// treated as None (default-thread identity) during parsing.
+    pub thread_count: Option<u32>,
     pub groups: Vec<LocalGroupRecord>,
     pub cases: Vec<LocalCaseRecord>,
 }
@@ -112,20 +117,25 @@ pub fn read_local_runs(path: &Path) -> Result<Vec<LocalRunRecord>, String> {
     Ok(runs)
 }
 
-/// Find the most recent run for a given system_uuid and suite kind.
+/// Find the most recent run matching the system, suite kind, and thread identity.
 ///
-/// Scans from the end of the list so the latest appended record wins.
-/// Filters by both `system_uuid` and `suite_kind` so CLI and frontend
-/// benchmarks never compare against each other.
+/// Scans from the end so the latest appended record wins. Filtering by
+/// `thread_count` ensures default-thread and fixed-thread runs never compare
+/// against each other, and different fixed counts never match. Old records
+/// without `thread_count` are treated as `None` (default).
 pub fn find_latest_matching_run<'a>(
     runs: &'a [LocalRunRecord],
     system_uuid: &str,
     suite_kind: BenchmarkSuiteKind,
+    thread_count: Option<u32>,
 ) -> Option<&'a LocalRunRecord> {
     let persisted_suite_kind = suite_kind.persisted_name();
 
-    runs.iter()
-        .rfind(|r| r.system_uuid == system_uuid && r.suite_kind == persisted_suite_kind)
+    runs.iter().rfind(|r| {
+        r.system_uuid == system_uuid
+            && r.suite_kind == persisted_suite_kind
+            && r.thread_count == thread_count
+    })
 }
 
 /// Append a single run record to runs.jsonl.
@@ -173,6 +183,78 @@ pub fn get_commit_hash() -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+/// Capture the effective `RAYON_NUM_THREADS` setting as a normalized
+/// thread identity.
+///
+/// Returns `Ok(Some(n))` for a valid positive integer, `Ok(None)` when the
+/// variable is unset (Rayon default threads), or `Err` when the variable is
+/// set to an empty string, zero, a non-numeric value, or a non-Unicode value.
+///
+/// Only an unset variable means default. A non-Unicode value must surface as a
+/// clear tooling error instead of silently collapsing into default identity.
+pub fn effective_thread_count() -> Result<Option<u32>, String> {
+    use std::env::VarError;
+
+    match std::env::var("RAYON_NUM_THREADS") {
+        Err(VarError::NotPresent) => Ok(None),
+        Err(VarError::NotUnicode(_)) => Err(
+            "RAYON_NUM_THREADS is set to a non-Unicode value; expected a positive integer or unset for default threads"
+                .to_string(),
+        ),
+        Ok(value) => parse_thread_count(&value),
+    }
+}
+
+/// Format a thread identity for display.
+///
+/// Returns "default" for `None` and "fixed: N" for `Some(n)`. A fixed-thread
+/// run must never look like a default run in any output surface.
+pub fn thread_identity_label(thread_count: Option<u32>) -> String {
+    match thread_count {
+        None => "default".to_string(),
+        Some(count) => format!("fixed: {count}"),
+    }
+}
+
+/// Format the inline thread-identity suffix for a benchmark result line.
+///
+/// Returns an empty string for default threads and ` [threads: fixed: N]` for
+/// a fixed thread count. A fixed run must always be visibly distinct from
+/// default in any stdout surface.
+pub fn thread_identity_suffix(thread_count: Option<u32>) -> String {
+    match thread_count {
+        None => String::new(),
+        Some(_) => format!(" [threads: {}]", thread_identity_label(thread_count)),
+    }
+}
+
+/// Parse a `RAYON_NUM_THREADS` value into a normalized thread identity.
+///
+/// Accepts a positive integer as `Some(n)`. Rejects empty, zero, or
+/// non-numeric values with a clear error message so invalid values never
+/// silently become default.
+fn parse_thread_count(value: &str) -> Result<Option<u32>, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(
+            "RAYON_NUM_THREADS is set to an empty string; expected a positive integer or unset for default threads"
+                .to_string(),
+        );
+    }
+    let count: u32 = trimmed.parse().map_err(|_| {
+        format!(
+            "RAYON_NUM_THREADS is set to '{value}'; expected a positive integer or unset for default threads"
+        )
+    })?;
+    if count == 0 {
+        return Err(
+            "RAYON_NUM_THREADS is set to 0; expected a positive integer or unset for default threads"
+                .to_string(),
+        );
+    }
+    Ok(Some(count))
 }
 
 /// Convert a BenchmarkRun into a LocalRunRecord for persistence.
@@ -241,6 +323,7 @@ pub fn to_local_record(run: &BenchmarkRun, commit: Option<String>) -> LocalRunRe
         primary_metric_name: run.suite_kind.primary_metric_name().to_string(),
         suite_average_ms: run.suite.average_ms,
         suite_case_spread_ms: run.suite.case_spread_ms,
+        thread_count: run.thread_count,
         groups,
         cases,
     }
@@ -294,8 +377,8 @@ pub fn to_group_stats(record: &LocalRunRecord) -> Vec<BenchmarkGroupStats> {
 
 /// Serialize a LocalRunRecord to a single JSONL line.
 ///
-/// WHAT: Produces compact, valid JSON without external dependencies.
-/// WHY:  xtask is kept std-only; the schema is small enough for manual formatting.
+/// Produces compact, valid JSON without external dependencies; xtask is kept
+/// std-only and the schema is small enough for manual formatting.
 pub fn format_record_as_jsonl(record: &LocalRunRecord) -> String {
     let mut parts = Vec::new();
 
@@ -344,6 +427,10 @@ pub fn format_record_as_jsonl(record: &LocalRunRecord) -> String {
         r#""suite_case_spread_ms":{}"#,
         record.suite_case_spread_ms
     ));
+    match record.thread_count {
+        Some(count) => parts.push(format!(r#""thread_count":{}"#, count)),
+        None => parts.push(r#""thread_count":null"#.to_string()),
+    }
 
     let group_parts: Vec<String> = record
         .groups
@@ -453,7 +540,7 @@ fn parse_jsonl_line(line: &str) -> Result<LocalRunRecord, String> {
 
     match format_version {
         1 => parse_v1_record(line),
-        2..=4 => parse_grouped_record(line),
+        2..=5 => parse_grouped_record(line),
         _ => Err(format!("unsupported format_version {format_version}")),
     }
 }
@@ -504,6 +591,7 @@ fn parse_v1_record(line: &str) -> Result<LocalRunRecord, String> {
         primary_metric_name: "wall_time_ms".to_string(),
         suite_average_ms: suite_mean_ms,
         suite_case_spread_ms: suite_stddev_ms,
+        thread_count: None,
         groups,
         cases,
     })
@@ -525,6 +613,10 @@ fn parse_grouped_record(line: &str) -> Result<LocalRunRecord, String> {
     let primary_metric_name = extract_string_field(line, "primary_metric_name")
         .unwrap_or_else(|| default_primary_metric_name.to_string());
 
+    // Old records (format version <= 4) do not carry thread_count; treat
+    // absent or null as None (default-thread identity).
+    let thread_count = extract_u32_field(line, "thread_count");
+
     Ok(LocalRunRecord {
         format_version: extract_u32_field(line, "format_version").unwrap_or(2),
         timestamp: fields.timestamp,
@@ -539,6 +631,7 @@ fn parse_grouped_record(line: &str) -> Result<LocalRunRecord, String> {
         primary_metric_name,
         suite_average_ms,
         suite_case_spread_ms,
+        thread_count,
         groups,
         cases,
     })

@@ -147,7 +147,10 @@ fn test_comparison_first_run_baseline() {
     assert_eq!(comparison.previous_case_count, 0);
     assert_eq!(comparison.compared_case_count, 0);
     assert!(!comparison.case_set_changed);
-    assert_eq!(comparison.format_run_change_line(), "**baseline**; 2 cases");
+    assert_eq!(
+        comparison.format_run_change_line(),
+        "**baseline**; 2 cases, avg ~150ms"
+    );
 }
 
 #[test]

@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 10 benchmark identity and artifact integration coverage. Phase 9 documentation remains deferred while the user-owned docs migration is active.
-LAST_ACCEPTED_COMMIT: `a408bd03c` (`refactor: remove stale module facade paths`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `a408bd03c`; the resolver-preflight correction has passed Codex implementation and Ollama final review and is ready for checkpoint. Concurrent docs migration remains user-owned and outside implementation worker scope.
+CURRENT_SLICE: Phase 10 artifact integration coverage. The benchmark thread-identity correction is accepted and ready for checkpoint, then Phase 9 documentation reconciliation follows.
+LAST_ACCEPTED_COMMIT: `b0aed305e` (`refactor: preflight source library roots`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `9905a08ac`; ten xtask benchmark files contain the accepted thread-identity patch. The docs migration is committed separately and paused.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -18,8 +18,8 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - this plan
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
-- docs: the ongoing language migration is user-owned. Compiler-design source-discovery and import pages still contain facade-era wording and are deferred to Phase 9.
-- code: source-library root canonicalization and hash-root discovery now have one Stage 0 owner. `ProjectPathResolver` consumes an immutable prepared contract and performs no filesystem discovery during construction. Remaining audit work is thread-aware benchmark identity, stale removed-metric labels and an end-to-end negative artifact assertion.
+- docs: the completed migration remains outside this implementation slice. Compiler-design source-discovery and import pages still need Phase 9 reconciliation after code slices are accepted.
+- code: source-library root canonicalization and hash-root discovery have one Stage 0 owner. Benchmark history now records exact default/fixed Rayon identity, comparisons never mix identities, fixed runs stay out of tracked summaries and reports label their identity. Remaining code work is the end-to-end negative artifact assertion and any missing source-library root fixture coverage found with it.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -188,16 +188,17 @@ VALIDATION_STATE:
 - Phase 8 generic traversal: Codex CLI removed the optional module-root export-file map and source-library facade map, made each discovered root file the authoritative public surface and renamed resolver/validation paths around module roots. Shared reachable-file traversal still owns provider-capable and provider-free imports, source-cache reuse and cross-module root queueing. Arbitrary-name source-library and Beandown root coverage was added. Focused Stage 0, path and header suites passed. Parent `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at 0 ms average.
 - Phase 10 implementation cleanup: Codex CLI audited obsolete discovery, filename-specific helpers, inline export compatibility and facade APIs. Parent rejected and reverted an entry-file-only discovery shortcut after the full gate exposed 22 missing sibling-module imports. The accepted cleanup only simplifies the already-rejected non-block `export` path and removes stale module-facade terminology. Corrected `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 - Phase 10 resolver preflight: Codex CLI introduced immutable `PreparedSourceLibraryRoots`, moved source-library canonicalization and direct-child hash-root discovery into one Stage 0/build-system preflight and migrated directory, single-file, config and direct Beandown construction. Resolver constructors now consume prepared data without filesystem calls. Ollama performed the user-requested final review and found no correction. Both workers passed all-target tests (3344), integration cases (1753/1753), frontend benchmarks, Clippy and diff checks; Codex also passed `just validate`.
+- Phase 10 benchmark identity: Ollama added format-v5 default/fixed Rayon thread identity to local history, exact-identity comparison and report selection, visible fixed-thread output and default-only tracked summaries. A separate Ollama final review fixed non-Unicode environment handling and consolidated summary policy. Parent validation passed formatting, the 447-test xtask suite, the default frontend run with a case-set-changed +4 ms comparison, fixed 1/2/4-thread runs at approximately 123/82/59 ms, `just bench-check` at -3 ms with no slower cases, `just bench-report` and full `just validate` with 3336 unit tests and 1753 integration cases. No benchmark history or tracked summary changed.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
-- other docs stale: `docs/language-overview.md`, `docs/compiler-design-overview.md`, docs-site project-structure/libraries/getting-started pages, `README.md` examples, scaffold docs and benchmark docs if metric names change
+- other docs stale: `docs/language-overview.md`, compiler-design source discovery/import pages, docs-site project-structure/libraries/getting-started pages, `README.md` examples and `benchmarks/README.md`, which must describe thread-identity isolation and default-only tracked summaries
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Use Ollama for the remaining Phase 10 benchmark-identity and artifact-coverage slices, followed by an additional Ollama final review before each commit.
-DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
-NEXT_WORKER_ORDER: codex-cli only for this run
+- Commit the accepted benchmark-thread-identity slice, then delegate the Phase 10 artifact integration coverage to Ollama.
+DELEGATION_DECISION: ollama - explicit user override for each implementation slice and its pre-commit final review, with codex-cli only after a clean Ollama availability blocker
+NEXT_WORKER_ORDER: ollama, then codex-cli only after a clean availability blocker, then parent-direct
 STOP_REASON: none
 NEXT_RESUME_ACTION: checkpoint the reviewed resolver preflight, then launch the benchmark-identity correction through Ollama without editing documentation.
 
@@ -1063,20 +1064,20 @@ This phase proves the refactor achieved its performance and simplification goals
   - [x] no second expensive discovery pass remains.
 - [x] Run full validation:
   - [x] `just validate`
-- [ ] Run final benchmark protocol:
-  - [ ] `just bench-frontend-check`
-  - [ ] `RAYON_NUM_THREADS=1 just bench-frontend-check`
-  - [ ] `RAYON_NUM_THREADS=2 just bench-frontend-check`
-  - [ ] `RAYON_NUM_THREADS=4 just bench-frontend-check`
-  - [ ] `just bench-check`
-  - [ ] `just bench-report`
+- [x] Run final benchmark protocol:
+  - [x] `just bench-frontend-check`
+  - [x] `RAYON_NUM_THREADS=1 just bench-frontend-check`
+  - [x] `RAYON_NUM_THREADS=2 just bench-frontend-check`
+  - [x] `RAYON_NUM_THREADS=4 just bench-frontend-check`
+  - [x] `just bench-check`
+  - [x] `just bench-report`
 - [ ] Confirm acceptance gates:
-  - [ ] exactly one source-tree discovery run per directory build;
-  - [ ] module-root stress/source-tree discovery stage improved versus baseline;
-  - [ ] no broad compile-time regression;
+  - [x] exactly one source-tree discovery run per directory build;
+  - [x] module-root stress/source-tree discovery stage improved versus baseline;
+  - [x] no broad compile-time regression;
   - [x] no hidden path resolver scan;
   - [ ] no artifact emitted for API-only HTML modules;
-  - [ ] imported root start bodies do not execute in importers.
+  - [x] imported root start bodies do not execute in importers.
 - [ ] If benchmark results are mixed:
   - [ ] run `just profile-case <case> terse` for regressed cases;
   - [ ] record concise explanation;

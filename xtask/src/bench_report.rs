@@ -5,7 +5,9 @@
 //! WHY: Tracked summaries stay terse; this command gives developers local
 //! per-case, stage, counter, and ratio evidence without writing any files.
 
-use crate::bench_history::{LocalRunRecord, RUNS_JSONL_PATH, read_local_runs, to_case_results};
+use crate::bench_history::{
+    LocalRunRecord, RUNS_JSONL_PATH, read_local_runs, thread_identity_label, to_case_results,
+};
 use crate::bench_system::{SystemIdentityMode, load_or_create_system};
 use crate::bench_types::{
     BenchmarkCaseResult, BenchmarkComparison, BenchmarkMetric, BenchmarkStageMovement,
@@ -231,6 +233,7 @@ pub(crate) struct SuiteReport {
     pub(crate) public_system_id: String,
     pub(crate) latest_timestamp: String,
     pub(crate) latest_commit: Option<String>,
+    pub(crate) thread_count: Option<u32>,
     pub(crate) comparison: BenchmarkComparison,
     pub(crate) slowest_cases: Vec<SlowCaseReport>,
     pub(crate) unattributed_cases: Vec<UnattributedCaseReport>,
@@ -350,8 +353,12 @@ fn select_latest_run<'a>(
     })?;
     let latest = &runs[latest_index];
 
+    // The previous run must match the latest run's thread identity so the
+    // report never compares runs with different parallelism levels.
     let previous = runs[..latest_index].iter().rev().find(|run| {
-        run.suite_kind == persisted_suite_kind && run.system_uuid == latest.system_uuid
+        run.suite_kind == persisted_suite_kind
+            && run.system_uuid == latest.system_uuid
+            && run.thread_count == latest.thread_count
     });
 
     Some(SelectedRun { latest, previous })
@@ -389,6 +396,7 @@ fn calculate_suite_report(
         public_system_id: selection.latest.public_system_id.clone(),
         latest_timestamp: selection.latest.timestamp.clone(),
         latest_commit: selection.latest.commit.clone(),
+        thread_count: selection.latest.thread_count,
         comparison,
         slowest_cases,
         unattributed_cases,
@@ -800,6 +808,10 @@ pub(crate) fn format_benchmark_report(report: &BenchmarkReport) -> String {
             "Latest: {}, commit {}\n",
             suite.latest_timestamp,
             suite.latest_commit.as_deref().unwrap_or("unknown")
+        ));
+        output.push_str(&format!(
+            "Threads: {}\n",
+            thread_identity_label(suite.thread_count)
         ));
         output.push_str(&format!(
             "Change: {}\n",

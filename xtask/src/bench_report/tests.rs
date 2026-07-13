@@ -1,6 +1,6 @@
 use super::*;
 use crate::bench_history::{LocalCaseRecord, LocalMetricRecord, LocalRunRecord};
-use crate::bench_types::{BenchmarkMetric, BenchmarkSystem};
+use crate::bench_types::{BenchmarkChangeKind, BenchmarkMetric, BenchmarkSystem};
 use crate::profile::history::{HistoryCaseRecord, HistoryHotFunction, ProfileHistoryRecord};
 
 #[test]
@@ -303,7 +303,7 @@ fn run_record(
     cases: Vec<LocalCaseRecord>,
 ) -> LocalRunRecord {
     LocalRunRecord {
-        format_version: 4,
+        format_version: 5,
         timestamp: timestamp.to_string(),
         month_key: "2026-05".to_string(),
         commit: Some("abc1234".to_string()),
@@ -316,6 +316,7 @@ fn run_record(
         primary_metric_name: suite_kind.primary_metric_name().to_string(),
         suite_average_ms: 0.0,
         suite_case_spread_ms: 0.0,
+        thread_count: None,
         groups: vec![],
         cases,
     }
@@ -546,4 +547,106 @@ fn format_top_drift_item_returns_none_when_no_comparable_previous() {
     let top_drift = format_top_drift_item(&records, Some(&system), &latest);
 
     assert_eq!(top_drift, "none");
+}
+
+// ---------------------------------------------------------------------------
+//  Thread identity tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn report_selects_only_matching_thread_identity_for_comparison() {
+    let system = test_system("SYSTEM-A");
+
+    // Previous run with default threads, latest run with fixed 4 threads.
+    // The report must NOT compare them because thread identities differ.
+    let previous = run_record(
+        "2026-05-01T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 20.0, vec![], vec![])],
+    );
+    let mut current = run_record(
+        "2026-05-02T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 24.0, vec![], vec![])],
+    );
+    current.thread_count = Some(4);
+
+    let report = calculate_benchmark_report(&[previous, current], Some(&system));
+    let suite = &report.suites[0];
+
+    // No comparable previous run exists for thread identity Some(4),
+    // so the comparison must be a baseline.
+    assert_eq!(suite.comparison.change_kind, BenchmarkChangeKind::Baseline);
+    assert_eq!(suite.comparison.compared_case_count, 0);
+}
+
+#[test]
+fn report_compares_runs_with_same_thread_identity() {
+    let system = test_system("SYSTEM-A");
+
+    let mut previous = run_record(
+        "2026-05-01T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 20.0, vec![], vec![])],
+    );
+    previous.thread_count = Some(2);
+
+    let mut current = run_record(
+        "2026-05-02T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 24.0, vec![], vec![])],
+    );
+    current.thread_count = Some(2);
+
+    let report = calculate_benchmark_report(&[previous, current], Some(&system));
+    let suite = &report.suites[0];
+
+    // Same thread identity: the report must find a comparable previous run.
+    assert_ne!(suite.comparison.change_kind, BenchmarkChangeKind::Baseline);
+    assert_eq!(suite.comparison.compared_case_count, 1);
+}
+
+#[test]
+fn report_renders_fixed_thread_identity_in_header() {
+    let system = test_system("SYSTEM-A");
+
+    let mut current = run_record(
+        "2026-05-02T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 24.0, vec![], vec![])],
+    );
+    current.thread_count = Some(4);
+
+    let report = calculate_benchmark_report(&[current], Some(&system));
+    let rendered = format_benchmark_report(&report);
+
+    assert!(
+        rendered.contains("Threads: fixed: 4"),
+        "report should show fixed thread identity: got\n{rendered}"
+    );
+}
+
+#[test]
+fn report_renders_default_thread_identity_in_header() {
+    let system = test_system("SYSTEM-A");
+
+    let current = run_record(
+        "2026-05-02T12:00",
+        BenchmarkSuiteKind::FrontendPhases,
+        "SYSTEM-A",
+        vec![case_record("docs", 24.0, vec![], vec![])],
+    );
+
+    let report = calculate_benchmark_report(&[current], Some(&system));
+    let rendered = format_benchmark_report(&report);
+
+    assert!(
+        rendered.contains("Threads: default"),
+        "report should show default thread identity: got\n{rendered}"
+    );
 }

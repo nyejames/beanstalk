@@ -75,8 +75,13 @@ impl ParsedSummaryRunEntry {
 
 /// Update or create the monthly summary for the current run.
 ///
-/// - Loads all local raw runs for the current month.
-/// - Builds the current system summary block (initial vs latest).
+/// Owns the tracked-summary default-thread policy. Fixed-thread runs no-op
+/// without reading or writing the summary so the public surface stays a
+/// default-thread signal without mixed-identity comparisons.
+///
+/// - For default-thread runs: loads all local raw runs for this month.
+/// - Builds the current system summary block (initial vs latest) from
+///   default-thread runs only.
 /// - Reads existing summary file and preserves other systems blocks.
 /// - Regenerates the summary section, then appends or replaces the new run entry.
 /// - Only called in Record mode.
@@ -84,20 +89,27 @@ pub fn update_monthly_summary(
     run: &BenchmarkRun,
     comparison: &BenchmarkComparison,
 ) -> Result<(), String> {
+    // Fixed-thread runs stay local-only. The tracked summary is a default-thread
+    // signal, so a fixed-thread run no-ops before any summary read or write.
+    if run.thread_count.is_some() {
+        return Ok(());
+    }
+
     let month_key = run.timestamp.month_key();
     let path = summary_path(&month_key);
     let suite_kind_label = run.suite_kind.display_label().to_string();
     let persisted_suite_kind = run.suite_kind.persisted_name();
 
-    // Load all local raw runs for this month
     let month_runs = load_month_runs(&month_key)?;
 
-    // Find initial and latest runs for the current system and suite kind
+    // Only default-thread runs feed the public summary top block so a
+    // recorded fixed-thread run can never become the initial or latest record.
     let system_runs: Vec<&LocalRunRecord> = month_runs
         .iter()
         .filter(|r| {
             r.public_system_id == run.system.public_system_id
                 && r.suite_kind == persisted_suite_kind
+                && r.thread_count.is_none()
         })
         .collect();
 

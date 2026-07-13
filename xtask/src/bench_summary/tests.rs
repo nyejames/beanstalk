@@ -42,6 +42,7 @@ fn local_record_from_cases(cases: Vec<BenchmarkCaseResult>) -> LocalRunRecord {
         measured_iterations: 10,
         suite_average_ms: suite.average_ms,
         suite_case_spread_ms: suite.case_spread_ms,
+        thread_count: None,
         groups: groups
             .into_iter()
             .map(|group| LocalGroupRecord {
@@ -82,6 +83,7 @@ fn local_record(average_ms: f64, case_spread_ms: f64) -> LocalRunRecord {
         primary_metric_name: "wall_time_ms".to_string(),
         suite_average_ms: average_ms,
         suite_case_spread_ms: case_spread_ms,
+        thread_count: None,
         groups: vec![
             LocalGroupRecord {
                 name: "core".to_string(),
@@ -132,6 +134,7 @@ fn benchmark_run(cases: Vec<BenchmarkCaseResult>) -> BenchmarkRun {
         suite,
         warmup_runs: 1,
         measured_iterations: 10,
+        thread_count: None,
     }
 }
 
@@ -315,7 +318,7 @@ fn test_generate_run_entry_baseline() {
     let entry = generate_run_entry(&run, &comparison);
     assert_eq!(
         entry.body,
-        "**baseline**; 1 cases\nAvg: all ~110ms, ungrouped ~110ms"
+        "**baseline**; 1 cases, avg ~110ms\nAvg: all ~110ms, ungrouped ~110ms"
     );
 }
 
@@ -1000,4 +1003,19 @@ Avg: all ~80ms, ungrouped ~80ms
             .to_markdown()
             .contains("End-to-end CLI / macOS M1 (B7F2A9)")
     );
+}
+
+#[test]
+fn test_update_monthly_summary_fixed_thread_run_is_noop() {
+    // A fixed-thread run must no-op before any summary read or write so the
+    // tracked summary stays a default-thread signal. The early return means
+    // no runs.jsonl read and no summary file access occurs.
+    let cases = vec![benchmark_case("check_docs", 80.0)];
+    let mut run = benchmark_run(cases);
+    run.thread_count = Some(4);
+
+    let comparison = BenchmarkComparison::new(&run.cases, None);
+
+    let result = update_monthly_summary(&run, &comparison);
+    assert!(result.is_ok(), "fixed-thread run should no-op cleanly");
 }

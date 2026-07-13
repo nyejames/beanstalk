@@ -1,9 +1,13 @@
 use super::*;
 use std::fs;
+use std::sync::Mutex;
+
+/// Serializes tests that mutate the `RAYON_NUM_THREADS` environment variable.
+static THREAD_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn make_record(system_uuid: &str, timestamp: &str) -> LocalRunRecord {
     LocalRunRecord {
-        format_version: 4,
+        format_version: 5,
         timestamp: timestamp.to_string(),
         month_key: "2026-05".to_string(),
         commit: Some("abc123".to_string()),
@@ -16,6 +20,7 @@ fn make_record(system_uuid: &str, timestamp: &str) -> LocalRunRecord {
         primary_metric_name: "wall_time_ms".to_string(),
         suite_average_ms: 68.0,
         suite_case_spread_ms: 9.0,
+        thread_count: None,
         groups: vec![LocalGroupRecord {
             name: "core".to_string(),
             case_count: 1,
@@ -125,14 +130,14 @@ fn test_find_latest_matching_run() {
         make_record("sys-a", "2026-05-10T12:00"),
     ];
 
-    let latest = find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli);
+    let latest = find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, None);
     assert!(latest.is_some());
     assert_eq!(latest.unwrap().timestamp, "2026-05-10T12:00");
 
-    let latest_b = find_latest_matching_run(&runs, "sys-b", BenchmarkSuiteKind::EndToEndCli);
+    let latest_b = find_latest_matching_run(&runs, "sys-b", BenchmarkSuiteKind::EndToEndCli, None);
     assert_eq!(latest_b.unwrap().timestamp, "2026-05-10T11:00");
 
-    let latest_c = find_latest_matching_run(&runs, "sys-c", BenchmarkSuiteKind::EndToEndCli);
+    let latest_c = find_latest_matching_run(&runs, "sys-c", BenchmarkSuiteKind::EndToEndCli, None);
     assert!(latest_c.is_none());
 }
 
@@ -159,7 +164,7 @@ fn test_find_latest_skips_unknown_version() {
 
     let runs = read_local_runs(&path).unwrap();
     assert_eq!(runs.len(), 1);
-    assert_eq!(runs[0].format_version, 4);
+    assert_eq!(runs[0].format_version, 5);
 
     // Cleanup
     let _ = fs::remove_file(&path);
@@ -235,18 +240,241 @@ fn test_find_latest_matching_run_filters_by_suite_kind() {
 
     let runs = vec![cli_record, frontend_record];
 
-    let latest_cli = find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli);
+    let latest_cli =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, None);
     assert!(latest_cli.is_some());
     assert_eq!(latest_cli.unwrap().timestamp, "2026-05-10T10:00");
 
     let latest_frontend =
-        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::FrontendPhases);
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::FrontendPhases, None);
     assert!(latest_frontend.is_some());
     assert_eq!(latest_frontend.unwrap().timestamp, "2026-05-10T11:00");
 
     let latest_other_system =
-        find_latest_matching_run(&runs, "sys-b", BenchmarkSuiteKind::FrontendPhases);
+        find_latest_matching_run(&runs, "sys-b", BenchmarkSuiteKind::FrontendPhases, None);
     assert!(latest_other_system.is_none());
+}
+
+#[test]
+fn test_v4_record_without_thread_count_parses_as_default() {
+    let temp_dir = std::env::temp_dir();
+    let path = temp_dir.join("bench_history_test_v4_no_thread_count.jsonl");
+    let _ = fs::remove_file(&path);
+
+    fs::write(
+        &path,
+        r#"{"format_version":4,"timestamp":"2026-05-10T15:21","month_key":"2026-05","commit":null,"system_uuid":"sys-a","public_system_id":"B7F2A9","display_name":"macOS M1","warmup_runs":1,"measured_iterations":10,"suite_kind":"end_to_end_cli","suite_average_ms":68.0,"suite_case_spread_ms":9.0,"groups":[],"cases":[]}"#,
+    )
+    .unwrap();
+
+    let runs = read_local_runs(&path).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].thread_count, None);
+
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn test_v5_fixed_thread_record_roundtrips() {
+    let temp_dir = std::env::temp_dir();
+    let path = temp_dir.join("bench_history_test_v5_thread_roundtrip.jsonl");
+    let _ = fs::remove_file(&path);
+
+    let mut record = make_record("sys-a", "2026-05-10T15:21");
+    record.thread_count = Some(4);
+    append_local_run(&path, &record).unwrap();
+
+    let runs = read_local_runs(&path).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].thread_count, Some(4));
+
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn test_v5_null_thread_count_parses_as_default() {
+    let temp_dir = std::env::temp_dir();
+    let path = temp_dir.join("bench_history_test_v5_null_thread.jsonl");
+    let _ = fs::remove_file(&path);
+
+    fs::write(
+        &path,
+        r#"{"format_version":5,"timestamp":"2026-05-10T15:21","month_key":"2026-05","commit":null,"system_uuid":"sys-a","public_system_id":"B7F2A9","display_name":"macOS M1","warmup_runs":1,"measured_iterations":10,"suite_kind":"end_to_end_cli","suite_average_ms":68.0,"suite_case_spread_ms":9.0,"thread_count":null,"groups":[],"cases":[]}"#,
+    )
+    .unwrap();
+
+    let runs = read_local_runs(&path).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].thread_count, None);
+
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn test_find_latest_default_never_matches_fixed() {
+    let mut default_run = make_record("sys-a", "2026-05-10T10:00");
+    default_run.thread_count = None;
+
+    let mut fixed_run = make_record("sys-a", "2026-05-10T11:00");
+    fixed_run.thread_count = Some(4);
+
+    let runs = vec![default_run, fixed_run];
+
+    // A default-thread query must not match the fixed-thread run.
+    let latest_default =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, None);
+    assert_eq!(latest_default.unwrap().timestamp, "2026-05-10T10:00");
+
+    // A fixed-thread query must not match the default-thread run.
+    let latest_fixed =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, Some(4));
+    assert_eq!(latest_fixed.unwrap().timestamp, "2026-05-10T11:00");
+
+    // A non-existent fixed count matches neither.
+    let latest_other =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, Some(2));
+    assert!(latest_other.is_none());
+}
+
+#[test]
+fn test_find_latest_fixed_counts_never_match_each_other() {
+    let mut one_thread = make_record("sys-a", "2026-05-10T10:00");
+    one_thread.thread_count = Some(1);
+
+    let mut two_thread = make_record("sys-a", "2026-05-10T11:00");
+    two_thread.thread_count = Some(2);
+
+    let runs = vec![one_thread, two_thread];
+
+    let latest_one =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, Some(1));
+    assert_eq!(latest_one.unwrap().timestamp, "2026-05-10T10:00");
+
+    let latest_two =
+        find_latest_matching_run(&runs, "sys-a", BenchmarkSuiteKind::EndToEndCli, Some(2));
+    assert_eq!(latest_two.unwrap().timestamp, "2026-05-10T11:00");
+
+    // Each count matches only its own run, not the other.
+    assert_ne!(
+        latest_one.unwrap().thread_count,
+        latest_two.unwrap().thread_count
+    );
+}
+
+#[test]
+fn test_parse_thread_count_positive_returns_fixed() {
+    // A valid positive integer is accepted as a fixed thread count.
+    // Whitespace is trimmed so " 8 " is equivalent to "8".
+    assert_eq!(parse_thread_count("4"), Ok(Some(4)));
+    assert_eq!(parse_thread_count(" 8 "), Ok(Some(8)));
+    assert_eq!(parse_thread_count("1"), Ok(Some(1)));
+}
+
+#[test]
+fn test_parse_thread_count_empty_returns_error() {
+    let result = parse_thread_count("");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("empty"),
+        "error should mention empty: got {err}"
+    );
+}
+
+#[test]
+fn test_parse_thread_count_zero_returns_error() {
+    let result = parse_thread_count("0");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("0"), "error should mention zero: got {err}");
+}
+
+#[test]
+fn test_parse_thread_count_malformed_returns_error() {
+    let result = parse_thread_count("abc");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("abc"),
+        "error should mention the bad value: got {err}"
+    );
+}
+
+#[test]
+fn test_thread_identity_label_default() {
+    assert_eq!(thread_identity_label(None), "default");
+}
+
+#[test]
+fn test_thread_identity_label_fixed() {
+    assert_eq!(thread_identity_label(Some(1)), "fixed: 1");
+    assert_eq!(thread_identity_label(Some(4)), "fixed: 4");
+}
+
+#[test]
+fn test_effective_thread_count_unset_returns_default() {
+    let _guard = THREAD_ENV_LOCK.lock().unwrap();
+    // Save and remove the variable so the unset path is exercised regardless
+    // of the ambient environment. This test is the sole owner of the env var
+    // mutation, so it is safe within the test process.
+    let saved = std::env::var("RAYON_NUM_THREADS").ok();
+    unsafe {
+        std::env::remove_var("RAYON_NUM_THREADS");
+    }
+
+    assert_eq!(effective_thread_count(), Ok(None));
+
+    if let Some(value) = saved {
+        unsafe {
+            std::env::set_var("RAYON_NUM_THREADS", value);
+        }
+    }
+}
+
+#[test]
+fn test_effective_thread_count_empty_string_returns_error() {
+    let _guard = THREAD_ENV_LOCK.lock().unwrap();
+    let saved = std::env::var("RAYON_NUM_THREADS").ok();
+    unsafe {
+        std::env::set_var("RAYON_NUM_THREADS", "");
+    }
+
+    let result = effective_thread_count();
+    assert!(
+        result.is_err(),
+        "empty string should be an error: got {result:?}"
+    );
+
+    if let Some(value) = saved {
+        unsafe {
+            std::env::set_var("RAYON_NUM_THREADS", value);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("RAYON_NUM_THREADS");
+        }
+    }
+}
+
+#[test]
+fn test_effective_thread_count_valid_positive_returns_fixed() {
+    let _guard = THREAD_ENV_LOCK.lock().unwrap();
+    let saved = std::env::var("RAYON_NUM_THREADS").ok();
+    unsafe {
+        std::env::set_var("RAYON_NUM_THREADS", "4");
+    }
+
+    assert_eq!(effective_thread_count(), Ok(Some(4)));
+
+    if let Some(value) = saved {
+        unsafe {
+            std::env::set_var("RAYON_NUM_THREADS", value);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("RAYON_NUM_THREADS");
+        }
+    }
 }
 
 #[test]
@@ -289,7 +517,7 @@ fn test_format_record_as_jsonl_structure() {
     assert!(json.ends_with('}'));
 
     // Should contain expected fields
-    assert!(json.contains(r#""format_version":4"#));
+    assert!(json.contains(r#""format_version":5"#));
     assert!(json.contains(r#""timestamp":"2026-05-10T15:21""#));
     assert!(json.contains(r#""commit":"abc123""#));
     assert!(json.contains(r#""system_uuid":"sys-a""#));
@@ -351,6 +579,7 @@ fn test_to_local_record_preserves_options() {
         },
         warmup_runs: 3,
         measured_iterations: 15,
+        thread_count: None,
     };
 
     let record = to_local_record(&run, Some("abc123".to_string()));
@@ -413,6 +642,7 @@ fn test_to_local_record_preserves_detailed_observations() {
         },
         warmup_runs: 1,
         measured_iterations: 10,
+        thread_count: None,
     };
 
     let record = to_local_record(&run, None);
@@ -438,4 +668,15 @@ fn read_record_line(line: &str) -> LocalRunRecord {
     let _ = fs::remove_file(&path);
 
     runs.into_iter().next().expect("record should parse")
+}
+
+#[test]
+fn test_thread_identity_suffix_default_is_empty() {
+    assert_eq!(thread_identity_suffix(None), "");
+}
+
+#[test]
+fn test_thread_identity_suffix_fixed_is_labeled() {
+    assert_eq!(thread_identity_suffix(Some(1)), " [threads: fixed: 1]");
+    assert_eq!(thread_identity_suffix(Some(4)), " [threads: fixed: 4]");
 }

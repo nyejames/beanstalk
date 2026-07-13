@@ -10,8 +10,8 @@ use beanstalk::benchmarking::{
 use std::path::PathBuf;
 
 use crate::bench_history::{
-    RUNS_JSONL_PATH, append_local_run, find_latest_matching_run, get_commit_hash, read_local_runs,
-    to_case_results, to_local_record,
+    RUNS_JSONL_PATH, append_local_run, effective_thread_count, find_latest_matching_run,
+    get_commit_hash, read_local_runs, thread_identity_suffix, to_case_results, to_local_record,
 };
 use crate::bench_observations::average_observations;
 use crate::bench_summary::update_monthly_summary;
@@ -19,8 +19,8 @@ use crate::bench_system::{SystemIdentityMode, load_or_create_system};
 use crate::bench_time::BenchmarkTimestamp;
 use crate::bench_types::{
     BenchmarkCaseObservations, BenchmarkCaseResult, BenchmarkChangeKind, BenchmarkComparison,
-    BenchmarkMetric, BenchmarkRun, BenchmarkSuiteKind, BenchmarkSystem, BenchmarkThresholds,
-    SuiteStats, calculate_group_stats, calculate_mean, calculate_median, calculate_stage_movement,
+    BenchmarkMetric, BenchmarkRun, BenchmarkSuiteKind, BenchmarkThresholds, SuiteStats,
+    calculate_group_stats, calculate_mean, calculate_median, calculate_stage_movement,
     calculate_stddev, format_stage_movement_line, format_top_current_stages,
 };
 use crate::case_parser::{BenchmarkCase, parse_cases};
@@ -57,6 +57,14 @@ pub struct FrontendBenchOptions {
 ///
 /// Warmup failures and measured iteration failures are treated as hard
 /// failures that abort the entire run without writing any data.
+///
+/// # Arguments
+///
+/// * `options` - Frontend benchmark execution options (warmup, iterations, mode)
+///
+/// # Returns
+///
+/// Ok(()) on success, or an error message on failure.
 pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), String> {
     let cases = load_frontend_cases()?;
 
@@ -66,6 +74,8 @@ pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), Stri
         options.warmup_runs,
         options.measured_iterations
     );
+
+    let thread_count = effective_thread_count()?;
 
     let case_results = run_frontend_cases(&cases, &options)?;
 
@@ -77,8 +87,10 @@ pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), Stri
         Some(sys) => sys,
         None => {
             println!(
-                "Result: frontend avg ~{:.0}ms, case spread ~{:.0}ms",
-                suite.average_ms, suite.case_spread_ms
+                "Result: frontend avg ~{:.0}ms, case spread ~{:.0}ms{}",
+                suite.average_ms,
+                suite.case_spread_ms,
+                thread_identity_suffix(thread_count)
             );
             if let Some(top_stages) = format_top_current_stages(&case_results) {
                 println!("{}", top_stages);
@@ -88,7 +100,7 @@ pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), Stri
         }
     };
 
-    let previous_cases = load_previous_cases_for_system(&system.system_uuid)?;
+    let previous_cases = load_previous_cases_for_system(&system.system_uuid, thread_count)?;
 
     let comparison = match &previous_cases {
         Some(cases) => BenchmarkComparison::new(&case_results, Some(cases)),
@@ -96,10 +108,11 @@ pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), Stri
     };
 
     println!(
-        "Result: {} ({}): {}",
+        "Result: {} ({}): {}{}",
         system.display_name,
         system.public_system_id,
-        timestamp.format_run_header()
+        timestamp.format_run_header(),
+        thread_identity_suffix(thread_count)
     );
     println!("{}", comparison.format_run_change_line());
 
@@ -135,15 +148,19 @@ pub fn run_frontend_benchmarks(options: FrontendBenchOptions) -> Result<(), Stri
     debug_assert!(case_results.iter().all(|case| case.median_ms.is_finite()));
 
     if options.mode == FrontendBenchMode::Record {
-        record_frontend_run(
-            &options,
-            &system,
+        let run = BenchmarkRun {
             timestamp,
-            case_results,
+            commit: get_commit_hash(),
+            system: system.clone(),
+            suite_kind: BenchmarkSuiteKind::FrontendPhases,
+            cases: case_results,
             groups,
             suite,
-            &comparison,
-        )?;
+            warmup_runs: options.warmup_runs,
+            measured_iterations: options.measured_iterations,
+            thread_count,
+        };
+        record_frontend_run(&run, &comparison)?;
     }
 
     Ok(())
@@ -292,9 +309,10 @@ fn build_frontend_case_result(
     }
 }
 
-/// Load the most recent previous frontend case results for the given system UUID.
+/// Load the most recent previous frontend case results for the given system UUID and thread identity.
 fn load_previous_cases_for_system(
     system_uuid: &str,
+    thread_count: Option<u32>,
 ) -> Result<Option<Vec<BenchmarkCaseResult>>, String> {
     let runs_path = PathBuf::from(RUNS_JSONL_PATH);
     if !runs_path.exists() {
@@ -302,38 +320,26 @@ fn load_previous_cases_for_system(
     }
 
     let runs = read_local_runs(&runs_path)?;
-    Ok(
-        find_latest_matching_run(&runs, system_uuid, BenchmarkSuiteKind::FrontendPhases)
-            .map(to_case_results),
+    Ok(find_latest_matching_run(
+        &runs,
+        system_uuid,
+        BenchmarkSuiteKind::FrontendPhases,
+        thread_count,
     )
+    .map(to_case_results))
 }
 
-/// Persist a completed frontend benchmark run to local history and update summaries.
-fn record_frontend_run(
-    options: &FrontendBenchOptions,
-    system: &BenchmarkSystem,
-    timestamp: BenchmarkTimestamp,
-    case_results: Vec<BenchmarkCaseResult>,
-    groups: Vec<crate::bench_types::BenchmarkGroupStats>,
-    suite: SuiteStats,
-    comparison: &BenchmarkComparison,
-) -> Result<(), String> {
-    let run = BenchmarkRun {
-        timestamp,
-        commit: get_commit_hash(),
-        system: system.clone(),
-        suite_kind: BenchmarkSuiteKind::FrontendPhases,
-        cases: case_results,
-        groups,
-        suite,
-        warmup_runs: options.warmup_runs,
-        measured_iterations: options.measured_iterations,
-    };
-
+/// Persist a completed frontend benchmark run to local history and update the tracked summary.
+///
+/// Appends the run to local raw history, then delegates tracked-summary
+/// updates to `update_monthly_summary`, which owns the default-thread policy
+/// and safely no-ops for fixed-thread runs.
+fn record_frontend_run(run: &BenchmarkRun, comparison: &BenchmarkComparison) -> Result<(), String> {
     let runs_path = PathBuf::from(RUNS_JSONL_PATH);
-    let record = to_local_record(&run, run.commit.clone());
+    let record = to_local_record(run, run.commit.clone());
     append_local_run(&runs_path, &record)?;
-    update_monthly_summary(&run, comparison)?;
+
+    update_monthly_summary(run, comparison)?;
 
     Ok(())
 }
