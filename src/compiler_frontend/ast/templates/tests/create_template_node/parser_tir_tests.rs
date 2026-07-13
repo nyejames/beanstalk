@@ -128,24 +128,6 @@ fn parser_tir_text(
     }
 }
 
-fn finalized_content_texts(template: &Template, string_table: &StringTable) -> Vec<String> {
-    template
-        .content
-        .atoms
-        .iter()
-        .filter_map(|atom| {
-            let crate::compiler_frontend::ast::templates::template::TemplateAtom::Content(segment) =
-                atom;
-
-            match &segment.expression.kind {
-                ExpressionKind::StringSlice(text) => Some(string_table.resolve(*text).to_owned()),
-
-                _ => None,
-            }
-        })
-        .collect()
-}
-
 fn parser_tir_root_child_origins(
     template: &Template,
     store: &TemplateIrStore,
@@ -176,17 +158,12 @@ fn parser_tir_owns_contiguous_literal_body_text() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "simple no-formatter text bodies should reuse the formatted TIR root as current state"
+        "simple no-formatter text bodies should reuse the formatted TIR root"
     );
     assert_eq!(
         parser_tir_texts(&template, &store, &string_table),
         vec!["alpha\nbeta"],
         "simple finalized parser TIR should hold whitespace-normalized body text"
-    );
-    assert_eq!(
-        finalized_content_texts(&template, &string_table),
-        Vec::<String>::new(),
-        "normal literal body text should no longer be written to the compatibility content mirror"
     );
 }
 
@@ -216,7 +193,7 @@ fn parser_tir_records_suppressed_child_template_brackets_as_literal_text() {
 }
 
 #[test]
-fn template_tir_syncs_foldable_nested_template_as_finalized_linear_text() {
+fn template_tir_folds_nested_child_as_child_template_boundary() {
     // A foldable nested child template now stays a `ChildTemplate` TIR boundary
     // because the TIR formatter is authoritative for child-template output. The
     // final folded output still matches the old linear-text result.
@@ -264,7 +241,7 @@ fn parser_preserves_foldable_nested_child_as_template_boundary() {
     let store = store.borrow();
 
     // The foldable nested child is now TIR-owned: it appears as a
-    // `ChildTemplate` node in the parser TIR root, not as a content mirror.
+    // `ChildTemplate` node in the parser TIR root, not as duplicated body content.
     let children = tir_root_child_ids(&template, &store);
     assert!(
         children.iter().any(|child_id| {
@@ -856,7 +833,7 @@ fn parser_tir_records_numeric_head_as_dynamic_expression_with_head_origin() {
 }
 
 #[test]
-fn parser_tir_records_rendered_path_head_without_content_mirror() {
+fn parser_tir_records_rendered_path_head_as_tir_only() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[@/: body]", &mut string_table);
     assert!(template.content.is_empty());
@@ -962,8 +939,8 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
 
     drop(store);
 
-    // Nested child expressions no longer live in the compatibility content
-    // mirror. Prove the store-and-registry-aware metadata owner still finds the
+    // Nested child expressions live only in parser TIR. Prove the
+    // store-and-registry-aware metadata owner still finds the
     // child's subscription through the parent's parser TIR root.
     let mut parent_tokens =
         template_tokens_from_source("[: [$(source): child]]", &mut string_table);
@@ -1123,9 +1100,9 @@ fn formatter_inline_code_preserves_span_for_authored_body_head_insert_anchor() {
 }
 
 #[test]
-fn simple_formatter_template_records_formatted_tir_current_state() {
+fn simple_formatter_template_records_formatted_tir_phase() {
     // Parsed simple explicit-formatter templates install a same-store
-    // `Formatted` TIR root that can be reused as current state.
+    // `Formatted` TIR root that can be reused.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[$md: body]", &mut string_table);
 
@@ -1143,16 +1120,16 @@ fn simple_formatter_template_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "simple formatter templates must reuse the formatted TIR root as current state"
+        "simple formatter templates must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn inline_code_head_insert_records_formatted_tir_current_state() {
+fn inline_code_head_insert_records_formatted_tir_phase() {
     // Markdown/head-insert inline-code surfaces install a same-store `Formatted`
     // TIR reference and the TIR formatter now classifies the head-expression
     // insert as a `DynamicExpression` anchor, so the formatted TIR root can be
-    // reused as current state.
+    // reused.
     let mut string_table = StringTable::new();
     let (template, store) =
         parse_template("[$md:\nLiteral syntax `[\"[slot]\"]`\n]", &mut string_table);
@@ -1172,7 +1149,7 @@ fn inline_code_head_insert_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "markdown/head-insert inline-code surfaces must reuse the formatted TIR root as current state"
+        "markdown/head-insert inline-code surfaces must reuse the formatted TIR root"
     );
 
     // The head-expression insert remains a child-template boundary in the stored
@@ -1194,57 +1171,9 @@ fn inline_code_head_insert_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn inline_code_head_insert_reuses_formatted_tir_when_content_mirror_stale() {
-    // Clearing the `TemplateContent` mirror for a markdown/head-insert inline-code
-    // surface leaves the formatted TIR root reusable, so current-state
-    // materialization reuses it rather than rebuilding from the stale mirror.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let mut template = Template::new(
-        &mut template_tokens_from_source(
-            "[$md:\nLiteral syntax `[\"[slot]\"]`\n]",
-            &mut string_table,
-        ),
-        &context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("inline-code markdown template should parse");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: inline-code head insert must reuse the formatted TIR root as current state"
-    );
-
-    let original_formatted_template_id = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: template must have a TIR reference")
-        .root
-        .template_id;
-
-    // Intentionally create a stale `TemplateContent` mirror.
-    template.content.atoms.clear();
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, original_formatted_template_id,
-        "current-state materialization must reuse the formatted TIR root when the content mirror is stale"
-    );
-}
-
-#[test]
-fn head_stringslice_records_formatted_tir_current_state() {
+fn head_stringslice_records_formatted_tir_phase() {
     // Head-origin literal text is preserved unchanged by formatters, so the
-    // same-store `Formatted` TIR root can be reused as current state.
+    // same-store `Formatted` TIR root can be reused.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[\"prefix\", $md: body]", &mut string_table);
 
@@ -1262,7 +1191,7 @@ fn head_stringslice_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "head-origin literal text must reuse the formatted TIR root as current state"
+        "head-origin literal text must reuse the formatted TIR root"
     );
 
     let rendered = folded_template_output("[\"prefix\", $md: body]");
@@ -1273,9 +1202,9 @@ fn head_stringslice_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn head_stringslice_has_no_content_mirror_and_reuses_formatted_tir() {
-    // Head literal text is parser-TIR-only. Current-state materialization must
-    // reuse that formatted root without reconstructing compatibility content.
+fn head_stringslice_registered_root_is_reused_by_finalization() {
+    // Head literal text is parser-TIR-only. Finalization must reuse that
+    // formatted root without allocating a new template.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -1293,7 +1222,7 @@ fn head_stringslice_has_no_content_mirror_and_reuses_formatted_tir() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: head-stringslice markdown template must reuse the formatted TIR root as current state"
+        "setup: head-stringslice markdown template must reuse the formatted TIR root"
     );
 
     let original_formatted_template_id = template
@@ -1310,14 +1239,14 @@ fn head_stringslice_has_no_content_mirror_and_reuses_formatted_tir() {
     };
     assert_eq!(
         materialized_id, original_formatted_template_id,
-        "current-state materialization must reuse the parser-TIR-only formatted root"
+        "finalization must reuse the registered formatted TIR root"
     );
 }
 
 #[test]
-fn style_child_wrapper_no_children_records_formatted_tir_current_state() {
+fn style_child_wrapper_no_children_records_formatted_tir_phase() {
     // A `$children(..)` style wrapper with no body child templates is a no-op
-    // wrapper; the formatted TIR root can be reused as current state.
+    // wrapper; the formatted TIR root can be reused.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template(
         "[$md, $children([:<b>[$slot]</b>]): body text]",
@@ -1338,7 +1267,7 @@ fn style_child_wrapper_no_children_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "style child-template wrappers with no body children must reuse the formatted TIR root as current state"
+        "style child-template wrappers with no body children must reuse the formatted TIR root"
     );
 
     let rendered = folded_template_output("[$md, $children([:<b>[$slot]</b>]): body text]");
@@ -1349,7 +1278,7 @@ fn style_child_wrapper_no_children_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn style_child_wrapper_with_children_records_formatted_tir_current_state() {
+fn style_child_wrapper_with_children_records_formatted_tir_phase() {
     // When there are body child templates for the style wrapper to apply to, the
     // formatted TIR root is reusable because the TIR formatter preserves
     // child-template boundaries for wrapper application.
@@ -1376,7 +1305,7 @@ fn style_child_wrapper_with_children_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "style child-template wrappers with body children must reuse the formatted TIR root as current state"
+        "style child-template wrappers with body children must reuse the formatted TIR root"
     );
 
     let rendered = folded_template_output("[$md, $children([:<b>[$slot]</b>]): hello [:child] ]");
@@ -1387,10 +1316,10 @@ fn style_child_wrapper_with_children_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn head_only_literal_text_records_formatted_tir_current_state() {
+fn head_only_literal_text_records_formatted_tir_phase() {
     // A template whose only safe content is head-origin literal text has no body
     // for the formatter to contextually alter, so the same-store `Formatted` TIR
-    // root can be reused as current state.
+    // root can be reused.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[\"head\", $md:]", &mut string_table);
 
@@ -1408,7 +1337,7 @@ fn head_only_literal_text_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "head-only literal explicit-formatter templates must reuse the formatted TIR root as current state"
+        "head-only literal explicit-formatter templates must reuse the formatted TIR root"
     );
 
     assert_eq!(
@@ -1419,8 +1348,8 @@ fn head_only_literal_text_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn head_only_literal_text_has_no_content_mirror_and_reuses_formatted_tir() {
-    // A head-only literal keeps its current state entirely in formatted TIR.
+fn head_only_literal_text_registered_root_is_reused_by_finalization() {
+    // A head-only literal keeps its content entirely in the formatted TIR root.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -1438,7 +1367,7 @@ fn head_only_literal_text_has_no_content_mirror_and_reuses_formatted_tir() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: head-only literal markdown template must reuse the formatted TIR root as current state"
+        "setup: head-only literal markdown template must reuse the formatted TIR root"
     );
 
     let original_formatted_template_id = template
@@ -1455,15 +1384,15 @@ fn head_only_literal_text_has_no_content_mirror_and_reuses_formatted_tir() {
     };
     assert_eq!(
         materialized_id, original_formatted_template_id,
-        "current-state materialization must reuse the parser-TIR-only formatted root"
+        "finalization must reuse the registered formatted TIR root"
     );
 }
 
 #[test]
-fn pure_direct_dynamic_formatter_template_records_formatted_tir_current_state() {
+fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     // A body with only an ordinary dynamic-expression anchor and an explicit
     // formatter has no formatter-context-sensitive text, so the same-store
-    // `Formatted` TIR root can be reused as current state.
+    // `Formatted` TIR root can be reused.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -1501,12 +1430,12 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_current_state() 
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "pure direct-dynamic explicit-formatter templates must reuse the formatted TIR root as current state"
+        "pure direct-dynamic explicit-formatter templates must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn reactive_body_segment_records_formatted_tir_current_state() {
+fn reactive_body_segment_records_formatted_tir_phase() {
     // A body segment carrying a reactive subscription whose expression is a safe
     // formatter anchor can reuse the formatted TIR root because the subscription
     // metadata is preserved through the TIR formatter anchor and TIR
@@ -1571,12 +1500,12 @@ fn reactive_body_segment_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "reactive body segments with safe formatter anchors must reuse the formatted TIR root as current state"
+        "reactive body segments with safe formatter anchors must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn reactive_literal_text_segment_records_formatted_tir_current_state() {
+fn reactive_literal_text_segment_records_formatted_tir_phase() {
     // A reactive subscription on literal body text is now stored in the TIR store's
     // node-level reactive-subscription side-table, so the formatted TIR root can be
     // authoritative while preserving the dependency for reactive metadata.
@@ -1634,16 +1563,16 @@ fn reactive_literal_text_segment_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "reactive subscriptions on literal body text must reuse the formatted TIR root as current state"
+        "reactive subscriptions on literal body text must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn nested_runtime_template_expression_admits_tir_formatter_authority() {
+fn nested_runtime_template_expression_preserves_formatter_tir_root() {
     // A body segment whose expression is a nested runtime template value is
     // converted to a `ChildTemplate` or `DynamicExpression` anchor in TIR
     // construction. The TIR formatter treats both as opaque anchors, so the
-    // formatted TIR root can be reused as current state.
+    // formatted TIR root can be reused.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -1696,16 +1625,16 @@ fn nested_runtime_template_expression_admits_tir_formatter_authority() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "nested runtime-template expressions must reuse the formatted TIR root as current state"
+        "nested runtime-template expressions must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn nested_runtime_template_expression_with_reactive_subscription_admits_tir_formatter_authority() {
+fn nested_runtime_template_expression_with_reactive_subscription_preserves_formatter_tir_root() {
     // A reactive subscription on a nested runtime-template segment is stored in
     // the TIR store's node-level side-table during construction, so the TIR
     // formatter can still treat the segment as an opaque anchor and the
-    // compatibility content mirror no longer owns the current-state root.
+    // parser TIR root owns the formatted output directly.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -1771,15 +1700,15 @@ fn nested_runtime_template_expression_with_reactive_subscription_admits_tir_form
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "reactive subscriptions on nested runtime-template expressions must reuse the formatted TIR root as current state"
+        "reactive subscriptions on nested runtime-template expressions must reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn head_expression_uses_tir_formatter_authority() {
+fn head_expression_folds_through_tir_formatter() {
     // Head-origin non-literal expressions are formatter-visible opaque anchors.
     // The TIR formatter now owns that shape directly instead of rebuilding a
-    // compatibility content mirror.
+    // parser TIR.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[42, $md:]", &mut string_table);
 
@@ -1797,13 +1726,13 @@ fn head_expression_uses_tir_formatter_authority() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "head-expression templates must reuse the formatted TIR root as current state"
+        "head-expression templates must reuse the formatted TIR root"
     );
 
     assert_eq!(
         folded_template_output("[42, $md:]"),
         "42",
-        "head-expression output must still fold correctly through TIR authority"
+        "head-expression output must fold correctly through the TIR formatter"
     );
 }
 
@@ -1977,7 +1906,7 @@ fn nested_child_with_own_formatter_is_formatted_independently() {
 }
 
 #[test]
-fn template_tir_sync_removes_formatter_summary_for_simple_formatted_template() {
+fn formatted_tir_reference_clears_formatter_summary_for_simple_template() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md: body]", &mut string_table);
     let store = store.borrow();
@@ -2011,7 +1940,7 @@ fn template_tir_sync_removes_formatter_summary_for_simple_formatted_template() {
 }
 
 #[test]
-fn template_tir_sync_installs_formatted_reference_with_opaque_body_child_template() {
+fn formatted_tir_reference_installs_with_opaque_body_child_template() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md: before [: child] after]", &mut string_table);
     let store = store.borrow();
@@ -2287,7 +2216,7 @@ fn formatter_named_insert_installs_formatted_reference_and_preserves_routing() {
     assert_eq!(
         string_table.resolve(folded),
         "<p>title</p><p>Heading</p><p>body</p>Body",
-        "named insert routing should preserve the compatibility formatter output"
+        "named insert routing should preserve the formatter output"
     );
 }
 
@@ -2338,7 +2267,7 @@ fn no_formatter_child_wrapper_reaches_formatted_phase_through_tir() {
 }
 
 #[test]
-fn template_tir_syncs_formatted_control_flow_branch_body() {
+fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md, if true: body]", &mut string_table);
     let store = store.borrow();
@@ -2372,7 +2301,7 @@ fn template_tir_syncs_formatted_control_flow_branch_body() {
     let branch_body_text = body_text(branches[0].body, &store, &string_table);
     assert_eq!(
         branch_body_text, "<p> body</p>",
-        "render-unit preparation should mirror finalized formatter output into the branch body node"
+        "render-unit preparation should install finalized formatter output into the branch body node"
     );
 
     let control_flow = template
@@ -2394,7 +2323,7 @@ fn template_tir_syncs_formatted_control_flow_branch_body() {
 }
 
 #[test]
-fn template_tir_syncs_formatted_branch_and_fallback_bodies() {
+fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template(
         "[$md, if false:\nbody\n[else]\nfallback\n]",
@@ -2460,7 +2389,7 @@ fn template_tir_syncs_formatted_branch_and_fallback_bodies() {
 }
 
 #[test]
-fn template_tir_syncs_formatted_loop_body() {
+fn formatted_tir_reference_installs_formatted_loop_body() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md, loop true: body]", &mut string_table);
     let store = store.borrow();
@@ -2665,10 +2594,10 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
 // -------------------------
 
 #[test]
-fn default_whitespace_linear_records_formatted_tir_current_state() {
+fn default_whitespace_linear_records_formatted_tir_phase() {
     // Default template-body whitespace normalization is applied by the TIR
     // formatter adapter, so no-formatter linear bodies can reuse the formatted
-    // TIR root as current state.
+    // TIR root.
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[:\n    Hello\n    World\n]", &mut string_table);
 
@@ -2686,7 +2615,7 @@ fn default_whitespace_linear_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "default-whitespace linear bodies should reuse the formatted TIR root as current state"
+        "default-whitespace linear bodies should reuse the formatted TIR root"
     );
 
     assert_eq!(
@@ -2697,50 +2626,7 @@ fn default_whitespace_linear_records_formatted_tir_current_state() {
 }
 
 #[test]
-fn default_whitespace_linear_reuses_formatted_tir_when_content_mirror_stale() {
-    // Current-state materialization must reuse the formatted TIR root even if
-    // the compatibility `TemplateContent` mirror is cleared.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let mut template = Template::new(
-        &mut template_tokens_from_source("[:\n    Hello\n    World\n]", &mut string_table),
-        &context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("default-whitespace template should parse");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: default-whitespace linear template must reuse the formatted TIR root as current state"
-    );
-
-    let original_formatted_template_id = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: template must have a TIR reference")
-        .root
-        .template_id;
-
-    template.content.atoms.clear();
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, original_formatted_template_id,
-        "current-state materialization must reuse the formatted TIR root when the content mirror is cleared"
-    );
-}
-
-#[test]
-fn raw_directive_records_formatted_tir_current_state() {
+fn raw_directive_records_formatted_tir_phase() {
     // `$raw` disables default whitespace normalization but still produces a
     // same-store `Formatted` TIR root through the no-op formatter adapter.
     let mut string_table = StringTable::new();
@@ -2760,56 +2646,13 @@ fn raw_directive_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "$raw linear bodies should reuse the formatted TIR root as current state"
+        "$raw linear bodies should reuse the formatted TIR root"
     );
 
     assert_eq!(
         folded_template_output("[$raw:\n    Hello\n    World\n]"),
         "\n    Hello\n    World\n",
         "$raw formatted TIR root must preserve authored whitespace exactly"
-    );
-}
-
-#[test]
-fn raw_directive_reuses_formatted_tir_when_content_mirror_stale() {
-    // Current-state materialization must reuse the formatted TIR root even if
-    // the compatibility `TemplateContent` mirror is cleared.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let mut template = Template::new(
-        &mut template_tokens_from_source("[$raw:\n    Hello\n    World\n]", &mut string_table),
-        &context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("$raw template should parse");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: $raw linear template must reuse the formatted TIR root as current state"
-    );
-
-    let original_formatted_template_id = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: template must have a TIR reference")
-        .root
-        .template_id;
-
-    template.content.atoms.clear();
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, original_formatted_template_id,
-        "current-state materialization must reuse the formatted TIR root when the content mirror is cleared"
     );
 }
 
@@ -2832,7 +2675,7 @@ fn parser_tir_template_kind_matches_final_template_kind() {
 }
 
 #[test]
-fn template_tir_syncs_finalized_same_store_child_template_as_child_template_node() {
+fn parser_tir_records_finalized_same_store_child_template_as_child_template_node() {
     let mut string_table = StringTable::new();
     let (template, store) =
         parse_const_required_template("[:before[:child]after]", &mut string_table);
@@ -3000,10 +2843,9 @@ fn parser_tir_recursively_materializes_cross_store_template_valued_head() {
     let parent_child_ids = tir_root_child_ids(&parent, &store);
     assert_eq!(parent_child_ids.len(), 2);
 
-    // After Phase D the parser-emitted TIR is authoritative for linear templates.
+    // The parser-emitted TIR is the sole semantic owner for linear templates.
     // Cross-store template-valued head expressions remain DynamicExpression nodes
-    // in the parent store because the content-materialization fallback is no longer
-    // the production path.
+    // in the parent store because the parser TIR root is the production path.
     let head_expression = match &store
         .get_node(parent_child_ids[0])
         .expect("head child node should exist")
@@ -3068,40 +2910,7 @@ fn parser_tir_skips_conditional_child_wrappers_for_fresh_control_flow_child() {
 }
 
 #[test]
-fn fold_prefers_formatted_tir_reference_when_content_mirror_is_stale() {
-    // A text-only explicit-formatter template installs a same-store `Formatted`
-    // TIR reference. Folding must consume that reference directly, even if the
-    // compatibility `TemplateContent` mirror has been wiped.
-    let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[$md: body]", &mut string_table);
-    let context = new_constant_context(token_stream.src_path.to_owned());
-    let mut template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("template should parse");
-
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("linear markdown template should keep a formatted TIR reference");
-    assert_eq!(
-        tir_reference.phase,
-        TemplateTirPhase::Formatted,
-        "setup: text-only formatter template must have a Formatted TIR reference"
-    );
-
-    // Intentionally create a stale `TemplateContent` mirror. The old fold path
-    // would materialize current state from this mirror and produce empty output.
-    template.content.atoms.clear();
-
-    let folded = fold_template_in_context(&template, &context, &mut string_table);
-    assert_eq!(
-        string_table.resolve(folded),
-        "<p> body</p>",
-        "folding must read the formatted TIR reference, not the stale content mirror"
-    );
-}
-
-#[test]
-fn doc_comment_with_formatter_reuses_formatted_tir_current_state() {
+fn doc_comment_with_formatter_reuses_formatted_tir_root() {
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -3143,82 +2952,15 @@ fn doc_comment_with_formatter_reuses_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "formatter-bearing $doc comment should reuse the formatted TIR root as current state"
+        "formatter-bearing $doc comment should reuse the formatted TIR root"
     );
 }
 
 #[test]
-fn doc_comment_formatted_tir_root_survives_cleared_content_mirror() {
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
-
-    let mut template = Template {
-        kind: TemplateType::Comment(CommentDirectiveKind::Doc),
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    string_table.intern("doc body"),
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "doc comment should reuse the formatted TIR root as current state"
-    );
-
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("doc comment should carry a TIR reference");
-    assert!(
-        tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
-        "doc comment TIR reference should reach the Formatted phase, found {:?}",
-        tir_reference.phase
-    );
-
-    // Clear the compatibility content mirror to prove folding reads the TIR root.
-    template.content.atoms.clear();
-
-    let folded = fold_template_in_context(&template, &context, &mut string_table);
-    assert_eq!(
-        string_table.resolve(folded),
-        "<p>doc body</p>",
-        "doc comment folding must read the same-store Formatted TIR root after the content mirror is cleared"
-    );
-}
-
-#[test]
-fn non_empty_slot_insert_reuses_formatted_tir_current_state() {
+fn non_empty_slot_insert_reuses_formatted_tir_root() {
     // Non-empty `$insert(...)` helpers now carry a reusable `Formatted` TIR
     // root. Slot composition consumes the TIR-backed helper output while the
-    // compatibility content mirror remains only as transitional storage.
+    // parser TIR root is the sole semantic owner for slot composition output.
     let mut string_table = StringTable::new();
     let shared_store = Rc::new(RefCell::new(TemplateIrStore::new()));
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
@@ -3257,7 +2999,7 @@ fn non_empty_slot_insert_reuses_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "non-empty insert helper should reuse the formatted TIR root as current state"
+        "non-empty insert helper should reuse the formatted TIR root"
     );
     let insert_reference = insert
         .tir_reference
@@ -3303,10 +3045,9 @@ fn non_empty_slot_insert_reuses_formatted_tir_current_state() {
 }
 
 #[test]
-fn empty_slot_insert_records_formatted_tir_current_state() {
+fn empty_slot_insert_records_formatted_tir_phase() {
     // An empty `$insert(...)` helper has no body atoms for slot composition to
-    // extract, so the same-store `Formatted` TIR root can be reused as current
-    // state.
+    // extract, so the same-store `Formatted` TIR root can be reused.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -3338,7 +3079,7 @@ fn empty_slot_insert_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "empty SlotInsert helper should reuse the formatted TIR root as current state"
+        "empty SlotInsert helper should reuse the formatted TIR root"
     );
 
     let tir_reference = template
@@ -3349,25 +3090,13 @@ fn empty_slot_insert_records_formatted_tir_current_state() {
         tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
         "setup: empty SlotInsert helper must have a Formatted-or-later TIR reference"
     );
-
-    template.content.atoms.clear();
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, tir_reference.root.template_id,
-        "current-state materialization must reuse the formatted TIR root for an empty SlotInsert helper after the content mirror is cleared"
-    );
 }
 
 #[test]
-fn slot_definition_records_formatted_tir_current_state() {
+fn slot_definition_records_formatted_tir_phase() {
     // Parent body parsing records slot definitions directly as TIR placeholders.
     // With an explicit formatter the slot helper's same-store `Formatted` TIR
-    // root can be reused as current state.
+    // root can be reused.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
@@ -3409,7 +3138,7 @@ fn slot_definition_records_formatted_tir_current_state() {
             .tir_reference
             .as_ref()
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "SlotDefinition helper should reuse the formatted TIR root as current state"
+        "SlotDefinition helper should reuse the formatted TIR root"
     );
 
     let tir_reference = template
@@ -3420,22 +3149,10 @@ fn slot_definition_records_formatted_tir_current_state() {
         tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
         "setup: SlotDefinition helper must have a Formatted-or-later TIR reference"
     );
-
-    template.content.atoms.clear();
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, tir_reference.root.template_id,
-        "current-state materialization must reuse the formatted TIR root for a SlotDefinition helper after the content mirror is cleared"
-    );
 }
 
 #[test]
-fn note_todo_comments_do_not_claim_tir_current_state_reuse() {
+fn note_todo_comments_do_not_claim_formatted_tir_root_reuse() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
 
@@ -3464,7 +3181,7 @@ fn note_todo_comments_do_not_claim_tir_current_state_reuse() {
                 .tir_reference
                 .as_ref()
                 .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-            "{:?} comment should not claim TIR current-state reuse without a TIR reference",
+            "{:?} comment should not claim formatted TIR root reuse without a TIR reference",
             kind
         );
     }
@@ -3483,7 +3200,7 @@ fn no_prefix_if_finalizes_with_direct_branch_chain_root() {
     // After render-unit preparation refreshes every branch body, the owner
     // root is the BranchChain directly — not a Sequence wrapping it. This lets
     // `finalized_template_tir_id` reuse the parser-emitted root without
-    // reconstructing from the content mirror.
+    // rebuilding from body content.
     assert!(
         matches!(
             parser_tir_root_kind(&template, &store),
