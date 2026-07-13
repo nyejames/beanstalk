@@ -605,18 +605,17 @@ fn build_source_library_membership(
     string_table: &mut StringTable,
 ) {
     for (source_file, canonical_path) in module_symbols.canonical_os_path_by_source.clone() {
-        for (prefix, root_path) in resolver.source_library_roots() {
-            if canonical_path.starts_with(root_path) {
-                let canonical_source = InternedPath::from_path_buf(&canonical_path, string_table);
-                module_symbols
-                    .file_library_membership
-                    .insert(source_file.clone(), prefix.clone());
-                module_symbols
-                    .file_library_membership
-                    .insert(canonical_source, prefix.clone());
-                break;
-            }
-        }
+        let Some((membership_prefix, _)) = resolver.source_library_for_file(&canonical_path) else {
+            continue;
+        };
+
+        let canonical_source = InternedPath::from_path_buf(&canonical_path, string_table);
+        module_symbols
+            .file_library_membership
+            .insert(source_file.clone(), membership_prefix.to_owned());
+        module_symbols
+            .file_library_membership
+            .insert(canonical_source, membership_prefix.to_owned());
     }
 }
 

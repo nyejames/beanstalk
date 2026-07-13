@@ -38,7 +38,8 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, To
 ///      without carrying the large value inline at every return.
 type FileParserResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
-// Top-level declarations are module-visible; non-declaration statements are collected into the
+// Top-level declarations are same-module-visible by default; cross-module public visibility
+// comes only from the root `export:` block. Non-declaration statements are collected into the
 // implicit start-function header for that file.
 pub(super) fn parse_headers_in_file(
     token_stream: &mut FileTokens,

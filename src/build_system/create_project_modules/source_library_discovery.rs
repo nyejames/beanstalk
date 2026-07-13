@@ -14,7 +14,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{ProvidedSourceRoot, SourceLibraryRegistry};
 use crate::projects::settings::Config;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -64,7 +64,7 @@ pub(super) fn discover_project_local_source_libraries(
     string_table: &mut StringTable,
 ) -> Result<SourceLibraryRegistry, CompilerMessages> {
     let mut discovered_libraries = SourceLibraryRegistry::new();
-    let mut discovered_prefixes: HashMap<String, PathBuf> = HashMap::new();
+    let mut discovered_prefixes: BTreeMap<String, PathBuf> = BTreeMap::new();
 
     for configured_folder in &config.library_folders {
         let folder_path = project_root.join(configured_folder);
@@ -141,7 +141,7 @@ fn scan_project_library_folder(
     config: &Config,
     folder_path: &Path,
     discovered_libraries: &mut SourceLibraryRegistry,
-    discovered_prefixes: &mut HashMap<String, PathBuf>,
+    discovered_prefixes: &mut BTreeMap<String, PathBuf>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
     let entries = fs::read_dir(folder_path).map_err(|error| {
@@ -154,6 +154,10 @@ fn scan_project_library_folder(
             string_table,
         )
     })?;
+
+    // Collect directory entries before registration so prefix collision diagnostics and
+    // registration order are deterministic regardless of filesystem iteration order.
+    let mut library_entries: Vec<(String, PathBuf)> = Vec::new();
 
     for entry in entries {
         let entry = entry.map_err(|error| {
@@ -175,8 +179,12 @@ fn scan_project_library_folder(
         let Some(prefix) = library_root.file_name().and_then(|value| value.to_str()) else {
             continue;
         };
-        let prefix = prefix.to_owned();
+        library_entries.push((prefix.to_owned(), library_root));
+    }
 
+    library_entries.sort_by(|(prefix_a, _), (prefix_b, _)| prefix_a.cmp(prefix_b));
+
+    for (prefix, library_root) in library_entries {
         // Prevent duplicate @prefixes across different project-local library roots.
         if let Some(previous_root) = discovered_prefixes.get(&prefix) {
             return Err(config_diagnostic_messages(

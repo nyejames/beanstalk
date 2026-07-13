@@ -1214,11 +1214,10 @@ fn provider_import_container(
         return Some(root);
     }
 
-    // Source libraries are the next boundary.
-    for root in project_path_resolver.source_library_roots().values() {
-        if file.starts_with(root) {
-            return Some(root.clone());
-        }
+    // Source libraries are the next boundary. Use the resolver's nearest-root policy so nested
+    // libraries do not inherit provider access from an outer registered root.
+    if let Some((_, root)) = project_path_resolver.source_library_for_file(file) {
+        return Some(root.to_path_buf());
     }
 
     // Everything under the entry root belongs to the default module.

@@ -7,7 +7,7 @@
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::CONFIG_FILE_NAME;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -24,12 +24,16 @@ pub(crate) enum HashRootFileDiscovery {
 ///
 /// WHAT: carries the canonical filesystem roots and the typed direct-child hash-root discovery
 ///     result from Stage 0 into path resolution and header preparation.
+///
+/// Both maps use `BTreeMap` so that every public iteration surface preserves one canonical
+/// import-prefix order. Callers never observe `HashMap` iteration order from roots or root-file
+/// discoveries.
 /// WHY: resolver construction must consume filesystem preparation rather than rediscovering
 ///     source-library roots or public surfaces.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PreparedSourceLibraryRoots {
-    roots: HashMap<String, PathBuf>,
-    root_files: HashMap<String, HashRootFileDiscovery>,
+    roots: BTreeMap<String, PathBuf>,
+    root_files: BTreeMap<String, HashRootFileDiscovery>,
 }
 
 impl PreparedSourceLibraryRoots {
@@ -51,11 +55,11 @@ impl PreparedSourceLibraryRoots {
         prepared
     }
 
-    pub(crate) fn roots(&self) -> &HashMap<String, PathBuf> {
+    pub(crate) fn roots(&self) -> &BTreeMap<String, PathBuf> {
         &self.roots
     }
 
-    pub(crate) fn root_files(&self) -> &HashMap<String, HashRootFileDiscovery> {
+    pub(crate) fn root_files(&self) -> &BTreeMap<String, HashRootFileDiscovery> {
         &self.root_files
     }
 }

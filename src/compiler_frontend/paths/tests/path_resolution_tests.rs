@@ -13,7 +13,9 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
+use crate::compiler_frontend::source_libraries::root_file::{
+    HashRootFileDiscovery, PreparedSourceLibraryRoots,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
@@ -1441,4 +1443,69 @@ fn markdown_and_beandown_same_stem_are_ambiguous() {
             ImportDiagnosticKind::AmbiguousImportTarget
         )
     );
+}
+
+fn resolver_with_prepared_source_library_roots(roots: &[(&str, &str)]) -> ProjectPathResolver {
+    let entries = roots.iter().map(|(prefix, root)| {
+        (
+            (*prefix).to_owned(),
+            PathBuf::from(root),
+            HashRootFileDiscovery::Missing,
+        )
+    });
+
+    ProjectPathResolver::new(
+        PathBuf::from("/project"),
+        PathBuf::from("/project/src"),
+        PreparedSourceLibraryRoots::from_entries(entries),
+        &SourceFileKindRegistry::default(),
+    )
+    .expect("resolver should build")
+}
+
+#[test]
+fn source_library_for_file_chooses_the_deepest_matching_root() {
+    let resolver = resolver_with_prepared_source_library_roots(&[
+        ("outer", "/libraries/outer"),
+        ("inner", "/libraries/outer/inner"),
+    ]);
+
+    let selected = resolver
+        .source_library_for_file(std::path::Path::new("/libraries/outer/inner/file.bst"))
+        .expect("nested source-library file should have a boundary");
+
+    assert_eq!(selected.0, "inner");
+    assert_eq!(selected.1, std::path::Path::new("/libraries/outer/inner"));
+}
+
+#[test]
+fn source_library_for_file_breaks_equal_root_ties_by_prefix() {
+    let resolver = resolver_with_prepared_source_library_roots(&[
+        ("zeta", "/libraries/shared"),
+        ("alpha", "/libraries/shared"),
+    ]);
+
+    let selected = resolver
+        .source_library_for_file(std::path::Path::new("/libraries/shared/file.bst"))
+        .expect("shared source-library file should have a boundary");
+
+    assert_eq!(selected.0, "alpha");
+}
+
+#[test]
+fn source_library_logical_paths_use_the_deepest_matching_root() {
+    let resolver = resolver_with_prepared_source_library_roots(&[
+        ("outer", "/libraries/outer"),
+        ("inner", "/libraries/outer/inner"),
+    ]);
+    let mut string_table = StringTable::new();
+
+    let logical_path = resolver
+        .logical_path_for_canonical_file(
+            std::path::Path::new("/libraries/outer/inner/file.bst"),
+            &mut string_table,
+        )
+        .expect("nested source-library file should have a logical path");
+
+    assert_eq!(logical_path, PathBuf::from("inner/file.bst"));
 }

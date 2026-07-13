@@ -122,8 +122,42 @@ impl ProjectPathResolver {
     }
 
     /// WHAT: returns the map of source library roots.
-    pub(crate) fn source_library_roots(&self) -> &std::collections::HashMap<String, PathBuf> {
+    #[cfg(test)]
+    pub(crate) fn source_library_roots(&self) -> &std::collections::BTreeMap<String, PathBuf> {
         self.source_library_roots.roots()
+    }
+
+    /// Return the most-specific source library containing a canonical file path.
+    ///
+    /// WHAT: selects the deepest matching source-library root, then the smallest import prefix
+    ///       when multiple prefixes name the same root.
+    /// WHY: logical paths, header membership and provider boundaries must share one deterministic
+    ///      owner when registered source-library roots overlap.
+    pub(crate) fn source_library_for_file(&self, file: &Path) -> Option<(&str, &Path)> {
+        let mut nearest_library: Option<(&str, &Path)> = None;
+
+        for (prefix, root) in self.source_library_roots.roots() {
+            if !file.starts_with(root) {
+                continue;
+            }
+
+            let should_replace = match nearest_library {
+                None => true,
+                Some((nearest_prefix, nearest_root)) => {
+                    let root_depth = root.components().count();
+                    let nearest_depth = nearest_root.components().count();
+
+                    root_depth > nearest_depth
+                        || (root_depth == nearest_depth && prefix.as_str() < nearest_prefix)
+                }
+            };
+
+            if should_replace {
+                nearest_library = Some((prefix.as_str(), root.as_path()));
+            }
+        }
+
+        nearest_library
     }
 
     /// Returns each source library's unique hash-root file as its public surface.
@@ -185,16 +219,13 @@ impl ProjectPathResolver {
         }
 
         // Source library files may live outside the project root (builder-provided).
-        // Derive a logical path relative to the library root, prefixed with the library name.
-        let mut sorted_library_prefixes: Vec<_> =
-            self.source_library_roots.roots().iter().collect();
-        sorted_library_prefixes.sort_by_key(|(prefix, _)| *prefix);
-        for (prefix, root) in sorted_library_prefixes {
-            if let Ok(relative_to_library_root) = canonical_file.strip_prefix(root) {
-                let mut logical = PathBuf::from(prefix);
-                logical.push(relative_to_library_root);
-                return Ok(logical);
-            }
+        // Derive a logical path from the same nearest-root policy used by membership checks.
+        if let Some((prefix, root)) = self.source_library_for_file(canonical_file)
+            && let Ok(relative_to_library_root) = canonical_file.strip_prefix(root)
+        {
+            let mut logical = PathBuf::from(prefix);
+            logical.push(relative_to_library_root);
+            return Ok(logical);
         }
 
         Err(CompilerError::file_error(

@@ -4,7 +4,11 @@
 //! WHY: source library imports resolve to actual `.bst` files, not virtual packages,
 //!      so the path resolver needs to know where each library prefix lives.
 
-use std::collections::HashMap;
+//! Roots are stored in a `BTreeMap` so that iteration surfaces one canonical
+//! import-prefix order at every Stage 0 and header boundary, with no need for
+//! downstream consumers to re-sort.
+
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// Registry of source library roots indexed by their import prefix.
@@ -13,7 +17,7 @@ use std::path::PathBuf;
 /// WHY: the path resolver checks these prefixes before falling back to entry-root resolution.
 #[derive(Clone, Debug, Default)]
 pub struct SourceLibraryRegistry {
-    roots: HashMap<String, SourceLibraryRoot>,
+    roots: BTreeMap<String, SourceLibraryRoot>,
 }
 
 impl SourceLibraryRegistry {
@@ -51,11 +55,9 @@ impl SourceLibraryRegistry {
     /// Merge another registry into this one, returning collision errors.
     pub fn merge(&mut self, other: &SourceLibraryRegistry) -> Result<(), Vec<String>> {
         let mut collisions = Vec::new();
-        let mut incoming_roots = other.roots.iter().collect::<Vec<_>>();
-        // Keep multi-collision diagnostics stable across HashMap iteration order.
-        incoming_roots.sort_by_key(|(prefix, _)| *prefix);
-
-        for (prefix, root) in incoming_roots {
+        // The BTreeMap already iterates in canonical import-prefix order, so
+        // multi-collision diagnostics are reported deterministically.
+        for (prefix, root) in &other.roots {
             if self.roots.contains_key(prefix) {
                 collisions.push(prefix.clone());
             } else {

@@ -1,2 +1,3 @@
 mod provider_registry_tests;
 mod source_file_kind_registry_tests;
+mod source_library_registry_tests;
