@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotPlaceholder, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
-use crate::compiler_frontend::ast::templates::tir::finalize_sync::ControlFlowBodyKind;
+use crate::compiler_frontend::ast::templates::tir::control_flow_roots::ControlFlowBodyKind;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
     TemplateSlotPlanId, TemplateWrapperSetId,
@@ -48,7 +48,7 @@ use std::sync::Arc;
 
 // These tables keep bulky or rarely read template metadata outside the main
 // `TemplateIr` and `TemplateIrNode` records. Some entries are still reserved
-// for fields the remaining `TemplateContent` surface will drop as the
+// for fields the remaining compatibility surface will drop as the
 // replacement lands; slot plans already carry TIR-owned runtime slot
 // application route data.
 
@@ -585,7 +585,7 @@ impl TemplateIrStore {
     /// combinations; sharing one side-table entry reduces allocation churn and
     /// keeps `TemplateIrSummary::wrapper_count` accurate as a per-template
     /// wrapper count. `TemplateWrapperReference` identity (all three fields) is
-    /// the reuse authority; `Template` values and `TemplateContent` comparison are
+    /// the reuse authority; `Template` values and content comparison are
     /// no longer inspected.
     pub(crate) fn push_or_reuse_wrapper_set(
         &mut self,
@@ -871,7 +871,7 @@ impl TemplateIrStore {
     /// WHAT: read-only counterpart to `replace_control_flow_body_node_by_id`.
     /// WHY: render-unit preparation updates the store-owned body IDs in place;
     /// later production readers can recover those finalized roots from the
-    /// store instead of reading the legacy `TemplateContent` body fields.
+    /// store instead of reading legacy body fields.
     pub(crate) fn control_flow_body_node_id_by_id(
         &self,
         control_flow_node_id: TemplateIrNodeId,

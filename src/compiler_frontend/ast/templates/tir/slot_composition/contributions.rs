@@ -359,9 +359,8 @@ fn collect_insert_contribution_content(
 
 /// A group of loose TIR node IDs treated as one positional contribution chunk.
 ///
-/// WHAT: corresponds to the legacy `LooseContribution` from
-///       `template_slots/contributions.rs`, but holds TIR node IDs instead of
-///       `TemplateAtom`s.
+/// WHAT: holds one authored loose contribution as an ordered group of TIR node
+///       IDs.
 /// WHY: loose content must be coalesced into logical chunks before it is
 ///      assigned to positional slots, so body-level whitespace does not consume
 ///      positional slot positions.

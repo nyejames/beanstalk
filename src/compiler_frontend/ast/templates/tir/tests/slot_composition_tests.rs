@@ -7,8 +7,8 @@
 //!       the query methods on `TirSlotSchema` and `TirSlotContributions`.
 //! WHY: slot composition depends on discovering declared slot targets
 //!      directly from TIR nodes, routing fill content into the right buckets,
-//!      and expanding placeholders without depending on legacy `TemplateContent`
-//!      structures; these tests pin that behavior in isolation.
+//!      and expanding placeholders from TIR nodes; these tests pin that
+//!      behavior in isolation.
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::SlotOccurrenceId;

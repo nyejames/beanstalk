@@ -10,9 +10,8 @@ use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, 
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape, FallibleCarrierVariant,
     FallibleExpressionHandling, expression_value_shape_for_diagnostic_type,
-    type_id_hint_for_diagnostic_type,
 };
-use crate::compiler_frontend::ast::expressions::expression_rpn::{ExpressionRpn, PlaceExpression};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpn;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
 use crate::compiler_frontend::datatypes::{DataType, PathTypeKind};
@@ -181,73 +180,6 @@ impl Expression {
             value_mode,
         )
     }
-
-    pub fn handled_result(
-        value: Expression,
-        handling: FallibleExpressionHandling,
-        success_type_id: TypeId,
-        location: SourceLocation,
-    ) -> Self {
-        Self::handled_result_with_type_id(
-            value,
-            handling,
-            success_type_id,
-            DataType::Inferred,
-            location,
-        )
-    }
-
-    pub fn collection(
-        items: Vec<Expression>,
-        inner_type: DataType,
-        location: SourceLocation,
-        value_mode: ValueMode,
-    ) -> Self {
-        let collection_type_id =
-            type_id_hint_for_diagnostic_type(&DataType::collection(inner_type.to_owned()));
-        let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
-        // Test-only helper: real collection type identity requires a TypeEnvironment.
-        // `collection_type_id` is a best-effort hint; hand-built tests that need canonical
-        // collection IDs should use the typed production constructor with a real environment.
-        Self::new(
-            ExpressionKind::Collection(items),
-            location,
-            collection_type_id,
-            DataType::collection(inner_type),
-            value_mode,
-        )
-        .with_regular_division_provenance(contains_regular_division)
-    }
-
-    pub fn copy(
-        place: PlaceExpression,
-        data_type: DataType,
-        location: SourceLocation,
-        value_mode: ValueMode,
-    ) -> Self {
-        Self::copy_with_type_id(
-            place,
-            data_type.to_owned(),
-            type_id_hint_for_diagnostic_type(&data_type),
-            location,
-            value_mode,
-        )
-    }
-
-    pub fn option_none(inner_type: DataType, location: SourceLocation) -> Self {
-        // Test-only helper: real option type identity requires a TypeEnvironment.
-        // `option_type_id` is a best-effort hint; hand-built tests that need canonical
-        // option IDs should use the typed production constructor with a real environment.
-        let option_type_id =
-            type_id_hint_for_diagnostic_type(&DataType::Option(Box::new(inner_type.to_owned())));
-        Self::new(
-            ExpressionKind::OptionNone,
-            location,
-            option_type_id,
-            DataType::Option(Box::new(inner_type)),
-            ValueMode::ImmutableOwned,
-        )
-    }
 }
 
 /// Best-effort builtin `TypeId` for hand-built AST tests that do not have a `TypeEnvironment`.
@@ -260,10 +192,7 @@ fn test_builtin_type_id_for_data_type(data_type: &DataType) -> TypeId {
         DataType::Int => builtin_type_ids::INT,
         DataType::Float => builtin_type_ids::FLOAT,
         DataType::Decimal => builtin_type_ids::DECIMAL,
-        DataType::StringSlice
-        | DataType::Template
-        | DataType::TemplateWrapper
-        | DataType::Path(_) => builtin_type_ids::STRING,
+        DataType::StringSlice | DataType::Template | DataType::Path(_) => builtin_type_ids::STRING,
         DataType::Char => builtin_type_ids::CHAR,
         DataType::Range => builtin_type_ids::RANGE,
         DataType::None => builtin_type_ids::NONE,

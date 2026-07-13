@@ -12,9 +12,8 @@
 //!      `collect_insert_contribution_content` discovers and routes nested
 //!      inserts to their own target slots — exactly like the same-store
 //!      contract. Non-insert content stays store-qualified through
-//!      `ChildTemplate` references to narrow derived foreign templates,
-//!      avoiding `finalized_template_tir_id`, `TemplateContent` reconstruction,
-//!      and eager foreign-tree copying.
+//!      `ChildTemplate` references to narrow derived foreign templates. This
+//!      preserves store-qualified identity without eager foreign-tree copying.
 //!
 //! ## Ownership contract
 //!

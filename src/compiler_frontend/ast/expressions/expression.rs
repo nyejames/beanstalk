@@ -401,8 +401,6 @@ pub(crate) fn expression_value_shape_for_diagnostic_type(
     match data_type {
         DataType::StringSlice => ExpressionValueShape::PlainStringSlice,
         DataType::Template => ExpressionValueShape::TemplateString,
-        #[cfg(test)]
-        DataType::TemplateWrapper => ExpressionValueShape::TemplateString,
         DataType::Path(_) => ExpressionValueShape::CompileTimePath,
         _ => ExpressionValueShape::Ordinary,
     }
@@ -443,8 +441,6 @@ pub(crate) fn type_id_hint_for_diagnostic_type(data_type: &DataType) -> TypeId {
         // preserved only for diagnostic round-tripping of the inactive builtin.
         DataType::Decimal => builtin_type_ids::DECIMAL,
         DataType::StringSlice | DataType::Template | DataType::Path(_) => builtin_type_ids::STRING,
-        #[cfg(test)]
-        DataType::TemplateWrapper => builtin_type_ids::STRING,
         DataType::Char => builtin_type_ids::CHAR,
         DataType::Range => builtin_type_ids::RANGE,
         DataType::None | DataType::Inferred => builtin_type_ids::NONE,

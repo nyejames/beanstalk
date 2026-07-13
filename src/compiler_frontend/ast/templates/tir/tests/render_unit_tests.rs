@@ -370,8 +370,7 @@ fn same_store_owner_mismatch_does_not_reborrow_current_store() {
 // These tests prove that `convert_head_node_for_aggregate_wrapper` (exercised
 // through `build_aggregate_wrapper_candidate_from_tir_nodes`) preserves a
 // registry-validated foreign child as a store-qualified
-// `TemplateTirChildReference` rather than converting it to a bare local ID
-// through `finalized_template_tir_id`.
+// `TemplateTirChildReference` rather than converting it to a bare local ID.
 // ---------------------------------------------------------------------------
 
 /// Builds a `Template` with a `tir_reference` pointing to a foreign store,
@@ -654,9 +653,9 @@ fn aggregate_wrapper_preserves_foreign_child_expression_overlay_identity() {
 #[test]
 fn aggregate_wrapper_foreign_child_not_flattened_to_local_id() {
     // Control test: verify the foreign child's reference store_id differs
-    // from the current store. If the old code path (finalized_template_tir_id)
-    // were used, the reference would have the current store's store_id and a
-    // freshly allocated local template ID, losing the foreign identity.
+    // from the current store. Rebuilding it locally would give the reference
+    // the current store's store_id and a freshly allocated template ID, losing
+    // the foreign identity.
     let mut string_table = StringTable::new();
     let mut registry = TemplateIrRegistry::new();
     let current_store_id = registry.allocate_store();

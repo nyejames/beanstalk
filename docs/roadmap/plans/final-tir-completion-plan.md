@@ -21,22 +21,21 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B family 1H2 - remove the create-template fold helper's finalized-content fallback by making every caller TIR-backed
-LAST_ACCEPTED_COMMIT: `2640d3fac` (`test: remove detached folding template fixtures`)
+CURRENT_SLICE: Phase 2A - introduce explicit parser-local template build state and construct the durable handle only after authoritative TIR exists
+LAST_ACCEPTED_COMMIT: `90e783ebd` (`test: remove obsolete control flow content walker`)
 BRANCH: `main`
-WORKTREE: family 1H1 accepted and ready to commit on `main` at `2640d3fac` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
+WORKTREE: Phase 1 is accepted and ready to commit on `main` at `90e783ebd`; the combined checkpoint deletes the detached content bridge, preserves production control-flow root ownership in `tir/control_flow_roots.rs`, removes latent dead test surfaces and passes the full gate
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
-- Detached content reconstruction is test-only. The remaining caller is the create-template fold helper's finalizer fallback, after which only the compatibility builder in `tir/finalize_sync.rs` remains.
+- Phase 1 removed detached content reconstruction from production and tests. TIR references are now required by the remaining fold fixtures.
 - The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
 - HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
 ACCEPTANCE_CRITERIA:
-- remove one connected compatibility-fixture family per slice; retain only distinct behavior or final TIR invariants
-- delete the test-only content bridge before thinning the durable `Template`
-- make TIR views and store-qualified references the only semantic read path
-- remove duplicate state, silent fallbacks, migration terminology, and classification-only deep clones
-- preserve parser diagnostics, source locations, markdown/formatter behavior, slots, wrappers, control flow, const folding, reactive metadata, fragment ordering, and the AST/HIR boundary
+- reuse `TemplateConstructionContext` for TIR/store/registry/location ownership and add only one narrow parser-local build-state record
+- pass build state, not `&mut Template`, through head/body parsing and remove `Template::empty()` as the parser accumulator
+- make construction finish return required authoritative TIR identity before constructing the durable `Template`
+- preserve parser diagnostics, source locations, formatting, slots, wrappers, control flow, folding, reactivity and the AST/HIR boundary
 VALIDATION_STATE:
 - Phase 1A passed `cargo run --quiet -- build docs --release`: 72 files.
 - Current `main` last passed full `just validate` at the completed hash-root checkpoint `cf36d5945`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28.
@@ -72,15 +71,19 @@ VALIDATION_STATE:
 - Phase 1B family 1G passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 5 faster and 0 slower.
 - Phase 1B family 1H1 focused validation passed: both const-required loop limit tests, 91 head tests, 285 create-template tests, and `cargo test --quiet --no-run --lib` without warnings.
 - Phase 1B family 1H1 passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 1 ms average improvement, 9 faster and 0 slower.
+- Phase 1B family 1H2 focused validation passed: all 32 fold-helper callers were already parser/direct-TIR-backed, 285 create-template tests, 61 parser TIR tests and 91 head tests passed. `cargo test --no-run --lib` completed with 13 dead bridge warnings, so the checkpoint remains unaccepted until Slice 1C deletes that owner.
+- Slice 1C bridge deletion focused validation passed: 285 create-template tests, 12 body-root tests and 441 TIR tests. `cargo test --no-run --lib` now passes with five latent dead-code warning groups in expression test support, fallible-carrier test vocabulary, match-pattern test vocabulary and `DataType` test vocabulary. Phase 1 hard-grep symbols remain only in stale comments.
+- Phase 1 terminal cleanup focused validation passed: 66 HIR expression lowering tests, 19 AST normalization tests, 285 create-template tests, 441 TIR tests, 91 head tests and a warning-free lib-test build. The exact bridge-symbol and stale `template.content.atoms` greps have zero hits.
+- Separate Ollama final review found one inaccurate formatter-view comment. The parent corrected it and the review's three stale field-comment observations before the full gate.
+- Phase 1 passed full `just validate`: cross-target Clippy, 3344 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
 - Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
-- Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: use an Ollama implementation worker for create-template fold-helper family 1H2, with Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: after the Phase 1 commit, use an Ollama implementation worker for bounded Phase 2A parser-local state, with Codex CLI only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted family 1H1, then inspect and delegate create-template fold-helper family 1H2 to Ollama
+NEXT_RESUME_ACTION: commit the accepted Phase 1 checkpoint, reload the plan and inspect the Phase 2A construction owner before delegation
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -109,8 +112,8 @@ The following work is closed and must not be re-planned:
 - Production const evaluation, finalization, doc fragments, helper filtering, and HIR handoff use registry-backed effective TIR.
 - Recursive wrapper `Template` storage, aggregate-wrapper source mirrors, content-to-TIR production conversion, current-state scratch-store classifiers, and legacy fold/handoff fallbacks were removed.
 - Runtime handoff is neutral AST-owned data; HIR and backends do not receive TIR stores, refs, views, overlays, or registries.
-- `Template.content`, `TemplateContent`, `TemplateAtom`, detached materialization, and related converter/parity helpers are now test-only.
-- Old parity suites have already been reduced substantially. Remaining fixtures must be judged against final builder/view/fold/validation coverage rather than preserved mechanically.
+- `Template.content`, detached content types, detached materialization and related converter/parity helpers are removed from production and tests.
+- Remaining fixtures use parser-emitted or directly constructed registry-qualified TIR and protect final behavior or TIR invariants.
 
 Git history is the detailed evidence. This plan records only the final architecture and remaining work.
 
@@ -243,12 +246,12 @@ Phase 1A inventory decisions:
 
 For the selected family:
 
-- [ ] Compare its assertions with current parser-builder, `TirView`, fold, validation, and integration coverage.
-- [ ] Delete representation/layout assertions that are not semantic invariants.
-- [ ] Rebuild only genuinely unique internal invariants with direct TIR builders and registry-qualified refs.
-- [ ] Prefer an existing integration case when output or diagnostics can prove the behavior.
-- [ ] Remove one-caller helpers with the family.
-- [ ] Run the family’s focused suite, template/TIR tests, and `just validate`.
+- [x] Compare its assertions with current parser-builder, `TirView`, fold, validation, and integration coverage.
+- [x] Delete representation/layout assertions that are not semantic invariants.
+- [x] Rebuild only genuinely unique internal invariants with direct TIR builders and registry-qualified refs.
+- [x] Prefer an existing integration case when output or diagnostics can prove the behavior.
+- [x] Remove one-caller helpers with the family.
+- [x] Run the family’s focused suite, template/TIR tests, and `just validate`.
 
 Repeat Slice 1B until only the bridge owner remains.
 
@@ -273,21 +276,21 @@ Completed Phase 1B families:
 
 #### Slice 1C — Delete the bridge owner
 
-- [ ] Delete `Template.content`.
-- [ ] Delete `TemplateContent`, `TemplateAtom`, and test-only `TemplateSegment`.
-- [ ] Delete `finalized_template_tir_id`.
-- [ ] Delete content-to-TIR builders and materialization-only enums/contexts from `tir/finalize_sync.rs`.
-- [ ] Delete test-only re-exports and imports in `tir/mod.rs`.
-- [ ] Remove obsolete counters, comments, and `#[cfg(test)]` branches that existed only for detached content.
-- [ ] Rename or dissolve `finalize_sync.rs` so its remaining production owner is explicit.
-- [ ] Confirm no test constructs old template authority for convenience.
+- [x] Delete `Template.content`.
+- [x] Delete `TemplateContent`, `TemplateAtom`, and test-only `TemplateSegment`.
+- [x] Delete `finalized_template_tir_id`.
+- [x] Delete content-to-TIR builders and materialization-only enums/contexts from `tir/finalize_sync.rs`.
+- [x] Delete test-only re-exports and imports in `tir/mod.rs`.
+- [x] Remove obsolete counters, comments, and `#[cfg(test)]` branches that existed only for detached content.
+- [x] Rename or dissolve `finalize_sync.rs` so its remaining production owner is explicit.
+- [x] Confirm no test constructs old template authority for convenience.
 
 #### Phase 1 acceptance
 
-- [ ] No `TemplateContent`, `TemplateAtom`, finalized-content bridge, or detached materializer remains anywhere under `src/compiler_frontend`.
-- [ ] Tests assert final behavior or final TIR invariants.
-- [ ] `just validate` passes.
-- [ ] `just bench-check` is unchanged or improved; no compatibility path is restored for timing.
+- [x] No `TemplateContent`, `TemplateAtom`, finalized-content bridge, or detached materializer remains anywhere under `src/compiler_frontend`.
+- [x] Tests assert final behavior or final TIR invariants.
+- [x] `just validate` passes.
+- [x] `just bench-check` is unchanged or improved; no compatibility path is restored for timing.
 
 ---
 

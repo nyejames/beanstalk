@@ -45,8 +45,8 @@ use std::sync::Arc;
 /// WHY: AST finalization has access to the module-scoped `TemplateIrStore`.
 /// Walking TIR body roots keeps reactive metadata aligned with the finalized
 /// TIR representation that render-unit preparation wrote into the store.
-/// Missing or below-Composed roots are not an invitation to revive stale
-/// `TemplateContent`.
+/// Missing or below-Composed roots are not an invitation to fall back to a
+/// non-TIR representation.
 pub(crate) fn merge_reactive_template_metadata_with_store_and_resolver(
     template: &Template,
     store: &TemplateIrStore,
@@ -71,10 +71,9 @@ pub(crate) fn merge_reactive_template_metadata_with_store_and_resolver(
 /// WHAT: accepts same-store TIR references whose phase is Composed or later.
 ///       The reference must belong to the current store and the template must
 ///       be linear (no control-flow header).
-/// WHY: Phase D made these roots the current structural authority for linear
-///      output. Reactive metadata must follow that authority or stale
-///      `TemplateContent` mirrors can drop subscriptions and hide reactive
-///      backend requirements.
+/// WHY: the formatted TIR root is the structural authority for linear output.
+///      Reactive metadata must follow that authority or subscriptions can be
+///      dropped and hide reactive backend requirements.
 fn authoritative_linear_tir_root_for_template(
     template: &Template,
     store: &TemplateIrStore,
@@ -335,9 +334,9 @@ fn merge_control_flow_body_metadata_with_store(
 /// — dynamic expression metadata, reactive subscriptions, child template bodies,
 /// branch selectors, loop headers, loop bodies, and aggregate wrappers —
 /// consistently with the existing owned-handoff and content traversals.
-/// WHY: the store-aware control-flow body path needs to read finalized TIR body
-/// roots instead of `TemplateContent`. This walker mirrors the owned-handoff
-/// node walker so reactive metadata parity is preserved across representations.
+/// WHY: the store-aware control-flow body path reads finalized TIR body roots.
+///      This walker mirrors the owned-handoff node walker so reactive metadata
+///      parity is preserved across representations.
 fn merge_tir_node_metadata(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
@@ -647,9 +646,8 @@ fn merge_loop_header_metadata(
 ///       traversal.
 /// WHY: after AST normalization the finalized TIR tree is the authoritative
 ///      template representation. Reading reactive metadata through `TirView`
-///      keeps it aligned with expression overlays and avoids accidentally
-///      reviving stale `TemplateContent` mirrors for templates that have
-///      already moved onto TIR-backed roots.
+///      keeps it aligned with expression overlays for templates that already
+///      carry TIR-backed roots.
 pub(crate) fn merge_reactive_template_metadata_with_store_and_registry(
     template: &Template,
     store: &TemplateIrStore,

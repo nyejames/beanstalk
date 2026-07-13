@@ -602,9 +602,6 @@ fn debug_validate_match_pattern_type_ids(
         MatchPattern::OptionNone { .. }
         | MatchPattern::Capture { .. }
         | MatchPattern::OptionPresentCapture { .. } => {}
-
-        #[cfg(test)]
-        MatchPattern::Wildcard { .. } => {}
     }
 }
 

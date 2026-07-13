@@ -1,9 +1,8 @@
 //! TIR-native formatter view.
 //!
-//! WHAT: feeds existing formatter algorithms from `TirView` / effective
-//! `TemplateIrNodeKind` snapshots without rebuilding `TemplateContent` or
-//! `TemplateRenderPlan`. Formatted output is mapped directly back to append-only
-//! TIR nodes after view extraction finishes.
+//! WHAT: feeds existing formatter algorithms from `TirView` and effective
+//! `TemplateIrNodeKind` snapshots. Formatted output is mapped directly back to
+//! append-only TIR nodes after view extraction finishes.
 //!
 //! WHY: removes the formatter-dependent representation ping-pong for compile-time
 //! template folding while preserving formatter behavior. Existing formatter
@@ -13,11 +12,9 @@
 //!
 //! ## Production authority
 //!
-//! Linear templates now bypass the compatibility `TemplateContent` formatter
-//! mirror and format directly from TIR. Control-flow body roots are also
-//! formatted natively in TIR through this adapter. The conversion step that
-//! once rebuilt `TemplateContent` into TIR before formatting is no longer
-//! part of the production render-unit path.
+//! Linear templates format directly from TIR. Control-flow body roots are
+//! also formatted natively in TIR through this adapter. No intermediate
+//! content-to-TIR conversion step remains in the production render-unit path.
 
 use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,

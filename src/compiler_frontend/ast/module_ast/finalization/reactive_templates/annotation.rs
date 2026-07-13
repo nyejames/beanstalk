@@ -855,9 +855,6 @@ fn annotate_match_pattern(
         | MatchPattern::OptionNone { .. }
         | MatchPattern::Capture { .. }
         | MatchPattern::OptionPresentCapture { .. } => {}
-
-        #[cfg(test)]
-        MatchPattern::Wildcard { .. } => {}
     }
 }
 

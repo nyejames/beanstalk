@@ -3777,6 +3777,57 @@ fn lowers_fallible_success_to_hir_variant_construct() {
     }
 }
 
+/// Verifies that an `Error` fallible carrier lowers to `HirExpressionKind::VariantConstruct`
+/// with `HirVariantCarrier::Fallible` and variant index 1, mirroring the success path.
+#[test]
+fn lowers_fallible_error_to_hir_variant_construct() {
+    let mut string_table = StringTable::new();
+    let error_text = string_table.intern("oops");
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+
+    let ok_type_id = builtin_type_ids::INT;
+    let err_type_id = builtin_type_ids::STRING;
+    let result_type_id =
+        result_carrier_type_id(&mut builder.type_environment, ok_type_id, err_type_id);
+
+    let value_expr =
+        Expression::string_slice(error_text, location.clone(), ValueMode::ImmutableOwned);
+
+    let result_expr = Expression::result_construct(
+        AstFallibleCarrierVariant::Error,
+        value_expr,
+        result_type_id,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&result_expr)
+        .expect("result err lowering should succeed");
+
+    assert!(lowered.prelude.is_empty());
+
+    match &lowered.value.kind {
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Fallible,
+            variant_index: 1,
+            fields,
+        } => {
+            assert_eq!(fields.len(), 1, "Result Err should have one field");
+            assert!(
+                fields[0].name.is_some(),
+                "Result Err field should have a name"
+            );
+            assert!(
+                matches!(&fields[0].value.kind, HirExpressionKind::StringLiteral(s) if s == "oops"),
+                "Result Err field value should be the lowered error string"
+            );
+        }
+        other => panic!("expected VariantConstruct(Result, 1, [_]), got {other:?}"),
+    }
+}
+
 #[test]
 fn external_float_call_emits_validate_float_in_current_block() {
     let mut string_table = StringTable::new();

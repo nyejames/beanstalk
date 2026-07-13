@@ -6,11 +6,10 @@
 //!       `fold_tir_view` directly, preserving root, phase, and overlay-set
 //!       identity.
 //!
-//! WHY: the same-store fast path uses a conservative linear-fold safety gate,
-//!      but foreign templates must not be rebuilt from `TemplateContent` via
-//!      `finalized_template_tir_id`. These tests prove the cross-store path
-//!      handles expression overlays, control flow, and third-store descendants
-//!      without flattening identity.
+//! WHY: the same-store fast path uses a conservative linear-fold safety gate.
+//!      These tests prove the cross-store path handles expression overlays,
+//!      control flow, and third-store descendants without rebuilding or
+//!      flattening foreign identity.
 
 use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeEndKind, RangeLoopSpec};
 use crate::compiler_frontend::ast::expressions::expression::Expression;

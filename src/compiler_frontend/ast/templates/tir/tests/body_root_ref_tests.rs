@@ -12,7 +12,9 @@
 use super::super::TemplateTirReference;
 use super::super::body_root_ref::TemplateTirBodyReference;
 use super::super::builder::TemplateIrBuilder;
-use super::super::finalize_sync::{ControlFlowBodyKind, finalized_control_flow_body_tir_reference};
+use super::super::control_flow_roots::{
+    ControlFlowBodyKind, finalized_control_flow_body_tir_reference,
+};
 use super::super::ids::{ExpressionSiteId, TemplateIrNodeId};
 use super::super::overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
 use super::super::refs::{TemplateNodeRef, TemplateRef, TemplateStoreId};

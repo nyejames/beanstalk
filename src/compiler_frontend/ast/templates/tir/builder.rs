@@ -5,8 +5,7 @@
 //! TIR trees directly: pushing text and sequence nodes, finishing a template,
 //! and leaving storage ownership with the caller.
 //!
-//! WHY: the parser emits TIR directly instead of building
-//! `TemplateContent` and then converting it. The builder is the narrow API the
+//! WHY: the parser emits TIR directly. The builder is the narrow API the
 //! parser uses; it delegates all storage to `TemplateIrStore` so the store
 //! remains the single owner of TIR data and no second store or parallel index
 //! logic is introduced.

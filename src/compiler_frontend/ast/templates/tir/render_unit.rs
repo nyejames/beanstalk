@@ -101,9 +101,9 @@ pub(in crate::compiler_frontend::ast::templates) fn build_aggregate_wrapper_cand
 ///       atom-level path did.
 /// WHY: branch and fallback bodies carry the shared head prefix plus their own
 ///      body content. Deriving the head-prefix portion from parser-emitted TIR
-///      nodes — instead of re-materializing it from the prefixed
-///      `TemplateContent` atom stream — moves the body root toward TIR
-///      authority while `compose_tir_head_chain` preserves wrapper semantics.
+///      nodes — rather than re-materializing the prefixed atom stream —
+///      moves the body root toward TIR authority while `compose_tir_head_chain`
+///      preserves wrapper semantics.
 pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_from_tir_nodes(
     head_prefix_nodes: &[TemplateIrNodeId],
     body_children: &[TemplateIrNodeId],
@@ -227,10 +227,9 @@ fn convert_head_node_for_aggregate_wrapper(
 
                 // For cross-store children that carry a registry-valid
                 // tir_reference, preserve the foreign store-qualified identity
-                // instead of rebuilding the template into the current store
-                // via finalized_template_tir_id. This keeps phase, overlay-set
-                // identity, and third-store descendants resolvable through
-                // their own qualified refs.
+                // instead of rebuilding the template into the current store.
+                // This keeps phase, overlay-set identity, and third-store
+                // descendants resolvable through their own qualified refs.
                 //
                 // SlotInsert heads use a local proxy template that carries
                 // the target slot key and mirrors the foreign SlotInsert body
@@ -240,7 +239,7 @@ fn convert_head_node_for_aggregate_wrapper(
                 // templates. This lets InsertContribution route by target key
                 // and discover nested inserts recursively — like the same-store
                 // contract — without deep-copying the foreign tree or reading
-                // TemplateContent.
+                // an intermediate content representation.
                 if let Some(foreign_reference) = child_template.tir_reference.as_ref()
                     && foreign_reference.root.store_id != store.store_id()
                     && !child_template
@@ -385,10 +384,9 @@ fn tir_formatter_messages_to_template_error(messages: CompilerMessages) -> Templ
 /// Runs the TIR formatter and forwards any warnings to the active diagnostic
 /// context.
 ///
-/// WHAT: thin wrapper around `format_tir_template` that preserves formatter
-///       warnings the old `TemplateContent` formatter path used to emit.
-/// WHY: warnings are part of user-visible formatter behavior and must survive
-///      the migration to TIR-authoritative formatting.
+/// WHAT: thin wrapper around `format_tir_template` that returns formatter
+///       warnings with the formatted TIR result.
+/// WHY: warnings are user-visible formatter behavior and must reach the caller.
 pub(in crate::compiler_frontend::ast::templates) fn run_tir_formatter_with_warnings(
     view: &TirView<'_>,
     style: &Style,
@@ -838,7 +836,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_loop_aggregate_wrapp
     // Derive the head-prefix TIR nodes from the owning template's parser-emitted
     // root children. These are the same nodes the parser materialized from the
     // shared head-prefix atoms, so reusing them avoids rebuilding TIR from
-    // `TemplateContent` and removes the loop aggregate wrapper's dependency on
+    // a rebuilt tree and removes the loop aggregate wrapper's dependency on
     // `shared_head_prefix` atoms.
     let head_prefix_nodes = head_prefix_tir_nodes(template_ir_store, root_children);
 

@@ -26,8 +26,8 @@ use std::sync::Arc;
 ///
 /// WHY: wrapper-set reuse must never merge wrappers that differ in dynamic
 /// behavior, formatter output, slot routing, or conditional semantics. Identity
-/// comparison on all three fields is the safe, precise reuse authority;
-/// `TemplateContent` and `TemplateAtom` are no longer inspected.
+/// comparison on all three fields is the safe, precise reuse authority; no
+/// intermediate content representation is inspected.
 pub(crate) fn wrapper_sets_are_equivalent(
     left: &[TemplateWrapperReference],
     right: &[TemplateWrapperReference],
@@ -49,7 +49,7 @@ pub(crate) fn wrapper_sets_are_equivalent(
 ///
 /// Returns `None` when the wrapper has no valid registry-backed TIR identity,
 /// including a missing reference, store, template, owner or overlay. Callers
-/// must not recover through `TemplateContent`.
+/// must not recover through an intermediate content representation.
 pub(crate) fn wrapper_reference_for_template(
     template: &Template,
     current_store: &TemplateIrStore,

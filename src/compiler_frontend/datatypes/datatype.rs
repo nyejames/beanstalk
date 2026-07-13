@@ -120,8 +120,6 @@ pub enum DataType {
         success: Box<DataType>,
         error: Box<DataType>,
     },
-    #[cfg(test)]
-    TemplateWrapper, // Foldable template with a slot (becomes two string slices)
     #[allow(dead_code)] // Planned: explicit None literal/type flows.
     None, // The None result of an option, or empty argument
     #[allow(dead_code)] // Planned: boolean literal singleton typing extensions.
@@ -267,18 +265,6 @@ impl DataType {
         )
     }
 
-    /// Returns a collection fixture's diagnostic element type.
-    #[cfg(test)]
-    pub fn collection_element_type(&self) -> Option<&DataType> {
-        match self {
-            DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Collection { .. }),
-                arguments,
-            } => arguments.first(),
-            _ => None,
-        }
-    }
-
     // -----------------
     //  Remap
     // -----------------
@@ -386,9 +372,6 @@ impl DataType {
                 error.remap_string_ids(remap);
             }
 
-            #[cfg(test)]
-            DataType::TemplateWrapper => {}
-
             DataType::None | DataType::True | DataType::False => {}
         }
     }
@@ -418,8 +401,6 @@ impl DataType {
             }
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
-            #[cfg(test)]
-            DataType::TemplateWrapper => "String".to_string(),
             DataType::Char => "Char".to_string(),
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),

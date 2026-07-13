@@ -107,9 +107,8 @@ pub(crate) fn same_store_tir_id(
 ///       control-flow body root recovered through
 ///       `finalized_control_flow_body_tir_reference`.
 /// WHY: runtime control-flow slot-artifact validation prefers the finalized
-///      body root after render-unit preparation instead of re-reading the
-///      `TemplateContent` body fields, while still reading those fields when no
-///      same-store root exists.
+///      body root after render-unit preparation, while still reading the
+///      template body fields when no same-store root exists.
 pub(crate) fn tir_subtree_has_unresolved_slots(
     store: &TemplateIrStore,
     root: TemplateIrNodeId,
@@ -358,7 +357,7 @@ fn classify_materialized_current_tir_const_value(
     if matches!(template_kind, TemplateType::SlotInsert(_)) {
         // Slot-insert helper templates are compile-time wrapper values. Escaped
         // nested `$insert(...)` children make them NonConst. Fresh TIR makes
-        // this check authoritative — no `TemplateContent` read is needed.
+        // this check authoritative — no extra template body read is needed.
         if has_slot_insertions {
             return TemplateConstValueKind::NonConst;
         }
@@ -391,7 +390,7 @@ fn classify_materialized_current_tir_const_value(
 /// Classifies an already-built TIR node as a structural const value.
 ///
 /// WHAT: lets runtime slot planning reuse the node it has just built for HIR
-/// handoff instead of rebuilding a temporary `TemplateContent` solely for the
+/// handoff instead of building a temporary value solely for the
 /// wrapper-rendering policy.
 /// WHY: runtime slot contribution sources are not always full `Template`
 /// values, but TIR owns their structural constness checks.
@@ -410,8 +409,7 @@ pub(crate) fn tir_node_is_const_evaluable_value(
 /// for freshly built const template control flow.
 /// WHY: render-unit preparation installs control-flow bodies into TIR before
 /// const-required validation recurses through them; validation can therefore
-/// avoid re-reading finalized `TemplateContent` for the body-level constness
-/// predicate.
+/// read the finalized TIR body root for the body-level constness predicate.
 #[cfg(test)]
 pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
     store: &mut TemplateIrStore,
@@ -432,8 +430,8 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
 /// Returns the root node ID for a freshly built template.
 ///
 /// WHAT: looks up the template entry by ID and returns its root node.
-/// WHY: `finalized_template_tir_id` just pushed this entry, so the lookup is a
-///      proven internal invariant. The error path exists only to keep the API
+/// WHY: the finalized TIR id just pushed this entry, so the lookup is a proven
+///      internal invariant. The error path exists only to keep the API
 ///      panic-free per the style guide.
 fn fresh_tir_root(
     store: &TemplateIrStore,
@@ -631,9 +629,8 @@ fn tir_view_visit_child_template(
 ///
 /// WHAT: walks `ChildTemplate` nodes (and `InsertContribution` nodes for
 ///       robustness) and inspects the referenced template's `kind` field to
-///       detect escaped `$insert(...)` helpers. This matches
-///       `TemplateContent::contains_slot_insertions` which checks
-///       `template.kind == SlotInsert(_)` on child templates.
+///       detect escaped `$insert(...)` helpers. This matches the
+///       `template.kind == SlotInsert(_)` check performed on child templates.
 /// WHY: materialized trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
 fn tir_tree_has_slot_insert_children(

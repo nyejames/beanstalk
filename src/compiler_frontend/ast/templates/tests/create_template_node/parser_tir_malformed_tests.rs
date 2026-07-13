@@ -1,13 +1,12 @@
-//! Focused malformed-template tests for B6 parser-to-TIR surfaces.
+//! Focused malformed-template tests for parser-to-TIR surfaces.
 //!
 //! WHAT: adds diagnostic parity coverage around body text, nested child
 //! templates, control-flow sentinels, slot/insert helpers, and suppressed
-//! child-template brackets now that the parser emits TIR nodes alongside the
-//! legacy `TemplateContent` path.
+//! child-template brackets now that the parser emits TIR nodes directly.
 //!
-//! WHY: B6 records parser-emitted TIR nodes during body/head parsing. If an
+//! WHY: body and head parsing record TIR nodes incrementally. If an
 //! error is raised after some nodes have been recorded, the diagnostic reason
-//! and source location must still match pre-B6 behavior. These tests pin the
+//! and source location must remain stable. These tests pin the
 //! expected malformed-surface behavior without relying on internal TIR IDs.
 
 use super::*;

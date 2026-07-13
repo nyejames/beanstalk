@@ -242,8 +242,6 @@ fn normalize_control_flow_templates(
                     | MatchPattern::ChoiceVariant { .. }
                     | MatchPattern::Capture { .. }
                     | MatchPattern::OptionPresentCapture { .. } => {}
-                    #[cfg(test)]
-                    MatchPattern::Wildcard { .. } => {}
                 }
 
                 if let Some(guard) = &mut arm.guard {
@@ -1546,8 +1544,8 @@ fn normalize_runtime_slot_template_expression_for_hir(
 ///       specialized slot-application handoff or the general owned runtime
 ///       handoff from that same view.
 /// WHY: normalization has already finalized the module-owned TIR reference.
-///      Rebuilding from `TemplateContent` here could discard effective overlays
-///      and revive stale compatibility data at the AST/HIR boundary.
+///      Rebuilding a fresh tree here could discard effective overlays and
+///      revive stale compatibility data at the AST/HIR boundary.
 fn materialize_runtime_template_handoff_for_hir(
     template: &Template,
     context: &mut TemplateNormalizationContext<'_, '_>,

@@ -294,16 +294,16 @@ impl TemplateConstructionContext {
     //  Whitespace trimming
     // -------------------------
 
-    /// Trims leading whitespace-only text nodes to mirror `TemplateContent`
-    /// control-flow body boundary cleanup.
+    /// Trims leading whitespace-only text nodes for control-flow body
+    /// boundary cleanup.
     pub(crate) fn trim_leading_whitespace(&mut self, string_table: &StringTable) {
         let store = self.store.borrow();
         self.builder
             .trim_leading_whitespace_text(&store, string_table);
     }
 
-    /// Trims trailing whitespace-only text nodes to mirror `TemplateContent`
-    /// loop-control sentinel cleanup.
+    /// Trims trailing whitespace-only text nodes for loop-control sentinel
+    /// cleanup.
     pub(crate) fn trim_trailing_whitespace(&mut self, string_table: &StringTable) {
         let store = self.store.borrow();
         self.builder

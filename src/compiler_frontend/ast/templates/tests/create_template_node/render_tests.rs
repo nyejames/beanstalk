@@ -68,10 +68,9 @@ fn collect_text_node_locations(
 ///
 /// WHAT: walks the same-store TIR tree referenced by `template.tir_reference` and
 ///       gathers every interned string carried by a `Text` node.
-/// WHY: Phase 8 makes simple formatted templates TIR-authoritative; the legacy
-///      `TemplateContent` formatter mirror is intentionally left unformatted for
-///      this shape, so render-plan assertions on `template.content` no longer
-///      observe formatter output.
+/// WHY: simple formatted templates are TIR-authoritative; render-plan
+///      assertions no longer observe formatter output for this shape, so the
+///      formatted body text is gathered from the TIR tree instead.
 fn collect_formatted_body_text_from_tir(
     template: &Template,
     context: &ScopeContext,

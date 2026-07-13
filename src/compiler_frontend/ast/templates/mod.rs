@@ -73,7 +73,7 @@
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
 //! | `tir/construction.rs` | TIR construction helpers (atom-to-node, summary) |
 //! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
-//! | `tir/finalize_sync.rs` | Install finalized TIR roots after render-unit preparation |
+//! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
 //! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
 //! | `tir/fold.rs` | TIR-native compile-time folding |
 //! | `tir/formatter_view.rs` | TIR-native formatter feed |
@@ -116,7 +116,7 @@
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
 //! | `tir/construction.rs` | TIR construction helpers (atom-to-node, summary) |
 //! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
-//! | `tir/finalize_sync.rs` | Compatibility-content materialization and control-flow root installation |
+//! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
 //! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
 //! | `tir/fold.rs` | TIR-native compile-time folding |
 //! | `tir/formatter_view.rs` | TIR-native style-formatter view |

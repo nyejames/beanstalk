@@ -4,7 +4,7 @@
 //! WHAT: owns the materialization summary and atom-level materialization helpers
 //!       that control-flow body-root recovery and runtime slot planning still
 //!       depend on.
-//! WHY: these types and functions live here so that `finalize_sync.rs`,
+//! WHY: these types and functions live here so that `control_flow_roots.rs`,
 //!      `render_unit.rs`, `slot_plan.rs`, and `subtree_copy.rs` can import
 //!      them without circular module dependencies.
 
@@ -178,12 +178,11 @@ impl CurrentStateMaterializationSummary {
 }
 
 // -------------------------
-//  Atom-to-TIR materialization
+//  Materialization counters
 // -------------------------
 
-/// Materializes a slice of atoms directly into a TIR node for runtime slot
-/// planning, avoiding temporary `TemplateContent` wrappers.
-///
+/// Records the templates, nodes, text and depth produced by one TIR
+/// materialization pass.
 pub(crate) fn record_materialization_counters(
     store: &TemplateIrStore,
     templates_before: usize,

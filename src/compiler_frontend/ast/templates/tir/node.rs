@@ -4,11 +4,10 @@
 //! core data shapes of the Template IR. A template owns a root node ID; nodes
 //! form a tree via child references back into the store.
 //!
-//! WHY: the current AST `Template` type still mixes content atoms,
-//! control-flow metadata, and formatting state. TIR separates those concerns
-//! into a clean tree of typed nodes so folding, formatting, and HIR preparation
-//! can work from a single stable representation without ping-pong between
-//! `TemplateContent` and rebuilt content.
+//! WHY: the AST template pipeline needs one structural owner for content,
+//! control flow, slots, and formatting. Typed TIR nodes let folding, formatting,
+//! and HIR preparation work from that stable representation without rebuilding
+//! content trees on demand.
 //!
 //! ## Ownership contract
 //!
@@ -18,9 +17,8 @@
 //!
 //! ## Semantic parity constraint
 //!
-//! TIR must preserve the same user-visible template semantics as the current
-//! `Template` → `TemplateContent` path. Behaviour changes are out of scope
-//! unless they are bug fixes with regression tests.
+//! TIR must preserve user-visible template semantics. Behaviour changes are out
+//! of scope unless they are bug fixes with regression tests.
 //!
 //! ## No feature flag
 //!
@@ -152,10 +150,9 @@ impl TemplateIrNode {
 /// Structural variant for a TIR node.
 ///
 /// WHAT: enumerates every kind of structural element a template body can contain.
-/// WHY: the old `TemplateAtom` enum mixes content segments and slot placeholders
-/// without distinguishing text from expressions or child templates. TIR node kinds
-/// give each structural role its own variant so folding, formatting, and HIR
-/// lowering can dispatch cleanly.
+/// WHY: text, expressions, child templates, and slot placeholders each need a
+/// distinct structural role. TIR node kinds give each role its own variant so
+/// folding, formatting, and HIR lowering can dispatch cleanly.
 ///
 /// ## Design notes
 ///

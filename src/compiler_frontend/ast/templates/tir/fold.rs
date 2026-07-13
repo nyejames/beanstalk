@@ -1,10 +1,9 @@
 //! TIR-native compile-time template folding.
 //!
 //! WHAT: folds a `TemplateIr` tree directly into an interned string emission
-//! without rebuilding `TemplateContent`.
 //!
 //! WHY: folding works directly on the authoritative TIR representation, keeping
-//! the fold stage decoupled from legacy template content surfaces.
+//! the fold stage decoupled from intermediate content surfaces.
 //!
 //! ## Loop aggregate wrappers
 //!

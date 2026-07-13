@@ -142,8 +142,6 @@ fn validate_node(node: &AstNode, context: &TypeValidationContext) -> Result<(), 
                     MatchPattern::OptionNone { .. }
                     | MatchPattern::Capture { .. }
                     | MatchPattern::OptionPresentCapture { .. } => {}
-                    #[cfg(test)]
-                    MatchPattern::Wildcard { .. } => {}
                 }
 
                 if let Some(guard) = &arm.guard {

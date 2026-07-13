@@ -1,9 +1,8 @@
 //! Template render-unit preparation for linear and control-flow templates.
 //!
 //! WHAT: Refreshes control-flow body roots in TIR and installs the formatted
-//! TIR reference for linear templates. Linear templates no longer use a
-//! compatibility `TemplateContent` formatter mirror; TIR formatting is the sole
-//! production authority.
+//! TIR reference for linear templates. Linear templates format directly from
+//! a TIR view, making TIR formatting the sole production authority.
 //!
 //! WHY: Normal templates, template `if` branches, and template `loop` bodies
 //! all need the same composition and formatting rules. Keeping the render-unit
@@ -36,8 +35,7 @@ use std::sync::Arc;
 /// WHAT: runs the TIR formatter adapter over the template's current referenced
 ///       root and stores the append-only formatted root as a new TIR template.
 /// WHY: linear templates now carry their formatted root directly in TIR.
-///      The legacy `TemplateContent` formatter mirror is no longer the
-///      production authority for linear bodies.
+///      TIR formatting is the production authority for linear bodies.
 pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_reference_for_linear_template(
     template: &mut Template,
     style: &Style,
@@ -151,7 +149,7 @@ fn try_sync_control_flow_body_tir_from_tir(
     // Derive the head-prefix TIR nodes from the owning template's parser-emitted
     // root children. These are the same nodes the parser materialized from the
     // shared head-prefix atoms, so reusing them avoids rebuilding TIR from
-    // `TemplateContent`.
+    // the formatted TIR root.
     let head_prefix_nodes = {
         let store = context.template_ir_store.borrow();
         head_prefix_tir_nodes(&store, root_children)

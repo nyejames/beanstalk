@@ -556,9 +556,9 @@ impl TemplateParserIrBuilderState {
         // 2. All control-flow bodies were refreshed during render-unit
         //    preparation (suppress_formatter_summary_on_finish). The refreshed
         //    bodies carry their own head-prefix content and formatted output, so
-        //    a single BranchChain or Loop is the authoritative root — wrapping it
-        //    in a Sequence would prevent `finalized_template_tir_id` from reusing
-        //    the parser-emitted root and force an unnecessary reconstruction.
+        //    a single BranchChain or Loop is the authoritative root. Wrapping it
+        //    in a Sequence would hide that root and force unnecessary subtree
+        //    reconstruction.
         //
         // Linear templates, unrefreshed control-flow templates, and multi-child
         // owner roots stay Sequence-shaped.

@@ -1,8 +1,7 @@
 //! TIR expression-payload walker tests.
 //!
-//! WHAT: exercises the strict finalized-body mutation walker over the TIR
-//! shapes that Phase 7 finalization must normalize without reading
-//! `TemplateContent`.
+//! WHAT: exercises the strict finalized-body mutation walker over every TIR
+//! shape AST finalization must normalize.
 //! WHY: the walker is the TIR-owned body-authority handoff. These tests prove
 //! it follows control-flow body roots, child-template refs, insert
 //! contributions, aggregate wrappers, and runtime slot-plan subtrees.

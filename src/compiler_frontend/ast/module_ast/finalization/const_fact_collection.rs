@@ -418,9 +418,6 @@ impl<'a> ConstFactCollector<'a> {
             | MatchPattern::ChoiceVariant { .. }
             | MatchPattern::Capture { .. }
             | MatchPattern::OptionPresentCapture { .. } => {}
-
-            #[cfg(test)]
-            MatchPattern::Wildcard { .. } => {}
         }
 
         Ok(())

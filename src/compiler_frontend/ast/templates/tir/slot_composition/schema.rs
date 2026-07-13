@@ -6,9 +6,8 @@
 //!       `template_slots/schema.rs` discovery and `compose_wrapper_atoms_recursive`
 //!       expansion phases.
 //!
-//! WHY: TIR-native slot composition needs to discover wrapper slots and
-//!      substitute fill content without depending on `TemplateContent` /
-//!      `TemplateAtom` structures. Keeping schema discovery separate from
+//! WHY: TIR-native slot composition discovers wrapper slots and substitutes
+//!      fill content from TIR nodes. Keeping schema discovery separate from
 //!      contribution routing lets each phase stay focused.
 
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
@@ -59,10 +58,8 @@ type SlotSchemaResult<T> = Result<T, Box<CompilerDiagnostic>>;
 ///
 /// WHAT: records which slot keys (default, named, positional) a wrapper
 ///       template declares.
-/// WHY: TIR-native slot composition needs a schema type that does not depend
-///      on `TemplateContent` / `TemplateAtom` structures. The atom-based slot
-///      path now returns the same type so both composition paths share one
-///      authority.
+/// WHY: slot composition needs one schema type derived from authoritative TIR
+///      nodes so discovery and routing share the same slot keys.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct TirSlotSchema {
     pub(crate) has_default_slot: bool,
@@ -321,9 +318,8 @@ fn collect_tir_slot_schema_from_node(
 /// WHY: runtime slot-site planning needs slot placeholders in the exact order
 ///      the final materialization pass will encounter them, so the
 ///      cursor-based site assignment in `materialize_slot_placeholder` matches
-///      each placeholder to the correct pre-planned site. This replaces the old
-///      `template.content.atoms` recursion in the runtime site planner and
-///      keeps TIR as the sole authority for slot-placeholder discovery.
+///      each placeholder to the correct pre-planned site. TIR remains the sole
+///      authority for slot-placeholder discovery.
 pub(crate) fn collect_tir_slot_placeholders_in_order(
     store: &TemplateIrStore,
     root_node_id: TemplateIrNodeId,
@@ -365,8 +361,7 @@ fn collect_tir_slot_placeholders_from_node(
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             // Nested child templates may declare their own slots. Walking their
-            // root naturally collects those placeholders in document order,
-            // matching the legacy `template.content.atoms` recursion.
+            // root naturally collects those placeholders in document order.
             let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
                 return Err(Box::new(internal_compiler_error(
                     "TIR slot placeholder collection: child template reference is not in the current store.",

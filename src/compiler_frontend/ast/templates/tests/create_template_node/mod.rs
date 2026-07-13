@@ -2,9 +2,6 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
-use crate::compiler_frontend::ast::templates::tir::{
-    TemplateOverlaySet, TemplateRef, TemplateTirReference, finalized_template_tir_id,
-};
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal, terse,
@@ -156,32 +153,13 @@ fn fold_template_in_context(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> StringId {
-    // Manual test fixtures built directly from `Template` values do not carry
-    // parser-emitted TIR references. Materialize one in the fold context's store
-    // so these fixtures fold through the same module-scoped store as parsed
-    // templates, keeping test diagnostics consistent with production paths.
-    let mut template = template.clone();
-
-    if template.tir_reference.is_none() {
-        let store = context.template_ir_store();
-        let mut store_borrow = store.borrow_mut();
-        let template_id = finalized_template_tir_id(&template, &mut store_borrow, string_table)
-            .expect("test template should convert to TIR");
-        let store_owner = Arc::clone(&store_borrow.owner());
-        let store_id = store_borrow.store_id();
-        drop(store_borrow);
-        let overlay_set_id = context
-            .template_ir_registry
-            .borrow_mut()
-            .allocate_overlay_set(TemplateOverlaySet::empty());
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner,
-            is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-            overlay_set_id,
-        });
-    }
+    // Every caller supplies a parser-emitted or direct-registry-qualified TIR
+    // reference. A missing reference is a test-fixture bug, not a recoverable
+    // state, so there is no content-finalizer fallback here.
+    template
+        .tir_reference
+        .as_ref()
+        .expect("fold_template_in_context requires an authoritative TIR reference");
 
     let mut fold_context = context
         .new_template_fold_context(string_table, "template tests fold")

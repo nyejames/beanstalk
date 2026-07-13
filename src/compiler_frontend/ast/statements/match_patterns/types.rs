@@ -87,11 +87,6 @@ pub enum MatchPattern {
         binding_location: SourceLocation,
     },
 
-    #[cfg(test)]
-    Wildcard {
-        location: SourceLocation,
-    },
-
     Relational {
         op: RelationalPatternOp,
         value: Expression,
@@ -125,9 +120,6 @@ impl MatchPattern {
             MatchPattern::OptionNone { location }
             | MatchPattern::OptionValue { location, .. }
             | MatchPattern::OptionPresentCapture { location, .. } => location,
-
-            #[cfg(test)]
-            MatchPattern::Wildcard { location } => location,
 
             MatchPattern::Relational { location, .. }
             | MatchPattern::ChoiceVariant { location, .. }
@@ -190,11 +182,6 @@ impl MatchPattern {
                 binding_path.remap_string_ids(remap);
                 location.remap_string_ids(remap);
                 binding_location.remap_string_ids(remap);
-            }
-
-            #[cfg(test)]
-            MatchPattern::Wildcard { location } => {
-                location.remap_string_ids(remap);
             }
 
             MatchPattern::Relational {

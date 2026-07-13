@@ -53,7 +53,7 @@
 //! ├── expression_payload_walker.rs     Shared read-only expression-payload traversal
 //! ├── construction.rs                  TIR construction helpers (atom-to-node, summary)
 //! ├── subtree_copy.rs                  TIR-native active-context subtree copying
-//! ├── finalize_sync.rs                 Install finalized TIR roots after render-unit preparation
+//! ├── control_flow_roots.rs            Install and resolve finalized control-flow body roots
 //! ├── classification.rs                Store-aware TIR shape queries for classification
 //! ├── fold.rs                          TIR-native compile-time folding
 //! ├── formatter_view.rs                TIR-native formatter feed
@@ -69,13 +69,7 @@
 //! Only `mod.rs` controls what is re-exported. Submodules keep their internals
 //! `pub(crate)` and `mod.rs` selects a narrow API surface.
 
-#[cfg(test)]
-use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-#[cfg(test)]
-use crate::compiler_frontend::compiler_errors::CompilerError;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::sync::Arc;
 
 // -------------------------
@@ -164,8 +158,9 @@ mod foreign_slot_insert_proxy;
 // Runtime slot-plan handoff side-table types consumed by reactive metadata and HIR lowering.
 mod slot_plan;
 
-// `finalize_sync` installs finalized TIR roots after render-unit preparation.
-mod finalize_sync;
+// `control_flow_roots` installs and resolves finalized control-flow body
+// roots after render-unit preparation.
+mod control_flow_roots;
 
 mod slot_composition;
 
@@ -243,15 +238,10 @@ pub(crate) use overlays::{TirSlotResolution, TirSlotResolutionOverlay};
 // Builder: narrow parser-facing facade for direct TIR emission.
 pub(crate) use builder::TemplateIrBuilder;
 
-// Finalized TIR state: owns the logic that installs finalized TIR roots after
-// render-unit preparation.
-pub(crate) use finalize_sync::{
+// Control-flow root installation and resolution after render-unit preparation.
+pub(crate) use control_flow_roots::{
     ControlFlowBodyKind, finalized_control_flow_body_tir_reference,
     replace_control_flow_body_tir_root, replace_loop_aggregate_wrapper_tir_root,
-};
-#[cfg(test)]
-pub(crate) use finalize_sync::{
-    build_finalized_tir_root_from_content, build_finalized_tir_root_with_control_flow,
 };
 
 // TIR-native child-contribution classification shared by slot composition and
@@ -334,137 +324,6 @@ pub(crate) use view::{
     FinalizedTirViewAttempt, TemplateTirPhase, TirSubtreeView, TirView,
     finalized_tir_view_for_template,
 };
-
-// -------------------------
-//  Finalized TIR root access
-// -------------------------
-
-/// Returns a same-store `TemplateIrId` for `template`, preferring its finalized
-/// TIR reference and building a fresh TIR tree from its stored body content
-/// when no same-store reference exists.
-///
-/// WHAT: production paths should prefer the finalized TIR reference.
-///       When the reference is missing or cross-store, this helper builds
-///       TIR from the template's stored body content via
-///       `build_finalized_tir_root_from_content`.
-/// WHY: the `Template` struct carries both a finalized TIR reference and the
-///      stored body content used for parser-local shapes. This helper lets
-///      callers obtain a same-store TIR root without reaching into those
-///      fields directly.
-#[cfg(test)]
-pub(crate) fn finalized_template_tir_id(
-    template: &Template,
-    store: &mut TemplateIrStore,
-    string_table: &StringTable,
-) -> Result<TemplateIrId, TemplateError> {
-    // -------------------------
-    //  Same-store reference check
-    // -------------------------
-
-    // Fast path: reuse the existing same-store TIR reference when it already
-    // carries the authoritative root. For templates without control flow the
-    // parser-built root is authoritative only when the TIR shape is safe for
-    // direct reuse — child templates, slots, insert contributions, wrappers, and
-    // formatter-bearing shapes need composition or body-content construction
-    // to produce the correct fold/handoff output, so they must fall through to
-    // the body-content path. Roots at phase Composed or higher are already
-    // safe for reuse; Parsed roots are excluded because they may carry
-    // pre-format or pre-composition structure.
-    //
-    // For templates with control flow, the parser-built root may be a Sequence
-    // that also carries the shared head prefix — folding that Sequence would
-    // emit the prefix unconditionally (e.g. when no branch is selected). Only
-    // reuse the reference when the root is the control-flow node itself, not a
-    // Sequence wrapping it alongside head-prefix content.
-    if let Some(reference) = &template.tir_reference
-        && Arc::ptr_eq(&reference.store_owner, &store.owner())
-    {
-        let can_reuse = if template.control_flow.is_some() {
-            store
-                .get_template(reference.root.template_id)
-                .is_some_and(|template_ir| {
-                    matches!(
-                        store.get_node(template_ir.root),
-                        Some(node) if matches!(
-                            node.kind,
-                            TemplateIrNodeKind::BranchChain { .. }
-                                | TemplateIrNodeKind::Loop { .. }
-                                | TemplateIrNodeKind::LoopControl { .. }
-                        )
-                    )
-                })
-        } else {
-            // Linear templates can carry two different TIR-derived roots while
-            // the content mirror still exists:
-            //
-            // - TIR-composed roots are the only current structural authority for
-            //   head-chain slot routing after content composition was removed.
-            // - Formatted and Finalized roots are authoritative once render-unit
-            //   preparation has run; they are reusable by phase alone.
-            //
-            // Phase and same-store identity gate current-state reuse. Parsed roots
-            // are excluded because they may still carry pre-format or
-            // pre-composition structure that body-content construction must
-            // resolve.
-            reference.can_reuse_as_linear_current_state()
-        };
-
-        if can_reuse {
-            return Ok(reference.root.template_id);
-        }
-    }
-
-    // -------------------------
-    //  Construct TIR root
-    // -------------------------
-
-    // This path is only reached when no same-store finalized reference is
-    // available. When the template carries control flow, build the TIR root
-    // from the control-flow body references (which render-unit preparation
-    // installs as same-store TIR roots). Otherwise, build from the stored
-    // body content.
-    let (root, summary) = if let Some(control_flow) = &template.control_flow {
-        build_finalized_tir_root_with_control_flow(template, control_flow, store, string_table)
-            .map_err(|reason| {
-                TemplateError::from(CompilerError::compiler_error(format!(
-                    "finalized_template_tir_id: control-flow TIR construction failed: {reason:?}"
-                )))
-            })?
-    } else {
-        let content = &template.content;
-        build_finalized_tir_root_from_content(
-            template,
-            store,
-            string_table,
-            content,
-            template.location.to_owned(),
-        )
-        .map_err(|reason| {
-            TemplateError::from(CompilerError::compiler_error(format!(
-                "finalized_template_tir_id: content TIR construction failed: {reason:?}"
-            )))
-        })?
-    };
-
-    // -------------------------
-    //  Collect child wrappers
-    // -------------------------
-
-    // -------------------------
-    //  Finalize template record
-    // -------------------------
-
-    let mut builder = TemplateIrBuilder::new(store);
-    let template_id = builder.finish_template(
-        root,
-        template.style.to_owned(),
-        template.kind.to_owned(),
-        summary,
-        template.location.to_owned(),
-    );
-
-    Ok(template_id)
-}
 
 // -------------------------
 //  Same-store TIR root resolution

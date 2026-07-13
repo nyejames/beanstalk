@@ -88,8 +88,8 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
     ) -> Result<(), TemplateSlotError> {
         // Walk the TIR tree in document order to discover every unresolved slot
         // placeholder, including those nested inside child templates, branch
-        // chains, and loops. This replaces the old `template.content.atoms`
-        // recursion so TIR is the sole authority for slot-placeholder discovery.
+        // chains, and loops. TIR is the sole authority for slot-placeholder
+        // discovery.
         // Site IDs are assigned in traversal order, matching the cursor-based
         // assignment the final materialization pass will use.
         let placeholders = collect_tir_slot_placeholders_in_order(self.store, wrapper_tir_root)

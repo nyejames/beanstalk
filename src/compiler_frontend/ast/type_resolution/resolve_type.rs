@@ -347,8 +347,6 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
         DataType::Range => Some(type_environment.builtins().range),
         DataType::None => Some(type_environment.builtins().none),
         DataType::Template => Some(type_environment.builtins().string),
-        #[cfg(test)]
-        DataType::TemplateWrapper => Some(type_environment.builtins().string),
         DataType::True | DataType::False => Some(type_environment.builtins().bool),
         DataType::Option(inner) => {
             let inner_id = resolve_diagnostic_type_to_type_id_opt(inner, type_environment)?;

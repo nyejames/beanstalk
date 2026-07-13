@@ -5,8 +5,6 @@
 //! WHY: templates are a first-class Beanstalk construct; this module owns the shared
 //!      vocabulary used by parsing, folding, slot routing, and render-plan preparation.
 
-#[cfg(test)]
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ReactiveSource;
 use crate::compiler_frontend::ast::templates::formatter_contract::{
     FormatterInput, FormatterOutput,
@@ -166,91 +164,7 @@ impl SlotPlaceholder {
 }
 
 // -------------------------
-//  Template Content
-// -------------------------
-
-/// Detached fixture content used by the test-only finalized-content bridge.
-///
-/// Production templates are TIR-backed and don't carry this field. These types
-/// remain temporarily so older tests can construct isolated compatibility
-/// payloads while their fixtures migrate to direct TIR builders.
-#[cfg(test)]
-#[derive(Clone, Debug, Default)]
-pub struct TemplateContent {
-    /// Atoms are stored in authored order.
-    pub atoms: Vec<TemplateAtom>,
-}
-
-#[cfg(test)]
-impl TemplateContent {
-    pub fn new(content: Vec<Expression>) -> TemplateContent {
-        TemplateContent {
-            atoms: content
-                .into_iter()
-                .map(|expression| {
-                    TemplateAtom::Content(TemplateSegment::new(
-                        expression,
-                        TemplateSegmentOrigin::Body,
-                    ))
-                })
-                .collect(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-    }
-
-    pub fn add(&mut self, expression: Expression) {
-        self.add_with_origin(expression, TemplateSegmentOrigin::Body);
-    }
-
-    pub fn add_with_origin(&mut self, expression: Expression, origin: TemplateSegmentOrigin) {
-        self.atoms.push(TemplateAtom::Content(TemplateSegment::new(
-            expression, origin,
-        )));
-    }
-
-    pub fn add_reactive_subscription(
-        &mut self,
-        expression: Expression,
-        origin: TemplateSegmentOrigin,
-        subscription: ReactiveSubscription,
-    ) {
-        self.atoms.push(TemplateAtom::Content(
-            TemplateSegment::reactive_subscription(expression, origin, subscription),
-        ));
-    }
-
-    pub fn flatten_expressions(&self) -> Vec<Expression> {
-        self.atoms
-            .iter()
-            .map(|atom| match atom {
-                TemplateAtom::Content(segment) => segment.expression.clone(),
-            })
-            .collect()
-    }
-
-    pub fn extend(&mut self, other: TemplateContent) {
-        self.atoms.extend(other.atoms);
-    }
-}
-
-// -------------------------
-//  Template Atoms
-// -------------------------
-
-/// A single structural unit of template content.
-#[cfg(test)]
-#[derive(Clone, Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum TemplateAtom {
-    /// Literal text or a runtime expression.
-    Content(TemplateSegment),
-}
-
-// -------------------------
-//  Template Segments
+//  Template Segment Origin
 // -------------------------
 
 /// Identifies where a template segment originated.
@@ -262,15 +176,6 @@ pub enum TemplateSegmentOrigin {
     /// Body segments are literal body content, so they are eligible for style
     /// formatters such as markdown when they are compile-time-known strings.
     Body,
-}
-
-/// A wrapped expression representing a piece of template content.
-#[cfg(test)]
-#[derive(Clone, Debug)]
-pub struct TemplateSegment {
-    pub expression: Expression,
-    pub origin: TemplateSegmentOrigin,
-    pub reactive_subscription: Option<ReactiveSubscription>,
 }
 
 /// Metadata for a V1 `$(source)` template subscription.
@@ -292,38 +197,6 @@ impl ReactiveSubscription {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.source.remap_string_ids(remap);
         self.location.remap_string_ids(remap);
-    }
-}
-
-#[cfg(test)]
-impl TemplateSegment {
-    pub fn new(expression: Expression, origin: TemplateSegmentOrigin) -> Self {
-        Self {
-            expression,
-            origin,
-            reactive_subscription: None,
-        }
-    }
-
-    pub fn reactive_subscription(
-        expression: Expression,
-        origin: TemplateSegmentOrigin,
-        subscription: ReactiveSubscription,
-    ) -> Self {
-        Self {
-            expression,
-            origin,
-            reactive_subscription: Some(subscription),
-        }
-    }
-
-    /// Remap expression and reactive subscription.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.expression.remap_string_ids(remap);
-        if let Some(subscription) = &mut self.reactive_subscription {
-            subscription.remap_string_ids(remap);
-        }
     }
 }
 

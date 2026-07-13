@@ -6,8 +6,6 @@
 //! WHY: Separates the `Template` data type from the parsing/composition logic
 //! so other modules can depend on the struct without pulling in the full parser.
 
-#[cfg(test)]
-use crate::compiler_frontend::ast::templates::template::TemplateContent;
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateControlFlow;
 use crate::compiler_frontend::ast::templates::tir::{
@@ -35,9 +33,6 @@ use std::sync::Arc;
 ///   must not be overwritten by generic cleanup.
 #[derive(Debug)]
 pub struct Template {
-    /// Detached compatibility payload used only by legacy fixture builders.
-    #[cfg(test)]
-    pub content: TemplateContent,
     pub(crate) control_flow: Option<TemplateControlFlow>,
     pub kind: TemplateType,
     pub style: Style,
@@ -68,8 +63,6 @@ pub struct Template {
 impl Clone for Template {
     fn clone(&self) -> Self {
         Self {
-            #[cfg(test)]
-            content: self.content.to_owned(),
             control_flow: self.control_flow.to_owned(),
             kind: self.kind.to_owned(),
             style: self.style.to_owned(),
@@ -96,8 +89,6 @@ impl Template {
 
     fn build_empty() -> Template {
         Template {
-            #[cfg(test)]
-            content: TemplateContent::default(),
             control_flow: None,
             kind: TemplateType::StringFunction,
             style: Style::default(),

@@ -520,7 +520,7 @@ fn tir_template_contains_runtime_artifact(
 ///       escaped `$insert(...)` contributions using the TIR node or branch location
 ///       for diagnostics.
 /// WHY: this is the production authority for runtime control-flow artifact
-///      validation; no `TemplateContent` fallback exists.
+///      validation; the TIR store is the sole source of truth.
 fn validate_runtime_tir_subtree_control_flow_slot_artifacts(
     store: &TemplateIrStore,
     roots: &[TemplateIrNodeId],

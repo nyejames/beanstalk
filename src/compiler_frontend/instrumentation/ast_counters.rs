@@ -89,18 +89,6 @@ pub(crate) enum AstCounter {
     TirFoldOutputBytes,
     TirFoldStringInternCalls,
 
-    /// Child template had same-store final TIR and was reused.
-    TemplateTirChildSameStoreReuse,
-
-    /// Recursive child materialization was attempted (child lacked same-store proof).
-    TemplateTirChildRecursiveMaterializationAttempts,
-
-    /// Recursive child materialization succeeded.
-    TemplateTirChildRecursiveMaterializationSuccesses,
-
-    /// Recursive child materialization failed.
-    TemplateTirChildRecursiveMaterializationFailures,
-
     // Phase 1 TIR attribution counters.
     //
     // WHAT: fine-grained attribution for current-state materialization,
@@ -339,10 +327,6 @@ mod detailed {
             AstCounter::TirFoldNodesVisited,
             AstCounter::TirFoldOutputBytes,
             AstCounter::TirFoldStringInternCalls,
-            AstCounter::TemplateTirChildSameStoreReuse,
-            AstCounter::TemplateTirChildRecursiveMaterializationAttempts,
-            AstCounter::TemplateTirChildRecursiveMaterializationSuccesses,
-            AstCounter::TemplateTirChildRecursiveMaterializationFailures,
             AstCounter::TirCurrentStateTemplatesCreated,
             AstCounter::TirCurrentStateNodesCreated,
             AstCounter::TirRegistryBackedFoldAttempts,
@@ -446,16 +430,6 @@ mod detailed {
             AstCounter::TirFoldOutputBytes => "TIR fold output bytes",
             AstCounter::TirFoldStringInternCalls => "TIR fold string-intern calls",
 
-            AstCounter::TemplateTirChildSameStoreReuse => "TIR child same-store reuse",
-            AstCounter::TemplateTirChildRecursiveMaterializationAttempts => {
-                "TIR child recursive materialization attempts"
-            }
-            AstCounter::TemplateTirChildRecursiveMaterializationSuccesses => {
-                "TIR child recursive materialization successes"
-            }
-            AstCounter::TemplateTirChildRecursiveMaterializationFailures => {
-                "TIR child recursive materialization failures"
-            }
             AstCounter::TirCurrentStateTemplatesCreated => "TIR current-state templates created",
             AstCounter::TirCurrentStateNodesCreated => "TIR current-state nodes created",
             AstCounter::TirRegistryBackedFoldAttempts => "registry-backed fold attempts",
@@ -579,16 +553,6 @@ mod detailed {
             AstCounter::TirFoldOutputBytes => "ast_tir_fold_output_bytes",
             AstCounter::TirFoldStringInternCalls => "ast_tir_fold_string_intern_calls",
 
-            AstCounter::TemplateTirChildSameStoreReuse => "ast_template_tir_child_same_store_reuse",
-            AstCounter::TemplateTirChildRecursiveMaterializationAttempts => {
-                "ast_template_tir_child_recursive_materialization_attempts"
-            }
-            AstCounter::TemplateTirChildRecursiveMaterializationSuccesses => {
-                "ast_template_tir_child_recursive_materialization_successes"
-            }
-            AstCounter::TemplateTirChildRecursiveMaterializationFailures => {
-                "ast_template_tir_child_recursive_materialization_failures"
-            }
             AstCounter::TirCurrentStateTemplatesCreated => {
                 "ast_tir_current_state_templates_created"
             }

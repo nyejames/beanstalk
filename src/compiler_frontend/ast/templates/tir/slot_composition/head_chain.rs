@@ -74,8 +74,8 @@ struct HeadChainResolutionInputs<'a> {
 /// WHAT: records one wrapper template opened by a head-origin receiver and the
 ///       pending items (direct nodes or nested layer references) accumulated as
 ///       its fill content.
-/// WHY: this mirrors the legacy `ChainLayer` from `template_composition.rs`,
-///      but stores TIR node/item references instead of `TemplateAtom`s.
+/// WHY: nested head wrappers need one layer-local fill list before the chain is
+///      resolved into effective TIR nodes.
 struct TirChainLayer {
     /// Effective wrapper identity from the head-origin child occurrence.
     wrapper_reference: TemplateTirChildReference,

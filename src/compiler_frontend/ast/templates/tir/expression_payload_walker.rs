@@ -2,9 +2,8 @@
 //!
 //! WHAT: provides read-only traversals over every expression payload reachable
 //!       from same-store TIR roots and from a finalized `TirView`, plus a strict
-//!       mutation traversal for finalized body roots that later finalization
-//!       phases can use before the legacy `TemplateContent` body authority is
-//!       removed.
+//!       mutation traversal for finalized body roots used during AST
+//!       finalization.
 //! WHY: final type-boundary validation and debug TypeId validation both need to
 //!      inspect the same expression-bearing TIR nodes; centralizing the walks in
 //!      TIR keeps the traversal authoritative and removes near-duplicate local
