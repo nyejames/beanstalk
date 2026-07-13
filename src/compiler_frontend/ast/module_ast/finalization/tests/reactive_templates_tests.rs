@@ -13,20 +13,21 @@ use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordSta
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
 };
+use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::runtime_handoff::OwnedRuntimeSlotSiteRenderPlan;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
+    TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIr, TemplateIrNode, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirBodyReference,
-    TemplateTirPhase, TemplateTirReference,
+    ExpressionSiteId, TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
+    TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
+    TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateTirChildReference,
+    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSite, OwnedRuntimeSlotSiteRenderPiece,
@@ -135,52 +136,6 @@ fn template_expression_from_tir(
     });
 
     Expression::template(template, ValueMode::ImmutableOwned)
-}
-
-fn push_tir_body_root_for_expression(
-    store: &mut TemplateIrStore,
-    expression: Expression,
-) -> (TemplateTirBodyReference, ExpressionSiteId) {
-    let location = expression.location.clone();
-    let site_id = store.next_expression_site_id();
-    let expression_node = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::DynamicExpression {
-            expression: Box::new(expression),
-            origin: TemplateSegmentOrigin::Body,
-            reactive_subscription: None,
-            site_id,
-        },
-        location.clone(),
-    ));
-    let root = store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Sequence {
-            children: vec![expression_node],
-        },
-        location,
-    ));
-
-    (
-        TemplateTirBodyReference::with_store_local_identity(
-            store,
-            root,
-            TemplateTirPhase::Composed,
-        ),
-        site_id,
-    )
-}
-
-fn tir_body_overlay_expression_metadata<'a>(
-    registry: &'a TemplateIrRegistry,
-    body_ref: &TemplateTirBodyReference,
-    site_id: ExpressionSiteId,
-) -> Option<&'a ReactiveTemplateMetadata> {
-    let overlay_set = registry.overlay_set(body_ref.overlay_set_id)?;
-    let expression_overlay_id = overlay_set.expression_overrides?;
-    let expression_overlay = registry.expression_overlay(expression_overlay_id)?;
-    expression_overlay
-        .expression_for_site(site_id)?
-        .reactive_template
-        .as_ref()
 }
 
 fn linear_tir_expression_overlay_metadata<'a>(
@@ -473,29 +428,65 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
     let count_path = symbol("count", &mut string_table);
     let location = test_location(2);
     let mut store = TemplateIrStore::new();
+
     let body_expression = template_with_subscription(
         &mut store,
         reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
     );
-    let (body_ref, body_site_id) = push_tir_body_root_for_expression(&mut store, body_expression);
+
+    let body_site_id = store.next_expression_site_id();
+    let body_expr_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(body_expression),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: body_site_id,
+        },
+        location.clone(),
+    ));
+    let body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![body_expr_node],
+        },
+        location.clone(),
+    ));
+
+    let selector_site_id = store.next_expression_site_id();
+    let branch = TemplateIrBranch::new(
+        TemplateBranchSelector::Bool(Expression::bool(
+            true,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        body_root,
+        location.clone(),
+    )
+    .with_selector_site_id(selector_site_id);
+
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::BranchChain {
+            branches: vec![branch],
+            fallback: None,
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
 
     let mut template = Template::empty();
     template.location = location.clone();
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: body_ref.clone(),
-                selector: TemplateBranchSelector::Bool(Expression::bool(
-                    true,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
-                location: location.clone(),
-            }],
-            fallback: None,
-            location: location.clone(),
-        },
-    )));
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -503,15 +494,12 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
     )];
 
     let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
     propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
 
     let template = template_from_expression_statement(&ast);
-    let Some(TemplateControlFlow::BranchChain(branch_chain)) = &template.control_flow else {
-        panic!("expected branch chain");
-    };
-    let body_ref = &branch_chain.branches[0].body_tir_reference;
-    let metadata = tir_body_overlay_expression_metadata(&registry, body_ref, body_site_id)
-        .expect("expected TIR body expression metadata");
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
+        .expect("expected TIR root expression overlay metadata for branch body");
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, count_path);
 }
@@ -523,41 +511,72 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
     let location = test_location(2);
     let mut store = TemplateIrStore::new();
 
-    let (branch_body_ref, _) = push_tir_body_root_for_expression(
-        &mut store,
-        Expression::string_slice(
-            string_table.intern("branch"),
-            location.clone(),
-            ValueMode::ImmutableOwned,
-        ),
-    );
+    let branch_body_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Text {
+            text: string_table.intern("branch"),
+            byte_len: 6,
+            origin: TemplateSegmentOrigin::Body,
+        },
+        location.clone(),
+    ));
+
     let fallback_expression = template_with_subscription(
         &mut store,
         reactive_source(fallback_path.clone(), ReactiveSourceKind::Declaration),
     );
-    let (fallback_body_ref, fallback_site_id) =
-        push_tir_body_root_for_expression(&mut store, fallback_expression);
+    let fallback_site_id = store.next_expression_site_id();
+    let fallback_expr_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(fallback_expression),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: fallback_site_id,
+        },
+        location.clone(),
+    ));
+    let fallback_body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![fallback_expr_node],
+        },
+        location.clone(),
+    ));
+
+    let selector_site_id = store.next_expression_site_id();
+    let branch = TemplateIrBranch::new(
+        TemplateBranchSelector::Bool(Expression::bool(
+            true,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        branch_body_node,
+        location.clone(),
+    )
+    .with_selector_site_id(selector_site_id);
+
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::BranchChain {
+            branches: vec![branch],
+            fallback: Some(fallback_body_root),
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
 
     let mut template = Template::empty();
     template.location = location.clone();
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: branch_body_ref,
-                selector: TemplateBranchSelector::Bool(Expression::bool(
-                    true,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
-                location: location.clone(),
-            }],
-            fallback: Some(TemplateFallbackBranch {
-                body_tir_reference: fallback_body_ref.clone(),
-                location: location.clone(),
-            }),
-            location: location.clone(),
-        },
-    )));
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -565,19 +584,12 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
     )];
 
     let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
     propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
 
     let template = template_from_expression_statement(&ast);
-    let Some(TemplateControlFlow::BranchChain(branch_chain)) = &template.control_flow else {
-        panic!("expected branch chain");
-    };
-    let fallback_ref = &branch_chain
-        .fallback
-        .as_ref()
-        .expect("expected fallback branch")
-        .body_tir_reference;
-    let metadata = tir_body_overlay_expression_metadata(&registry, fallback_ref, fallback_site_id)
-        .expect("expected fallback TIR body expression metadata");
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, fallback_site_id)
+        .expect("expected TIR root expression overlay metadata for fallback body");
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, fallback_path);
 }
@@ -588,16 +600,32 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
     let count_path = symbol("count", &mut string_table);
     let location = test_location(2);
     let mut store = TemplateIrStore::new();
+
     let body_expression = template_with_subscription(
         &mut store,
         reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
     );
-    let (body_ref, body_site_id) = push_tir_body_root_for_expression(&mut store, body_expression);
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-        TemplateLoopControlFlow {
+    let body_site_id = store.next_expression_site_id();
+    let body_expr_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(body_expression),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: body_site_id,
+        },
+        location.clone(),
+    ));
+    let body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![body_expr_node],
+        },
+        location.clone(),
+    ));
+
+    let condition_site_id = store.next_expression_site_id();
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Loop {
             header: TemplateLoopHeader::Conditional {
                 condition: Box::new(Expression::bool(
                     true,
@@ -605,11 +633,31 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
                     ValueMode::ImmutableOwned,
                 )),
             },
-            body_tir_reference: body_ref.clone(),
-            aggregate_wrapper_tir_reference: None,
-            location: location.clone(),
+            header_sites: TemplateLoopHeaderExpressionSites::Conditional {
+                condition: condition_site_id,
+            },
+            body: body_root,
+            aggregate_wrapper: None,
         },
-    )));
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -617,15 +665,450 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
     )];
 
     let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
     propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
 
     let template = template_from_expression_statement(&ast);
-    let Some(TemplateControlFlow::Loop(template_loop)) = &template.control_flow else {
-        panic!("expected template loop");
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
+        .expect("expected TIR root expression overlay metadata for loop body");
+    assert_eq!(metadata.subscriptions.len(), 1);
+    assert_eq!(metadata.subscriptions[0].source.path, count_path);
+}
+
+#[test]
+fn annotates_branch_selector_and_body_through_one_root_overlay() {
+    let mut string_table = StringTable::new();
+    let count_path = symbol("count", &mut string_table);
+    let show_path = symbol("show", &mut string_table);
+    let location = test_location(2);
+    let mut store = TemplateIrStore::new();
+
+    let show_template = template_with_subscription(
+        &mut store,
+        reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
+    );
+    let show_declaration = Declaration {
+        id: show_path.clone(),
+        value: show_template,
     };
-    let body_ref = &template_loop.body_tir_reference;
-    let metadata = tir_body_overlay_expression_metadata(&registry, body_ref, body_site_id)
-        .expect("expected loop TIR body expression metadata");
+
+    let body_expression = template_with_subscription(
+        &mut store,
+        reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
+    );
+
+    let body_site_id = store.next_expression_site_id();
+    let body_expr_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(body_expression),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: body_site_id,
+        },
+        location.clone(),
+    ));
+    let body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![body_expr_node],
+        },
+        location.clone(),
+    ));
+
+    let selector_expression = reference_expression(
+        show_path.clone(),
+        DataType::StringSlice,
+        builtin_type_ids::STRING,
+    );
+    let selector_site_id = store.next_expression_site_id();
+    let branch = TemplateIrBranch::new(
+        TemplateBranchSelector::Bool(selector_expression),
+        body_root,
+        location.clone(),
+    )
+    .with_selector_site_id(selector_site_id);
+
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::BranchChain {
+            branches: vec![branch],
+            fallback: None,
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
+
+    let mut ast = vec![
+        node(
+            NodeKind::VariableDeclaration(show_declaration),
+            test_location(1),
+        ),
+        node(
+            NodeKind::ExpressionStatement(Expression::template(
+                template,
+                ValueMode::ImmutableOwned,
+            )),
+            location,
+        ),
+    ];
+
+    let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+
+    let NodeKind::ExpressionStatement(Expression {
+        kind: ExpressionKind::Template(template),
+        ..
+    }) = &ast[1].kind
+    else {
+        panic!("expected template expression statement at ast[1]");
+    };
+
+    let selector_metadata =
+        linear_tir_expression_overlay_metadata(&registry, template, selector_site_id)
+            .expect("expected TIR root expression overlay metadata for branch selector");
+    assert_eq!(
+        selector_metadata.subscriptions.len(),
+        1,
+        "branch selector reference should inherit reactive metadata from the prior declaration through the root overlay"
+    );
+    assert_eq!(selector_metadata.subscriptions[0].source.path, count_path);
+
+    let body_metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
+        .expect("expected TIR root expression overlay metadata for branch body");
+    assert_eq!(body_metadata.subscriptions.len(), 1);
+    assert_eq!(body_metadata.subscriptions[0].source.path, count_path);
+}
+
+#[test]
+fn annotates_existing_effective_expression_override_instead_of_structural_payload() {
+    let mut string_table = StringTable::new();
+    let count_path = symbol("count", &mut string_table);
+    let show_path = symbol("show", &mut string_table);
+    let location = test_location(2);
+    let mut store = TemplateIrStore::new();
+
+    let show_declaration = Declaration {
+        id: show_path.clone(),
+        value: template_with_subscription(
+            &mut store,
+            reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
+        ),
+    };
+
+    let site_id = store.next_expression_site_id();
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(Expression::bool(
+                false,
+                location.clone(),
+                ValueMode::ImmutableOwned,
+            )),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id,
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut registry = TemplateIrRegistry::new();
+    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            site_id,
+            Box::new(reference_expression(
+                show_path,
+                DataType::StringSlice,
+                builtin_type_ids::STRING,
+            )),
+        )],
+    });
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id,
+    });
+
+    let mut ast = vec![
+        node(
+            NodeKind::VariableDeclaration(show_declaration),
+            test_location(1),
+        ),
+        node(
+            NodeKind::ExpressionStatement(Expression::template(
+                template,
+                ValueMode::ImmutableOwned,
+            )),
+            location,
+        ),
+    ];
+
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+
+    let NodeKind::ExpressionStatement(Expression {
+        kind: ExpressionKind::Template(template),
+        ..
+    }) = &ast[1].kind
+    else {
+        panic!("expected template expression statement at ast[1]");
+    };
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, site_id)
+        .expect("existing effective expression override should be annotated");
+
+    assert_eq!(metadata.subscriptions.len(), 1);
+    assert_eq!(metadata.subscriptions[0].source.path, count_path);
+}
+
+#[test]
+fn annotates_existing_same_store_child_expression_override() {
+    let mut string_table = StringTable::new();
+    let count_path = symbol("count", &mut string_table);
+    let show_path = symbol("show", &mut string_table);
+    let location = test_location(2);
+    let mut store = TemplateIrStore::new();
+
+    let show_declaration = Declaration {
+        id: show_path.clone(),
+        value: template_with_subscription(
+            &mut store,
+            reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
+        ),
+    };
+
+    let child_site_id = store.next_expression_site_id();
+    let child_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(Expression::bool(
+                false,
+                location.clone(),
+                ValueMode::ImmutableOwned,
+            )),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: child_site_id,
+        },
+        location.clone(),
+    ));
+    let child_template_id = store.push_template(TemplateIr::new(
+        child_root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut registry = TemplateIrRegistry::new();
+    let child_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            child_site_id,
+            Box::new(reference_expression(
+                show_path,
+                DataType::StringSlice,
+                builtin_type_ids::STRING,
+            )),
+        )],
+    });
+    let child_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(child_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let child_reference = TemplateTirChildReference::same_store(
+        child_template_id,
+        store.store_id(),
+        TemplateTirPhase::Composed,
+        child_overlay_set_id,
+    );
+    let child_occurrence_id = store.next_child_template_occurrence_id();
+    let parent_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: child_reference,
+            occurrence_id: child_occurrence_id,
+        },
+        location.clone(),
+    ));
+    let parent_template_id = store.push_template(TemplateIr::new(
+        parent_root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), parent_template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: root_overlay_set_id,
+    });
+    let mut ast = vec![
+        node(
+            NodeKind::VariableDeclaration(show_declaration),
+            test_location(1),
+        ),
+        node(
+            NodeKind::ExpressionStatement(Expression::template(
+                template,
+                ValueMode::ImmutableOwned,
+            )),
+            location,
+        ),
+    ];
+
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+
+    let NodeKind::ExpressionStatement(Expression {
+        kind: ExpressionKind::Template(template),
+        ..
+    }) = &ast[1].kind
+    else {
+        panic!("expected template expression statement at ast[1]");
+    };
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, child_site_id)
+        .expect("same-store child effective override should be annotated on the root overlay");
+
+    assert_eq!(metadata.subscriptions.len(), 1);
+    assert_eq!(metadata.subscriptions[0].source.path, count_path);
+}
+
+#[test]
+fn option_capture_body_uses_scrutinee_reactive_metadata() {
+    let mut string_table = StringTable::new();
+    let count_path = symbol("count", &mut string_table);
+    let optional_path = symbol("optional", &mut string_table);
+    let capture_path = symbol("captured", &mut string_table);
+    let capture_name = string_table.intern("captured");
+    let location = test_location(2);
+    let mut store = TemplateIrStore::new();
+
+    let optional_declaration = Declaration {
+        id: optional_path.clone(),
+        value: template_with_subscription(
+            &mut store,
+            reactive_source(count_path.clone(), ReactiveSourceKind::Declaration),
+        ),
+    };
+
+    let body_site_id = store.next_expression_site_id();
+    let body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::DynamicExpression {
+            expression: Box::new(reference_expression(
+                capture_path.clone(),
+                DataType::StringSlice,
+                builtin_type_ids::STRING,
+            )),
+            origin: TemplateSegmentOrigin::Body,
+            reactive_subscription: None,
+            site_id: body_site_id,
+        },
+        location.clone(),
+    ));
+
+    let selector_site_id = store.next_expression_site_id();
+    let selector = TemplateBranchSelector::OptionPresentCapture {
+        scrutinee: reference_expression(
+            optional_path,
+            DataType::StringSlice,
+            builtin_type_ids::STRING,
+        ),
+        pattern: Box::new(MatchPattern::OptionPresentCapture {
+            name: capture_name,
+            binding_path: capture_path,
+            inner_type_id: builtin_type_ids::STRING,
+            location: location.clone(),
+            binding_location: location.clone(),
+        }),
+    };
+    let branch = TemplateIrBranch::new(selector, body_root, location.clone())
+        .with_selector_site_id(selector_site_id);
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::BranchChain {
+            branches: vec![branch],
+            fallback: None,
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
+
+    let mut ast = vec![
+        node(
+            NodeKind::VariableDeclaration(optional_declaration),
+            test_location(1),
+        ),
+        node(
+            NodeKind::ExpressionStatement(Expression::template(
+                template,
+                ValueMode::ImmutableOwned,
+            )),
+            location,
+        ),
+    ];
+
+    let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+
+    let NodeKind::ExpressionStatement(Expression {
+        kind: ExpressionKind::Template(template),
+        ..
+    }) = &ast[1].kind
+    else {
+        panic!("expected template expression statement at ast[1]");
+    };
+    let metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
+        .expect("option-capture body reference should inherit scrutinee metadata");
+
     assert_eq!(metadata.subscriptions.len(), 1);
     assert_eq!(metadata.subscriptions[0].source.path, count_path);
 }

@@ -3,15 +3,14 @@
 //! WHAT: `TemplateTirBodyReference` is the canonical store-qualified identity
 //! for a control-flow body root or aggregate-wrapper root that can be consumed
 //! through the TIR view system. It carries the store-qualified node root, the
-//! pipeline phase, the overlay set, the source location, and the store-owner
-//! proof needed for same-store mutation checks.
+//! pipeline phase, the source location, and the store-owner proof needed for
+//! same-store mutation checks.
 //!
 //! WHY: branch/fallback/loop and aggregate-wrapper body roots previously
 //! traveled as a raw `TemplateIrNodeId` paired with an owner token. That shape
-//! lost registry identity, phase, and overlay context, forcing consumers to
-//! either re-derive them or skip the view system. This reference makes body
-//! roots first-class view inputs while preserving the same-store proof that
-//! keeps store-local mutation safe.
+//! lost registry identity and phase, forcing consumers to either re-derive them
+//! or skip the view system. This reference makes body roots first-class inputs
+//! while preserving the same-store proof that keeps store-local mutation safe.
 //!
 //! ## View consumption
 //!
@@ -20,15 +19,14 @@
 //! body shells) can be viewed through the owning `TemplateRef`; body roots that
 //! are nodes installed into an owning `BranchChain`/`Loop` are consumed via
 //! `same_store_root` today. The identity fields (`TemplateStoreId`, phase,
-//! overlay set, source location) are carried uniformly so later phases can
-//! construct the appropriate view without re-deriving context.
+//! source location) are carried uniformly so later phases can construct the
+//! appropriate view without re-deriving context.
 
 use std::sync::Arc;
 
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::ids::TemplateIrNodeId;
-use super::overlays::TemplateOverlaySetId;
 use super::refs::{TemplateNodeRef, TemplateStoreId};
 use super::store::{TemplateIrStore, TemplateIrStoreOwner};
 use super::view::TemplateTirPhase;
@@ -42,8 +40,8 @@ use super::view::TemplateTirPhase;
 /// WHAT: references a `BranchChain`/`Loop` body node or a loop aggregate-wrapper
 ///       root with the registry context needed to consume it through the TIR
 ///       view system. The `node_ref` carries the `TemplateStoreId` and
-///       `TemplateIrNodeId`; the remaining fields carry phase, overlay context,
-///       source location, and the same-store owner proof.
+///       `TemplateIrNodeId`; the remaining fields carry phase, source location,
+///       and the same-store owner proof.
 ///
 /// WHY: a bare `TemplateIrNodeId` is only valid inside one store and carries no
 ///      pipeline context. Threading the full identity on the reference lets
@@ -56,9 +54,6 @@ pub(crate) struct TemplateTirBodyReference {
 
     /// Pipeline phase represented by this body root.
     pub(crate) phase: TemplateTirPhase,
-
-    /// Overlay set that applies when the body is consumed as a view.
-    pub(crate) overlay_set_id: TemplateOverlaySetId,
 
     /// Source location for diagnostics pointing at the body.
     pub(crate) location: SourceLocation,
@@ -80,23 +75,20 @@ impl TemplateTirBodyReference {
         store_id: TemplateStoreId,
         root: TemplateIrNodeId,
         phase: TemplateTirPhase,
-        overlay_set_id: TemplateOverlaySetId,
         location: SourceLocation,
     ) -> Self {
         Self {
             node_ref: TemplateNodeRef::new(store_id, root),
             phase,
-            overlay_set_id,
             location,
             store_owner,
         }
     }
 
-    /// Convenience for store-local construction that does not yet have a
-    /// non-empty overlay set or a finalized location.
+    /// Convenience for store-local construction without a finalized location.
     ///
-    /// WHAT: builds a reference using the store's current `store_id`, the empty
-    ///       overlay set, and a default source location.
+    /// WHAT: builds a reference using the store's current `store_id` and a
+    ///       default source location.
     /// WHY: internal construction sites that only need same-store identity
     ///      today can call this without threading empty placeholders through
     ///      every helper.
@@ -111,7 +103,6 @@ impl TemplateTirBodyReference {
             store.store_id(),
             root,
             phase,
-            TemplateOverlaySetId::empty(),
             SourceLocation::default(),
         )
     }

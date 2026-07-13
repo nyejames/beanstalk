@@ -29,7 +29,6 @@ use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
     TirSlotPlaceholder,
 };
-use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateRef, TemplateStoreId, TemplateStringDomainId, TemplateWrapperReference,
 };
@@ -226,18 +225,6 @@ pub(crate) struct TemplateIrStore {
     ///      materialization without broadening the `TemplateIrNodeKind` enum shape.
     pub(crate) node_reactive_subscriptions: Vec<Option<ReactiveSubscription>>,
 
-    /// Body-root overlay-set identity attached to individual TIR nodes.
-    /// Indexed by `TemplateIrNodeId`; `None` means the node is not a body root
-    /// or carries the empty overlay set.
-    ///
-    /// WHAT: stores the overlay-set identity that finalization composed for a
-    ///       control-flow body root or loop aggregate-wrapper root.
-    /// WHY: body roots are referenced by raw `TemplateIrNodeId` inside
-    ///      `BranchChain` and `Loop` nodes. Keeping the overlay-set identity on
-    ///      the node lets the HIR handoff materializer build a `TirSubtreeView`
-    ///      for the body without reaching back to the AST control-flow reference.
-    pub(crate) node_body_overlay_sets: Vec<Option<TemplateOverlaySetId>>,
-
     /// Identity token for this store instance.
     ///
     /// WHAT: parser-emitted builder states hold a clone of this token so callers can
@@ -271,7 +258,6 @@ impl TemplateIrStore {
             slot_plans: Vec::new(),
             formatter_anchors: Vec::new(),
             node_reactive_subscriptions: Vec::new(),
-            node_body_overlay_sets: Vec::new(),
             owner: TemplateIrStoreOwner::new(),
             store_id: TemplateStoreId::new(0),
         }
@@ -304,7 +290,6 @@ impl TemplateIrStore {
             slot_plans: Vec::with_capacity(side_capacity),
             formatter_anchors: Vec::with_capacity(side_capacity),
             node_reactive_subscriptions: Vec::with_capacity(node_capacity),
-            node_body_overlay_sets: Vec::with_capacity(node_capacity),
             owner: TemplateIrStoreOwner::new(),
             store_id: TemplateStoreId::new(0),
         }
@@ -492,51 +477,7 @@ impl TemplateIrStore {
         let id = TemplateIrNodeId::new(self.nodes.len());
         self.nodes.push(node);
         self.node_reactive_subscriptions.push(None);
-        self.node_body_overlay_sets.push(None);
         id
-    }
-
-    /// Returns the body-root overlay set attached to a node, if any.
-    ///
-    /// WHAT: body roots carry the overlay-set identity that finalization
-    ///       composes for them. Storing it as node side-data lets the HIR
-    ///       handoff materializer build a `TirSubtreeView` without reaching
-    ///       back to the AST control-flow reference.
-    /// WHY: keeps the overlay-set identity durable across current-state TIR
-    ///      copies and lets the handoff builder resolve effective expressions
-    ///      inside control-flow bodies and loop aggregate wrappers.
-    pub(crate) fn node_body_overlay_set(
-        &self,
-        node_id: TemplateIrNodeId,
-    ) -> Option<TemplateOverlaySetId> {
-        self.node_body_overlay_sets
-            .get(node_id.index())
-            .copied()
-            .flatten()
-    }
-
-    /// Attaches a body-root overlay set to an existing node.
-    pub(crate) fn set_node_body_overlay_set(
-        &mut self,
-        node_id: TemplateIrNodeId,
-        overlay_set_id: TemplateOverlaySetId,
-    ) {
-        if let Some(entry) = self.node_body_overlay_sets.get_mut(node_id.index()) {
-            *entry = Some(overlay_set_id);
-        }
-    }
-
-    /// Copies the body-root overlay set from one node to another.
-    pub(crate) fn copy_node_body_overlay_set(
-        &mut self,
-        source_id: TemplateIrNodeId,
-        target_id: TemplateIrNodeId,
-    ) {
-        if let Some(Some(overlay_set_id)) =
-            self.node_body_overlay_sets.get(source_id.index()).copied()
-        {
-            self.set_node_body_overlay_set(target_id, overlay_set_id);
-        }
     }
 
     /// Returns the reactive subscription attached to a node, if any.

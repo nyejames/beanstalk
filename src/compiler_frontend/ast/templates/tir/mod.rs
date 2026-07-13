@@ -189,12 +189,10 @@ pub(crate) use ids::SlotOccurrenceId;
 // and debug TypeId validation. The walker is TIR-authoritative and removes the
 // duplicated local traversal helpers from AST finalization.
 pub(crate) use expression_payload_walker::walk_tir_view_expression_payloads;
-// Body-root expression-payload overlay APIs consumed by production AST
-// finalization (template expression normalization and reactive annotation).
+// Expression-payload overlay APIs consumed by production AST finalization.
 // Mutation is retained only for focused TIR walker tests.
 pub(crate) use expression_payload_walker::{
-    TirExpressionPayloadVisitor, collect_effective_tir_body_root_expression_overlay_payloads,
-    collect_tir_body_root_expression_overlay_payloads, collect_tir_expression_overlay_payloads,
+    TirExpressionPayloadVisitor, collect_effective_tir_expression_overlay_payloads,
     walk_tir_expression_payloads,
 };
 
@@ -317,12 +315,9 @@ pub(crate) use slot_plan::{
     TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, convert_tir_tree_to_active_slot_plan,
 };
 
-// Central read API: borrowed views over registry-owned template roots and
-// body/root subtrees plus overlay sets. Production consumers and tests
-// construct views through the narrow API instead of reaching into raw stores.
+// Central read API over registry-owned template roots and overlay sets.
 pub(crate) use view::{
-    FinalizedTirViewAttempt, TemplateTirPhase, TirSubtreeView, TirView,
-    finalized_tir_view_for_template,
+    FinalizedTirViewAttempt, TemplateTirPhase, TirView, finalized_tir_view_for_template,
 };
 
 // -------------------------

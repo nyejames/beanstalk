@@ -1,17 +1,14 @@
 //! TIR expression-payload walkers.
 //!
 //! WHAT: provides read-only traversals over every expression payload reachable
-//!       from same-store TIR roots and from a finalized `TirView`, plus a strict
-//!       mutation traversal for finalized body roots used during AST
-//!       finalization.
+//!       from same-store TIR roots and from a finalized `TirView`, plus the
+//!       effective overlay collector used by AST finalization.
 //! WHY: final type-boundary validation and debug TypeId validation both need to
 //!      inspect the same expression-bearing TIR nodes; centralizing the walks in
 //!      TIR keeps the traversal authoritative and removes near-duplicate local
 //!      helpers from AST finalization. The `TirView` walk reads effective
 //!      expression overlays for dynamic-expression splices, branch selectors,
-//!      and loop headers. The mutation walker is the Phase 7 body-authority
-//!      handoff point: it can follow `ChildTemplate` refs and runtime slot plans
-//!      without recovering the old AST `Template` payload.
+//!      and loop headers.
 
 use std::collections::HashSet;
 
@@ -19,14 +16,13 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
-use crate::compiler_frontend::ast::templates::tir::body_root_ref::TemplateTirBodyReference;
 use crate::compiler_frontend::ast::templates::tir::ids::ExpressionSiteId;
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
 };
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotSiteRenderPiece;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::view::{TirSubtreeView, TirView};
+use crate::compiler_frontend::ast::templates::tir::view::TirView;
 use crate::compiler_frontend::ast::templates::tir::{
     SameStoreTirRoots, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
 };
@@ -425,10 +421,9 @@ where
 ///       slot-plan roots owned by that template, records dynamic-expression
 ///       payloads, branch selectors, and loop-header expressions keyed by their
 ///       `ExpressionSiteId`.
-/// WHY: AST normalization reads structural payloads before any overlay is
-///      applied, so the first normalization pass sees the raw TIR expressions
-///      that composition produced. Keeping the traversal in the TIR walker
-///      module avoids another AST-local tree walk.
+/// WHY: focused walker tests compare raw structural coverage with the effective
+///      production collector without exposing collector internals.
+#[cfg(test)]
 pub(crate) fn collect_tir_expression_overlay_payloads(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
@@ -438,503 +433,26 @@ pub(crate) fn collect_tir_expression_overlay_payloads(
     Ok(collector.into_payloads())
 }
 
-/// Collects cloned structural expression payloads reachable from one body root.
+/// Collects effective expression payloads from one template root.
 ///
-/// WHAT: traverses the same-store TIR subtree below `root`, including runtime
-///       slot-plan roots owned by reached child templates, and records
-///       dynamic-expression payloads, branch selectors, and loop-header
-///       expressions keyed by their `ExpressionSiteId`.
-/// WHY: first-layer finalization passes (such as reactive metadata annotation)
-///      read the structural payloads and write the first overlay, before any
-///      earlier overlay exists for the body.
-pub(crate) fn collect_tir_body_root_expression_overlay_payloads(
+/// WHAT: traverses the same structural coverage as
+///       [`collect_tir_expression_overlay_payloads`] while resolving each site
+///       through a root-first overlay stack. Same-store child-template
+///       references temporarily add their own overlay identity, and runtime
+///       slot-plan roots retain the active owning-template stack.
+/// WHY: finalization writes one new root overlay, but must normalize the
+///      effective result of every earlier root and child overlay rather than
+///      replacing child-specific expressions with stale structural payloads.
+pub(crate) fn collect_effective_tir_expression_overlay_payloads(
     store: &TemplateIrStore,
-    root: TemplateIrNodeId,
-) -> Result<Vec<(ExpressionSiteId, Expression)>, CompilerError> {
-    let mut collector = ExpressionOverlayPayloadCollector::new(store);
-    collector.collect_node(root)?;
-    Ok(collector.into_payloads())
-}
-
-/// Collects effective expression payloads reachable from one body root.
-///
-/// WHAT: traverses the same-store TIR subtree below `body_reference.node_ref`
-///       through a `TirSubtreeView`, reading the effective expression for every
-///       discovered `ExpressionSiteId` from the view's overlay set. Child
-///       templates are entered through their own `TirView` so their effective
-///       overlays are honored too.
-/// WHY: later finalization passes (such as AST normalization) must observe the
-///      result of earlier overlay layers rather than replacing them silently.
-pub(crate) fn collect_effective_tir_body_root_expression_overlay_payloads(
     registry: &TemplateIrRegistry,
-    body_reference: &TemplateTirBodyReference,
+    template_id: TemplateIrId,
+    root_overlay_set_id: TemplateOverlaySetId,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, CompilerError> {
-    let view = TirSubtreeView::new(registry, body_reference)?;
-    let mut payloads = Vec::new();
-    let mut visited_templates = HashSet::new();
-    collect_effective_tir_subtree_expression_payloads(
-        &view,
-        body_reference.node_ref,
-        &mut payloads,
-        &mut visited_templates,
-    )?;
-    Ok(payloads)
-}
-
-/// Collects effective expression payloads from a body/root subtree view.
-fn collect_effective_tir_subtree_expression_payloads(
-    view: &TirSubtreeView<'_>,
-    node_ref: TemplateNodeRef,
-    payloads: &mut Vec<(ExpressionSiteId, Expression)>,
-    visited_templates: &mut HashSet<TemplateIrId>,
-) -> Result<(), CompilerError> {
-    let store_id = node_ref.store_id;
-    let node = view.effective_node(node_ref)?;
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            let children = children.clone();
-            drop(node);
-            for child in children {
-                collect_effective_tir_subtree_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, child),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::DynamicExpression {
-            expression,
-            site_id,
-            ..
-        } => {
-            let effective_expression = view
-                .effective_expression_for_site(*site_id)?
-                .cloned()
-                .unwrap_or_else(|| expression.as_ref().clone());
-            payloads.push((*site_id, effective_expression));
-            drop(node);
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            let branches = branches.clone();
-            let fallback = *fallback;
-            drop(node);
-            for branch in &branches {
-                let expression = view
-                    .effective_expression_for_site(branch.selector_site_id)?
-                    .cloned()
-                    .unwrap_or_else(|| branch.condition_expression().clone());
-                payloads.push((branch.selector_site_id, expression));
-                collect_effective_tir_subtree_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, branch.body),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-            if let Some(fallback_id) = fallback {
-                collect_effective_tir_subtree_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, fallback_id),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::Loop {
-            header,
-            header_sites,
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            let header = header.clone();
-            let header_sites = *header_sites;
-            let body = *body;
-            let aggregate_wrapper = *aggregate_wrapper;
-            drop(node);
-            collect_loop_header_effective_payloads(view, &header, header_sites, payloads)?;
-            collect_effective_tir_subtree_expression_payloads(
-                view,
-                TemplateNodeRef::new(store_id, body),
-                payloads,
-                visited_templates,
-            )?;
-            if let Some(wrapper_id) = aggregate_wrapper {
-                collect_effective_tir_subtree_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, wrapper_id),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let reference = *reference;
-            drop(node);
-            if let Some(template_id) = reference.template_id_in_store(store_id)
-                && visited_templates.insert(template_id)
-            {
-                let child_view = TirView::new(
-                    view.registry_ref(),
-                    reference.root,
-                    reference.phase,
-                    reference.overlay_set_id,
-                )?;
-                let child_root_node_id = {
-                    let child_root_template = child_view.root_template()?;
-                    child_root_template.root
-                };
-                let child_root_node_ref =
-                    TemplateNodeRef::new(child_view.root_ref().store_id, child_root_node_id);
-                collect_effective_tir_view_expression_payloads(
-                    &child_view,
-                    child_root_node_ref,
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            let template_id = *template;
-            drop(node);
-            if visited_templates.insert(template_id) {
-                let child_view = TirView::new(
-                    view.registry_ref(),
-                    TemplateRef::new(store_id, template_id),
-                    TemplateTirPhase::Parsed,
-                    TemplateOverlaySetId::empty(),
-                )?;
-                let child_root_node_id = {
-                    let child_root_template = child_view.root_template()?;
-                    child_root_template.root
-                };
-                let child_root_node_ref =
-                    TemplateNodeRef::new(child_view.root_ref().store_id, child_root_node_id);
-                collect_effective_tir_view_expression_payloads(
-                    &child_view,
-                    child_root_node_ref,
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::RuntimeSlotSite { .. }
-        | TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. } => {
-            drop(node);
-        }
-    }
-
-    Ok(())
-}
-
-/// Collects effective expression payloads from a top-level `TirView`.
-fn collect_effective_tir_view_expression_payloads(
-    view: &TirView<'_>,
-    node_ref: TemplateNodeRef,
-    payloads: &mut Vec<(ExpressionSiteId, Expression)>,
-    visited_templates: &mut HashSet<TemplateIrId>,
-) -> Result<(), CompilerError> {
-    let store_id = node_ref.store_id;
-    let node = view.effective_node(node_ref)?;
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            let children = children.clone();
-            drop(node);
-            for child in children {
-                collect_effective_tir_view_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, child),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::DynamicExpression {
-            expression,
-            site_id,
-            ..
-        } => {
-            let effective_expression = view
-                .effective_expression_for_site(*site_id)?
-                .cloned()
-                .unwrap_or_else(|| expression.as_ref().clone());
-            payloads.push((*site_id, effective_expression));
-            drop(node);
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            let branches = branches.clone();
-            let fallback = *fallback;
-            drop(node);
-            for branch in &branches {
-                let expression = view
-                    .effective_expression_for_site(branch.selector_site_id)?
-                    .cloned()
-                    .unwrap_or_else(|| branch.condition_expression().clone());
-                payloads.push((branch.selector_site_id, expression));
-                collect_effective_tir_view_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, branch.body),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-            if let Some(fallback_id) = fallback {
-                collect_effective_tir_view_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, fallback_id),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::Loop {
-            header,
-            header_sites,
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            let header = header.clone();
-            let header_sites = *header_sites;
-            let body = *body;
-            let aggregate_wrapper = *aggregate_wrapper;
-            drop(node);
-            collect_loop_header_effective_payloads_for_view(view, &header, header_sites, payloads)?;
-            collect_effective_tir_view_expression_payloads(
-                view,
-                TemplateNodeRef::new(store_id, body),
-                payloads,
-                visited_templates,
-            )?;
-            if let Some(wrapper_id) = aggregate_wrapper {
-                collect_effective_tir_view_expression_payloads(
-                    view,
-                    TemplateNodeRef::new(store_id, wrapper_id),
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            let reference = *reference;
-            drop(node);
-            if let Some(template_id) = reference.template_id_in_store(store_id)
-                && visited_templates.insert(template_id)
-            {
-                let child_view =
-                    view.child_view(reference.root, reference.phase, reference.overlay_set_id)?;
-                let child_root_node_id = {
-                    let child_root_template = child_view.root_template()?;
-                    child_root_template.root
-                };
-                let child_root_node_ref =
-                    TemplateNodeRef::new(child_view.root_ref().store_id, child_root_node_id);
-                collect_effective_tir_view_expression_payloads(
-                    &child_view,
-                    child_root_node_ref,
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            let template_id = *template;
-            drop(node);
-            if visited_templates.insert(template_id) {
-                let child_view = TirView::new(
-                    view.registry_ref(),
-                    TemplateRef::new(store_id, template_id),
-                    TemplateTirPhase::Parsed,
-                    TemplateOverlaySetId::empty(),
-                )?;
-                let child_root_node_id = {
-                    let child_root_template = child_view.root_template()?;
-                    child_root_template.root
-                };
-                let child_root_node_ref =
-                    TemplateNodeRef::new(child_view.root_ref().store_id, child_root_node_id);
-                collect_effective_tir_view_expression_payloads(
-                    &child_view,
-                    child_root_node_ref,
-                    payloads,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::RuntimeSlotSite { .. }
-        | TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. } => {
-            drop(node);
-        }
-    }
-
-    Ok(())
-}
-
-/// Collects loop-header effective expression payloads through a subtree view.
-fn collect_loop_header_effective_payloads(
-    view: &TirSubtreeView<'_>,
-    header: &TemplateLoopHeader,
-    header_sites: TemplateLoopHeaderExpressionSites,
-    payloads: &mut Vec<(ExpressionSiteId, Expression)>,
-) -> Result<(), CompilerError> {
-    match (header, header_sites) {
-        (
-            TemplateLoopHeader::Conditional { condition },
-            TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
-        ) => {
-            let expression = view
-                .effective_expression_for_site(site_id)?
-                .cloned()
-                .unwrap_or_else(|| condition.as_ref().clone());
-            payloads.push((site_id, expression));
-        }
-
-        (
-            TemplateLoopHeader::Range { range, .. },
-            TemplateLoopHeaderExpressionSites::Range { start, end, step },
-        ) => {
-            let start_expression = view
-                .effective_expression_for_site(start)?
-                .cloned()
-                .unwrap_or_else(|| range.start.clone());
-            payloads.push((start, start_expression));
-
-            let end_expression = view
-                .effective_expression_for_site(end)?
-                .cloned()
-                .unwrap_or_else(|| range.end.clone());
-            payloads.push((end, end_expression));
-
-            match (step, &range.step) {
-                (Some(step_site_id), Some(step_expression)) => {
-                    let expression = view
-                        .effective_expression_for_site(step_site_id)?
-                        .cloned()
-                        .unwrap_or_else(|| step_expression.clone());
-                    payloads.push((step_site_id, expression));
-                }
-                (None, None) => {}
-                _ => {
-                    return Err(CompilerError::compiler_error(
-                        "TIR effective expression overlay collection found mismatched range loop step site.",
-                    ));
-                }
-            }
-        }
-
-        (
-            TemplateLoopHeader::Collection { iterable, .. },
-            TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
-        ) => {
-            let expression = view
-                .effective_expression_for_site(site_id)?
-                .cloned()
-                .unwrap_or_else(|| iterable.as_ref().clone());
-            payloads.push((site_id, expression));
-        }
-
-        _ => {
-            return Err(CompilerError::compiler_error(
-                "TIR effective expression overlay collection found mismatched loop-header expression sites.",
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-/// Collects loop-header effective expression payloads through a top-level view.
-fn collect_loop_header_effective_payloads_for_view(
-    view: &TirView<'_>,
-    header: &TemplateLoopHeader,
-    header_sites: TemplateLoopHeaderExpressionSites,
-    payloads: &mut Vec<(ExpressionSiteId, Expression)>,
-) -> Result<(), CompilerError> {
-    match (header, header_sites) {
-        (
-            TemplateLoopHeader::Conditional { condition },
-            TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
-        ) => {
-            let expression = view
-                .effective_expression_for_site(site_id)?
-                .cloned()
-                .unwrap_or_else(|| condition.as_ref().clone());
-            payloads.push((site_id, expression));
-        }
-
-        (
-            TemplateLoopHeader::Range { range, .. },
-            TemplateLoopHeaderExpressionSites::Range { start, end, step },
-        ) => {
-            let start_expression = view
-                .effective_expression_for_site(start)?
-                .cloned()
-                .unwrap_or_else(|| range.start.clone());
-            payloads.push((start, start_expression));
-
-            let end_expression = view
-                .effective_expression_for_site(end)?
-                .cloned()
-                .unwrap_or_else(|| range.end.clone());
-            payloads.push((end, end_expression));
-
-            match (step, &range.step) {
-                (Some(step_site_id), Some(step_expression)) => {
-                    let expression = view
-                        .effective_expression_for_site(step_site_id)?
-                        .cloned()
-                        .unwrap_or_else(|| step_expression.clone());
-                    payloads.push((step_site_id, expression));
-                }
-                (None, None) => {}
-                _ => {
-                    return Err(CompilerError::compiler_error(
-                        "TIR effective expression overlay collection found mismatched range loop step site.",
-                    ));
-                }
-            }
-        }
-
-        (
-            TemplateLoopHeader::Collection { iterable, .. },
-            TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
-        ) => {
-            let expression = view
-                .effective_expression_for_site(site_id)?
-                .cloned()
-                .unwrap_or_else(|| iterable.as_ref().clone());
-            payloads.push((site_id, expression));
-        }
-
-        _ => {
-            return Err(CompilerError::compiler_error(
-                "TIR effective expression overlay collection found mismatched loop-header expression sites.",
-            ));
-        }
-    }
-
-    Ok(())
+    let mut collector =
+        ExpressionOverlayPayloadCollector::new_effective(store, registry, root_overlay_set_id)?;
+    collector.collect_template(template_id)?;
+    Ok(collector.into_payloads())
 }
 
 /// Recursively visits expression payloads reachable from one TIR node.
@@ -1262,13 +780,24 @@ where
     }
 }
 
+#[cfg(test)]
 enum TirExpressionWalkChild {
     Node(TemplateIrNodeId),
     Template(TemplateIrId),
 }
 
-struct ExpressionOverlayPayloadCollector<'store> {
+enum ExpressionOverlayCollectionChild {
+    Node(TemplateIrNodeId),
+    Template {
+        template_id: TemplateIrId,
+        overlay_set_id: Option<TemplateOverlaySetId>,
+    },
+}
+
+struct ExpressionOverlayPayloadCollector<'store, 'registry> {
     store: &'store TemplateIrStore,
+    registry: Option<&'registry TemplateIrRegistry>,
+    overlay_set_stack: Vec<TemplateOverlaySetId>,
     payloads: Vec<(ExpressionSiteId, Expression)>,
     active_nodes: HashSet<TemplateIrNodeId>,
     completed_nodes: HashSet<TemplateIrNodeId>,
@@ -1278,10 +807,12 @@ struct ExpressionOverlayPayloadCollector<'store> {
     completed_slot_plans: HashSet<TemplateSlotPlanId>,
 }
 
-impl<'store> ExpressionOverlayPayloadCollector<'store> {
+impl<'store, 'registry> ExpressionOverlayPayloadCollector<'store, 'registry> {
     fn new(store: &'store TemplateIrStore) -> Self {
         Self {
             store,
+            registry: None,
+            overlay_set_stack: Vec::new(),
             payloads: Vec::new(),
             active_nodes: HashSet::new(),
             completed_nodes: HashSet::new(),
@@ -1292,8 +823,41 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
         }
     }
 
+    fn new_effective(
+        store: &'store TemplateIrStore,
+        registry: &'registry TemplateIrRegistry,
+        root_overlay_set_id: TemplateOverlaySetId,
+    ) -> Result<Self, CompilerError> {
+        registry.overlay_set(root_overlay_set_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TIR expression overlay collection referenced missing root overlay set {}",
+                root_overlay_set_id
+            ))
+        })?;
+
+        let mut collector = Self::new(store);
+        collector.registry = Some(registry);
+        collector.overlay_set_stack.push(root_overlay_set_id);
+        Ok(collector)
+    }
+
     fn into_payloads(self) -> Vec<(ExpressionSiteId, Expression)> {
         self.payloads
+    }
+
+    fn effective_expression(
+        &self,
+        site_id: ExpressionSiteId,
+        structural_expression: &Expression,
+    ) -> Result<Expression, CompilerError> {
+        let Some(registry) = self.registry else {
+            return Ok(structural_expression.clone());
+        };
+
+        Ok(registry
+            .expression_for_overlay_stack(&self.overlay_set_stack, site_id)?
+            .cloned()
+            .unwrap_or_else(|| structural_expression.clone()))
     }
 
     fn collect_template(&mut self, template_id: TemplateIrId) -> Result<(), CompilerError> {
@@ -1384,9 +948,21 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             Ok(children) => {
                 for child in children {
                     match child {
-                        TirExpressionWalkChild::Node(node_id) => self.collect_node(node_id)?,
-                        TirExpressionWalkChild::Template(template_id) => {
-                            self.collect_template(template_id)?;
+                        ExpressionOverlayCollectionChild::Node(node_id) => {
+                            self.collect_node(node_id)?;
+                        }
+                        ExpressionOverlayCollectionChild::Template {
+                            template_id,
+                            overlay_set_id,
+                        } => {
+                            if let Some(overlay_set_id) = overlay_set_id {
+                                self.overlay_set_stack.push(overlay_set_id);
+                            }
+                            let result = self.collect_template(template_id);
+                            if overlay_set_id.is_some() {
+                                self.overlay_set_stack.pop();
+                            }
+                            result?;
                         }
                     }
                 }
@@ -1407,7 +983,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
     fn collect_node_payload_and_children(
         &mut self,
         node_id: TemplateIrNodeId,
-    ) -> Result<Vec<TirExpressionWalkChild>, CompilerError> {
+    ) -> Result<Vec<ExpressionOverlayCollectionChild>, CompilerError> {
         let node = self.store.get_node(node_id).ok_or_else(|| {
             CompilerError::compiler_error(
                 "TIR expression overlay collection referenced a missing node.",
@@ -1418,7 +994,7 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
             TemplateIrNodeKind::Sequence { children } => Ok(children
                 .iter()
                 .copied()
-                .map(TirExpressionWalkChild::Node)
+                .map(ExpressionOverlayCollectionChild::Node)
                 .collect()),
 
             TemplateIrNodeKind::DynamicExpression {
@@ -1426,7 +1002,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 site_id,
                 ..
             } => {
-                self.payloads.push((*site_id, expression.as_ref().clone()));
+                self.payloads
+                    .push((*site_id, self.effective_expression(*site_id, expression)?));
                 Ok(Vec::new())
             }
 
@@ -1436,13 +1013,16 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 for branch in branches {
                     self.payloads.push((
                         branch.selector_site_id,
-                        branch.condition_expression().clone(),
+                        self.effective_expression(
+                            branch.selector_site_id,
+                            branch.condition_expression(),
+                        )?,
                     ));
-                    children.push(TirExpressionWalkChild::Node(branch.body));
+                    children.push(ExpressionOverlayCollectionChild::Node(branch.body));
                 }
 
                 if let Some(fallback) = fallback {
-                    children.push(TirExpressionWalkChild::Node(*fallback));
+                    children.push(ExpressionOverlayCollectionChild::Node(*fallback));
                 }
 
                 Ok(children)
@@ -1458,10 +1038,10 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 self.collect_loop_header_payloads(header, header_sites)?;
 
                 let mut children = Vec::with_capacity(1 + usize::from(aggregate_wrapper.is_some()));
-                children.push(TirExpressionWalkChild::Node(*body));
+                children.push(ExpressionOverlayCollectionChild::Node(*body));
 
                 if let Some(wrapper) = aggregate_wrapper {
-                    children.push(TirExpressionWalkChild::Node(*wrapper));
+                    children.push(ExpressionOverlayCollectionChild::Node(*wrapper));
                 }
 
                 Ok(children)
@@ -1473,11 +1053,17 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                     return Ok(Vec::new());
                 };
 
-                Ok(vec![TirExpressionWalkChild::Template(template_id)])
+                Ok(vec![ExpressionOverlayCollectionChild::Template {
+                    template_id,
+                    overlay_set_id: Some(reference.overlay_set_id),
+                }])
             }
 
             TemplateIrNodeKind::InsertContribution { template } => {
-                Ok(vec![TirExpressionWalkChild::Template(*template)])
+                Ok(vec![ExpressionOverlayCollectionChild::Template {
+                    template_id: *template,
+                    overlay_set_id: None,
+                }])
             }
 
             TemplateIrNodeKind::Text { .. }
@@ -1498,19 +1084,25 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Conditional { condition },
                 TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
             ) => {
-                self.payloads.push((*site_id, condition.as_ref().clone()));
+                self.payloads
+                    .push((*site_id, self.effective_expression(*site_id, condition)?));
             }
 
             (
                 TemplateLoopHeader::Range { range, .. },
                 TemplateLoopHeaderExpressionSites::Range { start, end, step },
             ) => {
-                self.payloads.push((*start, range.start.clone()));
-                self.payloads.push((*end, range.end.clone()));
+                self.payloads
+                    .push((*start, self.effective_expression(*start, &range.start)?));
+                self.payloads
+                    .push((*end, self.effective_expression(*end, &range.end)?));
 
                 match (step, &range.step) {
                     (Some(step_site_id), Some(step_expression)) => {
-                        self.payloads.push((*step_site_id, step_expression.clone()));
+                        self.payloads.push((
+                            *step_site_id,
+                            self.effective_expression(*step_site_id, step_expression)?,
+                        ));
                     }
                     (None, None) => {}
                     _ => {
@@ -1525,7 +1117,8 @@ impl<'store> ExpressionOverlayPayloadCollector<'store> {
                 TemplateLoopHeader::Collection { iterable, .. },
                 TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
             ) => {
-                self.payloads.push((*site_id, iterable.as_ref().clone()));
+                self.payloads
+                    .push((*site_id, self.effective_expression(*site_id, iterable)?));
             }
 
             _ => {

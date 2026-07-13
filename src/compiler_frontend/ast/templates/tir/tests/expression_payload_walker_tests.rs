@@ -8,8 +8,9 @@
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::expression_payload_walker::{
-    TirExpressionPayloadMutator, collect_tir_expression_overlay_payloads,
-    mutate_finalized_tir_body_root_expression_payloads, walk_tir_view_expression_payloads,
+    TirExpressionPayloadMutator, collect_effective_tir_expression_overlay_payloads,
+    collect_tir_expression_overlay_payloads, mutate_finalized_tir_body_root_expression_payloads,
+    walk_tir_view_expression_payloads,
 };
 use super::super::ids::{ExpressionSiteId, TemplateIrId, TemplateIrNodeId};
 use super::super::node::{
@@ -392,6 +393,53 @@ fn collects_runtime_slot_plan_wrapper_source_and_site_render_piece_dynamic_paylo
         .expect("expression overlay collection should succeed");
 
     assert_eq!(payloads.len(), 3);
+}
+
+#[test]
+fn effective_collection_preserves_same_store_child_expression_overlay() {
+    let mut store = TemplateIrStore::new();
+    let child_root = dynamic_node(&mut store, 1);
+    let child_site_id = dynamic_expression_site_id(&store, child_root);
+    let child_template_id = push_template(&mut store, child_root);
+
+    let mut registry = TemplateIrRegistry::new();
+    let child_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(child_site_id, Box::new(expression(9)))],
+    });
+    let child_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(child_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let child_reference = TemplateTirChildReference::same_store(
+        child_template_id,
+        store.store_id(),
+        TemplateTirPhase::Composed,
+        child_overlay_set_id,
+    );
+    let child_occurrence_id = store.next_child_template_occurrence_id();
+    let parent_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::ChildTemplate {
+            reference: child_reference,
+            occurrence_id: child_occurrence_id,
+        },
+        empty_location(),
+    ));
+    let parent_template_id = push_template(&mut store, parent_root);
+
+    let payloads = collect_effective_tir_expression_overlay_payloads(
+        &store,
+        &registry,
+        parent_template_id,
+        root_overlay_set_id,
+    )
+    .expect("effective payload collection should succeed");
+
+    assert!(payloads.iter().any(|(site_id, expression)| {
+        *site_id == child_site_id && matches!(expression.kind, ExpressionKind::Int(9))
+    }));
 }
 
 #[test]

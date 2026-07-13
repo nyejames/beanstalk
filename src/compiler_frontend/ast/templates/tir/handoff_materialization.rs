@@ -41,9 +41,7 @@ use crate::compiler_frontend::ast::templates::tir::slot_plan::{
     TemplateSlotPlan, TemplateSlotSiteRenderPiece,
 };
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::view::{
-    TemplateTirPhase, TirSubtreeView, TirView,
-};
+use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::templates::tir::{
     fold_tir_view, tir_view_is_empty_overlay_linear_fold_safe,
 };
@@ -102,47 +100,8 @@ impl TemplateIrStore {
 
         let mut materializer =
             RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
-        materializer
-            .body_overlay_set_stack
-            .push(view.overlay_set_id());
+        materializer.overlay_set_stack.push(view.overlay_set_id());
         materializer.owned_runtime_template_handoff_for_template(template_id)
-    }
-
-    /// Materializes a single TIR node as an owned runtime-template node.
-    ///
-    /// WHAT: recursively copies a TIR node subtree into an owned handoff node,
-    /// preserving text, dynamic expressions, child templates, control flow,
-    /// and the `AggregateOutput` marker. All raw TIR IDs are dropped from the
-    /// returned value.
-    /// WHY: output-dependent child-wrapper mode is materialized from its
-    /// authoritative TIR subtree, then handed to HIR through this single-node
-    /// materialization so HIR never reads AST construction state directly.
-    /// Materializes a single TIR node subtree from a borrowed `TirSubtreeView`
-    /// while preserving the child-template fold shortcut.
-    ///
-    /// WHAT: same as `owned_runtime_template_node_for_tir_subtree_view`, but
-    ///       carries a `TemplateFoldContext` so const-foldable child templates
-    ///       can be inlined as owned `Text` nodes.
-    /// WHY: finalization already holds a fold context when materializing runtime
-    ///      handoffs; passing it through avoids falling back to nested
-    ///      child-template handoffs for constant children.
-    pub(crate) fn owned_runtime_template_node_for_tir_subtree_view_with_fold_context(
-        &self,
-        view: &TirSubtreeView<'_>,
-        fold_context: &mut TemplateFoldContext<'_>,
-    ) -> Result<Option<OwnedRuntimeTemplateNode>, CompilerError> {
-        if view.root_node_ref().store_id != self.store_id() {
-            return Ok(None);
-        }
-
-        let mut materializer =
-            RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
-        materializer
-            .body_overlay_set_stack
-            .push(view.overlay_set_id());
-        materializer
-            .materialize_node(view.root_node_ref().node_id, None)
-            .map(Some)
     }
 
     fn same_store_template_id_for_view(
@@ -178,16 +137,15 @@ struct RuntimeHandoffMaterializer<'store, 'context, 'fold> {
     store: &'store TemplateIrStore,
     registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
     fold_context: Option<&'context mut TemplateFoldContext<'fold>>,
-    /// Stack of overlay-set IDs for the body roots currently being materialized.
+    /// Stack of overlay-set IDs for the templates currently being materialized.
     ///
     /// WHAT: the top entry is the overlay set that applies to the current
     ///       subtree. The top-level template view pushes its overlay set first;
-    ///       each control-flow body root and loop aggregate-wrapper root pushes
-    ///       its own overlay set while its subtree is being materialized.
-    /// WHY: `BranchChain`/`Loop` nodes store body roots as raw node IDs. This
-    ///      stack lets the materializer resolve effective expressions through
-    ///      the body-root overlays without reconstructing a `TirView` per body.
-    body_overlay_set_stack: Vec<TemplateOverlaySetId>,
+    ///       each nested child template temporarily pushes its own overlay set.
+    /// WHY: one finalized root overlay covers every expression site reachable
+    ///      within a template, while child templates retain separate effective
+    ///      identities.
+    overlay_set_stack: Vec<TemplateOverlaySetId>,
     template_stack: Vec<TemplateRef>,
     node_stack: Vec<TemplateIrNodeId>,
 }
@@ -199,7 +157,7 @@ impl<'store> RuntimeHandoffMaterializer<'store, 'static, 'static> {
             store,
             registry: None,
             fold_context: None,
-            body_overlay_set_stack: Vec::new(),
+            overlay_set_stack: Vec::new(),
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
@@ -215,7 +173,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             store,
             registry: fold_context.template_ir_registry.as_ref().map(Rc::clone),
             fold_context: Some(fold_context),
-            body_overlay_set_stack: Vec::new(),
+            overlay_set_stack: Vec::new(),
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
@@ -230,7 +188,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             store,
             registry,
             fold_context: None,
-            body_overlay_set_stack: vec![overlay_set_id],
+            overlay_set_stack: vec![overlay_set_id],
             template_stack: Vec::new(),
             node_stack: Vec::new(),
         }
@@ -257,7 +215,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             store: foreign_store,
             registry: self.registry.as_ref().map(Rc::clone),
             fold_context: None,
-            body_overlay_set_stack: vec![overlay_set_id],
+            overlay_set_stack: vec![overlay_set_id],
             template_stack: self.template_stack.clone(),
             node_stack: Vec::new(),
         }
@@ -484,14 +442,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 TemplateIrNodeKind::BranchChain { branches, fallback } => {
                     let mut owned_branches = Vec::with_capacity(branches.len());
                     for branch in branches {
-                        let body_overlay_set = materializer.store.node_body_overlay_set(branch.body);
-                        let body = if let Some(overlay_set_id) = body_overlay_set {
-                            materializer.with_body_overlay(overlay_set_id, |materializer| {
-                                materializer.materialize_node(branch.body, active_slot_plan)
-                            })?
-                        } else {
-                            materializer.materialize_node(branch.body, active_slot_plan)?
-                        };
+                        let body = materializer.materialize_node(branch.body, active_slot_plan)?;
 
                         owned_branches.push(OwnedRuntimeTemplateBranch {
                             selector: materializer.effective_branch_selector(
@@ -504,15 +455,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                     }
 
                     let fallback = if let Some(fallback_id) = fallback {
-                        let fallback_overlay_set = materializer.store.node_body_overlay_set(fallback_id);
-                        let fallback_node = if let Some(overlay_set_id) = fallback_overlay_set {
-                            materializer.with_body_overlay(overlay_set_id, |materializer| {
-                                materializer.materialize_node(fallback_id, active_slot_plan)
-                            })?
-                        } else {
-                            materializer.materialize_node(fallback_id, active_slot_plan)?
-                        };
-                        Some(Box::new(fallback_node))
+                        Some(Box::new(
+                            materializer.materialize_node(fallback_id, active_slot_plan)?,
+                        ))
                     } else {
                         None
                     };
@@ -531,26 +476,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                     aggregate_wrapper,
                     ..
                 } => {
-                    let body_overlay_set = materializer.store.node_body_overlay_set(body);
-                    let body_node = if let Some(overlay_set_id) = body_overlay_set {
-                        materializer.with_body_overlay(overlay_set_id, |materializer| {
-                            materializer.materialize_node(body, active_slot_plan)
-                        })?
-                    } else {
-                        materializer.materialize_node(body, active_slot_plan)?
-                    };
+                    let body_node = materializer.materialize_node(body, active_slot_plan)?;
 
                     let aggregate_wrapper = if let Some(wrapper_id) = aggregate_wrapper {
-                        let wrapper_overlay_set =
-                            materializer.store.node_body_overlay_set(wrapper_id);
-                        let wrapper_node = if let Some(overlay_set_id) = wrapper_overlay_set {
-                            materializer.with_body_overlay(overlay_set_id, |materializer| {
-                                materializer.materialize_node(wrapper_id, active_slot_plan)
-                            })?
-                        } else {
-                            materializer.materialize_node(wrapper_id, active_slot_plan)?
-                        };
-                        Some(Box::new(wrapper_node))
+                        Some(Box::new(
+                            materializer.materialize_node(wrapper_id, active_slot_plan)?,
+                        ))
                     } else {
                         None
                     };
@@ -624,25 +555,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         Ok(owned_node)
     }
 
-    /// Pushes an overlay set onto the body-root stack for the duration of a
-    /// closure and pops it afterwards.
-    ///
-    /// WHAT: centralizes the push/pop bookkeeping when materializing a
-    ///       control-flow body or loop aggregate-wrapper subtree.
-    /// WHY: body-root overlays must apply to the entire subtree under the
-    ///      body root, including any nested control flow, without leaking into
-    ///      sibling subtrees once the closure returns.
-    fn with_body_overlay<T>(
-        &mut self,
-        overlay_set_id: TemplateOverlaySetId,
-        build: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
-    ) -> Result<T, CompilerError> {
-        self.body_overlay_set_stack.push(overlay_set_id);
-        let result = build(self);
-        self.body_overlay_set_stack.pop();
-        result
-    }
-
     fn with_template_on_stack<T>(
         &mut self,
         template_ref: TemplateRef,
@@ -697,16 +609,16 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         self.get_node(id).cloned()
     }
 
-    /// Resolves the effective expression for a site, preferring the override
-    /// at the top of the body-root overlay stack.
+    /// Resolves the effective expression for a site from the active root-first
+    /// template overlay stack.
     ///
-    /// WHAT: looks up the current body-root overlay set in the registry and
-    ///       returns a clone of the override expression for `site_id` if one
-    ///       exists. Falls back to the structural expression when there is no
-    ///       overlay set, no override, or no registry.
-    /// WHY: this replaces the previous `TirView`-based resolution for the
-    ///      handoff materializer. The stack tracks which body-root overlay set
-    ///      applies at each point in the structural traversal.
+    /// WHAT: searches active overlay sets from the finalized outer root toward
+    ///       nested child-template references and returns the first expression
+    ///       override for `site_id`. Falls back to the structural expression
+    ///       when no active overlay owns the site.
+    /// WHY: finalization writes one root expression overlay for every reachable
+    ///      site. Child references still own their slot and wrapper dimensions,
+    ///      but must not hide a root-level annotation or normalization override.
     fn effective_expression(
         &self,
         site_id: ExpressionSiteId,
@@ -721,33 +633,14 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         site_id: ExpressionSiteId,
     ) -> Result<Option<Expression>, CompilerError> {
-        let Some(overlay_set_id) = self.body_overlay_set_stack.last().copied() else {
-            return Ok(None);
-        };
         let Some(registry_rc) = self.registry.as_ref() else {
             return Ok(None);
         };
 
         let registry = registry_rc.borrow();
-        let overlay_set = registry.overlay_set(overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HIR handoff materialization referenced missing overlay set {}",
-                overlay_set_id
-            ))
-        })?;
-        let Some(expression_overlay_id) = overlay_set.expression_overrides else {
-            return Ok(None);
-        };
-        let expression_overlay = registry
-            .expression_overlay(expression_overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HIR handoff materialization referenced missing expression overlay {}",
-                    expression_overlay_id
-                ))
-            })?;
-
-        Ok(expression_overlay.expression_for_site(site_id).cloned())
+        Ok(registry
+            .expression_for_overlay_stack(&self.overlay_set_stack, site_id)?
+            .cloned())
     }
 
     /// Resolves the effective wrapper context for a child-template occurrence,
@@ -764,7 +657,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: ChildTemplateOccurrenceId,
     ) -> Result<Option<TirWrapperContext>, CompilerError> {
-        let Some(overlay_set_id) = self.body_overlay_set_stack.last().copied() else {
+        let Some(overlay_set_id) = self.overlay_set_stack.last().copied() else {
             return Ok(None);
         };
         let Some(registry_rc) = self.registry.as_ref() else {
@@ -810,7 +703,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         occurrence_id: SlotOccurrenceId,
     ) -> Result<Option<super::overlays::TirSlotResolution>, CompilerError> {
-        let Some(overlay_set_id) = self.body_overlay_set_stack.last().copied() else {
+        let Some(overlay_set_id) = self.overlay_set_stack.last().copied() else {
             return Ok(None);
         };
         let Some(registry_rc) = self.registry.as_ref() else {
@@ -963,9 +856,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // read through the child's overlay context rather than the parent's.
         // Without this, child templates with expression or slot overlays
         // would materialize from stale structural payloads.
-        self.body_overlay_set_stack.push(reference.overlay_set_id);
+        self.overlay_set_stack.push(reference.overlay_set_id);
         let handoff = self.materialize_template(template_id, active_slot_plan);
-        self.body_overlay_set_stack.pop();
+        self.overlay_set_stack.pop();
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),

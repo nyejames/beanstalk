@@ -87,7 +87,6 @@ fn copy_tir_node_with_active_slot_plan(
             {
                 store.set_node_reactive_subscription(node_id, subscription);
             }
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -113,7 +112,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -139,7 +137,6 @@ fn copy_tir_node_with_active_slot_plan(
                 TemplateIrNodeKind::Slot { placeholder },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -150,7 +147,6 @@ fn copy_tir_node_with_active_slot_plan(
                 TemplateIrNodeKind::RuntimeSlotSite { plan, site },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -181,7 +177,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -200,7 +195,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -226,7 +220,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -270,7 +263,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -311,7 +303,6 @@ fn copy_tir_node_with_active_slot_plan(
                 },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -322,7 +313,6 @@ fn copy_tir_node_with_active_slot_plan(
                 TemplateIrNodeKind::LoopControl { kind },
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
 
@@ -331,7 +321,6 @@ fn copy_tir_node_with_active_slot_plan(
                 TemplateIrNodeKind::AggregateOutput,
                 location,
             ));
-            store.copy_node_body_overlay_set(source_node_id, node_id);
             Ok(node_id)
         }
     }

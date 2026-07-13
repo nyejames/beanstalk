@@ -15,13 +15,12 @@ use super::super::builder::TemplateIrBuilder;
 use super::super::control_flow_roots::{
     ControlFlowBodyKind, finalized_control_flow_body_tir_reference,
 };
-use super::super::ids::{ExpressionSiteId, TemplateIrNodeId};
-use super::super::overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
+use super::super::ids::TemplateIrNodeId;
+use super::super::overlays::TemplateOverlaySetId;
 use super::super::refs::{TemplateNodeRef, TemplateRef, TemplateStoreId};
-use super::super::registry::TemplateIrRegistry;
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
-use super::super::view::{TemplateTirPhase, TirSubtreeView};
+use super::super::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape,
 };
@@ -78,27 +77,6 @@ fn build_single_text_template(store: &mut TemplateIrStore) -> (usize, TemplateIr
     (template_id.index(), root)
 }
 
-fn build_dynamic_expression_template(
-    store: &mut TemplateIrStore,
-) -> (usize, TemplateIrNodeId, ExpressionSiteId) {
-    let mut builder = TemplateIrBuilder::new(store);
-    let root = builder.push_dynamic_expression_node(
-        bool_expression(),
-        TemplateSegmentOrigin::Body,
-        None,
-        empty_location(),
-    );
-    let template_id = builder.finish_template(
-        root,
-        Style::default(),
-        TemplateType::String,
-        TemplateIrSummary::default(),
-        empty_location(),
-    );
-
-    (template_id.index(), root, ExpressionSiteId::new(0))
-}
-
 #[test]
 fn body_reference_round_trips_identity() {
     let mut store = TemplateIrStore::new();
@@ -109,7 +87,6 @@ fn body_reference_round_trips_identity() {
         TemplateStoreId::new(0),
         root,
         TemplateTirPhase::Formatted,
-        TemplateOverlaySetId::empty(),
         empty_location(),
     );
 
@@ -118,7 +95,6 @@ fn body_reference_round_trips_identity() {
         TemplateNodeRef::new(TemplateStoreId::new(0), root)
     );
     assert_eq!(reference.phase, TemplateTirPhase::Formatted);
-    assert_eq!(reference.overlay_set_id, TemplateOverlaySetId::empty());
     assert_eq!(reference.same_store_root(&store), Some(root));
 }
 
@@ -133,7 +109,6 @@ fn body_reference_rejects_different_store_owner() {
         TemplateStoreId::new(0),
         root,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
         empty_location(),
     );
 
@@ -154,7 +129,6 @@ fn body_reference_rejects_same_owner_with_wrong_store_id() {
         wrong_store_id,
         root,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
         empty_location(),
     );
 
@@ -175,7 +149,6 @@ fn body_reference_store_local_identity_helper_uses_store_id() {
     assert_eq!(reference.node_ref.store_id, store.store_id());
     assert_eq!(reference.node_ref.node_id, root);
     assert_eq!(reference.phase, TemplateTirPhase::Parsed);
-    assert_eq!(reference.overlay_set_id, TemplateOverlaySetId::empty());
 }
 
 #[test]
@@ -189,143 +162,10 @@ fn body_reference_preserves_source_location() {
         TemplateStoreId::new(0),
         root,
         TemplateTirPhase::Finalized,
-        TemplateOverlaySetId::empty(),
         location.clone(),
     );
 
     assert_eq!(*reference.location(), location);
-}
-
-#[test]
-fn body_reference_constructs_subtree_view() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    let (reference, root) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let (_, root) = build_single_text_template(&mut store);
-        let reference = TemplateTirBodyReference::new(
-            store.owner(),
-            store_id,
-            root,
-            TemplateTirPhase::Composed,
-            overlay_set_id,
-            empty_location(),
-        );
-        (reference, root)
-    };
-
-    let view =
-        TirSubtreeView::with_minimum_phase(&registry, &reference, TemplateTirPhase::Composed)
-            .expect("body-root subtree view should construct");
-
-    assert_eq!(view.root_node_ref(), TemplateNodeRef::new(store_id, root));
-    assert_eq!(view.phase(), TemplateTirPhase::Composed);
-    assert_eq!(view.overlay_set_id(), overlay_set_id);
-    assert_eq!(*view.location(), empty_location());
-    assert_eq!(
-        view.root_node().expect("root node should resolve").location,
-        empty_location()
-    );
-}
-
-#[test]
-fn aggregate_wrapper_reference_constructs_subtree_view() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    let reference = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let (_, aggregate_wrapper_root) = build_single_text_template(&mut store);
-        TemplateTirBodyReference::new(
-            store.owner(),
-            store_id,
-            aggregate_wrapper_root,
-            TemplateTirPhase::Composed,
-            overlay_set_id,
-            empty_location(),
-        )
-    };
-
-    let view = TirSubtreeView::new(&registry, &reference)
-        .expect("aggregate-wrapper body-root view should construct");
-
-    assert_eq!(view.root_node_ref().store_id, store_id);
-}
-
-#[test]
-fn body_reference_subtree_view_rejects_low_phase() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-
-    let reference = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let (_, root) = build_single_text_template(&mut store);
-        TemplateTirBodyReference::new(
-            store.owner(),
-            store_id,
-            root,
-            TemplateTirPhase::Parsed,
-            TemplateOverlaySetId::empty(),
-            empty_location(),
-        )
-    };
-
-    let error =
-        TirSubtreeView::with_minimum_phase(&registry, &reference, TemplateTirPhase::Composed)
-            .expect_err("parsed body root should not satisfy composed view consumers");
-
-    assert!(error.msg.contains("does not satisfy minimum phase"));
-}
-
-#[test]
-fn body_reference_subtree_view_uses_expression_overlay() {
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-
-    let (root, site_id, store_owner) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("store should be mutable");
-        let (_, root, site_id) = build_dynamic_expression_template(&mut store);
-        (root, site_id, store.owner())
-    };
-
-    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
-        overrides: vec![(site_id, Box::new(bool_expression()))],
-    });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
-    let reference = TemplateTirBodyReference::new(
-        store_owner,
-        store_id,
-        root,
-        TemplateTirPhase::Finalized,
-        overlay_set_id,
-        empty_location(),
-    );
-
-    let view =
-        TirSubtreeView::with_minimum_phase(&registry, &reference, TemplateTirPhase::Finalized)
-            .expect("finalized body-root view should construct");
-
-    assert!(
-        view.effective_expression_for_site(site_id)
-            .expect("overlay lookup should succeed")
-            .is_some(),
-        "subtree view should observe expression overlays through the registry"
-    );
 }
 
 #[test]
@@ -341,7 +181,6 @@ fn body_reference_exposes_view_identity() {
 
     assert_eq!(body_ref.node_ref().node_id, root);
     assert_eq!(body_ref.phase, TemplateTirPhase::Composed);
-    assert_eq!(body_ref.overlay_set_id, TemplateOverlaySetId::empty());
 }
 
 /// A finalized control-flow root may be nested under wrapper and composition

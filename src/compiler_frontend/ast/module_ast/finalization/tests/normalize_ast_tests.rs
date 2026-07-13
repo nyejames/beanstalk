@@ -9,14 +9,12 @@ use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
+    TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeId,
-    TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
-    TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateRef, TemplateStoreId,
-    TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference, TirView,
+    TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
+    TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
+    TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirView,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
@@ -52,33 +50,6 @@ fn test_project_path_resolver() -> ProjectPathResolver {
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
-}
-
-fn with_test_normalization_context<R>(
-    string_table: &mut StringTable,
-    action: impl FnOnce(&mut TemplateNormalizationContext<'_, '_>) -> R,
-) -> R {
-    let project_path_resolver = test_project_path_resolver();
-    let path_format_config = PathStringFormatConfig::default();
-    let source_file_scope = InternedPath::new();
-    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-    let template_ir_registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
-    {
-        let mut registry = template_ir_registry.borrow_mut();
-        registry.adopt_store(Rc::clone(&template_ir_store));
-        registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    }
-    let mut context = TemplateNormalizationContext {
-        source_file_scope: &source_file_scope,
-        path_format_config: &path_format_config,
-        project_path_resolver: &project_path_resolver,
-        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        string_table,
-        template_ir_store,
-        template_ir_registry: Some(template_ir_registry),
-    };
-
-    action(&mut context)
 }
 
 /// Builds a `Template` carrying a registered TIR root with a single text node,
@@ -1107,113 +1078,215 @@ fn runtime_template_handoff_from_expression(expression: Expression) -> OwnedRunt
 }
 
 #[test]
-fn branch_normalization_requires_tir_body_roots() {
+fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
-    let cross_store = TemplateIrStore::new();
-    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
-        &cross_store,
-        TemplateIrNodeId::new(0),
-        TemplateTirPhase::Parsed,
-    );
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-        TemplateBranchChain {
-            branches: vec![TemplateConditionalBranch {
-                body_tir_reference: cross_store_body_ref.clone(),
-                selector: TemplateBranchSelector::Bool(Expression::bool(
-                    true,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
-                location: location.clone(),
-            }],
-            fallback: Some(TemplateFallbackBranch {
-                body_tir_reference: cross_store_body_ref.clone(),
-                location: location.clone(),
-            }),
-            location: location.clone(),
-        },
-    )));
+    let branch_text = string_table.intern("branch body");
+    let fallback_text = string_table.intern("fallback body");
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-    let result = with_test_normalization_context(&mut string_table, |context| {
-        normalize_template_for_hir(&mut template, context)
-    });
-
-    assert!(
-        result.is_err(),
-        "normalization must not resurrect branch/fallback bodies without TIR body roots"
-    );
-}
-
-#[test]
-fn loop_body_normalization_requires_tir_body_root() {
-    let mut string_table = StringTable::new();
-    let location = SourceLocation::default();
-    let cross_store = TemplateIrStore::new();
-    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
-        &cross_store,
-        TemplateIrNodeId::new(0),
-        TemplateTirPhase::Parsed,
-    );
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-        TemplateLoopControlFlow {
-            body_tir_reference: cross_store_body_ref.clone(),
-            header: TemplateLoopHeader::Conditional {
-                condition: Box::new(Expression::bool(
-                    false,
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                )),
-            },
-            aggregate_wrapper_tir_reference: None,
-            location: location.clone(),
-        },
-    )));
-
-    let result = with_test_normalization_context(&mut string_table, |context| {
-        normalize_template_for_hir(&mut template, context)
-    });
-
-    assert!(
-        result.is_err(),
-        "normalization must not resurrect loop bodies without TIR body roots"
-    );
-}
-
-#[test]
-fn loop_normalization_requires_aggregate_wrapper_tir_root() {
-    let mut string_table = StringTable::new();
-    let location = SourceLocation::default();
-    let cross_store = TemplateIrStore::new();
-    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
-        &cross_store,
-        TemplateIrNodeId::new(0),
-        TemplateTirPhase::Parsed,
-    );
-    let mut loop_flow = TemplateLoopControlFlow {
-        body_tir_reference: cross_store_body_ref,
-        header: TemplateLoopHeader::Conditional {
-            condition: Box::new(Expression::bool(
-                false,
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let branch_body = builder.push_text_node(
+            branch_text,
+            "branch body".len() as u32,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+        let fallback_body = builder.push_text_node(
+            fallback_text,
+            "fallback body".len() as u32,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+        let branch = TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(Expression::reference_with_type_id(
+                InternedPath::from_single_str("show_branch", &mut string_table),
+                DataType::Bool,
+                builtin_type_ids::BOOL,
                 location.clone(),
-                ValueMode::ImmutableOwned,
+                ValueMode::ImmutableReference,
+                ConstRecordState::RuntimeValue,
             )),
-        },
-        aggregate_wrapper_tir_reference: None,
-        location,
+            branch_body,
+            location.clone(),
+        );
+        let root =
+            builder.push_branch_chain_node(vec![branch], Some(fallback_body), location.clone());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            location,
+        )
     };
 
-    let result = with_test_normalization_context(&mut string_table, |context| {
-        normalize_loop_aggregate_wrapper_tir_root_for_hir(&mut loop_flow, context)
+    let mut template = Template::empty();
+    template.kind = TemplateType::StringFunction;
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store_id, template_id),
+        store_owner: template_ir_store.borrow().owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id,
     });
 
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+    };
+
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("branch TIR root should normalize through the finalized effective view");
+
+    let handoff = runtime_template_handoff_from_expression(expression);
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::BranchChain {
+        branches,
+        fallback,
+        ..
+    }) = handoff.body
+    else {
+        panic!("expected a branch-chain runtime handoff");
+    };
+    assert_eq!(branches.len(), 1);
     assert!(
-        result.is_err(),
-        "normalization must reject loops without an authoritative aggregate-wrapper TIR root"
+        fallback.is_some(),
+        "the fallback must remain owned by the handoff"
+    );
+    assert!(matches!(
+        branches[0].selector,
+        TemplateBranchSelector::Bool(Expression {
+            kind: ExpressionKind::Reference(_),
+            ..
+        })
+    ));
+    assert!(matches!(
+        branches[0].body,
+        OwnedRuntimeTemplateNode::Text { text, .. } if text == branch_text
+    ));
+}
+
+#[test]
+fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
+    let mut string_table = StringTable::new();
+    let location = SourceLocation::default();
+    let loop_text = string_table.intern("loop body");
+    let open_text = string_table.intern("[");
+    let close_text = string_table.intern("]");
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let aggregate_output = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::AggregateOutput,
+            location.clone(),
+        ));
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let body = builder.push_text_node(
+            loop_text,
+            "loop body".len() as u32,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+        let open =
+            builder.push_text_node(open_text, 1, TemplateSegmentOrigin::Body, location.clone());
+        let close =
+            builder.push_text_node(close_text, 1, TemplateSegmentOrigin::Body, location.clone());
+        let aggregate_wrapper =
+            builder.push_sequence_node(vec![open, aggregate_output, close], location.clone());
+        let header = TemplateLoopHeader::Conditional {
+            condition: Box::new(Expression::reference_with_type_id(
+                InternedPath::from_single_str("keep_looping", &mut string_table),
+                DataType::Bool,
+                builtin_type_ids::BOOL,
+                location.clone(),
+                ValueMode::ImmutableReference,
+                ConstRecordState::RuntimeValue,
+            )),
+        };
+        let root = builder.push_loop_node(header, body, Some(aggregate_wrapper), location.clone());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            location,
+        )
+    };
+
+    let mut template = Template::empty();
+    template.kind = TemplateType::StringFunction;
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store_id, template_id),
+        store_owner: template_ir_store.borrow().owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id,
+    });
+
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+    };
+
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("loop TIR root should normalize through the finalized effective view");
+
+    let handoff = runtime_template_handoff_from_expression(expression);
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Loop {
+        header,
+        body,
+        aggregate_wrapper,
+        ..
+    }) = handoff.body
+    else {
+        panic!("expected a loop runtime handoff");
+    };
+    assert!(matches!(
+        header,
+        TemplateLoopHeader::Conditional { condition }
+            if matches!(condition.kind, ExpressionKind::Reference(_))
+    ));
+    assert!(matches!(
+        body.as_ref(),
+        OwnedRuntimeTemplateNode::Text { text, .. } if *text == loop_text
+    ));
+    let Some(aggregate_wrapper) = aggregate_wrapper else {
+        panic!("expected the loop aggregate wrapper in the handoff");
+    };
+    let OwnedRuntimeTemplateNode::Sequence { children, .. } = *aggregate_wrapper else {
+        panic!("expected the loop aggregate wrapper sequence in the handoff");
+    };
+    assert!(
+        children
+            .iter()
+            .any(|child| matches!(child, OwnedRuntimeTemplateNode::AggregateOutput { .. }))
     );
 }
 

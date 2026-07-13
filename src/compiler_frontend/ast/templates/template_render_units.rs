@@ -18,12 +18,11 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::tir::{
     ControlFlowBodyKind, TemplateConstructionContext, TemplateIr, TemplateIrNodeId,
-    TemplateIrStore, TemplateOverlaySetId, TemplateParserIrBuilderState, TemplateRef,
-    TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference, TemplateWrapperReference,
-    TirView, apply_inherited_child_wrappers_to_body_root,
-    build_branch_body_candidate_from_tir_nodes, compose_tir_head_chain,
-    current_same_store_tir_roots_for_template, format_tir_body_root, head_prefix_tir_nodes,
-    prepare_loop_aggregate_wrapper, replace_control_flow_body_tir_root,
+    TemplateIrStore, TemplateParserIrBuilderState, TemplateRef, TemplateTirBodyReference,
+    TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TirView,
+    apply_inherited_child_wrappers_to_body_root, build_branch_body_candidate_from_tir_nodes,
+    compose_tir_head_chain, current_same_store_tir_roots_for_template, format_tir_body_root,
+    head_prefix_tir_nodes, prepare_loop_aggregate_wrapper, replace_control_flow_body_tir_root,
     replace_loop_aggregate_wrapper_tir_root, run_tir_formatter_with_warnings, sequence_children,
     trim_whitespace_before_loop_control_boundary,
 };
@@ -561,7 +560,6 @@ fn prepare_loop_render_units(
         template_ir_store.store_id(),
         aggregate_wrapper.tir_root,
         TemplateTirPhase::Composed,
-        TemplateOverlaySetId::empty(),
         template_loop.location.to_owned(),
     );
     template_loop.aggregate_wrapper_tir_reference = Some(aggregate_wrapper_tir_reference);

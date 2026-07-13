@@ -869,7 +869,6 @@ fn finalize_tir_body_builder(
         tir_reference.root.store_id,
         root,
         tir_reference.phase,
-        tir_reference.overlay_set_id,
         location,
     );
 

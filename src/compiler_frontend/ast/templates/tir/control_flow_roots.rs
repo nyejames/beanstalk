@@ -7,8 +7,8 @@
 
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrNodeId, TemplateIrStore, TemplateOverlaySetId, TemplateParserIrBuilderState,
-    TemplateTirBodyReference, TemplateTirPhase,
+    TemplateIrNodeId, TemplateIrStore, TemplateParserIrBuilderState, TemplateTirBodyReference,
+    TemplateTirPhase,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -72,7 +72,6 @@ pub(crate) fn replace_control_flow_body_tir_root(
         store.store_id(),
         new_body_root,
         phase,
-        TemplateOverlaySetId::empty(),
         location,
     ))
 }
@@ -141,11 +140,6 @@ pub(crate) fn finalized_control_flow_body_tir_reference(
             .as_ref()
             .map(|reference| reference.phase)
             .unwrap_or(TemplateTirPhase::Composed),
-        template
-            .tir_reference
-            .as_ref()
-            .map(|reference| reference.overlay_set_id)
-            .unwrap_or(TemplateOverlaySetId::empty()),
         template.location.to_owned(),
     ))
 }

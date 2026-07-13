@@ -49,21 +49,19 @@
 
 use std::cell::Ref;
 use std::fmt;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-
-use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::ids::ChildTemplateOccurrenceId;
 #[cfg(test)]
 use super::ids::TemplateIrNodeId;
 use super::ids::{ExpressionSiteId, SlotOccurrenceId};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::templates::template_types::Template;
+#[cfg(test)]
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-use super::body_root_ref::TemplateTirBodyReference;
 use super::node::{TemplateIr, TemplateIrNode};
 #[cfg(test)]
 use super::node::{TemplateIrNodeKind, TemplateLoopHeaderExpressionSites};
@@ -220,192 +218,6 @@ pub(crate) struct TirView<'a> {
     root: TemplateRef,
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
-}
-
-/// Borrowed read view over a body/root subtree plus overlay set.
-///
-/// WHAT: `TirSubtreeView` is the node-root companion to [`TirView`]. It reads a
-/// store-qualified `TemplateNodeRef` carried by `TemplateTirBodyReference`,
-/// validates the same phase and overlay-set invariants, and exposes the same
-/// effective-node and expression-overlay lookup path for control-flow body
-/// roots and aggregate-wrapper roots.
-///
-/// WHY: some final TIR roots are subtree nodes rather than top-level
-/// `TemplateRef`s. Keeping their read surface in this module prevents
-/// finalization code from rebuilding ad hoc raw-node traversal while avoiding a
-/// broad `TirView` root-shape change before all template consumers are ready
-/// for it.
-pub(crate) struct TirSubtreeView<'a> {
-    registry: &'a TemplateIrRegistry,
-    root: TemplateNodeRef,
-    phase: TemplateTirPhase,
-    overlay_set_id: TemplateOverlaySetId,
-    location: SourceLocation,
-    _registry_lifetime: PhantomData<&'a TemplateIrRegistry>,
-}
-
-impl<'a> fmt::Debug for TirSubtreeView<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TirSubtreeView")
-            .field("registry", &"<registry>")
-            .field("root", &self.root)
-            .field("phase", &self.phase)
-            .field("overlay_set_id", &self.overlay_set_id)
-            .field("location", &self.location)
-            .finish()
-    }
-}
-
-impl<'a> TirSubtreeView<'a> {
-    /// Creates a subtree view from a body/root reference.
-    ///
-    /// WHAT: validates that the referenced node and overlay set exist in the
-    ///       registry, then carries the reference's phase, overlay set, and
-    ///       source location into the view.
-    /// WHY: body roots should enter consumers through the same registry-backed
-    ///      validation path as top-level template views, not through
-    ///      store-local node IDs threaded around finalization.
-    pub(crate) fn new(
-        registry: &'a TemplateIrRegistry,
-        reference: &TemplateTirBodyReference,
-    ) -> Result<Self, CompilerError> {
-        if registry.node(reference.node_ref).is_none() {
-            return Err(CompilerError::compiler_error(format!(
-                "TirSubtreeView::new: root node {} does not exist in the registry",
-                reference.node_ref
-            )));
-        }
-
-        if registry.overlay_set(reference.overlay_set_id).is_none() {
-            return Err(CompilerError::compiler_error(format!(
-                "TirSubtreeView::new: overlay set {} does not exist in the registry",
-                reference.overlay_set_id
-            )));
-        }
-
-        Ok(Self {
-            registry,
-            root: reference.node_ref,
-            phase: reference.phase,
-            overlay_set_id: reference.overlay_set_id,
-            location: reference.location.to_owned(),
-            _registry_lifetime: PhantomData,
-        })
-    }
-
-    /// Creates a subtree view and validates that its phase satisfies
-    /// `minimum_phase`.
-    pub(crate) fn with_minimum_phase(
-        registry: &'a TemplateIrRegistry,
-        reference: &TemplateTirBodyReference,
-        minimum_phase: TemplateTirPhase,
-    ) -> Result<Self, CompilerError> {
-        if !reference.phase.is_at_least(minimum_phase) {
-            return Err(CompilerError::compiler_error(format!(
-                "TirSubtreeView::with_minimum_phase: root node {} at phase {} does not satisfy minimum phase {}",
-                reference.node_ref, reference.phase, minimum_phase
-            )));
-        }
-
-        Self::new(registry, reference)
-    }
-
-    /// Returns the store-qualified root node for this subtree view.
-    pub(crate) fn root_node_ref(&self) -> TemplateNodeRef {
-        self.root
-    }
-
-    /// Returns the pipeline phase carried by this subtree view.
-    #[cfg(test)]
-    pub(crate) fn phase(&self) -> TemplateTirPhase {
-        self.phase
-    }
-
-    /// Returns the overlay-set ID carried by this subtree view.
-    pub(crate) fn overlay_set_id(&self) -> TemplateOverlaySetId {
-        self.overlay_set_id
-    }
-
-    /// Returns the source location carried by the body/root reference.
-    #[cfg(test)]
-    pub(crate) fn location(&self) -> &SourceLocation {
-        &self.location
-    }
-
-    /// Returns the registry that owns the subtree root.
-    ///
-    /// WHAT: lets body-root overlay collectors construct child `TirView`s
-    ///       when the subtree walk reaches a `ChildTemplate` node.
-    /// WHY: `TirSubtreeView` is borrowed from the registry; exposing the
-    ///      registry pointer lets recursive effective collection stay in the
-    ///      view system instead of reaching around it.
-    pub(in crate::compiler_frontend::ast::templates::tir) fn registry_ref(
-        &self,
-    ) -> &'a TemplateIrRegistry {
-        self.registry
-    }
-
-    /// Returns an immutable borrow of the subtree root node.
-    #[cfg(test)]
-    pub(crate) fn root_node(&self) -> Result<Ref<'a, TemplateIrNode>, CompilerError> {
-        self.effective_node(self.root)
-    }
-
-    /// Returns an immutable borrow of the effective node at `node_ref`.
-    pub(crate) fn effective_node(
-        &self,
-        node_ref: TemplateNodeRef,
-    ) -> Result<Ref<'a, TemplateIrNode>, CompilerError> {
-        self.registry.node(node_ref).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TirSubtreeView::effective_node: node {} does not exist in the registry",
-                node_ref
-            ))
-        })
-    }
-
-    /// Returns the resolved overlay set for this subtree view.
-    pub(crate) fn overlay_set(&self) -> Result<&'a TemplateOverlaySet, CompilerError> {
-        self.registry.overlay_set(self.overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TirSubtreeView::overlay_set: overlay set {} was valid at construction but is now missing; this is a compiler bug",
-                self.overlay_set_id
-            ))
-        })
-    }
-
-    /// Returns the expression overlay entry, if the overlay set has one.
-    pub(crate) fn expression_overlay(
-        &self,
-    ) -> Result<Option<&'a TirExpressionOverlay>, CompilerError> {
-        let Some(overlay_id) = self.overlay_set()?.expression_overrides else {
-            return Ok(None);
-        };
-
-        let overlay = self
-            .registry
-            .expression_overlay(overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "TirSubtreeView::expression_overlay: overlay {} does not exist in the registry",
-                    overlay_id
-                ))
-            })?;
-
-        Ok(Some(overlay))
-    }
-
-    /// Returns the override expression for an `ExpressionSiteId`, if present.
-    pub(crate) fn effective_expression_for_site(
-        &self,
-        site_id: ExpressionSiteId,
-    ) -> Result<Option<&'a Expression>, CompilerError> {
-        let Some(overlay) = self.expression_overlay()? else {
-            return Ok(None);
-        };
-
-        Ok(overlay.expression_for_site(site_id))
-    }
 }
 
 impl<'a> fmt::Debug for TirView<'a> {

@@ -7,31 +7,23 @@
 //! boundaries before lowering moves off the legacy runtime slot plan.
 
 use super::super::ids::{ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId};
-use super::super::node::{
-    TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
-    TemplateLoopHeaderExpressionSites, TirSlotPlaceholder,
-};
+use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder};
 use super::super::overlays::{TirSlotResolution, TirSlotResolutionOverlay};
 use super::super::refs::{TemplateRef, TemplateStoreId, TemplateTirChildReference};
 use super::super::registry::TemplateIrRegistry;
 
 use super::super::store::TemplateIrStore;
 use super::super::summary::TemplateIrSummary;
-use super::super::{
-    TemplateOverlaySet, TemplateOverlaySetId, TemplateTirPhase, TirSubtreeView, TirView,
-};
+use super::super::{TemplateOverlaySet, TemplateOverlaySetId, TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchSelector, TemplateLoopHeader,
-};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::tir::TirFoldCache;
 use crate::compiler_frontend::ast::templates::{
-    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateBranch, OwnedRuntimeTemplateNode,
+    OwnedRuntimeTemplateBody, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::datatype::DataType;
@@ -116,18 +108,6 @@ fn text_node_id(
     ))
 }
 
-/// Pushes a child-template reference node into the store.
-/// Pushes a sequence node containing the given children.
-fn sequence_node_id(
-    store: &mut TemplateIrStore,
-    children: Vec<TemplateIrNodeId>,
-) -> TemplateIrNodeId {
-    store.push_node(TemplateIrNode::new(
-        TemplateIrNodeKind::Sequence { children },
-        empty_location(),
-    ))
-}
-
 /// Finishes a simple text-function template from its root node.
 fn finish_text_template(store: &mut TemplateIrStore, root: TemplateIrNodeId) -> TemplateIrId {
     store.push_template(TemplateIr::new(
@@ -167,235 +147,6 @@ fn expression_overlay_set(
         slot_resolution: None,
         wrapper_context: None,
     })
-}
-
-/// Builds a body-root subtree view for a store-local node.
-fn tir_subtree_view<'a>(
-    registry: &'a TemplateIrRegistry,
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    overlay_set_id: TemplateOverlaySetId,
-) -> TirSubtreeView<'a> {
-    TirSubtreeView::with_minimum_phase(
-        registry,
-        &super::super::body_root_ref::TemplateTirBodyReference::new(
-            store.owner(),
-            store.store_id(),
-            node_id,
-            TemplateTirPhase::Finalized,
-            overlay_set_id,
-            empty_location(),
-        ),
-        TemplateTirPhase::Finalized,
-    )
-    .expect("test subtree view should be valid")
-}
-
-#[test]
-fn owned_runtime_template_node_for_subtree_view_materializes_branch_chain_selector_override() {
-    let mut string_table = StringTable::new();
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-
-    let (branch_chain_node_id, selector_site_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("registry store should be mutable");
-
-        let body_text = text_node_id(&mut store, &mut string_table, "branch body");
-        let selector = TemplateBranchSelector::Bool(bool_reference_expression(
-            &mut string_table,
-            "show_branch",
-        ));
-        let branch = TemplateIrBranch::new(selector, body_text, empty_location())
-            .with_selector_site_id(store.next_expression_site_id());
-        let selector_site_id = branch.selector_site_id;
-        let branch_node_id = store.push_node(TemplateIrNode::new(
-            TemplateIrNodeKind::BranchChain {
-                branches: vec![branch],
-                fallback: None,
-            },
-            empty_location(),
-        ));
-        (branch_node_id, selector_site_id)
-    };
-
-    let overlay_set_id = expression_overlay_set(
-        &mut registry,
-        vec![(
-            selector_site_id,
-            Expression::bool(true, empty_location(), ValueMode::ImmutableOwned),
-        )],
-    );
-
-    let registry = Rc::new(RefCell::new(registry));
-    let store_handle = registry
-        .borrow()
-        .store_handle(store_id)
-        .expect("registry store handle should exist");
-
-    let registry_borrow = registry.borrow();
-    let store_borrow = store_handle.borrow();
-    let view = tir_subtree_view(
-        &registry_borrow,
-        &store_borrow,
-        branch_chain_node_id,
-        overlay_set_id,
-    );
-    drop(store_borrow);
-
-    let fold_context_inputs = TestFoldContextInputs::new();
-    let mut fold_context = fold_context_inputs.context(&mut string_table, Rc::clone(&registry));
-
-    let node = store_handle
-        .borrow()
-        .owned_runtime_template_node_for_tir_subtree_view_with_fold_context(
-            &view,
-            &mut fold_context,
-        )
-        .expect("subtree view materialization should succeed")
-        .expect("branch-chain root view should materialize as an owned node");
-
-    let OwnedRuntimeTemplateNode::BranchChain {
-        branches, fallback, ..
-    } = node
-    else {
-        panic!("expected branch-chain node, got {:?}", node);
-    };
-    assert_eq!(branches.len(), 1);
-    assert!(fallback.is_none(), "branch chain had no fallback");
-
-    let OwnedRuntimeTemplateBranch { selector, body, .. } = &branches[0];
-    let TemplateBranchSelector::Bool(expression) = selector else {
-        panic!("expected bool selector, got {:?}", selector);
-    };
-    assert!(
-        matches!(expression.kind, ExpressionKind::Bool(true)),
-        "selector should be overridden to true, got {:?}",
-        expression.kind
-    );
-
-    let OwnedRuntimeTemplateNode::Text { text, .. } = body else {
-        panic!("expected text body, got {:?}", body);
-    };
-    assert_eq!(fold_context.string_table.resolve(*text), "branch body");
-}
-
-#[test]
-fn owned_runtime_template_node_for_subtree_view_materializes_loop_with_header_override() {
-    let mut string_table = StringTable::new();
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-
-    let (loop_node_id, condition_site_id) = {
-        let mut store = registry
-            .store_mut(store_id)
-            .expect("registry store should be mutable");
-
-        let body_text = text_node_id(&mut store, &mut string_table, "loop body");
-        let header = TemplateLoopHeader::Conditional {
-            condition: Box::new(bool_reference_expression(&mut string_table, "keep_looping")),
-        };
-        let header_sites = store.allocate_loop_header_expression_sites(&header);
-        let condition_site_id = match header_sites {
-            TemplateLoopHeaderExpressionSites::Conditional { condition } => condition,
-            _ => panic!("expected conditional loop header sites"),
-        };
-
-        let open_bracket = text_node_id(&mut store, &mut string_table, "[");
-        let aggregate_marker = store.push_node(TemplateIrNode::new(
-            TemplateIrNodeKind::AggregateOutput,
-            empty_location(),
-        ));
-        let close_bracket = text_node_id(&mut store, &mut string_table, "]");
-        let aggregate_wrapper = sequence_node_id(
-            &mut store,
-            vec![open_bracket, aggregate_marker, close_bracket],
-        );
-
-        let loop_node_id = store.push_node(TemplateIrNode::new(
-            TemplateIrNodeKind::Loop {
-                header,
-                header_sites,
-                body: body_text,
-                aggregate_wrapper: Some(aggregate_wrapper),
-            },
-            empty_location(),
-        ));
-        (loop_node_id, condition_site_id)
-    };
-
-    let overlay_set_id = expression_overlay_set(
-        &mut registry,
-        vec![(
-            condition_site_id,
-            Expression::bool(false, empty_location(), ValueMode::ImmutableOwned),
-        )],
-    );
-
-    let registry = Rc::new(RefCell::new(registry));
-    let store_handle = registry
-        .borrow()
-        .store_handle(store_id)
-        .expect("registry store handle should exist");
-
-    let registry_borrow = registry.borrow();
-    let store_borrow = store_handle.borrow();
-    let view = tir_subtree_view(
-        &registry_borrow,
-        &store_borrow,
-        loop_node_id,
-        overlay_set_id,
-    );
-    drop(store_borrow);
-
-    let fold_context_inputs = TestFoldContextInputs::new();
-    let mut fold_context = fold_context_inputs.context(&mut string_table, Rc::clone(&registry));
-
-    let node = store_handle
-        .borrow()
-        .owned_runtime_template_node_for_tir_subtree_view_with_fold_context(
-            &view,
-            &mut fold_context,
-        )
-        .expect("subtree view materialization should succeed")
-        .expect("loop root view should materialize as an owned node");
-
-    let OwnedRuntimeTemplateNode::Loop {
-        header,
-        body,
-        aggregate_wrapper,
-        ..
-    } = node
-    else {
-        panic!("expected loop node, got {:?}", node);
-    };
-
-    let TemplateLoopHeader::Conditional { condition } = header else {
-        panic!("expected conditional loop header, got {:?}", header);
-    };
-    assert!(
-        matches!(condition.kind, ExpressionKind::Bool(false)),
-        "loop condition should be overridden to false, got {:?}",
-        condition.kind
-    );
-
-    assert!(
-        matches!(body.as_ref(), OwnedRuntimeTemplateNode::Text { .. }),
-        "expected text loop body, got {:?}",
-        body
-    );
-
-    let wrapper = aggregate_wrapper.expect("loop should have an aggregate wrapper");
-    let OwnedRuntimeTemplateNode::Sequence { children, .. } = wrapper.as_ref() else {
-        panic!("expected aggregate wrapper sequence, got {:?}", wrapper);
-    };
-    assert!(
-        children
-            .iter()
-            .any(|child| matches!(child, OwnedRuntimeTemplateNode::AggregateOutput { .. })),
-        "aggregate wrapper should preserve the aggregate-output marker"
-    );
 }
 
 /// Allocates an overlay set that resolves the given slot occurrences.
@@ -560,6 +311,74 @@ fn owned_runtime_template_handoff_missing_slot_resolution_renders_slot_placehold
         ),
         "missing slot resolution should materialize as a structural no-output slot placeholder, got {:?}",
         handoff.body
+    );
+}
+
+#[test]
+fn parent_root_expression_overlay_applies_inside_same_store_child() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let child_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let (parent_template_id, child_site_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+
+        let child_site_id = store.next_expression_site_id();
+        let child_expression = bool_reference_expression(&mut string_table, "original");
+        let child_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(child_expression),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id: child_site_id,
+            },
+            empty_location(),
+        ));
+        let child_template_id = finish_text_template(&mut store, child_root);
+        let child_node = child_template_node_id(
+            &mut store,
+            child_reference(store_id, child_template_id, child_overlay_set_id),
+        );
+        let parent_template_id = finish_text_template(&mut store, child_node);
+
+        (parent_template_id, child_site_id)
+    };
+
+    let parent_overlay_set_id = expression_overlay_set(
+        &mut registry,
+        vec![(
+            child_site_id,
+            Expression::bool(true, empty_location(), ValueMode::ImmutableOwned),
+        )],
+    );
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        parent_overlay_set_id,
+    );
+
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
+        template, ..
+    }) = body
+    else {
+        panic!("expected same-store child template");
+    };
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression {
+        expression,
+        ..
+    }) = &template.body
+    else {
+        panic!("expected child dynamic expression, got {:?}", template.body);
+    };
+
+    assert!(
+        matches!(expression.kind, ExpressionKind::Bool(true)),
+        "parent root override should win over the child's empty overlay"
     );
 }
 

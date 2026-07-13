@@ -55,21 +55,14 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::reactive_template_metadata;
 use crate::compiler_frontend::ast::templates::runtime_handoff;
 use crate::compiler_frontend::ast::templates::runtime_handoff::{
-    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateBranch,
-    OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
+    OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
-use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateControlFlow, TemplateLoopControlFlow,
-};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    ControlFlowBodyKind, ExpressionSiteId, MaterializedTirTemplateClassification,
-    TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateTirBodyReference,
-    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSubtreeView, TirView,
-    classify_effective_tir_view_template,
-    collect_effective_tir_body_root_expression_overlay_payloads,
-    collect_tir_expression_overlay_payloads,
+    ExpressionSiteId, MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateIrStore,
+    TemplateOverlaySet, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirView,
+    classify_effective_tir_view_template, collect_effective_tir_expression_overlay_payloads,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -777,15 +770,6 @@ fn runtime_template_expression_replacement(
     classification: &MaterializedTirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    if let Some(handoff) =
-        try_materialize_control_flow_runtime_handoff_from_body_views(template, context)?
-    {
-        return Ok(Some(NormalizedTemplateExpression::RuntimeTemplate(
-            handoff,
-            reactive_template,
-        )));
-    }
-
     if let Some(replacement) = try_materialize_runtime_handoff_from_final_effective_template_view(
         template,
         context,
@@ -800,134 +784,6 @@ fn runtime_template_expression_replacement(
         classification,
         reactive_template,
     )
-}
-
-/// Materializes a runtime control-flow template from its finalized body/root
-/// `TirSubtreeView`s.
-///
-/// WHAT: for `BranchChain` and `Loop` templates, resolves each body root and
-///       loop aggregate-wrapper root through the registry, materializes the
-///       owned runtime-template node subtree from the final effective view, and
-///       assembles the control-flow node directly from the AST selectors/headers
-///       and the materialized bodies. `LoopControl` signals are not standalone
-///       runtime templates and are left for the fold path.
-/// WHY: control-flow templates do not have a single authoritative top-level TIR
-///      root that captures the final bodies; the bodies live as node-root views
-///      on the AST `TemplateControlFlow`. Routing them through the same
-///      `RuntimeHandoffMaterializer` body-root path as nested control flow keeps
-///      the handoff shape consistent with the top-level template-view path.
-fn try_materialize_control_flow_runtime_handoff_from_body_views(
-    template: &Template,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-) -> Result<Option<OwnedRuntimeTemplateHandoff>, TemplateNormalizationError> {
-    let control_flow = match &template.control_flow {
-        Some(control_flow) => control_flow,
-        None => return Ok(None),
-    };
-
-    let registry_rc = match context.template_ir_registry.as_ref().map(Rc::clone) {
-        Some(registry) => registry,
-        None => return Ok(None),
-    };
-
-    let store = context.template_ir_store.borrow();
-    let registry = registry_rc.borrow();
-
-    let mut fold_context = make_fold_context(
-        context.source_file_scope,
-        context.path_format_config,
-        context.project_path_resolver,
-        context.string_table,
-        context.template_const_loop_iteration_limit,
-        context.template_ir_registry.as_ref().map(Rc::clone),
-    );
-
-    // Helper that materializes one body/root subtree view into an owned node.
-    // Kept as a local closure so each branch, fallback, loop body, and loop
-    // aggregate wrapper share one code path.
-    let mut materialize_body =
-        |body_reference: &TemplateTirBodyReference,
-         materialize_error: &'static str|
-         -> Result<OwnedRuntimeTemplateNode, TemplateNormalizationError> {
-            let body_view = TirSubtreeView::with_minimum_phase(
-                &registry,
-                body_reference,
-                TemplateTirPhase::Finalized,
-            )?;
-            store
-                .owned_runtime_template_node_for_tir_subtree_view_with_fold_context(
-                    &body_view,
-                    &mut fold_context,
-                )?
-                .ok_or_else(|| CompilerError::compiler_error(materialize_error).into())
-        };
-
-    let body_node = match control_flow {
-        TemplateControlFlow::BranchChain(chain) => {
-            let mut branches = Vec::with_capacity(chain.branches.len());
-            for branch in &chain.branches {
-                let body_reference = &branch.body_tir_reference;
-                let body = materialize_body(
-                    body_reference,
-                    "TIR HIR handoff normalization could not materialize a branch body from its finalized view.",
-                )?;
-
-                branches.push(OwnedRuntimeTemplateBranch {
-                    selector: branch.selector.clone(),
-                    body,
-                    location: branch.location.clone(),
-                });
-            }
-
-            let fallback = if let Some(fallback_branch) = &chain.fallback {
-                let body_reference = &fallback_branch.body_tir_reference;
-                Some(Box::new(materialize_body(
-                    body_reference,
-                    "TIR HIR handoff normalization could not materialize a fallback body from its finalized view.",
-                )?))
-            } else {
-                None
-            };
-
-            OwnedRuntimeTemplateNode::BranchChain {
-                branches,
-                fallback,
-                location: chain.location.clone(),
-            }
-        }
-
-        TemplateControlFlow::Loop(loop_flow) => {
-            let body_reference = &loop_flow.body_tir_reference;
-            let body = Box::new(materialize_body(
-                body_reference,
-                "TIR HIR handoff normalization could not materialize a loop body from its finalized view.",
-            )?);
-
-            let aggregate_wrapper = if let Some(wrapper_reference) =
-                &loop_flow.aggregate_wrapper_tir_reference
-            {
-                Some(Box::new(materialize_body(
-                    wrapper_reference,
-                    "TIR HIR handoff normalization could not materialize a loop aggregate wrapper from its finalized view.",
-                )?))
-            } else {
-                None
-            };
-
-            OwnedRuntimeTemplateNode::Loop {
-                header: loop_flow.header.clone(),
-                body,
-                aggregate_wrapper,
-                location: loop_flow.location.clone(),
-            }
-        }
-    };
-
-    Ok(Some(OwnedRuntimeTemplateHandoff {
-        kind: template.kind.clone(),
-        body: OwnedRuntimeTemplateBody::Render(body_node),
-        location: template.location.clone(),
-    }))
 }
 
 fn try_materialize_runtime_handoff_from_final_effective_template_view(
@@ -1125,8 +981,8 @@ fn expression_reactive_template_metadata_from_store(
 
 /// Normalizes a template for HIR consumption.
 ///
-/// WHAT: normalizes expression payloads exposed by the template's TIR overlays
-///       and prepares control-flow runtime plans for the final expression handoff.
+/// WHAT: normalizes every expression payload reachable from the template's root
+///       TIR reference, including control-flow selectors and loop headers.
 ///
 /// WHY:
 /// - Runtime templates may contain compile-time child templates after wrapper/head
@@ -1143,15 +999,6 @@ fn normalize_template_for_hir(
 ) -> Result<(), TemplateNormalizationError> {
     normalize_expression_overlays_for_template_reference(template, context)?;
 
-    if let Some(mut control_flow) = template.control_flow.take() {
-        normalize_template_control_flow_runtime_plans_for_hir(
-            template,
-            &mut control_flow,
-            context,
-        )?;
-        template.control_flow = Some(control_flow);
-    }
-
     Ok(())
 }
 
@@ -1159,11 +1006,10 @@ fn normalize_expression_overlays_for_template_reference(
     template: &mut Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
 ) -> Result<(), TemplateNormalizationError> {
-    // Phase 10 makes normalized expression payloads visible through the
-    // effective `TirView`. Runtime handoff still consumes the structural payload
-    // until the later owned-handoff cutover, so this layers the normalized
-    // expressions into the reference's overlay set without mutating shared TIR
-    // nodes.
+    // Keep normalized payloads in the same registry-owned overlay set consumed
+    // by the finalized effective view and runtime handoff materializer. This
+    // preserves shared TIR nodes while covering dynamic expressions, selectors,
+    // loop headers, and every reachable control-flow body from one root pass.
     let Some(reference) = template.tir_reference.clone() else {
         return Ok(());
     };
@@ -1266,222 +1112,23 @@ fn collect_same_store_expression_overlay_payloads(
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, TemplateNormalizationError> {
     let store = context.template_ir_store.borrow();
-    collect_tir_expression_overlay_payloads(&store, reference.root.template_id).map_err(Into::into)
-}
-
-fn normalize_template_control_flow_runtime_plans_for_hir(
-    _template: &Template,
-    control_flow: &mut TemplateControlFlow,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-) -> Result<(), TemplateNormalizationError> {
-    match control_flow {
-        TemplateControlFlow::BranchChain(branch_chain) => {
-            for (index, branch) in branch_chain.branches.iter_mut().enumerate() {
-                normalize_control_flow_body_tir_root_for_hir(
-                    &mut branch.body_tir_reference,
-                    context,
-                    ControlFlowBodyKind::Branch { index },
-                    "branch",
-                )?;
-            }
-
-            if let Some(fallback) = &mut branch_chain.fallback {
-                normalize_control_flow_body_tir_root_for_hir(
-                    &mut fallback.body_tir_reference,
-                    context,
-                    ControlFlowBodyKind::Fallback,
-                    "fallback",
-                )?;
-            }
-        }
-
-        TemplateControlFlow::Loop(loop_flow) => {
-            normalize_control_flow_body_tir_root_for_hir(
-                &mut loop_flow.body_tir_reference,
-                context,
-                ControlFlowBodyKind::LoopBody,
-                "loop",
-            )?;
-
-            normalize_loop_aggregate_wrapper_tir_root_for_hir(loop_flow, context)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn normalize_loop_aggregate_wrapper_tir_root_for_hir(
-    loop_flow: &mut TemplateLoopControlFlow,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-) -> Result<(), TemplateNormalizationError> {
-    // Render-unit preparation installs every loop aggregate wrapper as a
-    // same-store TIR subtree. HIR normalization requires that authoritative
-    // root so late payload mutations apply to the same structure later
-    // materialized into the owned runtime handoff.
-    let reference = loop_flow
-        .aggregate_wrapper_tir_reference
-        .as_mut()
+    let registry = context
+        .template_ir_registry
+        .as_ref()
         .ok_or_else(|| {
             CompilerError::compiler_error(
-                "template HIR normalization encountered a loop without an aggregate-wrapper TIR root",
+                "expression overlay normalization requires the module TIR registry",
             )
-        })?;
+        })?
+        .borrow();
+    let expression_payloads = collect_effective_tir_expression_overlay_payloads(
+        &store,
+        &registry,
+        reference.root.template_id,
+        reference.overlay_set_id,
+    )?;
 
-    {
-        let store = context.template_ir_store.borrow();
-        if reference.same_store_root(&store).is_none() {
-            return Err(CompilerError::compiler_error(
-                "template HIR normalization requires a same-store aggregate-wrapper TIR root",
-            )
-            .into());
-        }
-    }
-
-    normalize_expression_overlays_for_body_reference(reference, context)
-}
-
-/// Normalizes all expression payloads reachable from a control-flow body/root
-/// reference into a registry-owned expression overlay.
-///
-/// WHAT: reads the effective expressions for the body subtree (honoring any
-///       prior overlay layers, such as reactive metadata annotation), runs
-///       AST finalization on each cloned payload, and layers the normalized
-///       results into the body reference's overlay set.
-/// WHY: this replaces the old `TirExpressionPayloadMutator` mutation path for
-///      body roots. Shared TIR nodes are no longer mutated; consumers read the
-///      effective view through the updated overlay set.
-fn normalize_expression_overlays_for_body_reference(
-    body_reference: &mut TemplateTirBodyReference,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-) -> Result<(), TemplateNormalizationError> {
-    let Some(registry) = context.template_ir_registry.as_ref().map(Rc::clone) else {
-        return Ok(());
-    };
-
-    let is_same_store_reference = {
-        let store = context.template_ir_store.borrow();
-        body_reference.same_store_root(&store).is_some()
-    };
-    let should_mark_finalized =
-        is_same_store_reference && body_reference.phase.is_at_least(TemplateTirPhase::Composed);
-
-    let expression_payloads = if is_same_store_reference {
-        let registry_borrow = registry.borrow();
-        collect_effective_tir_body_root_expression_overlay_payloads(
-            &registry_borrow,
-            body_reference,
-        )?
-    } else {
-        Vec::new()
-    };
-
-    if expression_payloads.is_empty() {
-        if should_mark_finalized {
-            body_reference.phase = TemplateTirPhase::Finalized;
-        }
-        if is_same_store_reference {
-            let mut store = context.template_ir_store.borrow_mut();
-            store.set_node_body_overlay_set(
-                body_reference.node_ref.node_id,
-                body_reference.overlay_set_id,
-            );
-        }
-        return Ok(());
-    }
-
-    let mut normalized_overrides = Vec::with_capacity(expression_payloads.len());
-    for (site_id, mut expression) in expression_payloads {
-        normalize_expression_templates_with_context(
-            &mut expression,
-            context,
-            HelperArtifactPolicy::AllowNestedHelperContent,
-        )?;
-        normalized_overrides.push((site_id, Box::new(expression)));
-    }
-
-    let mut registry = registry.borrow_mut();
-    let existing_overlay_set = registry
-        .overlay_set(body_reference.overlay_set_id)
-        .cloned()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "expression overlay normalization referenced missing overlay set {}",
-                body_reference.overlay_set_id
-            ))
-        })?;
-    let normalized_site_ids = normalized_overrides
-        .iter()
-        .map(|(site_id, _)| *site_id)
-        .collect::<HashSet<_>>();
-
-    let mut overrides = if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides
-    {
-        let existing_overlay = registry
-            .expression_overlay(existing_overlay_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "expression overlay normalization referenced missing expression overlay {}",
-                    existing_overlay_id
-                ))
-            })?;
-        existing_overlay
-            .overrides
-            .iter()
-            .filter(|(site_id, _)| !normalized_site_ids.contains(site_id))
-            .map(|(site_id, expression)| (*site_id, expression.clone()))
-            .collect()
-    } else {
-        Vec::new()
-    };
-    overrides.extend(normalized_overrides);
-
-    let expression_overlay_id =
-        registry.allocate_expression_overlay(TirExpressionOverlay { overrides });
-    let expression_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: Some(expression_overlay_id),
-        slot_resolution: None,
-        wrapper_context: None,
-    });
-    let overlay_set_id = registry
-        .compose_overlay_sets(&[body_reference.overlay_set_id, expression_overlay_set_id])?;
-
-    body_reference.overlay_set_id = overlay_set_id;
-    if should_mark_finalized {
-        body_reference.phase = TemplateTirPhase::Finalized;
-    }
-    if is_same_store_reference {
-        let mut store = context.template_ir_store.borrow_mut();
-        store.set_node_body_overlay_set(body_reference.node_ref.node_id, overlay_set_id);
-    }
-
-    Ok(())
-}
-
-fn normalize_control_flow_body_tir_root_for_hir(
-    body_reference: &mut TemplateTirBodyReference,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-    body_kind: ControlFlowBodyKind,
-    body_label: &str,
-) -> Result<(), TemplateNormalizationError> {
-    if let Some(registry) = &context.template_ir_registry {
-        TirSubtreeView::with_minimum_phase(
-            &registry.borrow(),
-            body_reference,
-            TemplateTirPhase::Parsed,
-        )?;
-    }
-
-    {
-        let store = context.template_ir_store.borrow();
-        if body_reference.same_store_root(&store).is_none() {
-            return Err(CompilerError::compiler_error(format!(
-                "template HIR normalization requires a same-store {body_label} body root for {body_kind:?}",
-            ))
-            .into());
-        }
-    }
-
-    normalize_expression_overlays_for_body_reference(body_reference, context)
+    Ok(expression_payloads)
 }
 
 fn normalize_runtime_slot_template_expression_for_hir(

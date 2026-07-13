@@ -24,8 +24,10 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
+use super::ids::ExpressionSiteId;
 use super::node::{TemplateIr, TemplateIrNode};
 use super::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirExpressionOverlayId,
@@ -500,6 +502,48 @@ impl TemplateIrRegistry {
     ///      their own copies, so overlay identity stays centralized.
     pub(crate) fn overlay_set(&self, id: TemplateOverlaySetId) -> Option<&TemplateOverlaySet> {
         self.overlay_sets.get(id.index())
+    }
+
+    /// Resolves an expression site through a root-first overlay stack.
+    ///
+    /// WHAT: searches each active overlay set in order and returns the first
+    ///       expression override that owns `site_id`. Missing overlay sets or
+    ///       expression overlays are internal invariant errors.
+    /// WHY: final root overlays cover every reachable same-store expression
+    ///      site, while nested child references may still carry an earlier
+    ///      overlay for sites the root did not replace. Keeping this resolution
+    ///      rule on the registry prevents annotation, normalization and handoff
+    ///      from implementing subtly different stack semantics.
+    pub(crate) fn expression_for_overlay_stack(
+        &self,
+        overlay_set_ids: &[TemplateOverlaySetId],
+        site_id: ExpressionSiteId,
+    ) -> Result<Option<&Expression>, CompilerError> {
+        for overlay_set_id in overlay_set_ids.iter().copied() {
+            let overlay_set = self.overlay_set(overlay_set_id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR expression resolution referenced missing overlay set {}",
+                    overlay_set_id
+                ))
+            })?;
+            let Some(expression_overlay_id) = overlay_set.expression_overrides else {
+                continue;
+            };
+            let expression_overlay =
+                self.expression_overlay(expression_overlay_id)
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "TIR expression resolution referenced missing expression overlay {}",
+                            expression_overlay_id
+                        ))
+                    })?;
+
+            if let Some(expression) = expression_overlay.expression_for_site(site_id) {
+                return Ok(Some(expression));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Returns the number of canonical overlay sets stored by the registry.

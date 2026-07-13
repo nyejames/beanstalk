@@ -56,6 +56,14 @@ impl ReactiveTemplateValueEnvironment {
             .insert(path.clone(), value.reactive_template.clone());
     }
 
+    pub(super) fn record_binding_metadata(
+        &mut self,
+        path: &InternedPath,
+        metadata: Option<ReactiveTemplateMetadata>,
+    ) {
+        self.values.insert(path.clone(), metadata);
+    }
+
     pub(super) fn metadata_for_path(
         &self,
         path: &InternedPath,
