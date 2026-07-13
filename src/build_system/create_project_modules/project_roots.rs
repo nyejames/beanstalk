@@ -15,12 +15,11 @@ use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 
-use super::collision_detection::validate_project_structure_collisions;
+use super::collision_detection::validate_source_library_tree_collisions;
 use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 use super::root_validation::validate_source_library_roots;
 use super::source_library_discovery::{
     discover_project_local_source_libraries, merge_source_libraries, prepare_source_library_roots,
-    validate_entry_root_library_prefix_collisions,
 };
 use super::source_tree_index::SourceTreeIndex;
 
@@ -75,12 +74,6 @@ pub(super) fn build_project_path_resolver_with_index(
         string_table,
     )?;
 
-    validate_entry_root_library_prefix_collisions(
-        &roots.entry_root,
-        &merged_libraries,
-        string_table,
-    )?;
-
     let prepared_source_library_roots = prepare_source_library_roots(&merged_libraries);
     validate_source_library_roots(&prepared_source_library_roots, string_table)?;
 
@@ -89,6 +82,7 @@ pub(super) fn build_project_path_resolver_with_index(
         entry_root.clone(),
         &roots.project_root,
         config,
+        &merged_libraries,
         string_table,
     )?;
 
@@ -101,7 +95,7 @@ pub(super) fn build_project_path_resolver_with_index(
     )
     .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
-    validate_project_structure_collisions(&entry_root, &merged_libraries, string_table)?;
+    validate_source_library_tree_collisions(&merged_libraries, string_table)?;
 
     Ok(ProjectPathResolverSetup {
         resolver,

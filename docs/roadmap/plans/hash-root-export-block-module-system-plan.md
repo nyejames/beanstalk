@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: active
-CURRENT_SLICE: The reviewed benchmark-fixture slice is ready to checkpoint. Next is whole-plan final review.
-LAST_ACCEPTED_COMMIT: `ed70cb5b9` (`test: close hash-root coverage gaps`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `ed70cb5b9`; the reviewed benchmark fixture, its registry note and this plan are ready to commit. No unrelated changes are present.
+STATUS: final review
+CURRENT_SLICE: Audit correction 1 is reviewed and ready to checkpoint. Next is deterministic source-library ordering.
+LAST_ACCEPTED_COMMIT: `d841133b5` (`bench: cover module root role mix`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `d841133b5`; the reviewed Stage 0 collision correction, its tests and this plan are ready to commit. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -20,7 +20,8 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 RELEVANT_CONTEXT_NOW:
 - docs: Phase 9 is committed at `74ce04813`. Do not edit official docs during the worker slice.
 - tests: every integration and focused test-matrix contract is covered and committed at `ed70cb5b9`.
-- benchmarks: `module-root-role-mix` combines eight skipped entry-root boundaries, API-only and output roots and a cosmetic source-library root. Existing parallelism fixtures own the many-roots/few-files and few-roots/many-files shapes.
+- benchmarks: every benchmark-shape contract is covered through `d841133b5`.
+- final review: audit correction 1 now folds entry-root collision and library-prefix checks into the single skip-aware index and removes both extra entry-root reads. Audit correction 2 for source-library determinism remains. Historic facade-named fixtures remain accepted regression identifiers. Progress, roadmap and parser-comment alignment remain parent-owned cleanup.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -194,6 +195,9 @@ VALIDATION_STATE:
 - Phase 9 documentation: the parent reconciled language, compiler-design, project-structure, library, benchmark, testing and progress documentation with the landed implementation. Two Ollama read-only reviews found stale facade/entry terminology and misleading fixture labels; every finding was corrected. `cargo run --quiet -- build docs --release` rebuilt 72 files successfully after the final correction and `git diff --check` passed.
 - Coverage tests: Ollama added two integration cases and two focused invariants for the four audited gaps. A separate Ollama review found no correctness, redundancy, assertion or scope issue. Parent `just validate` passed cross-target Clippy, 3344 unit tests, 1755 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 - Coverage benchmark: Ollama added `module-root-role-mix`; parent strengthened it to eight fixed/configured skipped boundaries and added the README registry note. A separate Ollama review found no validity, fidelity, usefulness, generated-file or documentation issue. Parent `just validate` passed cross-target Clippy, 3344 unit tests, 1755 integration cases, docs checking and benchmark-check 28/28 at -2 ms average with no slower cases. Direct project checking and all 27 focused frontend cases also passed; their comparison correctly reports a changed case set.
+- Whole-plan Ollama review: all seven acceptance criteria passed with no code correction. The historic facade-named fixture IDs are accepted as stable regression identifiers rather than production design terminology; the progress matrix and stale roadmap note require parent alignment after the mandatory audit.
+- Whole-plan Codex CLI audit: required Stage 0 entry-tree collision consolidation and deterministic source-library ordering. Existing strict export, role activity, artifact routing and benchmark identity coverage is otherwise sufficient. Direct single-file root coverage and the parser visibility comment should be closed within the correction slices where local.
+- Audit correction 1: Ollama consolidated entry-root collision checks into `SourceTreeIndex`, retained separate source-library-tree validation and added focused plus integration coverage. Parent corrected the ignored fixture payload and made the intended single-file rejection contract explicit. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3349 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -2 ms average with no slower cases.
 
 DOCS_IMPACT:
 - progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
@@ -201,11 +205,11 @@ DOCS_IMPACT:
 - generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit the reviewed benchmark fixture, then start the whole-plan final review protocol.
-DELEGATION_DECISION: parent checkpoint, then the final-review audit order.
-NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean Ollama availability blocker, then parent-direct
+- Commit audit correction 1, then launch deterministic source-library ordering through Ollama.
+DELEGATION_DECISION: parent checkpoint, then Ollama implementation worker for required audit finding 2.
+NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean availability blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: checkpoint the benchmark fixture and refresh this state at the new commit.
+NEXT_RESUME_ACTION: checkpoint audit correction 1 and refresh this state at the new commit.
 
 ---
 

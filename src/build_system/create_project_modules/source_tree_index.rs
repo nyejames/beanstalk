@@ -1,17 +1,20 @@
 //! Stage 0 source-tree indexing for directory projects.
 //!
-//! WHAT: performs the one deterministic entry-root traversal that prepares module roots and root
-//! entry candidates for the rest of the build.
-//! WHY: filesystem discovery belongs to Stage 0. Keeping it here prevents the frontend resolver
-//! and module inventory from repeating the same expensive walk.
+//! WHAT: performs the one deterministic entry-root traversal that prepares module roots, root
+//! entry candidates, sibling import-name collision facts, and entry-root source-library prefix
+//! collision facts for the rest of the build.
+//! WHY: filesystem discovery belongs to Stage 0. Keeping it here prevents the frontend resolver,
+//! module inventory, and collision validators from repeating the same expensive walk.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::source_libraries::root_file::file_name_is_hash_root_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::projects::settings::Config;
+use crate::libraries::SourceLibraryRegistry;
+use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -94,10 +97,17 @@ pub(crate) struct SourceTreeIndex {
 
 impl SourceTreeIndex {
     /// Build the index with one deterministic traversal of the configured entry root.
+    ///
+    /// The traversal also owns entry-root sibling `.bst` file/folder import-name collisions and
+    /// entry-root folder/source-library-prefix collisions, using the same sorted directory
+    /// entries it already reads. Skipped directories neither contribute collision facts nor get
+    /// recursively scanned. Source-library-tree collision validation remains separate because
+    /// registered source-library traversal lives outside entry-root indexing.
     pub(super) fn discover(
         entry_root: PathBuf,
         project_root: &Path,
         config: &Config,
+        source_libraries: &SourceLibraryRegistry,
         string_table: &mut StringTable,
     ) -> Result<Self, CompilerMessages> {
         let discovery_start = crate::timing::start_pipeline_timing();
@@ -127,6 +137,8 @@ impl SourceTreeIndex {
 
             let mut subdirectories = Vec::new();
             let mut hash_root_files = Vec::new();
+            let mut bst_file_stems: BTreeSet<String> = BTreeSet::new();
+            let mut importable_folder_names: BTreeSet<String> = BTreeSet::new();
 
             for entry in entries {
                 let path = entry.path();
@@ -135,6 +147,9 @@ impl SourceTreeIndex {
                     if skip_policy.should_skip(&path) {
                         stats.dirs_skipped += 1;
                     } else {
+                        if let Some(folder_name) = path.file_name().and_then(|name| name.to_str()) {
+                            importable_folder_names.insert(folder_name.to_owned());
+                        }
                         subdirectories.push(path);
                     }
                     continue;
@@ -145,6 +160,11 @@ impl SourceTreeIndex {
                 }
 
                 stats.files_seen += 1;
+
+                if let Some(stem) = bst_file_stem(&path) {
+                    bst_file_stems.insert(stem.to_owned());
+                }
+
                 if !path_is_hash_root_file(&path) {
                     continue;
                 }
@@ -161,6 +181,41 @@ impl SourceTreeIndex {
                         })
                         .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?,
                 );
+            }
+
+            // Check sibling .bst file/folder import-name collisions from the same sorted
+            // entries. Skipped folders are absent from importable_folder_names so they cannot
+            // create false collisions.
+            for stem in &bst_file_stems {
+                if importable_folder_names.contains(stem) {
+                    return Err(project_structure_messages(
+                        &directory,
+                        InvalidConfigReason::BstFileFolderCollision {
+                            file_name: string_table.intern(&format!("{stem}.bst")),
+                            folder_name: string_table.intern(stem),
+                            directory: path_id(&directory, string_table),
+                        },
+                        string_table,
+                    ));
+                }
+            }
+
+            // On the root pass, reject entry-root folders whose names collide with
+            // source-library import prefixes.
+            if directory == entry_root {
+                for folder_name in &importable_folder_names {
+                    if source_libraries.has_prefix(folder_name) {
+                        let colliding_folder = directory.join(folder_name);
+                        return Err(project_structure_messages(
+                            &colliding_folder,
+                            InvalidConfigReason::EntryRootLibraryPrefixCollision {
+                                prefix: string_table.intern(folder_name),
+                                entry_folder: path_id(&colliding_folder, string_table),
+                            },
+                            string_table,
+                        ));
+                    }
+                }
             }
 
             if !hash_root_files.is_empty() {
@@ -182,7 +237,7 @@ impl SourceTreeIndex {
                         .collect();
                     return Err(project_structure_messages(
                         &root_directory,
-                        crate::compiler_frontend::compiler_messages::InvalidConfigReason::MultipleModuleRootFiles {
+                        InvalidConfigReason::MultipleModuleRootFiles {
                             directory: path_id(&root_directory, string_table),
                             candidates,
                         },
@@ -222,6 +277,7 @@ impl SourceTreeIndex {
     pub(super) fn bounded_module_roots_for_single_file(
         entry_file: &Path,
         config: &Config,
+        source_libraries: &SourceLibraryRegistry,
         string_table: &mut StringTable,
     ) -> Result<ModuleRootTable, CompilerMessages> {
         if !path_is_hash_root_file(entry_file) {
@@ -245,6 +301,7 @@ impl SourceTreeIndex {
             canonical_root.clone(),
             &canonical_root,
             config,
+            source_libraries,
             string_table,
         )
         .map(|index| index.module_roots)
@@ -288,6 +345,15 @@ fn path_is_hash_root_file(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(file_name_is_hash_root_file)
+}
+
+/// Extract the import-name stem from a `.bst` file path, or `None` for other extensions.
+fn bst_file_stem(path: &Path) -> Option<&str> {
+    let extension = path.extension().and_then(|extension| extension.to_str())?;
+    if extension != BEANSTALK_FILE_EXTENSION {
+        return None;
+    }
+    path.file_stem().and_then(|stem| stem.to_str())
 }
 
 fn record_discovery_metrics(

@@ -49,6 +49,7 @@ fn configured_resolver_with_source_file_kinds(
         entry_root.clone(),
         &project_root,
         config,
+        &crate::libraries::SourceLibraryRegistry::default(),
         &mut index_string_table,
     )
     .expect("source tree index should build");
@@ -123,6 +124,7 @@ fn discover_modules_for_test(
         entry_root,
         &project_root,
         config,
+        &crate::libraries::SourceLibraryRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
@@ -162,6 +164,7 @@ fn discover_modules_for_test_with_providers(
         entry_root,
         &project_root,
         config,
+        &crate::libraries::SourceLibraryRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
@@ -288,6 +291,7 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
         canonical_entry_root.clone(),
         &canonical_root,
         &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
         &mut string_table,
     )
     .expect("source tree index should build");
@@ -319,6 +323,186 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
 }
 
 #[test]
+fn source_tree_index_ignores_collision_in_skipped_directories() {
+    let root = temp_dir("source_tree_index_skipped_collision");
+    let entry_root = root.clone();
+
+    // Fixed-skipped directory with collision-shaped contents.
+    let target_dir = entry_root.join("target");
+    fs::create_dir_all(target_dir.join("helper")).expect("should create target/helper");
+    fs::write(target_dir.join("helper.bst"), "x ~= 1\n").expect("should write colliding file");
+
+    // Configured-skipped directory with collision-shaped contents.
+    let dev_dir = entry_root.join("scratch");
+    fs::create_dir_all(dev_dir.join("widget")).expect("should create scratch/widget");
+    fs::write(dev_dir.join("widget.bst"), "y ~= 2\n").expect("should write colliding file");
+
+    // Real module root that should be discovered.
+    let nested = entry_root.join("nested");
+    fs::create_dir_all(&nested).expect("should create nested module");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
+    fs::write(nested.join("#nested.bst"), "").expect("should write nested root");
+
+    let mut config = Config::new(root.clone());
+    config.dev_folder = PathBuf::from("scratch");
+    config.release_folder = PathBuf::from("generated");
+    let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+    let canonical_entry_root =
+        fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+    let mut string_table = StringTable::new();
+
+    let index = super::source_tree_index::SourceTreeIndex::discover(
+        canonical_entry_root,
+        &canonical_root,
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("skipped collision-shaped inputs must not trigger collision diagnostics");
+
+    assert_eq!(index.entry_candidates().len(), 2);
+    assert_eq!(index.stats().dirs_skipped, 2);
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_tree_index_ignores_library_prefix_collision_in_skipped_directory() {
+    let root = temp_dir("source_tree_index_skipped_prefix_collision");
+    let entry_root = root.join("src");
+    fs::create_dir_all(&entry_root).expect("should create entry root");
+
+    // Fixed-skipped directory whose name matches a source-library prefix.
+    // Under the skip policy this folder is not importable, so no prefix collision.
+    fs::create_dir_all(entry_root.join("target")).expect("should create target folder");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
+
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+    let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+    let canonical_entry_root =
+        fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::default();
+    source_libraries.register_filesystem_root(
+        "target",
+        fs::canonicalize(entry_root.join("target")).unwrap(),
+    );
+
+    let mut string_table = StringTable::new();
+    super::source_tree_index::SourceTreeIndex::discover(
+        canonical_entry_root,
+        &canonical_root,
+        &config,
+        &source_libraries,
+        &mut string_table,
+    )
+    .expect("skipped folder matching a library prefix must not trigger prefix collision");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_tree_index_detects_collision_in_non_skipped_directory() {
+    let root = temp_dir("source_tree_index_non_skipped_collision");
+    let entry_root = root.join("src");
+    fs::create_dir_all(entry_root.join("helper")).expect("should create helper folder");
+    fs::write(entry_root.join("helper.bst"), "x ~= 1\n").expect("should write colliding file");
+    fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
+
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+    let canonical_root = fs::canonicalize(&root).expect("project root should canonicalize");
+    let canonical_entry_root =
+        fs::canonicalize(&entry_root).expect("entry root should canonicalize");
+    let mut string_table = StringTable::new();
+
+    let messages = super::source_tree_index::SourceTreeIndex::discover(
+        canonical_entry_root,
+        &canonical_root,
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect_err("non-skipped bst/folder collision should be rejected");
+
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::BstFileFolderCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn bounded_module_roots_for_single_file_indexes_nested_roots_with_ignored_directories() {
+    let root = temp_dir("bounded_single_file_nested_ignored");
+    let module_dir = root.join("module");
+    let nested = module_dir.join("nested");
+    fs::create_dir_all(&nested).expect("should create nested module");
+
+    // Ignored directory with collision-shaped contents.
+    let target_dir = module_dir.join("target");
+    fs::create_dir_all(target_dir.join("helper")).expect("should create target/helper");
+    fs::write(target_dir.join("helper.bst"), "x ~= 1\n").expect("should write colliding file");
+
+    fs::write(module_dir.join("#home.bst"), "").expect("should write entry root");
+    fs::write(nested.join("#nested.bst"), "").expect("should write nested root");
+
+    let config = Config::new(root.clone());
+    let entry_file = fs::canonicalize(module_dir.join("#home.bst")).unwrap();
+    let mut string_table = StringTable::new();
+
+    let module_roots =
+        super::source_tree_index::SourceTreeIndex::bounded_module_roots_for_single_file(
+            &entry_file,
+            &config,
+            &crate::libraries::SourceLibraryRegistry::default(),
+            &mut string_table,
+        )
+        .expect("single-file hash root should index its tree without collision errors");
+
+    let root_directories = module_roots
+        .root_directories()
+        .map(|path| path.file_name().and_then(OsStr::to_str).unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(root_directories.len(), 2);
+    assert!(root_directories.contains(&"module"));
+    assert!(root_directories.contains(&"nested"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn bounded_module_roots_for_single_file_rejects_import_name_collisions() {
+    let root = temp_dir("bounded_single_file_collision");
+    let module_dir = root.join("module");
+    fs::create_dir_all(module_dir.join("helper")).expect("should create helper directory");
+    fs::write(module_dir.join("helper.bst"), "helper #= 1\n")
+        .expect("should write colliding source file");
+    fs::write(module_dir.join("#home.bst"), "").expect("should write entry root");
+
+    let config = Config::new(root.clone());
+    let entry_file = fs::canonicalize(module_dir.join("#home.bst")).unwrap();
+    let mut string_table = StringTable::new();
+
+    let messages = super::source_tree_index::SourceTreeIndex::bounded_module_roots_for_single_file(
+        &entry_file,
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect_err("single-file hash roots should reject real import-name collisions");
+
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::BstFileFolderCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn source_tree_index_rejects_duplicate_hash_root_files() {
     let root = temp_dir("source_tree_index_duplicate_roots");
     let entry_root = root.join("src");
@@ -335,6 +519,7 @@ fn source_tree_index_rejects_duplicate_hash_root_files() {
         canonical_entry_root,
         &canonical_root,
         &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
         &mut string_table,
     )
     .expect_err("a module directory may contain only one hash root");

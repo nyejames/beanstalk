@@ -3,9 +3,9 @@
 //! Dispatches to single-file or directory-project flows, then delegates to focused submodules:
 //! - `frontend_orchestration`   — per-module pipeline (tokenization through borrow checking)
 //! - `project_roots`            — config root interpretation and path-resolver setup
-//! - `source_library_discovery` — project-local source-library scanning and prefix checks
+//! - `source_library_discovery` — project-local source-library scanning and prefix-merge checks
 //! - `root_validation`          — source-library generic hash-root preflight
-//! - `source_tree_index`        — one directory-project source-tree traversal
+//! - `source_tree_index`        — one directory-project source-tree traversal with collision checks
 //! - `module_inventory`         — project-level module assembly
 //! - `reachable_file_discovery` — BFS traversal over import graphs
 //! - `import_scanning`          — per-file import path extraction

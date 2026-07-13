@@ -136,6 +136,7 @@ pub(crate) fn compile_single_file_frontend(
         match SourceTreeIndex::bounded_module_roots_for_single_file(
             &entry_path,
             config,
+            &libraries.source_libraries,
             string_table,
         ) {
             Ok(module_roots) => module_roots,

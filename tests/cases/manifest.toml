@@ -8112,3 +8112,7 @@ tags = ["integration", "beandown", "html", "imports", "module-roots"]
 id = "hash_root_config_namesake_is_module_root"
 path = "hash_root_config_namesake_is_module_root"
 tags = ["integration", "config", "html", "module-roots"]
+[[case]]
+id = "skipped_directory_collision_ignored"
+path = "skipped_directory_collision_ignored"
+tags = ["integration", "config", "module-roots", "collisions"]

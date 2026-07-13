@@ -18,9 +18,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::project_structure_diagnostics::{
-    config_diagnostic_messages, path_id, project_structure_messages,
-};
+use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 
 /// Prepare canonical source-library roots and their direct-child public-surface states.
 ///
@@ -137,65 +135,6 @@ pub(super) fn merge_source_libraries(
     }
 
     Ok(merged_libraries)
-}
-
-/// Reject entry-root folders whose names collide with source-library import prefixes.
-///
-/// WHY: `foo/...` under the entry root and `@foo/...` source-library imports occupy distinct
-/// syntactic surfaces, but allowing both roots to share a prefix makes diagnostics and generated
-/// logical paths ambiguous.
-pub(super) fn validate_entry_root_library_prefix_collisions(
-    entry_root: &Path,
-    source_libraries: &SourceLibraryRegistry,
-    string_table: &mut StringTable,
-) -> Result<(), CompilerMessages> {
-    let entry_dir_entries = fs::read_dir(entry_root).map_err(|error| {
-        CompilerMessages::from_error_ref(
-            CompilerError::file_error(
-                entry_root,
-                format!(
-                    "Failed to read entry root while checking for library prefix collisions: {error}"
-                ),
-                string_table,
-            ),
-            string_table,
-        )
-    })?;
-
-    for entry in entry_dir_entries {
-        let entry = entry.map_err(|error| {
-            CompilerMessages::from_error_ref(
-                CompilerError::file_error(
-                    entry_root,
-                    format!(
-                        "Failed to read entry root directory entry while checking for library prefix collisions: {error}"
-                    ),
-                    string_table,
-                ),
-                string_table,
-            )
-        })?;
-
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        if let Some(folder_name) = path.file_name().and_then(|name| name.to_str())
-            && source_libraries.has_prefix(folder_name)
-        {
-            return Err(project_structure_messages(
-                &path,
-                InvalidConfigReason::EntryRootLibraryPrefixCollision {
-                    prefix: string_table.intern(folder_name),
-                    entry_folder: path_id(&path, string_table),
-                },
-                string_table,
-            ));
-        }
-    }
-
-    Ok(())
 }
 
 fn scan_project_library_folder(
