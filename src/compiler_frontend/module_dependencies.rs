@@ -336,7 +336,7 @@ pub fn resolve_module_dependencies(
     } = parsed;
 
     // Partition: StartFunction headers are appended last, not sorted.
-    // WHY: start is build-system-only and has no dependents. Facade declarations remain graph
+    // WHY: start is build-system-only and has no dependents. Module-root declarations remain graph
     // participants because other modules can depend on their public constants and type surfaces;
     // header import visibility, not dependency sorting, owns whether those declarations are visible.
     let mut start_headers: Vec<Header> = Vec::new();

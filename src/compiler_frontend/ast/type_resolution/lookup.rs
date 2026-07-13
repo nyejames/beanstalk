@@ -181,7 +181,8 @@ fn visible_static_trait_name(
 ///
 /// WHAT: looks up the namespace record, then resolves the member name to a source declaration,
 ///       external type, or namespace type/value misuse diagnostic. Supports multi-segment
-///       paths for external package surfaces while keeping source/facade records shallow.
+///       paths for external package surfaces while keeping source and module public-surface
+///       records shallow.
 /// WHY: namespace-qualified type names follow a separate visibility path from bare names and
 ///      need explicit handling for the "value used as type" error shape.
 pub(super) fn resolve_namespaced_type_from_context(
@@ -216,8 +217,8 @@ pub(super) fn resolve_namespaced_type_from_context(
         )));
     };
 
-    // Source and facade namespace records remain shallow. Any attempt to traverse deeper
-    // than one member in a source/facade record must keep reporting the existing nested
+    // Source and module public-surface namespace records remain shallow. Any attempt to traverse
+    // deeper than one member in such a record must keep reporting the existing nested
     // traversal diagnostic, which integration fixtures already assert.
     if path.len() > 2 && matches!(record.record_source, NamespaceRecordSource::SourceFile(_)) {
         return Err(Box::new(CompilerDiagnostic::nested_traversal(

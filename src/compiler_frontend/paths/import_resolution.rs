@@ -1,6 +1,6 @@
 //! Import-resolution diagnostics and validation helpers.
 //!
-//! `ProjectPathResolver` owns the public import-resolution facade, while this module owns the
+//! `ProjectPathResolver` owns the public import-resolution entry point, while this module owns the
 //! import-specific boundary error and validation rules that are independent of resolver state.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;

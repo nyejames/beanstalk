@@ -2,9 +2,9 @@
 //!
 //! WHAT: parses dotted namespace access such as `namespace.member`, `namespace.child.member`,
 //! or `namespace.external.function()` in expression position.
-//! WHY: external package surfaces are recursive, while source/facade namespace records remain
-//! shallow; this module walks the dotted path and reuses existing leaf parsers for the final
-//! source or external member.
+//! WHY: external package surfaces are recursive, while source and module public-surface namespace
+//! records remain shallow; this module walks the dotted path and reuses existing leaf parsers for
+//! the final source or external member.
 //! BOUNDARY: this module only handles value-position namespace access. Type-position traversal
 //! is owned by the type-resolution stage and is explicitly out of scope here.
 
@@ -52,8 +52,8 @@ pub(super) struct NamespaceAccessInput<'a, 'env> {
 /// WHY: namespace records are the import stage's field-access-only view of imports; AST
 /// must resolve the whole dotted path into ordinary declaration references or stable
 /// external IDs before producing HIR, so no runtime namespace value ever exists.
-/// BOUNDARY: source and facade namespace records remain shallow, so any second dot in a
-/// source/facade path reports the existing `nested_traversal` diagnostic.
+/// BOUNDARY: source and module public-surface namespace records remain shallow, so any second dot
+/// in a source or module public-surface path reports the existing `nested_traversal` diagnostic.
 pub(super) fn parse_namespace_access(
     input: NamespaceAccessInput<'_, '_>,
 ) -> Result<(), ExpressionParseError> {
@@ -90,8 +90,8 @@ pub(super) fn parse_namespace_access(
         let lookup = lookup_namespace_member(current_record, member_name);
         let has_following_dot = token_stream.peek_next_token() == Some(&TokenKind::Dot);
 
-        // Source and facade records are shallow. Any attempt to descend further than one
-        // member must keep using the existing `nested_traversal` diagnostic, which the
+        // Source and module public-surface records are shallow. Any attempt to descend further
+        // than one member must keep using the existing `nested_traversal` diagnostic, which the
         // existing integration fixture asserts.
         if has_following_dot
             && matches!(

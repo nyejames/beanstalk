@@ -1377,7 +1377,7 @@ fn html_js_provider_js_import_from_source_library_resolves() {
         dir.join("lib/ui/#mod.bst"),
         "import @./helper.js { draw }\n\nexport:\n    run || -> Int:\n        return draw()\n    ;\n;\n",
     )
-    .expect("should write facade");
+    .expect("should write module root");
     fs::write(
         dir.join("lib/ui/helper.js"),
         "/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",

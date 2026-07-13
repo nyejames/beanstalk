@@ -189,13 +189,14 @@ pub struct Header {
     /// The role of the source file that produced this header.
     ///
     /// WHAT: distinguishes active roots, imported roots, and normal source files.
-    /// WHY: visibility and export decisions now depend on file role and declaration kind,
-    /// not just the old `exported` boolean.
+    /// WHY: visibility and export decisions depend on file role and declaration kind,
+    /// not file role alone.
     pub file_role: FileRole,
-    /// Whether this header is part of the module-root public export API.
+    /// Whether this header is part of the module public surface.
     ///
-    /// WHAT: `Public` only for explicit `export` items in module-root files; `Private` everywhere else.
-    /// WHY: import preparation builds module APIs from explicit public export metadata, not from
+    /// WHAT: `Public` only for items inside a module root's `export:` block; `Private` everywhere
+    /// else.
+    /// WHY: import preparation builds module APIs from explicit public-surface metadata, not from
     /// file role alone.
     pub export_mode: HeaderExportMode,
     // Module-level dependency edges required before AST construction can lower this header.
@@ -402,7 +403,7 @@ pub struct FileImport {
     pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
     pub from_grouped: bool,
-    /// Whether this import is part of the module-root public export API.
+    /// Whether this import is part of the module public surface.
     ///
     /// WHAT: `Public` for grouped imports inside an `export:` block;
     /// `Private` for ordinary imports.

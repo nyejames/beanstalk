@@ -1901,7 +1901,8 @@ fn constant_header_with_declared_type_captures_type_in_declaration() {
 /// Verifies that `parse_headers` correctly aggregates per-file outputs from multiple source files.
 ///
 /// WHAT: entry file contributes runtime templates, const templates, and a start function;
-///       a non-entry library file contributes declarations; a facade file contributes exports.
+///       a non-entry library file contributes declarations; a module-root file contributes its
+///       public surface.
 /// WHY: this is the primary observable boundary introduced by the per-file refactor.
 pub(crate) fn parse_multi_file_headers(sources: &[(String, String)], entry_path: &str) -> Headers {
     let mut string_table = StringTable::new();
@@ -2189,7 +2190,7 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     // that local ID past the first file's generated string in the module table.
     let sources = [
         (
-            "Foo #= \"a\"\n#[facade_fragment]\n".to_owned(),
+            "Foo #= \"a\"\n#[public_surface_fragment]\n".to_owned(),
             "src/helper_a.bst".to_owned(),
         ),
         (
@@ -2409,7 +2410,7 @@ fn legacy_inline_export_declaration_is_rejected() {
 }
 
 #[test]
-fn export_import_path_parsed_as_public_import() {
+fn export_import_path_parsed_as_public_surface_import() {
     let mut string_table = StringTable::new();
     let output = prepare_single_file(
         "export:\n    import @./button { Button }\n;\n",
@@ -2529,7 +2530,7 @@ fn export_before_authored_declaration_marks_header_public() {
 }
 
 #[test]
-fn unmarked_authored_declarations_in_mod_facade_remain_private() {
+fn unmarked_authored_declarations_in_module_root_remain_private() {
     let source = "Button = | label String |\nrender |button Button| -> String:\n    return button.label\n;\n";
     let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
         .expect("headers should parse");
@@ -2544,7 +2545,7 @@ fn unmarked_authored_declarations_in_mod_facade_remain_private() {
         non_start_headers
             .iter()
             .all(|header| header.export_mode == HeaderExportMode::Private),
-        "unmarked declarations in #mod.bst should remain private"
+        "unmarked declarations in a module root should remain private"
     );
 }
 
@@ -2825,7 +2826,7 @@ fn header_parsing_rejects_grouped_import_alias_to_core_cast_trait_name() {
 }
 
 #[test]
-fn header_parsing_rejects_facade_re_export_with_core_cast_trait_name() {
+fn header_parsing_rejects_module_public_surface_re_export_with_core_cast_trait_name() {
     let sources = vec![
         (
             "USER_TRAIT must:\n    to_string |This| -> String\n;\n".to_owned(),
@@ -2842,7 +2843,7 @@ fn header_parsing_rejects_facade_re_export_with_core_cast_trait_name() {
         parse_multi_file_headers_with_result(&sources, "src/#page.bst");
     assert!(
         result.is_err(),
-        "facade re-export under a core cast trait name must be rejected"
+        "module public-surface re-export under a core cast trait name must be rejected"
     );
 
     let errors = result.err().expect("expected parse errors");

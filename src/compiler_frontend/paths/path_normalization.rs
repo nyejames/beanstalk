@@ -1,8 +1,8 @@
 //! Low-level Beanstalk path normalization helpers.
 //!
 //! These helpers translate already-tokenized `InternedPath` components into filesystem candidate
-//! paths and public path values. They do not own import visibility, facade policy, or diagnostic
-//! construction.
+//! paths and public path values. They do not own import visibility, public-surface policy, or
+//! diagnostic construction.
 
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathBase;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;

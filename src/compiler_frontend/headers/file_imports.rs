@@ -2,7 +2,7 @@
 //!
 //! WHAT: parses top-level import clauses into normalized file-local import records.
 //! WHY: import shells and their local names must be known before declaration headers are built,
-//! but full visibility and facade validation remain later header-stage responsibilities.
+//! but full visibility and public-surface validation remain later header-stage responsibilities.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
@@ -123,9 +123,10 @@ fn parse_and_record_import_clause(
 
 /// Record one parsed import item, normalizing duplicate (path, alias) pairs into a single record.
 ///
-/// WHAT: same path + same alias + any public occurrence results in one public import record.
-/// WHY: a facade may repeat an import as a re-export, or import and re-export the same symbol
-/// under the same local name; normalization avoids duplicate records while preserving visibility.
+/// WHAT: same path + same alias + any public occurrence results in one module public-surface
+/// import record.
+/// WHY: a module root may repeat an import as a re-export, or import and re-export the same symbol
+/// under the same local name. Normalization avoids duplicate records while preserving visibility.
 fn record_import_item(state: &mut HeaderFileParseState, record: ImportItemRecord) {
     let local_name = record.alias.or_else(|| record.header_path.name());
     if let Some(name) = local_name {

@@ -87,7 +87,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    /// Whether two source files share the same non-public export import boundary.
+    /// Whether two source files share the same non-public import boundary.
     ///
     /// WHAT: source-library members, same module-root members, and files in the implicit entry
     /// module can see each other's ordinary source declarations directly.
@@ -259,7 +259,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
 
                 if import.from_grouped {
-                    // Grouped imports keep the existing public export → target resolution flow.
+                    // Grouped imports keep the existing public-surface-to-target resolution flow.
                     self.resolve_and_register_grouped_import(
                         &mut file_visibility,
                         &mut registry,
@@ -363,11 +363,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let mut implicit_constants = FxHashMap::default();
         self.remove_beandown_generated_self_constants(file_visibility, source_file);
 
-        // Layer 1: exported constants from the HTML source-library public export.
+        // Layer 1: exported constants from the HTML source-library public surface.
         self.collect_html_public_export_constants(&mut implicit_constants);
 
-        // Layer 2: exported constants from the exact same-directory public export. Later inserts
-        // intentionally replace HTML names so local public export constants win on collisions.
+        // Layer 2: exported constants from the exact same-directory module public surface. Later
+        // inserts intentionally replace HTML names so local public-surface constants win on
+        // collisions.
         self.collect_same_directory_public_export_constants(source_file, &mut implicit_constants);
 
         for (name, path) in implicit_constants {
@@ -611,7 +612,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Ok(resolved);
         }
 
-        // Try public export resolution first.
+        // Try public-surface resolution first.
         let public_export_input = PublicExportResolutionInput {
             importer_file: source_file,
             header_path: &import.header_path,
@@ -732,13 +733,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    /// Resolve grouped virtual-package imports before source public export enforcement.
+    /// Resolve grouped virtual-package imports before source public-surface enforcement.
     ///
     /// WHAT: `import @web/canvas { get_canvas }` is parsed as a grouped import whose
     /// individual entry path is `web/canvas/get_canvas`. That path may also look like a
-    /// module-root public export import if the project has a `web/canvas/#*.bst` root-file shape. Checking
-    /// external metadata here keeps virtual packages out of source public export privacy rules while
-    /// leaving all source imports on the normal public export-first path.
+    /// a path into a module public surface if the project has a `web/canvas/#*.bst` root-file shape.
+    /// Checking external metadata here keeps virtual packages out of source public-surface privacy
+    /// rules while leaving all source imports on normal public-surface-first resolution.
     fn resolve_and_register_external_package_grouped_import(
         &mut self,
         file_visibility: &mut FileVisibility,
@@ -796,9 +797,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Ok(resolved);
         }
 
-        // Try namespace resolution first. Public export namespaces must be checked before concrete
-        // file/package resolution so `import @module` exposes the module root's public surface, not a private
-        // implementation path or a missing direct symbol.
+        // Try namespace resolution first. Public-surface namespaces must be checked before
+        // concrete file/package resolution so `import @module` exposes the module root's public
+        // surface, not a private implementation path or a missing direct symbol.
         let namespace_target = self
             .resolve_public_export_namespace_target(import, source_file)
             .or_else(|| {

@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 10 implementation cleanup audit. Phase 9 documentation remains deferred while the user-owned docs migration is active.
-LAST_ACCEPTED_COMMIT: `be16163a6` (`feat: filter API-only HTML modules`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `bc143430c`; Phase 7 is complete. Canvas cleanup and whitespace-only named-slot routing are committed separately at `bc143430c`. Concurrent docs migration remains user-owned and outside implementation worker scope.
+CURRENT_SLICE: Phase 10 final performance validation. Phase 9 documentation remains deferred while the user-owned docs migration is active.
+LAST_ACCEPTED_COMMIT: `1233c564f` (`refactor: unify module root public surfaces`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `1233c564f`; Phase 10 implementation cleanup is ready for checkpoint. Concurrent docs migration and untracked `tmp/` content remain user-owned and outside implementation worker scope.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: the ongoing language migration is user-owned. Compiler-design source-discovery and import pages still contain facade-era wording and are deferred to Phase 9.
-- code: Phase 8 removed the optional export-file side map and facade-specific traversal APIs. Source-library roots, cross-module public surfaces and same-directory Beandown roots now share generic module-root metadata and the existing provider-capable/provider-free traversal.
+- code: Phase 10's cleanup audit found no obsolete discovery or compatibility implementation. It simplified the rejected non-block `export` path and removed stale module-facade terminology. A proposed entry-file-only discovery shortcut failed 22 integration expectations and was fully reverted, preserving the prepared tree required for sibling module public surfaces.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -186,6 +186,7 @@ VALIDATION_STATE:
 - Phase 7B HTML artifact policy: Codex CLI filters page compilation, runtime assets and tracked assets through `ModuleRootActivity`, makes directory routes depend only on module directories and selects the homepage by the active root directory rather than a `#page.bst` filename. Directory builds with only API roots retain the structured missing-homepage diagnostic while single-file API-only builds may emit an empty project. Focused HTML tests passed (253), build orchestration tests passed (17), compiler-message tests passed (53) and `just bench-frontend-check` passed (26 cases). The integration runner reached only five concurrent canvas failures. All-target tests reached only the matching canvas unit failure.
 - Phase 7 final gate and canvas cleanup: the parent updated obsolete canvas fixtures to named `id` and `style` inserts, removed positional canvas dimensions and made whitespace-only loose content around named inserts disappear without weakening meaningful loose-content diagnostics. `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -2 ms average. Cleanup commit: `bc143430c`.
 - Phase 8 generic traversal: Codex CLI removed the optional module-root export-file map and source-library facade map, made each discovered root file the authoritative public surface and renamed resolver/validation paths around module roots. Shared reachable-file traversal still owns provider-capable and provider-free imports, source-cache reuse and cross-module root queueing. Arbitrary-name source-library and Beandown root coverage was added. Focused Stage 0, path and header suites passed. Parent `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at 0 ms average.
+- Phase 10 implementation cleanup: Codex CLI audited obsolete discovery, filename-specific helpers, inline export compatibility and facade APIs. Parent rejected and reverted an entry-file-only discovery shortcut after the full gate exposed 22 missing sibling-module imports. The accepted cleanup only simplifies the already-rejected non-block `export` path and removes stale module-facade terminology. Corrected `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -193,11 +194,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate Phase 10 obsolete-path and duplicate-discovery cleanup through codex-cli while Phase 9 remains deferred for the user-owned docs migration.
+- Delegate Phase 10's remaining thread-count benchmark protocol and final implementation audit through codex-cli while Phase 9 remains deferred for the user-owned docs migration.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: launch the Phase 10 implementation cleanup audit through codex-cli without editing documentation.
+NEXT_RESUME_ACTION: checkpoint the accepted cleanup, then launch Phase 10 final performance validation through codex-cli without editing documentation.
 
 ---
 
@@ -1048,19 +1049,19 @@ This phase proves the refactor achieved its performance and simplification goals
 
 ### Checklist
 
-- [ ] Delete obsolete files/functions after replacement:
-  - [ ] old `discover_root_entry_files` implementation;
-  - [ ] old filename-specific module root/facade helpers;
-  - [ ] old inline export parser branches;
-  - [ ] compatibility wrappers or forwarding shims introduced during migration.
-- [ ] Run grep audit:
-  - [ ] no alternate project config filename, compatibility branch or migration diagnostic remains;
-  - [ ] `MOD_FILE_NAME` removed or no longer semantic;
-  - [ ] `PAGE_FILE_NAME` removed or no longer semantic;
-  - [ ] `export import` only appears in migration notes/tests for rejection;
-  - [ ] no second expensive discovery pass remains.
-- [ ] Run full validation:
-  - [ ] `just validate`
+- [x] Delete obsolete files/functions after replacement:
+  - [x] old `discover_root_entry_files` implementation;
+  - [x] old filename-specific module root/facade helpers;
+  - [x] old inline export parser branches;
+  - [x] compatibility wrappers or forwarding shims introduced during migration.
+- [x] Run grep audit:
+  - [x] no alternate project config filename, compatibility branch or migration diagnostic remains;
+  - [x] `MOD_FILE_NAME` removed or no longer semantic;
+  - [x] `PAGE_FILE_NAME` removed or no longer semantic;
+  - [x] `export import` only appears in migration notes/tests for rejection;
+  - [x] no second expensive discovery pass remains.
+- [x] Run full validation:
+  - [x] `just validate`
 - [ ] Run final benchmark protocol:
   - [ ] `just bench-frontend-check`
   - [ ] `RAYON_NUM_THREADS=1 just bench-frontend-check`

@@ -93,13 +93,7 @@ fn parse_headers_in_file_inner(
             }
 
             HeaderFileItem::Export => {
-                handle_export_item(
-                    token_stream,
-                    state,
-                    context,
-                    current_token,
-                    current_location,
-                )?;
+                reject_non_block_export(token_stream, context, current_location)?;
             }
 
             HeaderFileItem::ExportBlock => {
@@ -141,22 +135,20 @@ fn parse_headers_in_file_inner(
     Ok(())
 }
 
-fn handle_export_item(
+fn reject_non_block_export(
     token_stream: &mut FileTokens,
-    _state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
-    _export_token: Token,
     export_location: SourceLocation,
 ) -> FileParserResult<()> {
-    // `export` is a module-root-only keyword; ordinary files cannot use it.
+    // `export` is valid only as the module-root `export:` block.
     if !context.file_role.is_export_capable() || context.is_config_file {
         return Err(Box::new(CompilerDiagnostic::export_outside_module_root(
             export_location,
         )));
     }
 
-    // The old prefix form is intentionally gone. Report the block delimiter that all remaining
-    // `export` syntax must provide instead of dispatching to a compatibility parser.
+    // Without the block delimiter, the token is not an export target. Keep this diagnostic in
+    // header parsing instead of interpreting the following tokens through another syntax path.
     Err(Box::new(CompilerDiagnostic::expected_token(
         TokenKind::Colon,
         Some(token_stream.current_token_kind().to_owned()),

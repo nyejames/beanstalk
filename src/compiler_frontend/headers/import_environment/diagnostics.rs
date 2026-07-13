@@ -20,7 +20,8 @@ pub(super) fn import_name_collision(
     CompilerDiagnostic::import_name_collision(local_name, previous_location, location)
 }
 
-/// Diagnostic when a public export import resolves to a symbol that the public export does not export.
+/// Diagnostic when an import through a public surface resolves to a symbol that the surface does
+/// not expose.
 pub(super) fn not_exported_by_public_surface(
     import_path: &InternedPath,
     public_surface_name: StringId,

@@ -80,8 +80,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// Whether the importer and the target of an import are in the same module or source library.
     ///
     /// WHAT: same-module and same-library imports see all authored declarations by default;
-    /// cross-module/cross-library imports must go through public export surfaces.
-    /// WHY: this replaces the old `exported` boolean as the gate for same-module visibility.
+    /// cross-module/cross-library imports must go through public surfaces.
+    /// WHY: boundary membership, rather than declaration flags, is the gate for same-module
+    /// visibility.
     pub(super) fn is_internal_import(
         &self,
         importer_file: &InternedPath,
@@ -102,7 +103,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ///
     /// WHAT: methods travel with the receiver type, not with an independent method export.
     /// Internal imports and direct source exports have already proven the type is visible. Public
-    /// export imports must expose the receiver type through the public export surface.
+    /// imports through public surfaces must expose the receiver type through that public surface.
     pub(super) fn receiver_type_visible_for_method_surface(
         &self,
         nominal_type_path: &InternedPath,

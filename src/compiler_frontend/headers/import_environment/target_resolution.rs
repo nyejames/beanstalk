@@ -34,8 +34,8 @@ pub(crate) enum ResolvedImportTarget {
 ///
 /// WHY: receiver methods travel with imported receiver types, but the set of methods that may
 /// travel depends on how the type was imported. Internal imports keep the module-local behavior,
-/// direct source imports use source-file exports, and public export imports use the explicit public export API
-/// surface that resolved the type.
+/// direct source imports use source-file exports, and imports through public surfaces use the
+/// explicit public surface that resolved the type.
 #[derive(Clone, Debug)]
 pub(crate) enum SourceImportAccess {
     Internal,
