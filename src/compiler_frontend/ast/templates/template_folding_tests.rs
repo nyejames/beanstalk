@@ -17,7 +17,9 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
-use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
+use crate::compiler_frontend::ast::templates::template::{
+    SlotKey, Style, TemplateSegmentOrigin, TemplateType,
+};
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateFoldBinding;
 use crate::compiler_frontend::ast::templates::template_folding::{
     FoldResolvedExpression, TemplateFoldContext, resolve_fold_bindings_in_expression,
@@ -26,7 +28,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateRef, TemplateTirPhase, TemplateTirReference, TirFoldCache,
+    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference, TirFoldCache,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -251,7 +253,7 @@ fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
         )
     };
 
-    let payload_template = stale_content_template_with_tir_reference(TemplateTirReference {
+    let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
         root: TemplateRef::new(active_store_id, template_id),
         store_owner: active_store.borrow().owner(),
         is_composed: true,
@@ -320,7 +322,7 @@ fn option_capture_scalar_payload_does_not_require_tir_registry() {
 }
 
 #[test]
-fn option_capture_classifies_foreign_store_payload_from_tir_not_stale_content() {
+fn option_capture_classifies_foreign_store_payload_through_effective_tir() {
     let mut string_table = StringTable::new();
     let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
     let active_store = Rc::new(RefCell::new(TemplateIrStore::new()));
@@ -346,7 +348,7 @@ fn option_capture_classifies_foreign_store_payload_from_tir_not_stale_content() 
         )
     };
 
-    let payload_template = stale_content_template_with_tir_reference(TemplateTirReference {
+    let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
         root: TemplateRef::new(payload_store_id, template_id),
         store_owner: payload_store.borrow().owner(),
         is_composed: true,
@@ -362,15 +364,9 @@ fn option_capture_classifies_foreign_store_payload_from_tir_not_stale_content() 
     );
 }
 
-fn stale_content_template_with_tir_reference(tir_reference: TemplateTirReference) -> Template {
+fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReference) -> Template {
     let mut payload_template = Template::empty();
     payload_template.kind = TemplateType::String;
-    payload_template.content.add(Expression::runtime(
-        ExpressionRpn { items: Vec::new() },
-        DataType::StringSlice,
-        test_location(1),
-        ValueMode::ImmutableOwned,
-    ));
     payload_template.tir_reference = Some(tir_reference);
     payload_template
 }
@@ -471,18 +467,40 @@ fn coerced_expression_with_no_bindings_returns_borrowed() {
 fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
     let mut string_table = StringTable::new();
     let text_id = string_table.intern("nested");
+
+    // Build a minimal store-qualified text template so the borrow path receives
+    // the same authoritative identity as any other parsed template.
+    let mut tir_store = TemplateIrStore::new();
+    let template_id = {
+        let mut builder = TemplateIrBuilder::new(&mut tir_store);
+        let root =
+            builder.push_text_node(text_id, 6, TemplateSegmentOrigin::Body, test_location(1));
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            test_location(1),
+        )
+    };
+
     let mut nested_template = Template::empty();
-    nested_template.content.add(Expression::string_slice(
-        text_id,
-        test_location(1),
-        ValueMode::ImmutableOwned,
-    ));
+    nested_template.kind = TemplateType::String;
+    nested_template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(tir_store.store_id(), template_id),
+        store_owner: tir_store.owner(),
+        is_composed: false,
+        phase: TemplateTirPhase::Parsed,
+        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+    });
 
     let coerced_template = Expression::coerced(
         Expression::template(nested_template, ValueMode::ImmutableOwned),
         builtin_type_ids::STRING,
     );
 
+    // The no-substitution path does not semantically read the template, so it
+    // must not depend on registry classification.
     let resolver = test_project_path_resolver();
     let path_format = PathStringFormatConfig::default();
     let source_scope = InternedPath::new();

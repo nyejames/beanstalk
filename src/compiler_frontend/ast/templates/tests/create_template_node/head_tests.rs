@@ -2162,15 +2162,8 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
         )
     };
 
-    let runtime_content = Expression::reference(
-        InternedPath::from_single_str("runtime_payload", &mut string_table),
-        DataType::StringSlice,
-        token_stream.current_location(),
-        ValueMode::ImmutableReference,
-    );
     let mut payload_template = Template::empty();
     payload_template.kind = TemplateType::String;
-    payload_template.content.add(runtime_content);
     payload_template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(foreign_store_id, payload_template_id),
         store_owner: foreign_store.borrow().owner(),
@@ -2202,7 +2195,7 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
         vec![],
         &mut string_table,
     )
-    .expect("registry-backed source const template should be accepted despite stale content");
+    .expect("registry-backed source const template should be accepted through effective TIR");
 
     assert!(
         template.tir_reference.is_some(),

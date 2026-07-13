@@ -21,14 +21,14 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B family 1G - rebuild the remaining head-validation and template-folding content fixtures through direct TIR
-LAST_ACCEPTED_COMMIT: `3ee046755` (`test: remove detached content absence checks`)
+CURRENT_SLICE: Phase 1B family 1H1 - remove the obsolete content-walking control-flow body-ref test helper and no-op callers
+LAST_ACCEPTED_COMMIT: `893c95ee1` (`test: remove stale registry template fixtures`)
 BRANCH: `main`
-WORKTREE: family 1F accepted and ready to commit on `main` at `3ee046755` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
+WORKTREE: family 1G accepted and ready to commit on `main` at `893c95ee1` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
-- Detached content reconstruction is test-only. The remaining fixture owners are one head-validation payload, two template-folding payloads, the nested-template control-flow helper, the create-template fold helper and the compatibility builder in `tir/finalize_sync.rs`.
+- Detached content reconstruction is test-only. The remaining callers are the content-walking control-flow test helper, the create-template fold helper's finalizer fallback and the compatibility builder in `tir/finalize_sync.rs`.
 - The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
 - HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
 ACCEPTANCE_CRITERIA:
@@ -68,15 +68,17 @@ VALIDATION_STATE:
 - Phase 1B family 1E passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
 - Phase 1B family 1F focused validation passed: one const-eval registry test, five struct-field-default tests, two field-member registry tests, one expression-dispatch registry test, and `cargo test --quiet --no-run --lib` without warnings.
 - Phase 1B family 1F passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 0 slower.
+- Phase 1B family 1G focused validation passed: one const-required option-capture head test, three option-capture folding tests, one coerced-template borrow test, 91 head tests, 11 template-folding tests, and `cargo test --quiet --no-run --lib` without warnings.
+- Phase 1B family 1G passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 5 faster and 0 slower.
 - Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: use an Ollama implementation worker for the remaining head-validation and template-folding fixture family 1G, with Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: use an Ollama implementation worker for obsolete control-flow body-ref helper family 1H1, with Codex CLI only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted family 1F, then inspect and delegate the remaining head-validation and template-folding fixture family 1G to Ollama
+NEXT_RESUME_ACTION: commit accepted family 1G, then inspect and delegate obsolete control-flow body-ref helper family 1H1 to Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -264,6 +266,7 @@ Completed Phase 1B families:
 - Parser tests no longer call `finalized_template_tir_id` or assert detached-content absence. Bridge-only template-ID reuse fixtures were deleted while final phase, output and root-shape owners remain.
 - Create-template tests no longer assert that obsolete detached content is empty. Their final TIR head, body and control-flow assertions remain the behavior owners.
 - Const-eval, type-resolution, field-member and expression-dispatch registry fixtures now construct store-qualified slot templates without stale runtime content. Their distinct foreign-store and module-registry classification assertions remain.
+- Const-required head and template-folding fixtures now use direct store-qualified TIR without detached payload content. Same-store active-borrow, foreign-store registry and no-substitution borrowing remain distinct test owners.
 
 #### Slice 1C — Delete the bridge owner
 
