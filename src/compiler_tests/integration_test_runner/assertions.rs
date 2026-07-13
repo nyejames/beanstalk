@@ -50,6 +50,12 @@ pub(crate) fn validate_success_result(
         return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
 
+    if let Some(reason) =
+        validate_artifacts_must_not_exist(&build_result, &expectation.artifacts_must_not_exist)
+    {
+        return fail(build_result, reason, FailureKind::ExpectationViolation);
+    }
+
     if let Some((reason, kind)) =
         validate_golden_outputs(&build_result, &case.golden_dir, expectation.golden_mode)
     {
@@ -223,6 +229,33 @@ fn collect_built_artifact_paths(build_result: &BuildResult) -> Vec<String> {
         .collect::<Vec<_>>();
     actual_paths.sort();
     actual_paths
+}
+
+/// Verifies that no built artifact matches a forbidden path.
+///
+/// WHAT: fails when any `artifacts_must_not_exist` entry appears among built output files.
+/// WHY: lets success fixtures prove API-only modules emit no HTML artifact without coupling
+///      to artifact kinds or content assertions.
+fn validate_artifacts_must_not_exist(
+    build_result: &BuildResult,
+    forbidden_paths: &[String],
+) -> Option<String> {
+    if forbidden_paths.is_empty() {
+        return None;
+    }
+
+    let built_paths = collect_built_artifact_paths(build_result);
+
+    for forbidden in forbidden_paths {
+        if built_paths.contains(forbidden) {
+            return Some(format!(
+                "Expected artifact '{}' to not exist, but it was produced. Built paths: {built_paths:?}.",
+                forbidden
+            ));
+        }
+    }
+
+    None
 }
 
 fn validate_artifact_assertions(

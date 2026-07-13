@@ -6,6 +6,9 @@ warnings = "forbid"
 rendered_output_contains = [
     "html_api_only_module_artifact_filtering api-only-import",
 ]
+artifacts_must_not_exist = [
+    "api/index.html",
+]
 
 [[backends.html.artifact_assertions]]
 path = "docs/index.html"

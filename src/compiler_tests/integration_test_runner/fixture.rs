@@ -182,6 +182,7 @@ pub(crate) fn load_canonical_case_specs(
                 golden_mode: backend_expectation.golden_mode,
                 rendered_output_contains: backend_expectation.rendered_output_contains,
                 rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
+                artifacts_must_not_exist: backend_expectation.artifacts_must_not_exist,
             }),
             ExpectationMode::Failure => ExpectedOutcome::Failure(FailureExpectation {
                 warnings: backend_expectation.warnings,

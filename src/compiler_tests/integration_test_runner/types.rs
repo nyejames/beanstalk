@@ -50,6 +50,7 @@ pub(crate) struct SuccessExpectation {
     pub golden_mode: GoldenMode,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
+    pub artifacts_must_not_exist: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -248,4 +249,5 @@ pub(crate) struct ParsedBackendExpectation {
     pub golden_mode: GoldenMode,
     pub rendered_output_contains: Vec<String>,
     pub rendered_output_not_contains: Vec<String>,
+    pub artifacts_must_not_exist: Vec<String>,
 }

@@ -5,16 +5,20 @@
 //! WHY: the test runner is load-bearing infrastructure — catching regressions here prevents
 //!      silent changes in how fixtures are discovered, parsed, or executed.
 
-use super::assertions::{normalize_text_for_comparison, validate_failure_result};
+use super::assertions::{
+    normalize_text_for_comparison, validate_failure_result, validate_success_result,
+};
 use super::execution::panic_case_result;
 use super::expectations::parse_expectation_file;
 use super::fixture::{
     load_canonical_case_specs, load_test_suite_from_root, load_test_suite_from_root_with_filter,
 };
 use super::{
-    BackendId, EXPECT_FILE_NAME, FailureExpectation, FailureKind, GOLDEN_DIR_NAME, INPUT_DIR_NAME,
-    MANIFEST_FILE_NAME, WarningExpectation,
+    BackendId, EXPECT_FILE_NAME, ExpectedOutcome, FailureExpectation, FailureKind, GOLDEN_DIR_NAME,
+    GoldenMode, INPUT_DIR_NAME, MANIFEST_FILE_NAME, SuccessExpectation, TestCaseSpec,
+    WarningExpectation,
 };
+use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
@@ -23,8 +27,9 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
+use crate::projects::settings::Config;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn write_success_fixture(root: &Path, case_name: &str) {
     let case_root = root.join(case_name);
@@ -615,6 +620,115 @@ fn accepts_normalized_golden_mode() {
     fs::remove_dir_all(&root).expect("should clean up");
 }
 
+const VALID_HTML: &str = "<!DOCTYPE html><html><head></head><body></body></html>";
+
+fn build_result_with_output_files(files: Vec<(PathBuf, FileKind)>) -> BuildResult {
+    let output_files = files
+        .into_iter()
+        .map(|(path, kind)| OutputFile::new(path, kind))
+        .collect();
+    BuildResult {
+        project: Project {
+            output_files,
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::html(),
+            warnings: Vec::new(),
+        },
+        config: Config::new(PathBuf::from("main.bst")),
+        warnings: Vec::new(),
+        string_table: StringTable::new(),
+    }
+}
+
+fn absence_expectation(forbidden: Vec<String>) -> SuccessExpectation {
+    SuccessExpectation {
+        warnings: WarningExpectation::Forbid,
+        artifact_assertions: Vec::new(),
+        golden_mode: GoldenMode::Strict,
+        rendered_output_contains: Vec::new(),
+        rendered_output_not_contains: Vec::new(),
+        artifacts_must_not_exist: forbidden,
+    }
+}
+
+fn absence_test_case(expectation: SuccessExpectation) -> TestCaseSpec {
+    TestCaseSpec {
+        display_name: "absence-contract".to_string(),
+        backend_id: BackendId::Html,
+        entry_path: PathBuf::from("."),
+        golden_dir: PathBuf::from("nonexistent-golden"),
+        flags: Vec::new(),
+        expected: ExpectedOutcome::Success(expectation),
+    }
+}
+
+#[test]
+fn absence_contract_passes_when_forbidden_path_not_built() {
+    let expectation = absence_expectation(vec!["api/index.html".to_string()]);
+    let case = absence_test_case(expectation.clone());
+    let build_result = build_result_with_output_files(vec![(
+        PathBuf::from("index.html"),
+        FileKind::Html(VALID_HTML.to_owned()),
+    )]);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(
+        result.passed,
+        "absence contract should pass when the forbidden path is not among built artifacts"
+    );
+}
+
+#[test]
+fn absence_contract_fails_when_forbidden_path_is_built() {
+    let expectation = absence_expectation(vec!["api/index.html".to_string()]);
+    let case = absence_test_case(expectation.clone());
+    let build_result = build_result_with_output_files(vec![
+        (
+            PathBuf::from("index.html"),
+            FileKind::Html(VALID_HTML.to_owned()),
+        ),
+        (
+            PathBuf::from("api/index.html"),
+            FileKind::Html(VALID_HTML.to_owned()),
+        ),
+    ]);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(
+        !result.passed,
+        "absence contract should fail when the forbidden path is built"
+    );
+    let reason = result
+        .failure_reason
+        .expect("failure should carry a reason");
+    assert!(
+        reason.contains("api/index.html"),
+        "failure reason should name the forbidden path: {reason}"
+    );
+}
+
+#[test]
+fn absence_contract_ignores_not_built_files() {
+    let expectation = absence_expectation(vec!["api/index.html".to_string()]);
+    let case = absence_test_case(expectation.clone());
+    let build_result = build_result_with_output_files(vec![
+        (
+            PathBuf::from("index.html"),
+            FileKind::Html(VALID_HTML.to_owned()),
+        ),
+        (PathBuf::from("api/index.html"), FileKind::NotBuilt),
+    ]);
+
+    let result = validate_success_result(&case, build_result, &expectation);
+
+    assert!(
+        result.passed,
+        "NotBuilt files must not count as emitted artifacts"
+    );
+}
+
 #[test]
 fn rejects_unknown_golden_mode() {
     let root = temp_dir("unknown_golden_mode");
@@ -709,4 +823,81 @@ fn panic_execution_result_has_harness_failed_kind() {
     let result = panic_case_result(Box::new("boom".to_string()));
     assert!(!result.passed);
     assert_eq!(result.failure_kind, Some(FailureKind::HarnessFailed));
+}
+
+#[test]
+fn accepts_artifacts_must_not_exist_in_success_mode() {
+    let root = temp_dir("absence_contract_success");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nartifacts_must_not_exist = [\"api\\\\index.html\"]\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None, None)
+        .expect("artifacts_must_not_exist in success mode should be accepted");
+    assert_eq!(cases.len(), 1);
+
+    let ExpectedOutcome::Success(expectation) = &cases[0].expected else {
+        panic!("case should have a success expectation");
+    };
+    assert_eq!(
+        expectation.artifacts_must_not_exist,
+        vec!["api/index.html".to_string()],
+        "non-canonical backslash separator should be normalised to forward slashes"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_artifacts_must_not_exist_in_failure_mode() {
+    let root = temp_dir("absence_contract_failure");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"ignore\"\ndiagnostic_codes = [\"BST-RULE-0001\"]\nartifacts_must_not_exist = [\"api/index.html\"]\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+        panic!("artifacts_must_not_exist in failure mode should be rejected");
+    };
+    assert!(
+        error.contains("artifacts_must_not_exist"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_empty_artifacts_must_not_exist_entry() {
+    let root = temp_dir("absence_contract_empty");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nartifacts_must_not_exist = [\"\"]\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+        panic!("empty artifacts_must_not_exist entry should be rejected");
+    };
+    assert!(
+        error.contains("empty") && error.contains("artifacts_must_not_exist"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
 }

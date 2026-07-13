@@ -52,6 +52,8 @@ struct BackendExpectationToml {
     rendered_output_contains: Vec<String>,
     #[serde(default)]
     rendered_output_not_contains: Vec<String>,
+    #[serde(default)]
+    artifacts_must_not_exist: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -194,6 +196,26 @@ fn parse_matrix_expectation_file(
             &backend_expectation.rendered_output_not_contains,
         )?;
 
+        // artifacts_must_not_exist is a success-only negative contract.
+        // Reject it in failure mode so absence expectations never couple to
+        // diagnostic assertions.
+        if backend_expectation.mode == ExpectationMode::Failure
+            && !backend_expectation.artifacts_must_not_exist.is_empty()
+        {
+            return Err(format!(
+                "Expectation file '{}' {} uses mode = \"failure\" and must not set \
+                 'artifacts_must_not_exist'.",
+                path.display(),
+                context
+            ));
+        }
+
+        let artifacts_must_not_exist = parse_artifacts_must_not_exist(
+            path,
+            &context,
+            &backend_expectation.artifacts_must_not_exist,
+        )?;
+
         backend_expectations.push(ParsedBackendExpectation {
             backend_id,
             flags,
@@ -205,6 +227,7 @@ fn parse_matrix_expectation_file(
             golden_mode,
             rendered_output_contains: backend_expectation.rendered_output_contains,
             rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
+            artifacts_must_not_exist,
         });
     }
 
@@ -531,4 +554,29 @@ pub(crate) fn parse_case_flags(
         flags.push(parsed);
     }
     Ok(flags)
+}
+
+/// Parses, validates and normalises `artifacts_must_not_exist` entries.
+///
+/// WHAT: rejects empty entries and normalises each path to forward slashes in one pass.
+/// WHY: keeps absence-contract paths comparable to built-artifact paths and catches
+///      degenerate expectations early at parse time.
+fn parse_artifacts_must_not_exist(
+    path: &Path,
+    context: &str,
+    raw_paths: &[String],
+) -> Result<Vec<String>, String> {
+    let mut normalized = Vec::with_capacity(raw_paths.len());
+    for raw_path in raw_paths {
+        if raw_path.trim().is_empty() {
+            return Err(format!(
+                "Expectation file '{}' {} contains an empty 'artifacts_must_not_exist' entry.",
+                path.display(),
+                context
+            ));
+        }
+        normalized.push(normalize_relative_path_text(raw_path));
+    }
+
+    Ok(normalized)
 }

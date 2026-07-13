@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 10 artifact integration coverage. The benchmark thread-identity correction is accepted and ready for checkpoint, then Phase 9 documentation reconciliation follows.
-LAST_ACCEPTED_COMMIT: `b0aed305e` (`refactor: preflight source library roots`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `9905a08ac`; ten xtask benchmark files contain the accepted thread-identity patch. The docs migration is committed separately and paused.
+CURRENT_SLICE: Phase 9 documentation reconciliation. The Phase 10 artifact-absence contract and cosmetic source-library integration coverage are accepted and ready for checkpoint.
+LAST_ACCEPTED_COMMIT: `5a3026580` (`fix: isolate benchmark thread identities`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `5a3026580`; the accepted artifact-contract runner and fixture changes are uncommitted. The docs migration is committed separately and paused.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: the completed migration remains outside this implementation slice. Compiler-design source-discovery and import pages still need Phase 9 reconciliation after code slices are accepted.
-- code: source-library root canonicalization and hash-root discovery have one Stage 0 owner. Benchmark history now records exact default/fixed Rayon identity, comparisons never mix identities, fixed runs stay out of tracked summaries and reports label their identity. Remaining code work is the end-to-end negative artifact assertion and any missing source-library root fixture coverage found with it.
+- code: source-library root canonicalization and hash-root discovery have one Stage 0 owner. Integration expectations can now forbid emitted artifact paths, the API-only module fixture forbids `api/index.html` and one configured library fixture proves `#alpha.bst` and `#mod.bst` have identical root semantics. Remaining work is documentation reconciliation and whole-plan final review.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -189,14 +189,15 @@ VALIDATION_STATE:
 - Phase 10 implementation cleanup: Codex CLI audited obsolete discovery, filename-specific helpers, inline export compatibility and facade APIs. Parent rejected and reverted an entry-file-only discovery shortcut after the full gate exposed 22 missing sibling-module imports. The accepted cleanup only simplifies the already-rejected non-block `export` path and removes stale module-facade terminology. Corrected `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 - Phase 10 resolver preflight: Codex CLI introduced immutable `PreparedSourceLibraryRoots`, moved source-library canonicalization and direct-child hash-root discovery into one Stage 0/build-system preflight and migrated directory, single-file, config and direct Beandown construction. Resolver constructors now consume prepared data without filesystem calls. Ollama performed the user-requested final review and found no correction. Both workers passed all-target tests (3344), integration cases (1753/1753), frontend benchmarks, Clippy and diff checks; Codex also passed `just validate`.
 - Phase 10 benchmark identity: Ollama added format-v5 default/fixed Rayon thread identity to local history, exact-identity comparison and report selection, visible fixed-thread output and default-only tracked summaries. A separate Ollama final review fixed non-Unicode environment handling and consolidated summary policy. Parent validation passed formatting, the 447-test xtask suite, the default frontend run with a case-set-changed +4 ms comparison, fixed 1/2/4-thread runs at approximately 123/82/59 ms, `just bench-check` at -3 ms with no slower cases, `just bench-report` and full `just validate` with 3336 unit tests and 1753 integration cases. No benchmark history or tracked summary changed.
+- Phase 10 artifact contract: Ollama added success-only `artifacts_must_not_exist` integration expectations, exact normalized path handling and `NotBuilt` exclusion. The API-only fixture now forbids `api/index.html`, while the configured multiple-library fixture uses both `#alpha.bst` and `#mod.bst`. A separate Ollama final review consolidated parsing and moved new behavior coverage through the runner's success boundary. Parent formatting and 48 focused runner tests passed; full `just validate` passed cross-target Clippy, 3342 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms with no slower cases.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
-- other docs stale: `docs/language-overview.md`, compiler-design source discovery/import pages, docs-site project-structure/libraries/getting-started pages, `README.md` examples and `benchmarks/README.md`, which must describe thread-identity isolation and default-only tracked summaries
+- other docs stale: `docs/language-overview.md`, compiler-design source discovery/import pages, docs-site project-structure/libraries/getting-started pages, `README.md` examples, `benchmarks/README.md` for thread-identity isolation and `style-guide/testing.bd` for artifact-absence assertions
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Commit the accepted benchmark-thread-identity slice, then delegate the Phase 10 artifact integration coverage to Ollama.
+- Commit the accepted artifact-contract slice, then reconcile Phase 9 docs against the completed migration and current implementation.
 DELEGATION_DECISION: ollama - explicit user override for each implementation slice and its pre-commit final review, with codex-cli only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: ollama, then codex-cli only after a clean availability blocker, then parent-direct
 STOP_REASON: none
@@ -1076,7 +1077,7 @@ This phase proves the refactor achieved its performance and simplification goals
   - [x] module-root stress/source-tree discovery stage improved versus baseline;
   - [x] no broad compile-time regression;
   - [x] no hidden path resolver scan;
-  - [ ] no artifact emitted for API-only HTML modules;
+  - [x] no artifact emitted for API-only HTML modules;
   - [x] imported root start bodies do not execute in importers.
 - [ ] If benchmark results are mixed:
   - [ ] run `just profile-case <case> terse` for regressed cases;
@@ -1114,13 +1115,13 @@ Integration cases under `tests/cases/` should cover:
 - [ ] direct `config.bst` / `config` import rejected;
 - [ ] module directory import resolves through `export:`;
 - [ ] module with no `export:` exports nothing;
-- [ ] API-only module produces no HTML artifact;
+- [x] API-only module produces no HTML artifact;
 - [ ] module with top-level template produces HTML artifact;
 - [ ] imported module root with top-level template does not execute in importer;
 - [ ] old inline `export` syntax rejected;
 - [ ] conformance inside `export:` rejected;
 - [ ] public API private type leakage still rejected;
-- [ ] source-library root can use any single hash root filename;
+- [x] source-library root can use any single hash root filename;
 - [ ] Beandown same-directory root constants still work through root export/scope rules if currently supported.
 
 Unit/focused tests should cover:
