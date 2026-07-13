@@ -2,7 +2,6 @@ use super::*;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
-use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::install_same_store_control_flow_body_refs;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateConstValueKind, TemplateSegmentOrigin, TemplateType,
 };
@@ -1955,16 +1954,11 @@ fn const_required_template_loop_validates_from_body_tir_root() {
 
 #[test]
 fn const_required_template_loop_reports_expansion_limit() {
-    let (mut template, context, mut string_table) = parse_const_required_template(
+    let (template, context, mut string_table) = parse_const_required_template(
         "[loop 0 to & 10000 |i|:
             [i]
         ]",
     );
-    {
-        let mut store = context.template_ir_store.borrow_mut();
-        install_same_store_control_flow_body_refs(&mut template, &mut store, &string_table)
-            .expect("test template should install same-store body roots");
-    }
 
     let mut fold_context = context
         .new_template_fold_context(&mut string_table, "template tests fold limit")
@@ -1982,18 +1976,13 @@ fn const_required_template_loop_reports_expansion_limit() {
 
 #[test]
 fn const_required_template_loop_uses_configured_expansion_limit() {
-    let (mut template, context, mut string_table) = parse_const_required_template(
+    let (template, context, mut string_table) = parse_const_required_template(
         "[loop 0 to & 10000 |i|:
             [if false:
                 hidden
             ]
         ]",
     );
-    {
-        let mut store = context.template_ir_store.borrow_mut();
-        install_same_store_control_flow_body_refs(&mut template, &mut store, &string_table)
-            .expect("test template should install same-store body roots");
-    }
 
     let mut fold_context = context
         .new_template_fold_context(&mut string_table, "template tests configured fold limit")

@@ -196,8 +196,4 @@ mod doc_fragments;
 pub(crate) mod error;
 
 #[cfg(test)]
-#[path = "tests/control_flow_body_ref_helpers.rs"]
-pub(crate) mod control_flow_body_ref_test_helpers;
-
-#[cfg(test)]
 mod template_folding_tests;

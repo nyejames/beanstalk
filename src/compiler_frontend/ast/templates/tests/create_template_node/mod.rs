@@ -1,7 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::install_same_store_control_flow_body_refs;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateRef, TemplateTirReference, finalized_template_tir_id,
@@ -162,12 +161,6 @@ fn fold_template_in_context(
     // so these fixtures fold through the same module-scoped store as parsed
     // templates, keeping test diagnostics consistent with production paths.
     let mut template = template.clone();
-    {
-        let store = context.template_ir_store();
-        let mut store_borrow = store.borrow_mut();
-        install_same_store_control_flow_body_refs(&mut template, &mut store_borrow, string_table)
-            .expect("test template should install same-store body roots");
-    }
 
     if template.tir_reference.is_none() {
         let store = context.template_ir_store();
