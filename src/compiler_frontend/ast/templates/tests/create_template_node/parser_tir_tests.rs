@@ -17,7 +17,6 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary,
     TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
-    finalized_template_tir_id,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::datatypes::datatype::DataType;
@@ -435,11 +434,6 @@ fn branch_body_tir_root_derives_shared_head_prefix_from_parser_tir() {
     let (template, store) = parse_template("[\"prefix\", if true:body]", &mut string_table);
     let store = store.borrow();
 
-    assert!(
-        template.content.is_empty(),
-        "control-flow head prefixes should live only in parser TIR"
-    );
-
     let (branches, fallback) = branch_chain_from_root(&template, &store);
     assert_eq!(branches.len(), 1);
     assert!(fallback.is_none());
@@ -474,11 +468,6 @@ fn fallback_body_tir_root_derives_shared_head_prefix_from_parser_tir() {
         &mut string_table,
     );
     let store = store.borrow();
-
-    assert!(
-        template.content.is_empty(),
-        "fallback head prefixes should live only in parser TIR"
-    );
 
     let (branches, fallback) = branch_chain_from_root(&template, &store);
     assert_eq!(branches.len(), 1);
@@ -770,7 +759,6 @@ fn parser_tir_records_positional_slot_placeholder() {
 fn parser_tir_records_string_literal_head_before_body_with_head_origin() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[\"head\": body]", &mut string_table);
-    assert!(template.content.is_empty());
     let store = store.borrow();
 
     let children = tir_root_child_ids(&template, &store);
@@ -787,7 +775,6 @@ fn parser_tir_records_string_literal_head_before_body_with_head_origin() {
 fn parser_tir_records_numeric_head_as_dynamic_expression_with_head_origin() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[42: body]", &mut string_table);
-    assert!(template.content.is_empty());
     let store = store.borrow();
 
     let children = tir_root_child_ids(&template, &store);
@@ -810,7 +797,6 @@ fn parser_tir_records_numeric_head_as_dynamic_expression_with_head_origin() {
 fn parser_tir_records_rendered_path_head_as_tir_only() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[@/: body]", &mut string_table);
-    assert!(template.content.is_empty());
     let store = store.borrow();
 
     let children = tir_root_child_ids(&template, &store);
@@ -874,8 +860,6 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("reactive head template should parse");
-    assert!(template.content.is_empty());
-
     let store = context.template_ir_store();
     let store = store.borrow();
 
@@ -1176,48 +1160,6 @@ fn head_stringslice_records_formatted_tir_phase() {
 }
 
 #[test]
-fn head_stringslice_registered_root_is_reused_by_finalization() {
-    // Head literal text is parser-TIR-only. Finalization must reuse that
-    // formatted root without allocating a new template.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let template = Template::new(
-        &mut template_tokens_from_source("[\"prefix\", $md: body]", &mut string_table),
-        &context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("head-stringslice markdown template should parse");
-    assert!(template.content.is_empty());
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: head-stringslice markdown template must reuse the formatted TIR root"
-    );
-
-    let original_formatted_template_id = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: template must have a TIR reference")
-        .root
-        .template_id;
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, original_formatted_template_id,
-        "finalization must reuse the registered formatted TIR root"
-    );
-}
-
-#[test]
 fn style_child_wrapper_no_children_records_formatted_tir_phase() {
     // A `$children(..)` style wrapper with no body child templates is a no-op
     // wrapper; the formatted TIR root can be reused.
@@ -1318,47 +1260,6 @@ fn head_only_literal_text_records_formatted_tir_phase() {
         folded_template_output("[\"head\", $md:]"),
         "head",
         "head-only literal formatted TIR root must preserve the head prefix unchanged"
-    );
-}
-
-#[test]
-fn head_only_literal_text_registered_root_is_reused_by_finalization() {
-    // A head-only literal keeps its content entirely in the formatted TIR root.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let template = Template::new(
-        &mut template_tokens_from_source("[\"head\", $md:]", &mut string_table),
-        &context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("head-only literal markdown template should parse");
-    assert!(template.content.is_empty());
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "setup: head-only literal markdown template must reuse the formatted TIR root"
-    );
-
-    let original_formatted_template_id = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: template must have a TIR reference")
-        .root
-        .template_id;
-
-    let materialized_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("materialization should succeed")
-    };
-    assert_eq!(
-        materialized_id, original_formatted_template_id,
-        "finalization must reuse the registered formatted TIR root"
     );
 }
 
@@ -2726,8 +2627,6 @@ fn parser_tir_records_same_store_template_valued_head_reference_as_child_templat
         &mut string_table,
     )
     .expect("parent template should parse");
-    assert!(parent.content.is_empty());
-
     let store = shared_store.borrow();
     let parent_child_ids = tir_root_child_ids(&parent, &store);
     assert_eq!(parent_child_ids.len(), 2);
@@ -2803,8 +2702,6 @@ fn parser_tir_recursively_materializes_cross_store_template_valued_head() {
         &mut string_table,
     )
     .expect("parent template should parse");
-    assert!(parent.content.is_empty());
-
     let store = parent_store.borrow();
     let parent_child_ids = tir_root_child_ids(&parent, &store);
     assert_eq!(parent_child_ids.len(), 2);
@@ -3022,9 +2919,7 @@ fn no_prefix_if_finalizes_with_direct_branch_chain_root() {
     let store = store.borrow();
 
     // After render-unit preparation refreshes every branch body, the owner
-    // root is the BranchChain directly — not a Sequence wrapping it. This lets
-    // `finalized_template_tir_id` reuse the parser-emitted root without
-    // rebuilding from body content.
+    // root is the BranchChain directly — not a Sequence wrapping it.
     assert!(
         matches!(
             parser_tir_root_kind(&template, &store),
@@ -3048,48 +2943,6 @@ fn no_prefix_loop_finalizes_with_direct_loop_root() {
             TemplateIrNodeKind::Loop { .. }
         ),
         "no-prefix loop should finalize with a direct Loop root"
-    );
-}
-
-#[test]
-fn direct_branch_chain_root_is_reused_by_finalized_template_tir_id() {
-    let mut string_table = StringTable::new();
-    let (template, store) = parse_template("[if true: body]", &mut string_table);
-
-    let parser_tir_id = template
-        .tir_template_id()
-        .expect("parser should finalize a TIR reference");
-
-    let finalized_id = {
-        let mut store = store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("finalized_template_tir_id should succeed")
-    };
-
-    assert_eq!(
-        finalized_id, parser_tir_id,
-        "direct BranchChain root should be reused without allocating a replacement template"
-    );
-}
-
-#[test]
-fn direct_loop_root_is_reused_by_finalized_template_tir_id() {
-    let mut string_table = StringTable::new();
-    let (template, store) = parse_template("[loop true: body]", &mut string_table);
-
-    let parser_tir_id = template
-        .tir_template_id()
-        .expect("parser should finalize a TIR reference");
-
-    let finalized_id = {
-        let mut store = store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("finalized_template_tir_id should succeed")
-    };
-
-    assert_eq!(
-        finalized_id, parser_tir_id,
-        "direct Loop root should be reused without allocating a replacement template"
     );
 }
 

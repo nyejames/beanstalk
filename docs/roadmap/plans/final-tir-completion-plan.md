@@ -21,10 +21,10 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B family 1D - remove bridge-specific root-reuse tests and remaining detached-content fixture assertions
-LAST_ACCEPTED_COMMIT: `24d7ac013` (`test: build formatter fixtures from direct TIR`)
+CURRENT_SLICE: Phase 1B family 1E - remove the remaining old-representation absence assertions from create-template tests
+LAST_ACCEPTED_COMMIT: `bd5081d91` (`test: remove detached parser helper fixtures`)
 BRANCH: `main`
-WORKTREE: family 1C accepted and ready to commit on `main` at `24d7ac013` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
+WORKTREE: family 1D accepted and ready to commit on `main` at `bd5081d91` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
@@ -62,15 +62,17 @@ VALIDATION_STATE:
 - Phase 1B family 1B passed full `just validate`: cross-target Clippy, 3349 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
 - Phase 1B family 1C focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 65 passed, `cargo test --quiet directive_style_tests -- --format terse`, 50 passed, `cargo test --quiet create_template_node -- --format terse`, 289 passed, and `cargo test --quiet --no-run --lib` without warnings.
 - Phase 1B family 1C passed full `just validate`: cross-target Clippy, 3347 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
+- Phase 1B family 1D focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 61 passed, `cargo test --quiet create_template_node -- --format terse`, 285 passed, and `cargo test --quiet --no-run --lib` without warnings.
+- Phase 1B family 1D passed full `just validate`: cross-target Clippy, 3343 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 3 ms average improvement, 14 faster and 0 slower.
 - Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: use an Ollama implementation worker for parser TIR subfamily 1D, with Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: use an Ollama implementation worker for create-template subfamily 1E, with Codex CLI only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted family 1C, then delegate parser TIR subfamily 1D to Ollama
+NEXT_RESUME_ACTION: commit accepted family 1D, then delegate create-template subfamily 1E to Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -255,6 +257,7 @@ Completed Phase 1B families:
 - Parser-created stale-content parity tests were deleted. Retained parser tests now name final TIR phase, root reuse, formatter output and root-shape invariants.
 - Manual body-dynamic and reactive formatter fixtures now construct direct registered TIR and assert preserved reactive payloads. Obsolete nested-template conversion fixtures were deleted.
 - Parser `$doc` and empty named-insert formatter fixtures now use real source parsing. Impossible explicit-formatter slot-definition coverage, tautological note/todo coverage and their detached-content attachment helper were deleted.
+- Parser tests no longer call `finalized_template_tir_id` or assert detached-content absence. Bridge-only template-ID reuse fixtures were deleted while final phase, output and root-shape owners remain.
 
 #### Slice 1C — Delete the bridge owner
 
