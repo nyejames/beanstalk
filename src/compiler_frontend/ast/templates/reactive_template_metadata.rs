@@ -1163,16 +1163,16 @@ mod tests {
     };
     use crate::compiler_frontend::ast::templates::template_control_flow::{
         TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch,
-        TemplateControlFlow, TemplateControlFlowTirReference, TemplateFallbackBranch,
-        TemplateLoopControlFlow, TemplateLoopHeader,
+        TemplateControlFlow, TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
     };
     use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotContributionSourceId;
     use crate::compiler_frontend::ast::templates::tir::{
         ExpressionSiteId, TemplateIrBranch, TemplateIrBuilder, TemplateIrId, TemplateIrNode,
-        TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
-        TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef,
-        TemplateSlotContributionSourcePlan, TemplateSlotPlan, TemplateStoreId, TemplateTirPhase,
-        TemplateTirReference, TirExpressionOverlay,
+        TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
+        TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
+        TemplateOverlaySetId, TemplateRef, TemplateSlotContributionSourcePlan, TemplateSlotPlan,
+        TemplateStoreId, TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference,
+        TirExpressionOverlay,
     };
     use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
     use crate::compiler_frontend::datatypes::DataType;
@@ -1417,7 +1417,11 @@ mod tests {
         template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
             TemplateBranchChain {
                 branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: None,
+                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                        &store,
+                        TemplateIrNodeId::new(0),
+                        TemplateTirPhase::Parsed,
+                    ),
                     selector: TemplateBranchSelector::Bool(Expression::bool(
                         true,
                         test_location(),
@@ -1448,7 +1452,11 @@ mod tests {
         template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
             TemplateBranchChain {
                 branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: None,
+                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                        &store,
+                        TemplateIrNodeId::new(0),
+                        TemplateTirPhase::Parsed,
+                    ),
                     selector: bool_selector(),
                     location: test_location(),
                 }],
@@ -1548,12 +1556,20 @@ mod tests {
         template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
             TemplateBranchChain {
                 branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: None,
+                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                        &store,
+                        TemplateIrNodeId::new(0),
+                        TemplateTirPhase::Parsed,
+                    ),
                     selector: bool_selector(),
                     location: test_location(),
                 }],
                 fallback: Some(TemplateFallbackBranch {
-                    body_tir_reference: None,
+                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                        &store,
+                        TemplateIrNodeId::new(0),
+                        TemplateTirPhase::Parsed,
+                    ),
                     location: test_location(),
                 }),
                 location: test_location(),
@@ -1588,7 +1604,11 @@ mod tests {
         });
         template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
             TemplateLoopControlFlow {
-                body_tir_reference: None,
+                body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                    &store,
+                    TemplateIrNodeId::new(0),
+                    TemplateTirPhase::Parsed,
+                ),
                 header: conditional_loop_header(),
                 aggregate_wrapper_tir_reference: None,
                 location: test_location(),
@@ -1634,12 +1654,19 @@ mod tests {
         });
         template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
             TemplateLoopControlFlow {
-                body_tir_reference: None,
-                header: conditional_loop_header(),
-                aggregate_wrapper_tir_reference: Some(TemplateControlFlowTirReference::new(
+                body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
                     &store,
-                    tir_wrapper_root,
-                )),
+                    TemplateIrNodeId::new(0),
+                    TemplateTirPhase::Parsed,
+                ),
+                header: conditional_loop_header(),
+                aggregate_wrapper_tir_reference: Some(
+                    TemplateTirBodyReference::with_store_local_identity(
+                        &store,
+                        tir_wrapper_root,
+                        TemplateTirPhase::Composed,
+                    ),
+                ),
                 location: test_location(),
             },
         )));

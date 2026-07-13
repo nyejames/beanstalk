@@ -233,7 +233,7 @@ impl Template {
         }
 
         // Stage 2: Parse the template body (strings, nested templates, slots)
-        let control_flow_body_scratch = parse_template_body(
+        parse_template_body(
             token_stream,
             &mut build_state,
             &mut construction_context,
@@ -261,7 +261,6 @@ impl Template {
                 &mut build_state,
                 &mut construction_context,
                 ControlFlowRenderUnitRequest {
-                    control_flow_body_scratch,
                     style: &style,
                     child_wrappers: &child_wrappers,
                     context,
@@ -274,13 +273,24 @@ impl Template {
         // Finish the parser builder-state TIR with a provisional kind. The
         // kind is updated after classification once the TIR-native composition
         // block below has produced the final post-composition reference.
+        //
+        // Prepared control-flow owner roots are at Formatted phase because
+        // render-unit preparation has installed formatted body content. Linear
+        // templates start at Parsed; linear formatting installs the formatted
+        // reference below.
+        let has_control_flow = build_state.control_flow.is_some();
+        let owner_phase = if has_control_flow {
+            TemplateTirPhase::Formatted
+        } else {
+            TemplateTirPhase::Parsed
+        };
         let mut tir_reference = construction_context.finish(
             build_state.style.to_owned(),
             build_state.kind.to_owned(),
+            owner_phase,
             construction_context.location().to_owned(),
         );
         let style = build_state.style.to_owned();
-        let has_control_flow = build_state.control_flow.is_some();
         install_formatted_tir_reference_for_linear_template(
             &mut tir_reference,
             has_control_flow,

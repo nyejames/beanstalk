@@ -12,8 +12,8 @@ use crate::compiler_frontend::ast::templates::template_body_sentinels::TemplateB
 use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchChain, TemplateBranchSelector, TemplateControlFlow,
-    TemplateControlFlowTirReference, TemplateControlFlowValidationMode, TemplateLoopControlFlow,
-    TemplateLoopHeader, validate_const_required_template_control_flow,
+    TemplateControlFlowValidationMode, TemplateLoopControlFlow, TemplateLoopHeader,
+    validate_const_required_template_control_flow,
     validate_runtime_template_control_flow_slot_artifacts,
 };
 use crate::compiler_frontend::ast::templates::template_head_parser::{
@@ -23,8 +23,8 @@ use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBranch,
     TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
     TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateRef,
-    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+    TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -2622,7 +2622,8 @@ fn parse_runtime_template_without_validation(
     let style = build_state.style.to_owned();
     let kind = build_state.kind.to_owned();
     let location = construction_context.location().to_owned();
-    let tir_reference = construction_context.finish(style, kind, location);
+    let tir_reference =
+        construction_context.finish(style, kind, TemplateTirPhase::Parsed, location);
 
     let template = Template {
         control_flow: build_state.control_flow,
@@ -2994,7 +2995,7 @@ fn install_slot_resolution_overlay_on_template(
 }
 
 fn body_ref_static_text(
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> String {
@@ -3073,7 +3074,7 @@ fn collect_static_tir_fragments(
 }
 
 fn body_ref_contains_unresolved_slots(
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     context: &ScopeContext,
 ) -> bool {
     let store = context.template_ir_store.borrow();
@@ -3133,7 +3134,7 @@ fn tir_subtree_contains_slot(
 }
 
 fn body_ref_loop_control_signal_count(
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     context: &ScopeContext,
 ) -> usize {
     let store = context.template_ir_store.borrow();
@@ -3201,7 +3202,7 @@ fn count_tir_loop_control_signals(
 }
 
 fn assert_body_ref_static_contains(
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     context: &ScopeContext,
     string_table: &StringTable,
     expected: &str,
@@ -3214,7 +3215,7 @@ fn assert_body_ref_static_contains(
 }
 
 fn assert_body_ref_static_excludes(
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     context: &ScopeContext,
     string_table: &StringTable,
     unexpected: &str,
@@ -3246,44 +3247,32 @@ fn expect_branch_chain(template: &Template) -> &TemplateBranchChain {
     branch_chain
 }
 
-fn first_branch_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateControlFlowTirReference {
-    branch_chain
+fn first_branch_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateTirBodyReference {
+    &branch_chain
         .branches
         .first()
         .expect("branch chain should contain a primary branch")
         .body_tir_reference
-        .as_ref()
-        .expect("branch should have a TIR body root")
 }
 
-fn branch_body_ref(
-    branch_chain: &TemplateBranchChain,
-    index: usize,
-) -> &TemplateControlFlowTirReference {
-    branch_chain
+fn branch_body_ref(branch_chain: &TemplateBranchChain, index: usize) -> &TemplateTirBodyReference {
+    &branch_chain
         .branches
         .get(index)
         .expect("branch chain should contain requested branch")
         .body_tir_reference
-        .as_ref()
-        .expect("branch should have a TIR body root")
 }
 
-fn fallback_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateControlFlowTirReference {
-    branch_chain
+fn fallback_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateTirBodyReference {
+    &branch_chain
         .fallback
         .as_ref()
         .expect("branch chain should contain fallback")
         .body_tir_reference
-        .as_ref()
-        .expect("fallback should have a TIR body root")
 }
 
-fn loop_body_ref(template_loop: &TemplateLoopControlFlow) -> &TemplateControlFlowTirReference {
-    template_loop
-        .body_tir_reference
-        .as_ref()
-        .expect("loop should have a TIR body root")
+fn loop_body_ref(template_loop: &TemplateLoopControlFlow) -> &TemplateTirBodyReference {
+    &template_loop.body_tir_reference
 }
 
 /// Returns true when the TIR subtree rooted at `node_id` contains a

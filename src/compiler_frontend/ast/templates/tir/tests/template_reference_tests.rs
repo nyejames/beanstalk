@@ -4,10 +4,13 @@
 //!       and remapping of the live `Template` payload.
 //! WHY: these handle invariants remain useful for AST-owned TIR payloads.
 
-use super::super::ids::TemplateIrId;
+use super::super::ids::{TemplateIrId, TemplateIrNodeId};
 use super::super::overlays::TemplateOverlaySetId;
 use super::super::store::TemplateIrStore;
-use super::super::{TemplateRef, TemplateTirReference, TemplateWrapperReference};
+use super::super::{
+    TemplateRef, TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference,
+    TemplateWrapperReference,
+};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::{
@@ -105,7 +108,11 @@ fn template_remap_updates_live_fields_and_preserves_tir_reference() {
                     source_location.clone(),
                     ValueMode::ImmutableOwned,
                 )),
-                body_tir_reference: None,
+                body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                    &store,
+                    TemplateIrNodeId::new(0),
+                    TemplateTirPhase::Parsed,
+                ),
                 location: source_location.clone(),
             }],
             fallback: None,

@@ -13,9 +13,10 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
-    TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirView,
+    TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeId,
+    TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
+    TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateRef, TemplateStoreId,
+    TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference, TirView,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
@@ -1109,12 +1110,18 @@ fn runtime_template_handoff_from_expression(expression: Expression) -> OwnedRunt
 fn branch_normalization_requires_tir_body_roots() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
+    let cross_store = TemplateIrStore::new();
+    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
+        &cross_store,
+        TemplateIrNodeId::new(0),
+        TemplateTirPhase::Parsed,
+    );
     let mut template = Template::empty();
     template.location = location.clone();
     template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
         TemplateBranchChain {
             branches: vec![TemplateConditionalBranch {
-                body_tir_reference: None,
+                body_tir_reference: cross_store_body_ref.clone(),
                 selector: TemplateBranchSelector::Bool(Expression::bool(
                     true,
                     location.clone(),
@@ -1123,7 +1130,7 @@ fn branch_normalization_requires_tir_body_roots() {
                 location: location.clone(),
             }],
             fallback: Some(TemplateFallbackBranch {
-                body_tir_reference: None,
+                body_tir_reference: cross_store_body_ref.clone(),
                 location: location.clone(),
             }),
             location: location.clone(),
@@ -1144,11 +1151,17 @@ fn branch_normalization_requires_tir_body_roots() {
 fn loop_body_normalization_requires_tir_body_root() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
+    let cross_store = TemplateIrStore::new();
+    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
+        &cross_store,
+        TemplateIrNodeId::new(0),
+        TemplateTirPhase::Parsed,
+    );
     let mut template = Template::empty();
     template.location = location.clone();
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
-            body_tir_reference: None,
+            body_tir_reference: cross_store_body_ref.clone(),
             header: TemplateLoopHeader::Conditional {
                 condition: Box::new(Expression::bool(
                     false,
@@ -1175,8 +1188,14 @@ fn loop_body_normalization_requires_tir_body_root() {
 fn loop_normalization_requires_aggregate_wrapper_tir_root() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
+    let cross_store = TemplateIrStore::new();
+    let cross_store_body_ref = TemplateTirBodyReference::with_store_local_identity(
+        &cross_store,
+        TemplateIrNodeId::new(0),
+        TemplateTirPhase::Parsed,
+    );
     let mut loop_flow = TemplateLoopControlFlow {
-        body_tir_reference: None,
+        body_tir_reference: cross_store_body_ref,
         header: TemplateLoopHeader::Conditional {
             condition: Box::new(Expression::bool(
                 false,

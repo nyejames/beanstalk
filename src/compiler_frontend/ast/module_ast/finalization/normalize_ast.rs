@@ -866,15 +866,7 @@ fn try_materialize_control_flow_runtime_handoff_from_body_views(
         TemplateControlFlow::BranchChain(chain) => {
             let mut branches = Vec::with_capacity(chain.branches.len());
             for branch in &chain.branches {
-                let body_reference = branch
-                    .body_tir_reference
-                    .as_ref()
-                    .map(|reference| reference.body_reference())
-                    .ok_or_else(|| {
-                        CompilerError::compiler_error(
-                            "TIR HIR handoff normalization encountered a branch without a finalized body-root reference.",
-                        )
-                    })?;
+                let body_reference = &branch.body_tir_reference;
                 let body = materialize_body(
                     body_reference,
                     "TIR HIR handoff normalization could not materialize a branch body from its finalized view.",
@@ -888,15 +880,7 @@ fn try_materialize_control_flow_runtime_handoff_from_body_views(
             }
 
             let fallback = if let Some(fallback_branch) = &chain.fallback {
-                let body_reference = fallback_branch
-                    .body_tir_reference
-                    .as_ref()
-                    .map(|reference| reference.body_reference())
-                    .ok_or_else(|| {
-                        CompilerError::compiler_error(
-                            "TIR HIR handoff normalization encountered a fallback without a finalized body-root reference.",
-                        )
-                    })?;
+                let body_reference = &fallback_branch.body_tir_reference;
                 Some(Box::new(materialize_body(
                     body_reference,
                     "TIR HIR handoff normalization could not materialize a fallback body from its finalized view.",
@@ -913,15 +897,7 @@ fn try_materialize_control_flow_runtime_handoff_from_body_views(
         }
 
         TemplateControlFlow::Loop(loop_flow) => {
-            let body_reference = loop_flow
-                .body_tir_reference
-                .as_ref()
-                .map(|reference| reference.body_reference())
-                .ok_or_else(|| {
-                    CompilerError::compiler_error(
-                        "TIR HIR handoff normalization encountered a loop without a finalized body-root reference.",
-                    )
-                })?;
+            let body_reference = &loop_flow.body_tir_reference;
             let body = Box::new(materialize_body(
                 body_reference,
                 "TIR HIR handoff normalization could not materialize a loop body from its finalized view.",
@@ -931,7 +907,7 @@ fn try_materialize_control_flow_runtime_handoff_from_body_views(
                 &loop_flow.aggregate_wrapper_tir_reference
             {
                 Some(Box::new(materialize_body(
-                    wrapper_reference.body_reference(),
+                    wrapper_reference,
                     "TIR HIR handoff normalization could not materialize a loop aggregate wrapper from its finalized view.",
                 )?))
             } else {
@@ -1302,10 +1278,7 @@ fn normalize_template_control_flow_runtime_plans_for_hir(
         TemplateControlFlow::BranchChain(branch_chain) => {
             for (index, branch) in branch_chain.branches.iter_mut().enumerate() {
                 normalize_control_flow_body_tir_root_for_hir(
-                    branch
-                        .body_tir_reference
-                        .as_mut()
-                        .map(|reference| reference.body_reference_mut()),
+                    &mut branch.body_tir_reference,
                     context,
                     ControlFlowBodyKind::Branch { index },
                     "branch",
@@ -1314,10 +1287,7 @@ fn normalize_template_control_flow_runtime_plans_for_hir(
 
             if let Some(fallback) = &mut branch_chain.fallback {
                 normalize_control_flow_body_tir_root_for_hir(
-                    fallback
-                        .body_tir_reference
-                        .as_mut()
-                        .map(|reference| reference.body_reference_mut()),
+                    &mut fallback.body_tir_reference,
                     context,
                     ControlFlowBodyKind::Fallback,
                     "fallback",
@@ -1327,10 +1297,7 @@ fn normalize_template_control_flow_runtime_plans_for_hir(
 
         TemplateControlFlow::Loop(loop_flow) => {
             normalize_control_flow_body_tir_root_for_hir(
-                loop_flow
-                    .body_tir_reference
-                    .as_mut()
-                    .map(|reference| reference.body_reference_mut()),
+                &mut loop_flow.body_tir_reference,
                 context,
                 ControlFlowBodyKind::LoopBody,
                 "loop",
@@ -1370,7 +1337,7 @@ fn normalize_loop_aggregate_wrapper_tir_root_for_hir(
         }
     }
 
-    normalize_expression_overlays_for_body_reference(reference.body_reference_mut(), context)
+    normalize_expression_overlays_for_body_reference(reference, context)
 }
 
 /// Normalizes all expression payloads reachable from a control-flow body/root
@@ -1491,31 +1458,22 @@ fn normalize_expression_overlays_for_body_reference(
 }
 
 fn normalize_control_flow_body_tir_root_for_hir(
-    body_reference: Option<&mut TemplateTirBodyReference>,
+    body_reference: &mut TemplateTirBodyReference,
     context: &mut TemplateNormalizationContext<'_, '_>,
     body_kind: ControlFlowBodyKind,
     body_label: &str,
 ) -> Result<(), TemplateNormalizationError> {
-    if let (Some(reference), Some(registry)) =
-        (body_reference.as_ref(), &context.template_ir_registry)
-    {
+    if let Some(registry) = &context.template_ir_registry {
         TirSubtreeView::with_minimum_phase(
             &registry.borrow(),
-            reference,
+            body_reference,
             TemplateTirPhase::Parsed,
         )?;
     }
 
-    let Some(reference) = body_reference else {
-        return Err(CompilerError::compiler_error(format!(
-            "template HIR normalization requires a same-store {body_label} body root for {body_kind:?}",
-        ))
-        .into());
-    };
-
     {
         let store = context.template_ir_store.borrow();
-        if reference.same_store_root(&store).is_none() {
+        if body_reference.same_store_root(&store).is_none() {
             return Err(CompilerError::compiler_error(format!(
                 "template HIR normalization requires a same-store {body_label} body root for {body_kind:?}",
             ))
@@ -1523,7 +1481,7 @@ fn normalize_control_flow_body_tir_root_for_hir(
         }
     }
 
-    normalize_expression_overlays_for_body_reference(reference, context)
+    normalize_expression_overlays_for_body_reference(body_reference, context)
 }
 
 fn normalize_runtime_slot_template_expression_for_hir(

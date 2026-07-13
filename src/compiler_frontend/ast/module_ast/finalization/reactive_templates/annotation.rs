@@ -561,10 +561,7 @@ fn annotate_control_flow(
                     registry,
                 );
                 annotate_tir_body_reference(
-                    branch
-                        .body_tir_reference
-                        .as_mut()
-                        .map(|reference| reference.body_reference_mut()),
+                    Some(&mut branch.body_tir_reference),
                     flows,
                     &mut branch_environment,
                     store,
@@ -575,10 +572,7 @@ fn annotate_control_flow(
             if let Some(fallback) = &mut branch_chain.fallback {
                 let mut fallback_environment = value_environment.clone();
                 annotate_tir_body_reference(
-                    fallback
-                        .body_tir_reference
-                        .as_mut()
-                        .map(|reference| reference.body_reference_mut()),
+                    Some(&mut fallback.body_tir_reference),
                     flows,
                     &mut fallback_environment,
                     store,
@@ -597,10 +591,7 @@ fn annotate_control_flow(
                 registry,
             );
             annotate_tir_body_reference(
-                template_loop
-                    .body_tir_reference
-                    .as_mut()
-                    .map(|reference| reference.body_reference_mut()),
+                Some(&mut template_loop.body_tir_reference),
                 flows,
                 &mut loop_environment,
                 store,
@@ -611,10 +602,7 @@ fn annotate_control_flow(
             // subtree on the AST loop. Annotate that authoritative TIR root;
             // normalization reports the broken invariant if it is absent.
             annotate_tir_body_reference(
-                template_loop
-                    .aggregate_wrapper_tir_reference
-                    .as_mut()
-                    .map(|reference| reference.body_reference_mut()),
+                template_loop.aggregate_wrapper_tir_reference.as_mut(),
                 flows,
                 &mut loop_environment,
                 store,

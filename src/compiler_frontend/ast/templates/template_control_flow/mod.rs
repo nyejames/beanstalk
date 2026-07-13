@@ -22,12 +22,10 @@ pub(crate) use const_folding::{
     build_range_iteration_bindings, const_collection_items,
 };
 pub(crate) use types::{
-    TemplateBodyEmission, TemplateBodyParseMode, TemplateBranchChain,
-    TemplateBranchChainBodyScratch, TemplateBranchSelector, TemplateConditionalBranch,
-    TemplateControlFlow, TemplateControlFlowBodyScratch, TemplateControlFlowTirReference,
-    TemplateControlFlowValidationMode, TemplateFallbackBranch, TemplateIfBodyParseInput,
-    TemplateLoopBodyParseInput, TemplateLoopBodyScratch, TemplateLoopControlFlow,
-    TemplateLoopControlKind, TemplateLoopHeader,
+    TemplateBodyEmission, TemplateBodyParseMode, TemplateBranchChain, TemplateBranchSelector,
+    TemplateConditionalBranch, TemplateControlFlow, TemplateControlFlowValidationMode,
+    TemplateFallbackBranch, TemplateIfBodyParseInput, TemplateLoopBodyParseInput,
+    TemplateLoopControlFlow, TemplateLoopControlKind, TemplateLoopHeader,
 };
 pub(crate) use validation::{
     validate_const_required_template_control_flow,

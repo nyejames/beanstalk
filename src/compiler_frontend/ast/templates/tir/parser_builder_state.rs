@@ -126,16 +126,6 @@ pub(crate) struct TemplateParserIrBuilderState {
     ///      comparing store handles or inspecting private vectors.
     pub(crate) store_owner: Arc<TemplateIrStoreOwner>,
 
-    /// When true, `finish` must not set `summary.has_formatter` even if the
-    /// style carries a formatter.
-    ///
-    /// WHAT: render-unit preparation may refresh every control-flow body so the
-    ///       parser-TIR summary no longer represents a formatter-pending surface.
-    /// WHY: `finish` cannot re-derive whether bodies were refreshed from the node
-    ///      tree alone; this flag is the narrow state bridge from render-unit
-    ///      preparation back to builder-state finalization.
-    suppress_formatter_summary_on_finish: bool,
-
     /// Number of children recorded while the parser was still in the head section.
     ///
     /// WHAT: counts every node emitted by a head-record call (head text, head
@@ -153,7 +143,6 @@ impl TemplateParserIrBuilderState {
             children: Vec::new(),
             summary: TemplateIrSummary::default(),
             store_owner,
-            suppress_formatter_summary_on_finish: false,
             head_node_count: 0,
         }
     }
@@ -172,17 +161,8 @@ impl TemplateParserIrBuilderState {
         template_id: TemplateIrId,
         store_id: TemplateStoreId,
         overlay_set_id: TemplateOverlaySetId,
+        phase: TemplateTirPhase,
     ) -> TemplateTirReference {
-        let phase = if self.suppress_formatter_summary_on_finish {
-            // Render-unit preparation sets this flag only after every
-            // control-flow body has passed through `format_tir_body_root`.
-            // The finalized owner root therefore represents formatted body
-            // authority even though it is sealed by the parser builder.
-            TemplateTirPhase::Formatted
-        } else {
-            TemplateTirPhase::Parsed
-        };
-
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: Arc::clone(&self.store_owner),
@@ -401,19 +381,6 @@ impl TemplateParserIrBuilderState {
         self.summary.has_control_flow = true;
     }
 
-    /// Clears the formatter-pending flag on this builder state's summary.
-    ///
-    /// WHAT: after render-unit preparation has refreshed every control-flow body,
-    ///       the owner summary no longer represents a formatter-pending surface.
-    /// WHY: the builder-state summary is copied into the finalized `TemplateIr` by
-    ///      `finish`, so clearing it here ensures the finalized owner reflects the
-    ///      post-format state. The suppression flag prevents `finish` from
-    ///      re-setting the flag based on the style formatter alone.
-    pub(crate) fn clear_has_formatter_summary(&mut self) {
-        self.summary.has_formatter = false;
-        self.suppress_formatter_summary_on_finish = true;
-    }
-
     /// Returns this builder state's template-owned control-flow node ID, if any.
     ///
     /// WHAT: searches the in-progress root children, walking only nested sequence
@@ -507,13 +474,18 @@ impl TemplateParserIrBuilderState {
         store: &mut TemplateIrStore,
         style: Style,
         kind: TemplateType,
+        phase: TemplateTirPhase,
         location: SourceLocation,
     ) -> TemplateIrId {
         if let Some(template_id) = self.template_id {
             return template_id;
         }
 
-        if style.formatter.is_some() && !self.suppress_formatter_summary_on_finish {
+        // Control-flow owner roots passed at `Formatted` phase already carry
+        // prepared body content, so the owner summary must not represent a
+        // formatter-pending surface. Linear templates and unprepared control-flow
+        // roots start at `Parsed` and set `has_formatter` from the style.
+        if style.formatter.is_some() && !phase.is_at_least(TemplateTirPhase::Formatted) {
             self.summary.has_formatter = true;
         }
 
@@ -545,37 +517,20 @@ impl TemplateParserIrBuilderState {
             self.children.to_owned()
         };
 
-        // Use the control-flow node directly as the root instead of wrapping it
-        // in a Sequence when one of two conditions holds:
+        // Use a single control-flow child directly as the root. Render-unit
+        // preparation has already moved the shared head prefix into branch
+        // bodies or the loop aggregate wrapper, and the structural root shape
+        // now carries that fact without a second lifecycle marker.
         //
-        // 1. A shared head prefix was dropped (the control-flow node was not the
-        //    first child). The remaining single BranchChain must not be wrapped in
-        //    a Sequence, or skipped branches would still render the prefix shell.
-        //    This is the existing head-prefix rule for template `if`.
-        //
-        // 2. All control-flow bodies were refreshed during render-unit
-        //    preparation (suppress_formatter_summary_on_finish). The refreshed
-        //    bodies carry their own head-prefix content and formatted output, so
-        //    a single BranchChain or Loop is the authoritative root. Wrapping it
-        //    in a Sequence would hide that root and force unnecessary subtree
-        //    reconstruction.
-        //
-        // Linear templates, unrefreshed control-flow templates, and multi-child
-        // owner roots stay Sequence-shaped.
+        // Linear templates and multi-child owner roots stay Sequence-shaped.
         let (root, direct_control_flow_root) = match root_children.as_slice() {
             [child_id] => {
-                let prefix_was_dropped = *child_id != self.children[0];
-                let use_direct = store
-                    .get_node(*child_id)
-                    .is_some_and(|node| match &node.kind {
-                        TemplateIrNodeKind::BranchChain { .. } => {
-                            prefix_was_dropped || self.suppress_formatter_summary_on_finish
-                        }
-                        TemplateIrNodeKind::Loop { .. } => {
-                            self.suppress_formatter_summary_on_finish
-                        }
-                        _ => false,
-                    });
+                let use_direct = store.get_node(*child_id).is_some_and(|node| {
+                    matches!(
+                        node.kind,
+                        TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. }
+                    )
+                });
                 if use_direct {
                     (*child_id, true)
                 } else {

@@ -19,15 +19,14 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateControlFlowTirReference, TemplateFallbackBranch, TemplateLoopControlFlow,
-    TemplateLoopHeader,
+    TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIr, TemplateIrNode, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase,
-    TemplateTirReference,
+    TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirBodyReference,
+    TemplateTirPhase, TemplateTirReference,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSite, OwnedRuntimeSlotSiteRenderPiece,
@@ -141,7 +140,7 @@ fn template_expression_from_tir(
 fn push_tir_body_root_for_expression(
     store: &mut TemplateIrStore,
     expression: Expression,
-) -> (TemplateControlFlowTirReference, ExpressionSiteId) {
+) -> (TemplateTirBodyReference, ExpressionSiteId) {
     let location = expression.location.clone();
     let site_id = store.next_expression_site_id();
     let expression_node = store.push_node(TemplateIrNode::new(
@@ -160,15 +159,22 @@ fn push_tir_body_root_for_expression(
         location,
     ));
 
-    (TemplateControlFlowTirReference::new(store, root), site_id)
+    (
+        TemplateTirBodyReference::with_store_local_identity(
+            store,
+            root,
+            TemplateTirPhase::Composed,
+        ),
+        site_id,
+    )
 }
 
 fn tir_body_overlay_expression_metadata<'a>(
     registry: &'a TemplateIrRegistry,
-    body_ref: &TemplateControlFlowTirReference,
+    body_ref: &TemplateTirBodyReference,
     site_id: ExpressionSiteId,
 ) -> Option<&'a ReactiveTemplateMetadata> {
-    let overlay_set = registry.overlay_set(body_ref.overlay_set_id())?;
+    let overlay_set = registry.overlay_set(body_ref.overlay_set_id)?;
     let expression_overlay_id = overlay_set.expression_overrides?;
     let expression_overlay = registry.expression_overlay(expression_overlay_id)?;
     expression_overlay
@@ -478,7 +484,7 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
     template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
         TemplateBranchChain {
             branches: vec![TemplateConditionalBranch {
-                body_tir_reference: Some(body_ref.clone()),
+                body_tir_reference: body_ref.clone(),
                 selector: TemplateBranchSelector::Bool(Expression::bool(
                     true,
                     location.clone(),
@@ -503,10 +509,7 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
     let Some(TemplateControlFlow::BranchChain(branch_chain)) = &template.control_flow else {
         panic!("expected branch chain");
     };
-    let body_ref = branch_chain.branches[0]
-        .body_tir_reference
-        .as_ref()
-        .expect("expected branch body reference");
+    let body_ref = &branch_chain.branches[0].body_tir_reference;
     let metadata = tir_body_overlay_expression_metadata(&registry, body_ref, body_site_id)
         .expect("expected TIR body expression metadata");
     assert_eq!(metadata.subscriptions.len(), 1);
@@ -540,7 +543,7 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
     template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
         TemplateBranchChain {
             branches: vec![TemplateConditionalBranch {
-                body_tir_reference: Some(branch_body_ref),
+                body_tir_reference: branch_body_ref,
                 selector: TemplateBranchSelector::Bool(Expression::bool(
                     true,
                     location.clone(),
@@ -549,7 +552,7 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
                 location: location.clone(),
             }],
             fallback: Some(TemplateFallbackBranch {
-                body_tir_reference: Some(fallback_body_ref.clone()),
+                body_tir_reference: fallback_body_ref.clone(),
                 location: location.clone(),
             }),
             location: location.clone(),
@@ -568,11 +571,11 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
     let Some(TemplateControlFlow::BranchChain(branch_chain)) = &template.control_flow else {
         panic!("expected branch chain");
     };
-    let fallback_ref = branch_chain
+    let fallback_ref = &branch_chain
         .fallback
         .as_ref()
-        .and_then(|fallback| fallback.body_tir_reference.as_ref())
-        .expect("expected fallback body reference");
+        .expect("expected fallback branch")
+        .body_tir_reference;
     let metadata = tir_body_overlay_expression_metadata(&registry, fallback_ref, fallback_site_id)
         .expect("expected fallback TIR body expression metadata");
     assert_eq!(metadata.subscriptions.len(), 1);
@@ -602,7 +605,7 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
                     ValueMode::ImmutableOwned,
                 )),
             },
-            body_tir_reference: Some(body_ref.clone()),
+            body_tir_reference: body_ref.clone(),
             aggregate_wrapper_tir_reference: None,
             location: location.clone(),
         },
@@ -620,10 +623,7 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
     let Some(TemplateControlFlow::Loop(template_loop)) = &template.control_flow else {
         panic!("expected template loop");
     };
-    let body_ref = template_loop
-        .body_tir_reference
-        .as_ref()
-        .expect("expected loop body reference");
+    let body_ref = &template_loop.body_tir_reference;
     let metadata = tir_body_overlay_expression_metadata(&registry, body_ref, body_site_id)
         .expect("expected loop TIR body expression metadata");
     assert_eq!(metadata.subscriptions.len(), 1);

@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::templates::tir::parser_builder_state::{
 };
 use crate::compiler_frontend::ast::templates::tir::store::{TemplateIrStore, TemplateIrStoreOwner};
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateStoreId,
+    TemplateIrRegistry, TemplateStoreId, TemplateTirPhase,
     ids::{TemplateIrId, TemplateIrNodeId},
     node::TemplateIrBranch,
 };
@@ -113,11 +113,6 @@ impl TemplateConstructionContext {
     ///       still in progress.
     pub(crate) fn builder(&self) -> &TemplateParserIrBuilderState {
         &self.builder
-    }
-
-    /// Returns a mutable reference to the in-progress builder state.
-    pub(crate) fn builder_mut(&mut self) -> &mut TemplateParserIrBuilderState {
-        &mut self.builder
     }
 
     /// Returns a shared borrow of the underlying TIR store.
@@ -319,19 +314,24 @@ impl TemplateConstructionContext {
     /// WHAT: seals accumulated children under a root sequence node, stores the
     ///       finished `TemplateIr` entry, and returns the required
     ///       `TemplateTirReference` (store-qualified root + store-owner token).
+    ///       The `phase` parameter records how far the root has progressed:
+    ///       `Parsed` for ordinary body/wrapper construction, `Formatted` for
+    ///       prepared control-flow owner roots.
     /// WHY: after this call, the builder state is consumed and the caller
     ///      constructs the durable `Template` with the returned reference.
     pub(crate) fn finish(
         &mut self,
         style: Style,
         kind: TemplateType,
+        phase: TemplateTirPhase,
         location: SourceLocation,
     ) -> TemplateTirReference {
         self.debug_assert_registered_store();
 
         let template_id = {
             let mut store = self.store.borrow_mut();
-            self.builder.finish(&mut store, style, kind, location)
+            self.builder
+                .finish(&mut store, style, kind, phase, location)
         };
 
         // Allocate the canonical empty overlay set through the registry so the
@@ -344,7 +344,7 @@ impl TemplateConstructionContext {
             .allocate_overlay_set(TemplateOverlaySet::empty());
 
         self.builder
-            .finalized_reference(template_id, self.store_id, overlay_set_id)
+            .finalized_reference(template_id, self.store_id, overlay_set_id, phase)
     }
 
     /// Debug-check that the direct store handle still matches its registry ID.

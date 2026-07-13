@@ -2197,11 +2197,7 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
         panic!("expected branch-chain control-flow state");
     };
     assert_eq!(
-        branch_chain.branches[0]
-            .body_tir_reference
-            .as_ref()
-            .expect("branch should keep a body TIR reference")
-            .phase(),
+        branch_chain.branches[0].body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "explicit formatter branch bodies should reach the Formatted phase"
     );
@@ -2255,21 +2251,31 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
         panic!("expected branch-chain control-flow state");
     };
     assert_eq!(
-        branch_chain.branches[0]
-            .body_tir_reference
-            .as_ref()
-            .expect("branch should keep a body TIR reference")
-            .phase(),
+        branch_chain.branches[0].body_tir_reference.phase,
         TemplateTirPhase::Formatted
+    );
+    assert_ne!(
+        branch_chain.branches[0].body_tir_reference.location,
+        SourceLocation::default(),
+        "prepared branch body references should retain a concrete parser source location"
     );
     assert_eq!(
         branch_chain
             .fallback
             .as_ref()
-            .and_then(|fallback| fallback.body_tir_reference.as_ref())
+            .map(|fallback| &fallback.body_tir_reference)
             .expect("fallback should keep a body TIR reference")
-            .phase(),
+            .phase,
         TemplateTirPhase::Formatted
+    );
+    let fallback = branch_chain
+        .fallback
+        .as_ref()
+        .expect("fallback should keep a body TIR reference");
+    assert_ne!(
+        fallback.body_tir_reference.location,
+        SourceLocation::default(),
+        "prepared fallback body references should retain a concrete parser source location"
     );
 }
 
@@ -2323,13 +2329,14 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
         panic!("expected loop control-flow state");
     };
     assert_eq!(
-        template_loop
-            .body_tir_reference
-            .as_ref()
-            .expect("loop should keep a body TIR reference")
-            .phase(),
+        template_loop.body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "explicit formatter loop bodies should reach the Formatted phase"
+    );
+    assert_ne!(
+        template_loop.body_tir_reference.location,
+        SourceLocation::default(),
+        "prepared loop body references should retain a concrete parser source location"
     );
 }
 
@@ -2362,11 +2369,7 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         panic!("expected branch-chain control-flow state");
     };
     assert_eq!(
-        branch_ast.branches[0]
-            .body_tir_reference
-            .as_ref()
-            .expect("branch should keep a body TIR reference")
-            .phase(),
+        branch_ast.branches[0].body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "no-formatter branch body should reach the Formatted phase"
     );
@@ -2396,11 +2399,7 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         panic!("expected branch-chain control-flow state");
     };
     assert_eq!(
-        fallback_ast.branches[0]
-            .body_tir_reference
-            .as_ref()
-            .expect("branch should keep a body TIR reference")
-            .phase(),
+        fallback_ast.branches[0].body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "no-formatter branch body should reach the Formatted phase"
     );
@@ -2408,9 +2407,9 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         fallback_ast
             .fallback
             .as_ref()
-            .and_then(|fallback| fallback.body_tir_reference.as_ref())
+            .map(|fallback| &fallback.body_tir_reference)
             .expect("fallback should keep a body TIR reference")
-            .phase(),
+            .phase,
         TemplateTirPhase::Formatted,
         "no-formatter fallback body should reach the Formatted phase"
     );
@@ -2435,11 +2434,7 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         panic!("expected loop control-flow state");
     };
     assert_eq!(
-        template_loop
-            .body_tir_reference
-            .as_ref()
-            .expect("loop should keep a body TIR reference")
-            .phase(),
+        template_loop.body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "no-formatter loop body should reach the Formatted phase"
     );
@@ -2464,11 +2459,7 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         panic!("expected branch-chain control-flow state");
     };
     assert_eq!(
-        raw_branch_ast.branches[0]
-            .body_tir_reference
-            .as_ref()
-            .expect("raw branch should keep a body TIR reference")
-            .phase(),
+        raw_branch_ast.branches[0].body_tir_reference.phase,
         TemplateTirPhase::Formatted,
         "$raw branch body should reach the Formatted phase"
     );

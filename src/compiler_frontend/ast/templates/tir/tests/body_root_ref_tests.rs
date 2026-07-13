@@ -329,27 +329,19 @@ fn body_reference_subtree_view_uses_expression_overlay() {
 }
 
 #[test]
-fn control_flow_reference_exposes_body_reference() {
+fn body_reference_exposes_view_identity() {
     let mut store = TemplateIrStore::new();
     let (_, root) = build_single_text_template(&mut store);
 
-    let mut control_flow_ref =
-        super::super::super::template_control_flow::TemplateControlFlowTirReference::new(
-            &store, root,
-        );
-    let body_ref = control_flow_ref.body_reference();
+    let body_ref = TemplateTirBodyReference::with_store_local_identity(
+        &store,
+        root,
+        TemplateTirPhase::Composed,
+    );
 
     assert_eq!(body_ref.node_ref().node_id, root);
     assert_eq!(body_ref.phase, TemplateTirPhase::Composed);
     assert_eq!(body_ref.overlay_set_id, TemplateOverlaySetId::empty());
-    assert_eq!(
-        control_flow_ref.overlay_set_id(),
-        TemplateOverlaySetId::empty()
-    );
-    assert_eq!(*control_flow_ref.location(), empty_location());
-
-    control_flow_ref.set_phase(TemplateTirPhase::Finalized);
-    assert_eq!(control_flow_ref.phase(), TemplateTirPhase::Finalized);
 }
 
 /// A finalized control-flow root may be nested under wrapper and composition
@@ -418,7 +410,11 @@ fn finalized_control_flow_body_reference_finds_nested_control_flow_node() {
     });
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
-            body_tir_reference: None,
+            body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                &store,
+                TemplateIrNodeId::new(0),
+                TemplateTirPhase::Parsed,
+            ),
             header: TemplateLoopHeader::Conditional {
                 condition: Box::new(bool_expression()),
             },
@@ -482,7 +478,11 @@ fn finalized_control_flow_body_reference_follows_single_child_forwarding_root() 
     });
     template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
         TemplateLoopControlFlow {
-            body_tir_reference: None,
+            body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
+                &store,
+                TemplateIrNodeId::new(0),
+                TemplateTirPhase::Parsed,
+            ),
             header: TemplateLoopHeader::Conditional {
                 condition: Box::new(bool_expression()),
             },

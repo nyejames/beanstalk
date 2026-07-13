@@ -612,7 +612,7 @@ fn resolve_foreign_child_classification(
 /// path. Foreign children have their style/summary facts resolved through the
 /// module-local registry without holding a borrow across local mutation, so
 /// derived output stays local and the original child reference is preserved.
-/// WHY: lets `try_sync_control_flow_body_tir_from_tir` cover bodies with inherited
+/// WHY: lets `prepare_branch_body_tir_root` cover bodies with inherited
 ///      `$children(...)` wrappers without falling back to the content mirror,
 ///      including bodies whose direct children were finalized into a different
 ///      TIR store.

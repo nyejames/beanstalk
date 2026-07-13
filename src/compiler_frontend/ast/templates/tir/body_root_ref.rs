@@ -100,6 +100,7 @@ impl TemplateTirBodyReference {
     /// WHY: internal construction sites that only need same-store identity
     ///      today can call this without threading empty placeholders through
     ///      every helper.
+    #[cfg(test)]
     pub(crate) fn with_store_local_identity(
         store: &TemplateIrStore,
         root: TemplateIrNodeId,

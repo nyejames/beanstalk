@@ -19,7 +19,8 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateConstructionContext, TemplateWrapperReference, wrapper_reference_for_template,
+    TemplateConstructionContext, TemplateTirPhase, TemplateWrapperReference,
+    wrapper_reference_for_template,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -167,8 +168,12 @@ fn normalize_string_child_wrapper_reference(
         string_table.resolve(value).len(),
         argument_location.clone(),
     );
-    let reference =
-        construction_context.finish(Style::default(), TemplateType::String, argument_location);
+    let reference = construction_context.finish(
+        Style::default(),
+        TemplateType::String,
+        TemplateTirPhase::Parsed,
+        argument_location,
+    );
 
     Ok(TemplateWrapperReference::new(
         reference.root,
