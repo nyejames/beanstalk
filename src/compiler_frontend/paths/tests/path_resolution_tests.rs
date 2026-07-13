@@ -13,9 +13,10 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use std::fs;
 use std::path::PathBuf;
 
@@ -25,6 +26,13 @@ struct TestHarness {
     resolver: ProjectPathResolver,
     string_table: StringTable,
     _temp_dir: tempfile::TempDir,
+}
+
+fn prepared_source_library_roots(
+    source_libraries: &SourceLibraryRegistry,
+) -> PreparedSourceLibraryRoots {
+    crate::build_system::create_project_modules::source_library_discovery::
+        prepare_source_library_roots(source_libraries)
 }
 
 impl TestHarness {
@@ -67,7 +75,7 @@ impl TestHarness {
         let resolver = ProjectPathResolver::new(
             project_root.clone(),
             entry_root,
-            source_libraries,
+            prepared_source_library_roots(source_libraries),
             source_file_kinds,
         )
         .expect("resolver creation should succeed");
@@ -378,7 +386,7 @@ fn source_library_import_resolves_to_library_root() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -420,7 +428,7 @@ fn source_library_folder_import_uses_generic_hash_root_public_surface() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -470,7 +478,7 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -636,7 +644,7 @@ fn public_surface_fallback_preserves_beandown_folder_ambiguity() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &registry,
     )
     .expect("resolver creation should succeed");
@@ -684,7 +692,7 @@ fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path()
     let resolver = ProjectPathResolver::new(
         project_root,
         entry_root,
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -729,7 +737,7 @@ fn library_scan_root_name_is_not_import_prefix() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -769,7 +777,7 @@ fn library_direct_child_is_import_prefix() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -806,7 +814,7 @@ fn entry_root_import_fallback_success() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -849,7 +857,7 @@ fn source_library_prefix_wins_consistently() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -892,7 +900,7 @@ fn import_dotdot_rejected() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -929,7 +937,7 @@ fn missing_import_target_is_typed_diagnostic() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -970,7 +978,7 @@ fn import_escape_project_root_rejected() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -1019,7 +1027,7 @@ fn import_escape_library_root_rejected() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -1065,7 +1073,7 @@ fn module_root_public_surface_fallback_resolves_plain_folder_import() {
     let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
         prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
@@ -1107,7 +1115,7 @@ fn disabled_module_root_discovery_does_not_register_plain_folder_public_surfaces
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -1149,7 +1157,7 @@ fn plain_folder_import_to_module_root_uses_any_hash_root() {
     let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
         prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
@@ -1190,7 +1198,7 @@ fn concrete_file_import_inside_module_root_is_accepted() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
@@ -1228,7 +1236,7 @@ fn import_case_sensitive_symbol_mismatch_rejected() {
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        &source_libraries,
+        prepared_source_library_roots(&source_libraries),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");

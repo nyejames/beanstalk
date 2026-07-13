@@ -6,20 +6,20 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::source_libraries::root_file::HashRootFileDiscovery;
+use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 use super::project_structure_diagnostics::{path_id, project_structure_messages};
 
 /// Validate that every source-library root has exactly one direct-child hash root file.
-pub(super) fn validate_source_library_roots(
-    resolver: &ProjectPathResolver,
+pub(crate) fn validate_source_library_roots(
+    prepared_roots: &PreparedSourceLibraryRoots,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    for (prefix, root) in resolver.source_library_roots() {
-        let discovery = resolver
-            .source_library_root_files()
+    for (prefix, root) in prepared_roots.roots() {
+        let discovery = prepared_roots
+            .root_files()
             .get(prefix)
             .unwrap_or(&HashRootFileDiscovery::Missing);
 

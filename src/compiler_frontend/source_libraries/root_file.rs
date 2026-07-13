@@ -7,6 +7,7 @@
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::CONFIG_FILE_NAME;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,46 @@ pub(crate) enum HashRootFileDiscovery {
     Unique(PathBuf),
     Multiple(Vec<PathBuf>),
     Unreadable(String),
+}
+
+/// Immutable source-library roots and their prepared public-surface states.
+///
+/// WHAT: carries the canonical filesystem roots and the typed direct-child hash-root discovery
+///     result from Stage 0 into path resolution and header preparation.
+/// WHY: resolver construction must consume filesystem preparation rather than rediscovering
+///     source-library roots or public surfaces.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PreparedSourceLibraryRoots {
+    roots: HashMap<String, PathBuf>,
+    root_files: HashMap<String, HashRootFileDiscovery>,
+}
+
+impl PreparedSourceLibraryRoots {
+    pub(crate) fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Build one prepared contract from Stage 0's canonical roots and discoveries.
+    pub(crate) fn from_entries(
+        entries: impl IntoIterator<Item = (String, PathBuf, HashRootFileDiscovery)>,
+    ) -> Self {
+        let mut prepared = Self::default();
+
+        for (prefix, root, root_file) in entries {
+            prepared.roots.insert(prefix.clone(), root);
+            prepared.root_files.insert(prefix, root_file);
+        }
+
+        prepared
+    }
+
+    pub(crate) fn roots(&self) -> &HashMap<String, PathBuf> {
+        &self.roots
+    }
+
+    pub(crate) fn root_files(&self) -> &HashMap<String, HashRootFileDiscovery> {
+        &self.root_files
+    }
 }
 
 /// Whether a filesystem filename is a non-config Beanstalk module root.

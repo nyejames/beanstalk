@@ -30,7 +30,7 @@ pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     ProjectPathResolver::new(
         cwd.clone(),
         cwd,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")

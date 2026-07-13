@@ -13,6 +13,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
@@ -55,7 +56,7 @@ fn configured_resolver_with_source_file_kinds(
     ProjectPathResolver::new_with_module_roots(
         project_root,
         entry_root,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        PreparedSourceLibraryRoots::empty(),
         source_file_kinds,
         source_tree_index.module_roots().clone(),
     )

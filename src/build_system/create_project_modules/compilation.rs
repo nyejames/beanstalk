@@ -30,6 +30,8 @@ use super::frontend_orchestration::FrontendModuleBuildContext;
 use super::module_inventory;
 use super::project_roots;
 use super::reachable_file_discovery;
+use super::root_validation::validate_source_library_roots;
+use super::source_library_discovery::prepare_source_library_roots;
 use super::source_tree_index::SourceTreeIndex;
 
 /// Record a Stage 0 build-system timing through the central `timers` substrate.
@@ -117,6 +119,15 @@ pub(crate) fn compile_single_file_frontend(
 
     // 3. Initialize path resolver for imports.
     let path_resolver_start = crate::timing::start_pipeline_timing();
+    let prepared_source_library_roots = prepare_source_library_roots(&libraries.source_libraries);
+    if let Err(messages) =
+        validate_source_library_roots(&prepared_source_library_roots, string_table)
+    {
+        log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
+        log_stage_timing("stage0.single_file.total", total_start);
+        return Err(messages);
+    }
+
     let module_roots = if entry_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -140,7 +151,7 @@ pub(crate) fn compile_single_file_frontend(
     let project_path_resolver = match ProjectPathResolver::new_with_module_roots(
         source_root.clone(),
         source_root.clone(),
-        &libraries.source_libraries,
+        prepared_source_library_roots,
         &libraries.source_file_kinds,
         module_roots,
     ) {

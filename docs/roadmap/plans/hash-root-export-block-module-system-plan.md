@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 10 final performance validation. Phase 9 documentation remains deferred while the user-owned docs migration is active.
-LAST_ACCEPTED_COMMIT: `1233c564f` (`refactor: unify module root public surfaces`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `1233c564f`; Phase 10 implementation cleanup is ready for checkpoint. Concurrent docs migration and untracked `tmp/` content remain user-owned and outside implementation worker scope.
+CURRENT_SLICE: Phase 10 benchmark identity and artifact integration coverage. Phase 9 documentation remains deferred while the user-owned docs migration is active.
+LAST_ACCEPTED_COMMIT: `a408bd03c` (`refactor: remove stale module facade paths`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `a408bd03c`; the resolver-preflight correction has passed Codex implementation and Ollama final review and is ready for checkpoint. Concurrent docs migration remains user-owned and outside implementation worker scope.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,7 +19,7 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: the ongoing language migration is user-owned. Compiler-design source-discovery and import pages still contain facade-era wording and are deferred to Phase 9.
-- code: Phase 10's cleanup audit found no obsolete discovery or compatibility implementation. It simplified the rejected non-block `export` path and removed stale module-facade terminology. A proposed entry-file-only discovery shortcut failed 22 integration expectations and was fully reverted, preserving the prepared tree required for sibling module public surfaces.
+- code: source-library root canonicalization and hash-root discovery now have one Stage 0 owner. `ProjectPathResolver` consumes an immutable prepared contract and performs no filesystem discovery during construction. Remaining audit work is thread-aware benchmark identity, stale removed-metric labels and an end-to-end negative artifact assertion.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -187,6 +187,7 @@ VALIDATION_STATE:
 - Phase 7 final gate and canvas cleanup: the parent updated obsolete canvas fixtures to named `id` and `style` inserts, removed positional canvas dimensions and made whitespace-only loose content around named inserts disappear without weakening meaningful loose-content diagnostics. `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -2 ms average. Cleanup commit: `bc143430c`.
 - Phase 8 generic traversal: Codex CLI removed the optional module-root export-file map and source-library facade map, made each discovered root file the authoritative public surface and renamed resolver/validation paths around module roots. Shared reachable-file traversal still owns provider-capable and provider-free imports, source-cache reuse and cross-module root queueing. Arbitrary-name source-library and Beandown root coverage was added. Focused Stage 0, path and header suites passed. Parent `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at 0 ms average.
 - Phase 10 implementation cleanup: Codex CLI audited obsolete discovery, filename-specific helpers, inline export compatibility and facade APIs. Parent rejected and reverted an entry-file-only discovery shortcut after the full gate exposed 22 missing sibling-module imports. The accepted cleanup only simplifies the already-rejected non-block `export` path and removes stale module-facade terminology. Corrected `just validate` passed cross-target Clippy, 3336 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
+- Phase 10 resolver preflight: Codex CLI introduced immutable `PreparedSourceLibraryRoots`, moved source-library canonicalization and direct-child hash-root discovery into one Stage 0/build-system preflight and migrated directory, single-file, config and direct Beandown construction. Resolver constructors now consume prepared data without filesystem calls. Ollama performed the user-requested final review and found no correction. Both workers passed all-target tests (3344), integration cases (1753/1753), frontend benchmarks, Clippy and diff checks; Codex also passed `just validate`.
 
 DOCS_IMPACT:
 - progress matrix: updated for generic Stage 0 source-library discovery and the remaining temporary `#mod.bst` file-role limit
@@ -194,11 +195,11 @@ DOCS_IMPACT:
 - authorized docs updates: yes, update docs in the same phase that changes behavior; do not leave source semantics undocumented
 
 NEXT_ACTION:
-- Delegate Phase 10's remaining thread-count benchmark protocol and final implementation audit through codex-cli while Phase 9 remains deferred for the user-owned docs migration.
+- Use Ollama for the remaining Phase 10 benchmark-identity and artifact-coverage slices, followed by an additional Ollama final review before each commit.
 DELEGATION_DECISION: codex-cli - explicit user override for every implementation and audit slice; the reviewed wrapper now resolves through the repo-tracked script
 NEXT_WORKER_ORDER: codex-cli only for this run
 STOP_REASON: none
-NEXT_RESUME_ACTION: checkpoint the accepted cleanup, then launch Phase 10 final performance validation through codex-cli without editing documentation.
+NEXT_RESUME_ACTION: checkpoint the reviewed resolver preflight, then launch the benchmark-identity correction through Ollama without editing documentation.
 
 ---
 
@@ -1073,7 +1074,7 @@ This phase proves the refactor achieved its performance and simplification goals
   - [ ] exactly one source-tree discovery run per directory build;
   - [ ] module-root stress/source-tree discovery stage improved versus baseline;
   - [ ] no broad compile-time regression;
-  - [ ] no hidden path resolver scan;
+  - [x] no hidden path resolver scan;
   - [ ] no artifact emitted for API-only HTML modules;
   - [ ] imported root start bodies do not execute in importers.
 - [ ] If benchmark results are mixed:

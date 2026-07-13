@@ -13,6 +13,7 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -20,7 +21,7 @@ use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
 };
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use crate::projects::html_project::beandown::input::{BeandownCompileRequest, BeandownSourceUnit};
 use crate::projects::html_project::beandown::output::{
     BeandownCompileOutput, CompiledBeandownDocument,
@@ -115,11 +116,10 @@ fn new_direct_beandown_frontend(
         SourceFileKind::Beandown.extension(),
         SourceFileKind::Beandown,
     );
-    let source_libraries = SourceLibraryRegistry::default();
     let project_path_resolver = ProjectPathResolver::new(
         source_root.clone(),
         source_root,
-        &source_libraries,
+        PreparedSourceLibraryRoots::empty(),
         &source_file_kinds,
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;

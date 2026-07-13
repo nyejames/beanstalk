@@ -7,8 +7,11 @@
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
+use crate::compiler_frontend::source_libraries::root_file::{
+    HashRootFileDiscovery, PreparedSourceLibraryRoots, discover_hash_root_file,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceLibraryRegistry;
+use crate::libraries::{ProvidedSourceRoot, SourceLibraryRegistry};
 use crate::projects::settings::Config;
 
 use std::collections::HashMap;
@@ -18,6 +21,39 @@ use std::path::{Path, PathBuf};
 use super::project_structure_diagnostics::{
     config_diagnostic_messages, path_id, project_structure_messages,
 };
+
+/// Prepare canonical source-library roots and their direct-child public-surface states.
+///
+/// WHAT: performs the one source-library filesystem preflight used by directory, single-file,
+///     and config compilation.
+/// WHY: Stage 0 owns filesystem preparation; path resolution consumes the resulting immutable
+///     contract and must not scan or canonicalize source-library roots during construction.
+pub(crate) fn prepare_source_library_roots(
+    source_libraries: &SourceLibraryRegistry,
+) -> PreparedSourceLibraryRoots {
+    let entries = source_libraries.iter().map(|library| {
+        let ProvidedSourceRoot::Filesystem(path) = &library.root;
+        let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+        let discovery = match discover_hash_root_file(&canonical_root) {
+            Ok(HashRootFileDiscovery::Unique(root_file)) => match fs::canonicalize(&root_file) {
+                Ok(canonical_root_file) => HashRootFileDiscovery::Unique(canonical_root_file),
+                Err(error) => HashRootFileDiscovery::Unreadable(format!(
+                    "Failed to canonicalize source library public-surface file '{}': {error}",
+                    root_file.display()
+                )),
+            },
+            Ok(discovery) => discovery,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                HashRootFileDiscovery::Missing
+            }
+            Err(error) => HashRootFileDiscovery::Unreadable(error.to_string()),
+        };
+
+        (library.import_prefix.clone(), canonical_root, discovery)
+    });
+
+    PreparedSourceLibraryRoots::from_entries(entries)
+}
 
 /// Discover project-local source libraries from configured `library_folders`.
 ///

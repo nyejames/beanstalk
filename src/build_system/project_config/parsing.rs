@@ -9,6 +9,8 @@
 
 use crate::build_system::create_project_modules::extract_source_code;
 use crate::build_system::create_project_modules::import_scanning::extract_import_paths;
+use crate::build_system::create_project_modules::root_validation::validate_source_library_roots;
+use crate::build_system::create_project_modules::source_library_discovery::prepare_source_library_roots;
 use crate::build_system::project_config::ProjectConfigParseServices;
 use std::sync::Arc;
 
@@ -88,10 +90,20 @@ pub(super) fn parse_config_file(
         std::fs::canonicalize(config_dir).unwrap_or_else(|_| config_dir.to_path_buf());
 
     let path_resolver_start = crate::timing::start_pipeline_timing();
+    let prepared_source_library_roots =
+        prepare_source_library_roots(&services.libraries.source_libraries);
+    if let Err(messages) =
+        validate_source_library_roots(&prepared_source_library_roots, string_table)
+    {
+        log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
+        log_config_stage_timing("config.parse.total", parse_total_start);
+        return Err(messages);
+    }
+
     let project_path_resolver = match ProjectPathResolver::new(
         canonical_dir.clone(),
         canonical_dir,
-        &services.libraries.source_libraries,
+        prepared_source_library_roots,
         &services.libraries.source_file_kinds,
     ) {
         Ok(resolver) => resolver

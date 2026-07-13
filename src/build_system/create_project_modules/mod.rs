@@ -24,9 +24,9 @@ mod module_inventory;
 mod project_roots;
 mod project_structure_diagnostics;
 mod reachable_file_discovery;
-mod root_validation;
+pub(crate) mod root_validation;
 pub(crate) mod source_discovery_error;
-mod source_library_discovery;
+pub(crate) mod source_library_discovery;
 pub(crate) mod source_loading;
 mod source_tree_index;
 

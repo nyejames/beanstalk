@@ -47,7 +47,7 @@ fn test_context(scope: InternedPath) -> ScopeContext {
     let resolver = ProjectPathResolver::new(
         cwd.clone(),
         cwd,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
         &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid");

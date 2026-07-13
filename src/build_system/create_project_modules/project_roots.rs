@@ -19,7 +19,7 @@ use super::collision_detection::validate_project_structure_collisions;
 use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 use super::root_validation::validate_source_library_roots;
 use super::source_library_discovery::{
-    discover_project_local_source_libraries, merge_source_libraries,
+    discover_project_local_source_libraries, merge_source_libraries, prepare_source_library_roots,
     validate_entry_root_library_prefix_collisions,
 };
 use super::source_tree_index::SourceTreeIndex;
@@ -81,6 +81,9 @@ pub(super) fn build_project_path_resolver_with_index(
         string_table,
     )?;
 
+    let prepared_source_library_roots = prepare_source_library_roots(&merged_libraries);
+    validate_source_library_roots(&prepared_source_library_roots, string_table)?;
+
     let entry_root = roots.entry_root.clone();
     let source_tree_index = SourceTreeIndex::discover(
         entry_root.clone(),
@@ -92,13 +95,11 @@ pub(super) fn build_project_path_resolver_with_index(
     let resolver = ProjectPathResolver::new_with_module_roots(
         roots.project_root,
         entry_root.clone(),
-        &merged_libraries,
+        prepared_source_library_roots,
         source_file_kinds,
         source_tree_index.module_roots().clone(),
     )
     .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
-
-    validate_source_library_roots(&resolver, string_table)?;
 
     validate_project_structure_collisions(&entry_root, &merged_libraries, string_table)?;
 

@@ -25,12 +25,11 @@ use crate::compiler_frontend::paths::path_normalization::{
     is_relative_import_path, join_and_normalize_path,
 };
 use crate::compiler_frontend::source_libraries::root_file::{
-    HashRootFileDiscovery, discover_hash_root_file,
+    HashRootFileDiscovery, PreparedSourceLibraryRoots,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
-use std::collections::HashMap;
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -60,10 +59,8 @@ pub(crate) struct ResolvedImportFile {
 pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
-    source_library_roots: HashMap<String, PathBuf>,
-    /// Source-library hash-root discovery state. A unique root file is the library's public
-    /// surface; missing or ambiguous states remain available for Stage 0 validation.
-    source_library_root_files: HashMap<String, HashRootFileDiscovery>,
+    /// Canonical source-library roots and their prepared public surfaces from Stage 0.
+    source_library_roots: PreparedSourceLibraryRoots,
     /// Module roots prepared by Stage 0. Resolver construction never discovers them.
     module_roots: ModuleRootTable,
     /// Import root policy enforced during import resolution.
@@ -78,13 +75,13 @@ impl ProjectPathResolver {
     pub(crate) fn new(
         project_root: PathBuf,
         entry_root: PathBuf,
-        source_libraries: &SourceLibraryRegistry,
+        source_library_roots: PreparedSourceLibraryRoots,
         source_file_kinds: &SourceFileKindRegistry,
     ) -> Result<Self, CompilerError> {
         Self::new_with_module_roots(
             project_root,
             entry_root,
-            source_libraries,
+            source_library_roots,
             source_file_kinds,
             ModuleRootTable::empty(),
         )
@@ -96,73 +93,18 @@ impl ProjectPathResolver {
     pub(crate) fn new_with_module_roots(
         project_root: PathBuf,
         entry_root: PathBuf,
-        source_libraries: &SourceLibraryRegistry,
+        source_library_roots: PreparedSourceLibraryRoots,
         source_file_kinds: &SourceFileKindRegistry,
         module_roots: ModuleRootTable,
     ) -> Result<Self, CompilerError> {
-        let total_start = crate::timing::start_pipeline_timing();
-
-        let source_library_roots_start = crate::timing::start_pipeline_timing();
-        let mut source_library_roots = HashMap::new();
-        for root in source_libraries.iter() {
-            // Currently only filesystem roots are supported; embedded roots will be added later.
-            let crate::libraries::ProvidedSourceRoot::Filesystem(path) = &root.root;
-            // Keep a non-canonical fallback so Stage 0 can still report typed source-library root
-            // diagnostics for configured roots that exist logically but fail early canonicalization
-            // in test or project setup contexts.
-            let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
-            source_library_roots.insert(root.import_prefix.clone(), canonical_root);
-        }
-        log_path_resolver_timing(
-            "stage0.path_resolver.source_library_roots",
-            source_library_roots_start,
-        );
-
-        // Discover one generic root candidate in each source library root. Missing or ambiguous
-        // candidates stay in the resolver for Stage 0 validation. A unique candidate is stored as
-        // the canonical public-surface file used by import resolution and header preparation.
-        let source_library_roots_start = crate::timing::start_pipeline_timing();
-        let mut source_library_root_files = HashMap::new();
-        for (prefix, root) in &source_library_roots {
-            let discovery = match discover_hash_root_file(root) {
-                Ok(discovery) => discovery,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    HashRootFileDiscovery::Missing
-                }
-                Err(error) => HashRootFileDiscovery::Unreadable(error.to_string()),
-            };
-
-            let discovery = match discovery {
-                HashRootFileDiscovery::Unique(root_file) => match fs::canonicalize(&root_file) {
-                    Ok(canonical) => HashRootFileDiscovery::Unique(canonical),
-                    Err(error) => HashRootFileDiscovery::Unreadable(format!(
-                        "Failed to canonicalize source library public-surface file '{}': {error}",
-                        root_file.display()
-                    )),
-                },
-                discovery => discovery,
-            };
-
-            source_library_root_files.insert(prefix.clone(), discovery);
-        }
-        log_path_resolver_timing(
-            "stage0.path_resolver.source_library_roots",
-            source_library_roots_start,
-        );
-
-        let resolver = Self {
+        Ok(Self {
             project_root,
             entry_root,
             source_library_roots,
-            source_library_root_files,
             module_roots,
             import_root_policy: ImportRootPolicy::Normal,
             source_file_kinds: source_file_kinds.clone(),
-        };
-
-        log_path_resolver_timing("stage0.path_resolver.total", total_start);
-
-        Ok(resolver)
+        })
     }
 
     /// Set the import root policy for this resolver.
@@ -180,20 +122,16 @@ impl ProjectPathResolver {
     }
 
     /// WHAT: returns the map of source library roots.
-    pub(crate) fn source_library_roots(&self) -> &HashMap<String, PathBuf> {
-        &self.source_library_roots
-    }
-
-    /// Returns the generic hash-root discovery state for each source library.
-    pub(crate) fn source_library_root_files(&self) -> &HashMap<String, HashRootFileDiscovery> {
-        &self.source_library_root_files
+    pub(crate) fn source_library_roots(&self) -> &std::collections::HashMap<String, PathBuf> {
+        self.source_library_roots.roots()
     }
 
     /// Returns each source library's unique hash-root file as its public surface.
     pub(crate) fn source_library_public_surface_files(
         &self,
     ) -> impl Iterator<Item = (&String, &PathBuf)> {
-        self.source_library_root_files
+        self.source_library_roots
+            .root_files()
             .iter()
             .filter_map(|(prefix, discovery)| match discovery {
                 HashRootFileDiscovery::Unique(root_file) => Some((prefix, root_file)),
@@ -248,7 +186,8 @@ impl ProjectPathResolver {
 
         // Source library files may live outside the project root (builder-provided).
         // Derive a logical path relative to the library root, prefixed with the library name.
-        let mut sorted_library_prefixes: Vec<_> = self.source_library_roots.iter().collect();
+        let mut sorted_library_prefixes: Vec<_> =
+            self.source_library_roots.roots().iter().collect();
         sorted_library_prefixes.sort_by_key(|(prefix, _)| *prefix);
         for (prefix, root) in sorted_library_prefixes {
             if let Ok(relative_to_library_root) = canonical_file.strip_prefix(root) {
@@ -355,7 +294,8 @@ impl ProjectPathResolver {
     ) -> Option<PathBuf> {
         let first_component = import_path.as_components().first()?;
         let prefix = string_table.resolve(*first_component);
-        self.source_library_root_files
+        self.source_library_roots
+            .root_files()
             .get(prefix)
             .and_then(|discovery| match discovery {
                 HashRootFileDiscovery::Unique(root_file) => Some(root_file.clone()),
@@ -566,7 +506,7 @@ impl ProjectPathResolver {
     ) -> Option<PathBuf> {
         let first_component = import_path.as_components().first()?;
         let segment = string_table.resolve(*first_component);
-        self.source_library_roots.get(segment).cloned()
+        self.source_library_roots.roots().get(segment).cloned()
     }
 
     /// WHAT: checks whether a file already admitted to config parsing belongs to a source library.
@@ -577,6 +517,7 @@ impl ProjectPathResolver {
             fs::canonicalize(importer_file).unwrap_or_else(|_| importer_file.to_path_buf());
 
         self.source_library_roots
+            .roots()
             .values()
             .any(|library_root| canonical_importer.starts_with(library_root))
     }
@@ -767,15 +708,3 @@ fn existing_import_candidates(candidates: &[ImportCandidate]) -> Vec<&ImportCand
 #[cfg(test)]
 #[path = "tests/path_resolution_tests.rs"]
 mod tests;
-
-/// Record a path-resolver stage timing through the central `timers` substrate.
-///
-/// WHAT: delegates to `timing::record_started_pipeline_timing`, which stores the
-///      observation in the active collection scope and emits the stable
-///      `BST_BENCH timing` line when the output mode permits.
-/// WHY:  path-resolver construction uses dotted `stage0.path_resolver.*` metric
-///      names. The start token is zero-sized when `timers` is off, so regular
-///      builds do not read clocks for instrumentation-only measurements.
-fn log_path_resolver_timing(metric: &str, start: crate::timing::PipelineTimingStart) {
-    crate::timing::record_started_pipeline_timing(metric, start);
-}

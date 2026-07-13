@@ -100,7 +100,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     let project_path_resolver = ProjectPathResolver::new(
         project_path.clone(),
         project_path,
-        &SourceLibraryRegistry::default(),
+        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
         &SourceFileKindRegistry::default(),
     )
     .expect("test project path resolver should build");
@@ -227,7 +227,8 @@ impl BeandownScopeFixture {
         let project_path_resolver = ProjectPathResolver::new_with_module_roots(
             project_root.clone(),
             entry_root.clone(),
-            &source_libraries,
+            crate::build_system::create_project_modules::source_library_discovery::
+                prepare_source_library_roots(&source_libraries),
             &source_file_kinds,
             module_roots,
         )
@@ -1308,7 +1309,7 @@ fn beandown_folded_output_matches_authored_markdown_template() {
     let project_path_resolver = ProjectPathResolver::new(
         project_path.clone(),
         project_path,
-        &SourceLibraryRegistry::default(),
+        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
         &SourceFileKindRegistry::default(),
     )
     .expect("test project path resolver should build");
