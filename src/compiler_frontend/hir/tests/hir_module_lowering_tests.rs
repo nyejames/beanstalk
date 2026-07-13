@@ -175,11 +175,6 @@ fn rejects_unmaterialized_template_constants_in_hir_module_constant_lowering() {
     template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template_constant.location = test_location(2);
-    template_constant.content.add(Expression::string_slice(
-        string_table.intern("literal"),
-        test_location(2),
-        ValueMode::ImmutableOwned,
-    ));
 
     let mut ast = build_ast(vec![start_function], entry_path);
     ast.module_constants.push(make_test_variable(
@@ -216,11 +211,6 @@ fn rejects_nested_unmaterialized_template_constants_in_hir_module_constant_lower
     template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template_constant.location = test_location(2);
-    template_constant.content.add(Expression::string_slice(
-        string_table.intern("<section>body</section>"),
-        test_location(2),
-        ValueMode::ImmutableOwned,
-    ));
 
     let page_const_name = super::symbol("PAGE", &mut string_table);
     let body_field = page_const_name.append(string_table.intern("body"));
