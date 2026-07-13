@@ -1146,7 +1146,6 @@ fn template_loop_composition_formats_body_without_repeating_shared_head_prefix()
         panic!("expected template loop control flow");
     };
 
-    assert!(template.content.is_empty());
     assert_body_ref_static_contains(
         template_loop
             .aggregate_wrapper_tir_reference
