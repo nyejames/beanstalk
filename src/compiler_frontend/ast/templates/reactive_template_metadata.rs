@@ -1161,8 +1161,7 @@ mod tests {
         OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
     };
     use crate::compiler_frontend::ast::templates::template::{
-        ReactiveSubscription, SlotKey, Style, TemplateAtom, TemplateContent, TemplateSegment,
-        TemplateSegmentOrigin, TemplateType,
+        ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
     };
     use crate::compiler_frontend::ast::templates::template_control_flow::{
         TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch,
@@ -1657,10 +1656,9 @@ mod tests {
     }
 
     #[test]
-    fn store_aware_metadata_reads_reactive_body_segment_from_formatted_tir_root() {
-        // When a linear template has a same-store `Formatted` TIR root and the
-        // `TemplateContent` body is stale/cleared, the store-aware metadata
-        // walker must still discover body-origin reactive subscriptions from the
+    fn store_aware_metadata_discovers_subscription_from_formatted_tir_root() {
+        // A linear template with a same-store `Formatted` TIR root must have its
+        // body-origin reactive subscriptions discovered directly from the
         // authoritative TIR root.
         let mut string_table = StringTable::new();
         let mut store = TemplateIrStore::new();
@@ -1678,22 +1676,21 @@ mod tests {
             phase: TemplateTirPhase::Formatted,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        // Simulate the stale content mirror that render-unit finalization skipped.
-        template.content.atoms.clear();
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
         assert_eq!(
             metadata.subscriptions,
             vec![subscription],
-            "store-aware metadata must read the reactive subscription from the formatted TIR root when the content mirror is stale"
+            "store-aware metadata must discover the reactive subscription from the formatted TIR root"
         );
     }
 
     #[test]
-    fn store_aware_metadata_ignores_content_when_tir_phase_is_below_composed() {
-        // A below-Composed root is not authoritative for this consumer. The
-        // store-aware path must skip it without reviving compatibility content.
+    fn store_aware_metadata_skips_below_composed_tir_root_subscription() {
+        // A below-Composed TIR root is not authoritative for this consumer.
+        // Even when the root contains a subscription, the store-aware path
+        // must skip it.
         let mut string_table = StringTable::new();
         let mut store = TemplateIrStore::new();
         let mut builder = TemplateIrBuilder::new(&mut store);
@@ -1701,22 +1698,6 @@ mod tests {
         let (body_root, _) =
             reactive_dynamic_expression_node(&mut builder, &mut string_table, "tir_count");
         let template_id = finish_string_function_template(&mut builder, body_root);
-
-        let source = ReactiveSource {
-            path: InternedPath::from_single_str("content_count", &mut string_table),
-            kind: ReactiveSourceKind::Declaration,
-        };
-        let content_subscription = ReactiveSubscription {
-            source: source.clone(),
-            type_id: builtin_type_ids::INT,
-            location: test_location(),
-        };
-        let mut expression = source_expression(source);
-        expression.reactive_template = Some(ReactiveTemplateMetadata {
-            template_backed: false,
-            subscriptions: vec![content_subscription.clone()],
-            template_value_parameters: vec![],
-        });
 
         let mut template = Template::empty();
         template.tir_reference = Some(TemplateTirReference {
@@ -1726,23 +1707,12 @@ mod tests {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        // Deliberately install stale compatibility content. Neither this
-        // subscription nor the below-Composed TIR payload is authoritative.
-        template.content = TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    expression,
-                    TemplateSegmentOrigin::Body,
-                    content_subscription.clone(),
-                ),
-            )],
-        };
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
         assert!(
             metadata.subscriptions.is_empty(),
-            "store-aware metadata must not revive content when the TIR phase is below Composed"
+            "store-aware metadata must not collect subscriptions from a below-Composed TIR root"
         );
     }
 
@@ -2008,32 +1978,33 @@ mod tests {
     }
 
     #[test]
-    fn registry_metadata_ignores_content_for_parsed_phase() {
+    fn registry_metadata_skips_parsed_phase_tir_subscription() {
         let mut string_table = StringTable::new();
         let store_rc = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-        let content_source = ReactiveSource {
-            path: InternedPath::from_single_str("content_count", &mut string_table),
+        let tir_source = ReactiveSource {
+            path: InternedPath::from_single_str("tir_count", &mut string_table),
             kind: ReactiveSourceKind::Declaration,
         };
-        let content_subscription = ReactiveSubscription {
-            source: content_source.clone(),
+        let tir_subscription = ReactiveSubscription {
+            source: tir_source.clone(),
             type_id: builtin_type_ids::INT,
             location: test_location(),
         };
-        let content_expression = source_expression(content_source.clone())
-            .with_reactive_template_metadata(ReactiveTemplateMetadata {
+        let tir_expression = source_expression(tir_source.clone()).with_reactive_template_metadata(
+            ReactiveTemplateMetadata {
                 template_backed: false,
-                subscriptions: vec![content_subscription.clone()],
+                subscriptions: vec![tir_subscription.clone()],
                 template_value_parameters: vec![],
-            });
+            },
+        );
 
         let (body_root, _site_id) = {
             let mut store = store_rc.borrow_mut();
             dynamic_expression_node_with_site(
                 &mut store,
-                content_expression,
-                Some(content_subscription.clone()),
+                tir_expression,
+                Some(tir_subscription.clone()),
             )
         };
 
@@ -2055,16 +2026,6 @@ mod tests {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         });
-        // Simulate a stale content mirror with a subscription that is not in the TIR node.
-        template.content = TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    source_expression(content_source),
-                    TemplateSegmentOrigin::Body,
-                    content_subscription.clone(),
-                ),
-            )],
-        };
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -2077,7 +2038,7 @@ mod tests {
 
         assert!(
             metadata.subscriptions.is_empty(),
-            "registry-backed metadata must not revive content for parsed-phase templates"
+            "registry-backed metadata must not collect subscriptions from a parsed-phase TIR root"
         );
     }
 
@@ -2147,25 +2108,6 @@ mod tests {
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         });
-        // Simulate a stale content mirror with a subscription that is not in the TIR node.
-        let content_source = ReactiveSource {
-            path: InternedPath::from_single_str("content_source", &mut string_table),
-            kind: ReactiveSourceKind::Declaration,
-        };
-        let content_subscription = ReactiveSubscription {
-            source: content_source.clone(),
-            type_id: builtin_type_ids::INT,
-            location: test_location(),
-        };
-        template.content = TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    source_expression(content_source),
-                    TemplateSegmentOrigin::Body,
-                    content_subscription,
-                ),
-            )],
-        };
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -2179,7 +2121,7 @@ mod tests {
         assert_eq!(
             metadata.subscriptions,
             vec![overlay_subscription],
-            "formatted templates with expression overlays must read from the TirView, not stale content"
+            "formatted TirView metadata must resolve the effective expression overlay"
         );
     }
 
