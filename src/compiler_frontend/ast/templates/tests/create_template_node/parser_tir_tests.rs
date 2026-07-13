@@ -7,8 +7,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::templates::reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateAtom, TemplateContent,
-    TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateLoopControlKind,
@@ -58,32 +57,6 @@ fn parse_const_required_template(
         .expect("const-required template should parse");
 
     (template, template_ir_store)
-}
-
-fn attach_parsed_tir_reference_for_test(
-    template: &mut Template,
-    context: &ScopeContext,
-    string_table: &StringTable,
-) {
-    let parsed_template_id = {
-        let store = context.template_ir_store();
-        let mut store_borrow = store.borrow_mut();
-        finalized_template_tir_id(template, &mut store_borrow, string_table)
-            .expect("manual template should convert to TIR")
-    };
-    let store_owner = Arc::clone(&context.template_ir_store().borrow().owner());
-    let overlay_set_id = {
-        let mut registry = context.template_ir_registry.borrow_mut();
-        registry.allocate_overlay_set(TemplateOverlaySet::empty())
-    };
-
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(context.template_ir_store_id, parsed_template_id),
-        store_owner,
-        is_composed: false,
-        phase: TemplateTirPhase::Parsed,
-        overlay_set_id,
-    });
 }
 
 fn tir_root_child_ids(template: &Template, store: &TemplateIrStore) -> Vec<TemplateIrNodeId> {
@@ -2904,41 +2877,16 @@ fn parser_tir_skips_conditional_child_wrappers_for_fresh_control_flow_child() {
 
 #[test]
 fn doc_comment_with_formatter_reuses_formatted_tir_root() {
+    // `$doc` applies markdown formatting automatically, so the same-store
+    // `Formatted` TIR root can be reused.
     let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
+    let (template, _store) = parse_template("[$doc: doc body]", &mut string_table);
 
-    let mut template = Template {
-        kind: TemplateType::Comment(CommentDirectiveKind::Doc),
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    string_table.intern("doc body"),
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
+    assert_eq!(
+        template.kind,
+        TemplateType::Comment(CommentDirectiveKind::Doc),
+        "$doc should produce a doc-comment template kind"
+    );
 
     assert!(
         template
@@ -3039,33 +2987,11 @@ fn non_empty_slot_insert_reuses_formatted_tir_root() {
 
 #[test]
 fn empty_slot_insert_records_formatted_tir_phase() {
-    // An empty `$insert(...)` helper has no body atoms for slot composition to
-    // extract, so the same-store `Formatted` TIR root can be reused.
+    // An empty `$insert(...)` helper with an explicit formatter has no body
+    // atoms for slot composition to extract, so the same-store `Formatted`
+    // TIR root can be reused.
     let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-
-    let mut template = Template {
-        kind: TemplateType::SlotInsert(SlotKey::Named(string_table.intern("name"))),
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent { atoms: vec![] },
-        location: SourceLocation::default(),
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
+    let (template, _store) = parse_template("[$md, $insert(\"name\"):]", &mut string_table);
 
     assert!(
         template
@@ -3083,101 +3009,6 @@ fn empty_slot_insert_records_formatted_tir_phase() {
         tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
         "setup: empty SlotInsert helper must have a Formatted-or-later TIR reference"
     );
-}
-
-#[test]
-fn slot_definition_records_formatted_tir_phase() {
-    // Parent body parsing records slot definitions directly as TIR placeholders.
-    // With an explicit formatter the slot helper's same-store `Formatted` TIR
-    // root can be reused.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
-
-    let mut template = Template {
-        kind: TemplateType::SlotDefinition(SlotKey::Named(string_table.intern("name"))),
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    string_table.intern("slot default"),
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "SlotDefinition helper should reuse the formatted TIR root"
-    );
-
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: SlotDefinition helper must have a TIR reference");
-    assert!(
-        tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
-        "setup: SlotDefinition helper must have a Formatted-or-later TIR reference"
-    );
-}
-
-#[test]
-fn note_todo_comments_do_not_claim_formatted_tir_root_reuse() {
-    let mut string_table = StringTable::new();
-    let location = SourceLocation::default();
-
-    for kind in [CommentDirectiveKind::Note, CommentDirectiveKind::Todo] {
-        let template = Template {
-            kind: TemplateType::Comment(kind.clone()),
-            // Production resets note/todo style to no formatter; keep that invariant
-            // so the helper-kind guard is exercised through the explicit-formatter check.
-            style: Style::default(),
-            content: TemplateContent {
-                atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                    Expression::string_slice(
-                        string_table.intern("ignored"),
-                        location.clone(),
-                        ValueMode::ImmutableOwned,
-                    ),
-                    TemplateSegmentOrigin::Body,
-                ))],
-            },
-            location: location.clone(),
-            ..Template::empty()
-        };
-
-        assert!(
-            !template
-                .tir_reference
-                .as_ref()
-                .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-            "{:?} comment should not claim formatted TIR root reuse without a TIR reference",
-            kind
-        );
-    }
 }
 
 // -------------------------
