@@ -6,8 +6,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, Style, TemplateAtom, TemplateSegment, TemplateSegmentOrigin,
-    TemplateType,
+    ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
@@ -17,7 +16,6 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
     TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
     TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirView,
-    finalized_template_tir_id,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
@@ -82,39 +80,40 @@ fn with_test_normalization_context<R>(
     action(&mut context)
 }
 
-fn const_template_with_text(
-    text: crate::compiler_frontend::symbols::string_interning::StringId,
-) -> Template {
-    let location = SourceLocation::default();
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location.clone();
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(TemplateSegment::new(
-            Expression::string_slice(text, location, ValueMode::ImmutableOwned),
-            TemplateSegmentOrigin::Body,
-        )));
-    template
-}
-
-/// Builds the production-shaped TIR identity that parser-created template
-/// expressions carry before finalization normalizes their enclosing payload.
-fn const_template_with_registered_tir_text(
+/// Builds a `Template` carrying a registered TIR root with a single text node,
+/// matching the production shape parser-created const text templates carry
+/// before finalization normalizes their enclosing payload.
+fn registered_text_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
     store_id: TemplateStoreId,
     overlay_set_id: TemplateOverlaySetId,
     template_ir_store: &Rc<RefCell<TemplateIrStore>>,
     string_table: &StringTable,
 ) -> Template {
-    let mut template = const_template_with_text(text);
-    let mut store = template_ir_store.borrow_mut();
-    let template_id = finalized_template_tir_id(&template, &mut store, string_table)
-        .expect("test template should materialize its parser-equivalent TIR root");
+    let byte_len = string_table.resolve(text).len() as u32;
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node(
+            text,
+            byte_len,
+            TemplateSegmentOrigin::Body,
+            SourceLocation::default(),
+        );
+        let root = builder.push_sequence_node(vec![text_node], SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, template_id),
-        store_owner: store.owner(),
+        store_owner: template_ir_store.borrow().owner(),
         is_composed: true,
         phase: TemplateTirPhase::Composed,
         overlay_set_id,
@@ -154,10 +153,9 @@ fn assert_expression_site_location(
 }
 
 #[test]
-fn finalization_fold_prefers_registry_backed_composed_tir_view() {
+fn finalization_fold_composed_tir_root_folds_view_text() {
     let mut string_table = StringTable::new();
     let view_text = string_table.intern("registry-backed view");
-    let fallback_text = string_table.intern("current-state fallback");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -168,22 +166,13 @@ fn finalization_fold_prefers_registry_backed_composed_tir_view() {
     let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let reference = {
-        let view_template = const_template_with_text(view_text);
-        let mut store = template_ir_store.borrow_mut();
-        let template_id = finalized_template_tir_id(&view_template, &mut store, &string_table)
-            .expect("view template should convert to TIR");
-        TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store.owner(),
-            is_composed: true,
-            phase: TemplateTirPhase::Composed,
-            overlay_set_id,
-        }
-    };
-
-    let mut template = const_template_with_text(fallback_text);
-    template.tir_reference = Some(reference);
+    let template = registered_text_template(
+        view_text,
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &string_table,
+    );
 
     let folded = try_fold_template_to_string(
         &template,
@@ -197,13 +186,13 @@ fn finalization_fold_prefers_registry_backed_composed_tir_view() {
             template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
-    .expect("registry-backed view fold should succeed")
+    .expect("composed TIR root fold should succeed")
     .folded
     .expect("composed template should fold");
 
     assert_eq!(
         folded, view_text,
-        "finalization should fold the stable composed TIR view before using current-state fallback"
+        "finalization should fold the composed TIR view text"
     );
 }
 
@@ -223,7 +212,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
     let registry = Rc::new(RefCell::new(registry));
 
     let dynamic_expression = Expression::template(
-        const_template_with_registered_tir_text(
+        registered_text_template(
             normalized_text,
             store_id,
             overlay_set_id,
@@ -362,7 +351,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     let registry = Rc::new(RefCell::new(registry));
 
     let dynamic_expression = Expression::template(
-        const_template_with_registered_tir_text(
+        registered_text_template(
             normalized_text,
             store_id,
             overlay_set_id,
@@ -410,7 +399,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     };
 
     normalize_template_for_hir(&mut template, &mut context)
-        .expect("template normalization should preserve parsed reference fallback state");
+        .expect("template normalization should preserve parsed reference identity");
 
     let reference = template
         .tir_reference
@@ -423,7 +412,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Parsed,
-        "parsed references are not stable finalization views and must keep fallback identity"
+        "parsed references are not stable finalization views and must keep their parsed phase"
     );
 }
 
@@ -443,7 +432,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
     let registry = Rc::new(RefCell::new(registry));
 
     let selector_expression = Expression::template(
-        const_template_with_registered_tir_text(
+        registered_text_template(
             normalized_text,
             store_id,
             overlay_set_id,
@@ -573,7 +562,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
     let registry = Rc::new(RefCell::new(registry));
 
     let header_expression = Expression::template(
-        const_template_with_registered_tir_text(
+        registered_text_template(
             normalized_text,
             store_id,
             overlay_set_id,
@@ -700,7 +689,6 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
     let mut string_table = StringTable::new();
     let structural_text = string_table.intern("structural dynamic payload");
     let overlay_text = string_table.intern("finalized expression overlay");
-    let fallback_text = string_table.intern("current-state fallback");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -767,7 +755,8 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         .compose_overlay_sets(&[empty_overlay_set_id, expression_overlay_set_id])
         .expect("expression overlay set should compose");
 
-    let mut template = const_template_with_text(fallback_text);
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, template_id),
         store_owner: template_ir_store.borrow().owner(),
@@ -797,7 +786,7 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
 
     assert_eq!(
         folded, overlay_text,
-        "finalized expression overlays must fold from the same effective TirView instead of current-state fallback or structural payload"
+        "finalized expression overlays must fold from the same effective TirView instead of the structural payload"
     );
 
     #[cfg(feature = "benchmark_counters")]
@@ -814,7 +803,6 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
     let before_text = string_table.intern("before");
     let after_text = string_table.intern("after");
     let fill_text = string_table.intern("filled");
-    let fallback_text = string_table.intern("overlay fallback");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -908,7 +896,8 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
         }
     };
 
-    let mut template = const_template_with_text(fallback_text);
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(reference);
 
     let folded = try_fold_template_to_string(
@@ -930,15 +919,14 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
     let expected = string_table.intern("beforefilledafter");
     assert_eq!(
         folded, expected,
-        "Composed slot overlays must fold from the effective TirView instead of current-state fallback content"
+        "composed slot overlays must fold from the effective TirView"
     );
 }
 
 #[test]
-fn finalization_fold_uses_authoritative_composed_root_for_unfilled_slot() {
+fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
     let mut string_table = StringTable::new();
-    let text_id = string_table.intern("authoritative slot output");
-    let stale_content_text = string_table.intern("stale compatibility content");
+    let text_id = string_table.intern("text before unfilled slot");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -949,16 +937,15 @@ fn finalization_fold_uses_authoritative_composed_root_for_unfilled_slot() {
     let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
-    // An unfilled slot contributes no output. Finalization folds that rule from
-    // the authoritative TIR root and must ignore contradictory compatibility
-    // content carried by this detached fixture.
+    // An unfilled slot contributes no output. Finalization folds that rule
+    // directly from the composed TIR root.
     let reference = {
         let location = SourceLocation::default();
         let mut store = template_ir_store.borrow_mut();
         let mut builder = TemplateIrBuilder::new(&mut store);
         let text_node = builder.push_text_node(
             text_id,
-            "authoritative slot output".len() as u32,
+            "text before unfilled slot".len() as u32,
             TemplateSegmentOrigin::Body,
             location.clone(),
         );
@@ -981,7 +968,8 @@ fn finalization_fold_uses_authoritative_composed_root_for_unfilled_slot() {
         }
     };
 
-    let mut template = const_template_with_text(stale_content_text);
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(reference);
 
     let folded = try_fold_template_to_string(
@@ -996,24 +984,23 @@ fn finalization_fold_uses_authoritative_composed_root_for_unfilled_slot() {
             template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
-    .expect("authoritative slot-root fold should succeed")
+    .expect("composed slot-root fold should succeed")
     .folded
     .expect("unfilled slot template should fold");
 
     assert_eq!(
         folded, text_id,
-        "unfilled slots must fold from the authoritative TIR root and ignore stale compatibility content"
+        "the unfilled slot must contribute no output to the composed TIR root"
     );
 }
 
 #[test]
-fn finalization_fold_uses_authoritative_formatted_root_for_unfilled_slot() {
+fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
     #[cfg(feature = "benchmark_counters")]
     let _guard = crate::compiler_frontend::instrumentation::lock_counter_test();
 
     let mut string_table = StringTable::new();
-    let text_id = string_table.intern("authoritative formatted slot output");
-    let stale_content_text = string_table.intern("stale formatted compatibility content");
+    let text_id = string_table.intern("formatted text before unfilled slot");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -1030,7 +1017,7 @@ fn finalization_fold_uses_authoritative_formatted_root_for_unfilled_slot() {
         let mut builder = TemplateIrBuilder::new(&mut store);
         let text_node = builder.push_text_node(
             text_id,
-            "authoritative formatted slot output".len() as u32,
+            "formatted text before unfilled slot".len() as u32,
             TemplateSegmentOrigin::Body,
             location.clone(),
         );
@@ -1057,7 +1044,8 @@ fn finalization_fold_uses_authoritative_formatted_root_for_unfilled_slot() {
         }
     };
 
-    let mut template = const_template_with_text(stale_content_text);
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(reference);
 
     #[cfg(feature = "benchmark_counters")]
@@ -1075,13 +1063,13 @@ fn finalization_fold_uses_authoritative_formatted_root_for_unfilled_slot() {
             template_ir_registry: Rc::new(RefCell::new(registry)),
         },
     )
-    .expect("authoritative formatted slot-root fold should succeed")
+    .expect("formatted slot-root fold should succeed")
     .folded
     .expect("unfilled formatted slot template should fold");
 
     assert_eq!(
         folded, text_id,
-        "formatted unfilled slots must fold from TIR and ignore stale compatibility content"
+        "the unfilled slot must contribute no output to the formatted TIR root"
     );
 
     #[cfg(feature = "benchmark_counters")]
@@ -1118,7 +1106,7 @@ fn runtime_template_handoff_from_expression(expression: Expression) -> OwnedRunt
 }
 
 #[test]
-fn branch_content_only_normalization_requires_tir_body_roots() {
+fn branch_normalization_requires_tir_body_roots() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
     let mut template = Template::empty();
@@ -1148,12 +1136,12 @@ fn branch_content_only_normalization_requires_tir_body_roots() {
 
     assert!(
         result.is_err(),
-        "normalization must not resurrect branch/fallback bodies from content-only state"
+        "normalization must not resurrect branch/fallback bodies without TIR body roots"
     );
 }
 
 #[test]
-fn loop_body_content_only_normalization_requires_tir_body_root() {
+fn loop_body_normalization_requires_tir_body_root() {
     let mut string_table = StringTable::new();
     let location = SourceLocation::default();
     let mut template = Template::empty();
@@ -1179,7 +1167,7 @@ fn loop_body_content_only_normalization_requires_tir_body_root() {
 
     assert!(
         result.is_err(),
-        "normalization must not resurrect loop bodies from content-only state"
+        "normalization must not resurrect loop bodies without TIR body roots"
     );
 }
 
@@ -1291,48 +1279,65 @@ fn collect_owned_node_string_slice_expressions(
     }
 }
 
-/// Builds an ordinary runtime template that mixes a literal text segment with a
-/// dynamic reference expression.
+/// Builds a `Template` with a registered TIR root containing a text segment and
+/// a runtime reference expression, matching the production shape for ordinary
+/// runtime templates that are not const-foldable.
 ///
 /// WHAT: the resulting template is not const-foldable because the reference is
 ///       a runtime value, so it must go through the runtime-template handoff path.
 /// WHY: gives the new store-focused test a simple, representative input shape.
-fn ordinary_runtime_template_with_text_and_reference(
-    string_table: &mut StringTable,
+fn registered_runtime_template(
     text: crate::compiler_frontend::symbols::string_interning::StringId,
     reference_name: &str,
+    store_id: TemplateStoreId,
+    overlay_set_id: TemplateOverlaySetId,
+    template_ir_store: &Rc<RefCell<TemplateIrStore>>,
+    string_table: &mut StringTable,
 ) -> Template {
-    let location = SourceLocation::default();
-    let mut template = Template::empty();
-    template.location = location.clone();
-
-    let text_expression =
-        Expression::string_slice(text, location.clone(), ValueMode::ImmutableOwned);
+    let byte_len = string_table.resolve(text).len() as u32;
     let reference_path = InternedPath::from_single_str(reference_name, string_table);
     let reference_expression = Expression::reference_with_type_id(
         reference_path,
         DataType::StringSlice,
         builtin_type_ids::STRING,
-        location.clone(),
+        SourceLocation::default(),
         ValueMode::ImmutableReference,
         ConstRecordState::RuntimeValue,
     );
-
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(TemplateSegment::new(
-            text_expression,
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node(
+            text,
+            byte_len,
             TemplateSegmentOrigin::Body,
-        )));
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(TemplateSegment::new(
+            SourceLocation::default(),
+        );
+        let dynamic_node = builder.push_dynamic_expression_node(
             reference_expression,
             TemplateSegmentOrigin::Body,
-        )));
-
+            None,
+            SourceLocation::default(),
+        );
+        let root =
+            builder.push_sequence_node(vec![text_node, dynamic_node], SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+    let mut template = Template::empty();
+    template.kind = TemplateType::StringFunction;
+    template.tir_reference = Some(TemplateTirReference {
+        root: TemplateRef::new(store_id, template_id),
+        store_owner: template_ir_store.borrow().owner(),
+        is_composed: true,
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id,
+    });
     template
 }
 
@@ -1340,56 +1345,41 @@ fn ordinary_runtime_template_with_text_and_reference(
 fn ordinary_runtime_template_handoff_uses_module_tir_store() {
     let mut string_table = StringTable::new();
     let text = string_table.intern("hello ");
-    let mut template =
-        ordinary_runtime_template_with_text_and_reference(&mut string_table, text, "name");
 
-    let handoff = with_test_normalization_context(&mut string_table, |context| {
-        // Install a same-store TIR reference so finalization traverses the final
-        // effective view instead of the compatibility content mirror.
-        let reference = {
-            let mut store = context.template_ir_store.borrow_mut();
-            let template_id =
-                finalized_template_tir_id(&template, &mut store, context.string_table)
-                    .expect("test template should convert to TIR");
-            let store_owner = store.owner();
-            let store_id = store.store_id();
-            TemplateTirReference {
-                root: TemplateRef::new(store_id, template_id),
-                store_owner,
-                is_composed: true,
-                phase: TemplateTirPhase::Composed,
-                overlay_set_id: TemplateOverlaySetId::empty(),
-            }
-        };
-        template.tir_reference = Some(reference);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-        let stale_text = context.string_table.intern("stale static content");
-        template.content.atoms.clear();
-        template
-            .content
-            .atoms
-            .push(TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    stale_text,
-                    SourceLocation::default(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            )));
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
-        let normalization_result = normalize_template_for_hir(&mut template, context);
-        assert!(
-            normalization_result.is_ok(),
-            "ordinary runtime template normalization should succeed"
-        );
+    let template = registered_runtime_template(
+        text,
+        "name",
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &mut string_table,
+    );
 
-        let mut expression = Expression::template(template.clone(), ValueMode::ImmutableOwned);
-        normalize_expression_templates(&mut expression, context)
-            .expect("ordinary runtime template expression normalization should succeed");
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
-        runtime_template_handoff_from_expression(expression)
-    });
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+    };
 
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("ordinary runtime template expression normalization should succeed");
+
+    let handoff = runtime_template_handoff_from_expression(expression);
     assert!(
         matches!(handoff.body, OwnedRuntimeTemplateBody::Render(_)),
         "ordinary runtime templates must materialize a render body handoff"
@@ -1400,30 +1390,39 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
 fn runtime_template_expression_normalization_replaces_template_with_owned_handoff() {
     let mut string_table = StringTable::new();
     let text = string_table.intern("hello ");
-    let mut template =
-        ordinary_runtime_template_with_text_and_reference(&mut string_table, text, "name");
 
-    let expression = with_test_normalization_context(&mut string_table, |context| {
-        let reference = {
-            let mut store = context.template_ir_store.borrow_mut();
-            let template_id =
-                finalized_template_tir_id(&template, &mut store, context.string_table)
-                    .expect("test template should convert to TIR");
-            TemplateTirReference {
-                root: TemplateRef::new(store.store_id(), template_id),
-                store_owner: store.owner(),
-                is_composed: true,
-                phase: TemplateTirPhase::Composed,
-                overlay_set_id: TemplateOverlaySetId::empty(),
-            }
-        };
-        template.tir_reference = Some(reference);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
 
-        let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
-        normalize_expression_templates(&mut expression, context)
-            .expect("runtime template expression normalization should succeed");
-        expression
-    });
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let template = registered_runtime_template(
+        text,
+        "name",
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &mut string_table,
+    );
+
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+    };
+
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("runtime template expression normalization should succeed");
 
     let ExpressionKind::RuntimeTemplateHandoff(handoff) = &expression.kind else {
         panic!("runtime template expression should be replaced with an owned handoff");
@@ -1447,7 +1446,6 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
 fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() {
     let mut string_table = StringTable::new();
     let overlay_text = string_table.intern("normalized overlay text");
-    let structural_path = InternedPath::from_single_str("structural_name", &mut string_table);
     let runtime_path = InternedPath::from_single_str("runtime_name", &mut string_table);
 
     let project_path_resolver = test_project_path_resolver();
@@ -1459,7 +1457,7 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
     let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
     let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
     let nested_template_expression = Expression::template(
-        const_template_with_registered_tir_text(
+        registered_text_template(
             overlay_text,
             store_id,
             empty_overlay_set_id,
@@ -1507,20 +1505,6 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
     let mut template = Template::empty();
     template.kind = TemplateType::StringFunction;
     template.location = SourceLocation::default();
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(TemplateSegment::new(
-            Expression::reference_with_type_id(
-                structural_path.clone(),
-                DataType::StringSlice,
-                builtin_type_ids::STRING,
-                SourceLocation::default(),
-                ValueMode::ImmutableReference,
-                ConstRecordState::RuntimeValue,
-            ),
-            TemplateSegmentOrigin::Body,
-        )));
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, template_id),
         store_owner: template_ir_store.borrow().owner(),
@@ -1559,17 +1543,10 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
     );
 }
 
-// ---------------------------------------------------------------------------
-// Slice 5 tests: AST finalization content walks replaced by final TIR view
-// traversal.
-// ---------------------------------------------------------------------------
-
 /// Proves that a nested runtime template inside a TIR dynamic expression node
-/// is normalized through the final effective view, not the legacy content-atoms
-/// walk. The outer template carries empty content atoms so the TIR view is the
-/// sole source of the nested expression.
+/// is normalized through the final effective view.
 #[test]
-fn nested_runtime_template_normalizes_through_final_view_without_content_atoms() {
+fn nested_runtime_template_normalizes_through_final_view() {
     let mut string_table = StringTable::new();
     let nested_text = string_table.intern("nested runtime text");
 
@@ -1583,24 +1560,15 @@ fn nested_runtime_template_normalizes_through_final_view_without_content_atoms()
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
     // Build a TIR whose sole dynamic expression holds a nested runtime
-    // template (text + runtime reference — not const-foldable).
-    let mut nested_template = ordinary_runtime_template_with_text_and_reference(
-        &mut string_table,
+    // template (text plus a runtime reference, so it is not const-foldable).
+    let nested_template = registered_runtime_template(
         nested_text,
         "runtime_ref",
-    );
-    let nested_template_id = {
-        let mut store = template_ir_store.borrow_mut();
-        finalized_template_tir_id(&nested_template, &mut store, &string_table)
-            .expect("nested runtime template should convert to TIR")
-    };
-    nested_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, nested_template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
+        store_id,
         overlay_set_id,
-    });
+        &template_ir_store,
+        &mut string_table,
+    );
 
     let template_id = {
         let mut store = template_ir_store.borrow_mut();
@@ -1622,8 +1590,6 @@ fn nested_runtime_template_normalizes_through_final_view_without_content_atoms()
         )
     };
 
-    // Outer template has empty content atoms — the TIR view is the only
-    // source of the nested runtime template expression.
     let mut template = Template::empty();
     template.kind = TemplateType::StringFunction;
     template.location = SourceLocation::default();
@@ -1711,15 +1677,13 @@ fn find_runtime_handoff_in_node(node: &OwnedRuntimeTemplateNode, found: &mut boo
 }
 
 /// Proves that a const child template referenced from the outer TIR view folds
-/// correctly through the final view, even when the outer template's content
-/// atoms carry different (stale) text.
+/// correctly through the final view.
 #[test]
 fn nested_const_template_folds_through_final_view() {
     let mut string_table = StringTable::new();
     let child_text_str = "child folded text";
     let child_text = string_table.intern(child_text_str);
     let child_byte_len = child_text_str.len() as u32;
-    let stale_text = string_table.intern("stale content atoms");
 
     let project_path_resolver = test_project_path_resolver();
     let path_format_config = PathStringFormatConfig::default();
@@ -1762,9 +1726,8 @@ fn nested_const_template_folds_through_final_view() {
         )
     };
 
-    // Outer template's content atoms carry stale text that must not appear
-    // in the folded result — the TIR view is authoritative.
-    let mut template = const_template_with_text(stale_text);
+    let mut template = Template::empty();
+    template.kind = TemplateType::String;
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, outer_template_id),
         store_owner: template_ir_store.borrow().owner(),
@@ -1791,13 +1754,13 @@ fn nested_const_template_folds_through_final_view() {
 
     assert_eq!(
         folded, child_text,
-        "fold must produce the child template's text from the final TIR view, not the stale content atoms"
+        "fold must produce the child template's text from the final TIR view"
     );
 }
 
 /// Proves that reactive subscriptions stored on TIR dynamic expression nodes
 /// are collected into the expression's reactive metadata through the finalized
-/// effective view, not through the legacy content-atoms walk.
+/// effective view.
 #[test]
 fn reactive_metadata_derived_from_nested_final_view() {
     let mut string_table = StringTable::new();
@@ -1892,138 +1855,6 @@ fn reactive_metadata_derived_from_nested_final_view() {
     );
 }
 
-/// Proves that `reactive_template_metadata_from_current_store` ignores stale
-/// `TemplateContent` subscriptions when an authoritative same-store TIR root
-/// is available. The store-aware normalization path must read metadata from
-/// TIR, not fall back to the legacy content-atoms walk.
-#[test]
-fn store_aware_normalization_ignores_stale_content_subscriptions() {
-    let mut string_table = StringTable::new();
-    let stale_path = InternedPath::from_single_str("stale_source", &mut string_table);
-    let tir_path = InternedPath::from_single_str("tir_source", &mut string_table);
-
-    let project_path_resolver = test_project_path_resolver();
-    let path_format_config = PathStringFormatConfig::default();
-    let source_file_scope = InternedPath::new();
-    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
-
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
-
-    // Build a TIR with a dynamic expression carrying a reactive subscription.
-    let template_id = {
-        let mut store = template_ir_store.borrow_mut();
-        let mut builder = TemplateIrBuilder::new(&mut store);
-
-        let tir_subscription = ReactiveSubscription {
-            source: ReactiveSource {
-                path: tir_path.clone(),
-                kind: ReactiveSourceKind::Declaration,
-            },
-            type_id: builtin_type_ids::STRING,
-            location: SourceLocation::default(),
-        };
-
-        let dynamic_node = builder.push_dynamic_expression_node(
-            Expression::reference_with_type_id(
-                tir_path.clone(),
-                DataType::StringSlice,
-                builtin_type_ids::STRING,
-                SourceLocation::default(),
-                ValueMode::ImmutableReference,
-                ConstRecordState::RuntimeValue,
-            ),
-            TemplateSegmentOrigin::Body,
-            Some(tir_subscription),
-            SourceLocation::default(),
-        );
-        let root = builder.push_sequence_node(vec![dynamic_node], SourceLocation::default());
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::StringFunction,
-            TemplateIrSummary::default(),
-            SourceLocation::default(),
-        )
-    };
-
-    // Build a template with stale content containing a different subscription.
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.location = SourceLocation::default();
-    let stale_subscription = ReactiveSubscription {
-        source: ReactiveSource {
-            path: stale_path.clone(),
-            kind: ReactiveSourceKind::Declaration,
-        },
-        type_id: builtin_type_ids::INT,
-        location: SourceLocation::default(),
-    };
-    let stale_segment = TemplateSegment::reactive_subscription(
-        Expression::reference_with_type_id(
-            stale_path.clone(),
-            DataType::Inferred,
-            builtin_type_ids::INT,
-            SourceLocation::default(),
-            ValueMode::ImmutableReference,
-            ConstRecordState::RuntimeValue,
-        ),
-        TemplateSegmentOrigin::Body,
-        stale_subscription,
-    );
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(stale_segment));
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-
-    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
-
-    let mut context = TemplateNormalizationContext {
-        source_file_scope: &source_file_scope,
-        path_format_config: &path_format_config,
-        project_path_resolver: &project_path_resolver,
-        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
-        string_table: &mut string_table,
-        template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
-    };
-
-    normalize_expression_templates(&mut expression, &mut context)
-        .expect("reactive template normalization should succeed");
-
-    let metadata = expression
-        .reactive_template
-        .as_ref()
-        .expect("runtime handoff replacement should preserve reactive template metadata");
-
-    assert!(
-        metadata.template_backed,
-        "reactive metadata should be template-backed"
-    );
-    assert!(
-        metadata.subscriptions.iter().any(|sub| {
-            sub.source.path == tir_path
-                && matches!(sub.source.kind, ReactiveSourceKind::Declaration)
-        }),
-        "reactive metadata must contain the subscription from the same-store TIR root"
-    );
-    assert!(
-        !metadata
-            .subscriptions
-            .iter()
-            .any(|sub| sub.source.path == stale_path),
-        "store-aware normalization must not read stale content subscriptions"
-    );
-}
-
 /// Proves that a slot-insert helper artifact surviving composition is rejected
 /// after final view traversal, not silently passed to HIR.
 #[test]
@@ -2040,23 +1871,30 @@ fn helper_artifact_rejected_after_final_view_traversal() {
     let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
-    // Build a slot-insert template with simple text content.
+    // Build a TIR root with simple text. The template kind is SlotInsert,
+    // which finalization must reject as a helper artifact.
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node(
+            text,
+            "slot insert content".len() as u32,
+            TemplateSegmentOrigin::Body,
+            SourceLocation::default(),
+        );
+        let root = builder.push_sequence_node(vec![text_node], SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::SlotInsert(SlotKey::Default),
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+
     let mut template = Template::empty();
     template.kind = TemplateType::SlotInsert(SlotKey::Default);
     template.location = SourceLocation::default();
-    template
-        .content
-        .atoms
-        .push(TemplateAtom::Content(TemplateSegment::new(
-            Expression::string_slice(text, SourceLocation::default(), ValueMode::ImmutableOwned),
-            TemplateSegmentOrigin::Body,
-        )));
-
-    let template_id = {
-        let mut store = template_ir_store.borrow_mut();
-        finalized_template_tir_id(&template, &mut store, &string_table)
-            .expect("slot insert template should convert to TIR")
-    };
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, template_id),
         store_owner: template_ir_store.borrow().owner(),
