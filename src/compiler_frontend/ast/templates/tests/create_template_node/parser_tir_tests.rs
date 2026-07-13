@@ -16,8 +16,9 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateOverlaySet, TemplateRef,
-    TemplateTirPhase, TemplateTirReference, finalized_template_tir_id,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary,
+    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    finalized_template_tir_id,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::datatypes::datatype::DataType;
@@ -1388,33 +1389,95 @@ fn head_only_literal_text_registered_root_is_reused_by_finalization() {
     );
 }
 
+/// Builds a `Template` handle whose TIR root is constructed directly in the
+/// context's module store via `TemplateIrBuilder`, then attaches a `Parsed`
+/// phase same-store TIR reference.
+///
+/// WHAT: lets formatter fixtures construct body-origin dynamic expressions and
+///       reactive side-table subscriptions that source parsing cannot express
+///       narrowly.
+/// WHY: these tests protect TIR-owned payload facts directly.
+fn build_template_with_direct_tir_root(
+    context: &ScopeContext,
+    kind: TemplateType,
+    style: Style,
+    location: SourceLocation,
+    build_root: impl FnOnce(
+        &mut TemplateIrStore,
+        &mut StringTable,
+    ) -> (TemplateIrNodeId, TemplateIrSummary),
+    string_table: &mut StringTable,
+) -> Template {
+    let template_id = {
+        let store = context.template_ir_store();
+        let mut store = store.borrow_mut();
+        let (root, summary) = build_root(&mut store, string_table);
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        builder.finish_template(root, style.clone(), kind.clone(), summary, location.clone())
+    };
+    let (resolved_store_id, store_owner) = {
+        let store = context.template_ir_store();
+        let store = store.borrow();
+        (store.store_id(), Arc::clone(&store.owner()))
+    };
+    let overlay_set_id = context
+        .template_ir_registry
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
+    Template {
+        kind,
+        style,
+        location,
+        tir_reference: Some(TemplateTirReference {
+            root: TemplateRef::new(resolved_store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id,
+        }),
+        ..Template::empty()
+    }
+}
+
 #[test]
 fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     // A body with only an ordinary dynamic-expression anchor and an explicit
     // formatter has no formatter-context-sensitive text, so the same-store
-    // `Formatted` TIR root can be reused.
+    // `Formatted` TIR root can be reused. Source parsing cannot express a
+    // body-origin dynamic expression, so the body TIR is constructed directly
+    // via `TemplateIrBuilder`.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
     let location = SourceLocation::default();
 
-    let mut template = Template {
-        kind: TemplateType::String,
-        style: Style {
+    let mut template = build_template_with_direct_tir_root(
+        &context,
+        TemplateType::String,
+        Style {
             formatter: Some(markdown_formatter()),
             ..Style::default()
         },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
+        location.clone(),
+        move |store, _string_table| {
+            let mut builder = TemplateIrBuilder::new(store);
+            let body_node = builder.push_dynamic_expression_node(
                 Expression::int(42, location.clone(), ValueMode::ImmutableOwned),
                 TemplateSegmentOrigin::Body,
-            ))],
+                None,
+                location.clone(),
+            );
+            let root = builder.push_sequence_node(vec![body_node], location.clone());
+            let summary = TemplateIrSummary {
+                dynamic_expression_count: 1,
+                max_depth: 1,
+                is_const_evaluable_shape: false,
+                ..TemplateIrSummary::default()
+            };
+            (root, summary)
         },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
+        &mut string_table,
+    );
 
     let style = template.style.clone();
     install_formatted_tir_reference_for_linear_template(
@@ -1438,14 +1501,17 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
 fn reactive_body_segment_records_formatted_tir_phase() {
     // A body segment carrying a reactive subscription whose expression is a safe
     // formatter anchor can reuse the formatted TIR root because the subscription
-    // metadata is preserved through the TIR formatter anchor and TIR
-    // materialization.
+    // metadata is preserved through the TIR formatter anchor and formatted
+    // root. Source parsing only emits reactive head expressions, so
+    // this body reactive dynamic-expression payload is constructed directly via
+    // `TemplateIrBuilder`.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
     let location = SourceLocation::default();
 
     let source_path = InternedPath::from_single_str("main.bst/#reactive0", &mut string_table);
+    let expected_source_path = source_path.clone();
     let source = ReactiveSource {
         path: source_path.clone(),
         kind: ReactiveSourceKind::Declaration,
@@ -1465,26 +1531,34 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     )
     .with_reactive_source(source);
 
-    let mut template = Template {
-        kind: TemplateType::String,
-        style: Style {
+    let mut template = build_template_with_direct_tir_root(
+        &context,
+        TemplateType::String,
+        Style {
             formatter: Some(markdown_formatter()),
             ..Style::default()
         },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    expression,
-                    TemplateSegmentOrigin::Body,
-                    subscription,
-                ),
-            )],
+        location.clone(),
+        move |store, _string_table| {
+            let mut builder = TemplateIrBuilder::new(store);
+            let body_node = builder.push_dynamic_expression_node(
+                expression,
+                TemplateSegmentOrigin::Body,
+                Some(subscription),
+                location.clone(),
+            );
+            let root = builder.push_sequence_node(vec![body_node], location.clone());
+            let summary = TemplateIrSummary {
+                dynamic_expression_count: 1,
+                max_depth: 1,
+                has_reactivity: true,
+                is_const_evaluable_shape: false,
+                ..TemplateIrSummary::default()
+            };
+            (root, summary)
         },
-        location,
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
+        &mut string_table,
+    );
 
     let style = template.style.clone();
     install_formatted_tir_reference_for_linear_template(
@@ -1502,19 +1576,48 @@ fn reactive_body_segment_records_formatted_tir_phase() {
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
         "reactive body segments with safe formatter anchors must reuse the formatted TIR root"
     );
+
+    let store = context.template_ir_store();
+    let store = store.borrow();
+    let children = tir_root_child_ids(&template, &store);
+    let reactive_subscription = children
+        .iter()
+        .find_map(|child_id| {
+            let node = store
+                .get_node(*child_id)
+                .expect("formatted root child should exist");
+            match &node.kind {
+                TemplateIrNodeKind::DynamicExpression {
+                    reactive_subscription,
+                    ..
+                } => Some(reactive_subscription),
+                _ => None,
+            }
+        })
+        .expect("formatted root should preserve the dynamic-expression anchor");
+    assert_eq!(
+        reactive_subscription
+            .as_ref()
+            .map(|subscription| &subscription.source.path),
+        Some(&expected_source_path),
+        "formatting must preserve the dynamic anchor's reactive subscription"
+    );
 }
 
 #[test]
 fn reactive_literal_text_segment_records_formatted_tir_phase() {
-    // A reactive subscription on literal body text is now stored in the TIR store's
-    // node-level reactive-subscription side-table, so the formatted TIR root can be
-    // authoritative while preserving the dependency for reactive metadata.
+    // A reactive subscription on literal body text is stored in the TIR store's
+    // node-level reactive-subscription side-table, so the formatted TIR root can
+    // be authoritative while preserving the dependency for reactive metadata.
+    // Source parsing only emits reactive head text, so this body reactive text
+    // payload is constructed directly via `TemplateIrBuilder`.
     let mut string_table = StringTable::new();
     let context =
         new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
     let location = SourceLocation::default();
 
     let source_path = InternedPath::from_single_str("main.bst/#reactive0", &mut string_table);
+    let expected_source_path = source_path.clone();
     let subscription = ReactiveSubscription {
         source: ReactiveSource {
             path: source_path,
@@ -1524,30 +1627,38 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
         location: location.clone(),
     };
 
-    let mut template = Template {
-        kind: TemplateType::String,
-        style: Style {
+    let mut template = build_template_with_direct_tir_root(
+        &context,
+        TemplateType::String,
+        Style {
             formatter: Some(markdown_formatter()),
             ..Style::default()
         },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    Expression::string_slice(
-                        string_table.intern("reactive body"),
-                        location.clone(),
-                        ValueMode::ImmutableOwned,
-                    ),
-                    TemplateSegmentOrigin::Body,
-                    subscription,
-                ),
-            )],
+        location.clone(),
+        move |store, string_table| {
+            let text = string_table.intern("reactive body");
+            let byte_len = "reactive body".len() as u32;
+            let mut builder = TemplateIrBuilder::new(store);
+            let body_node = builder.push_text_node_with_subscription(
+                text,
+                byte_len,
+                TemplateSegmentOrigin::Body,
+                Some(subscription),
+                location.clone(),
+            );
+            let root = builder.push_sequence_node(vec![body_node], location.clone());
+            let summary = TemplateIrSummary {
+                estimated_output_bytes: byte_len as usize,
+                text_node_count: 1,
+                text_byte_count: byte_len as usize,
+                max_depth: 1,
+                has_reactivity: true,
+                ..TemplateIrSummary::default()
+            };
+            (root, summary)
         },
-        location,
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
+        &mut string_table,
+    );
 
     let style = template.style.clone();
     install_formatted_tir_reference_for_linear_template(
@@ -1565,142 +1676,24 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
             .is_some_and(|r| r.can_reuse_as_linear_current_state()),
         "reactive subscriptions on literal body text must reuse the formatted TIR root"
     );
-}
 
-#[test]
-fn nested_runtime_template_expression_preserves_formatter_tir_root() {
-    // A body segment whose expression is a nested runtime template value is
-    // converted to a `ChildTemplate` or `DynamicExpression` anchor in TIR
-    // construction. The TIR formatter treats both as opaque anchors, so the
-    // formatted TIR root can be reused.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
-
-    let nested_template = Template {
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    string_table.intern("nested"),
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    let mut template = Template {
-        kind: TemplateType::String,
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::template(nested_template, ValueMode::ImmutableOwned),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location,
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "nested runtime-template expressions must reuse the formatted TIR root"
-    );
-}
-
-#[test]
-fn nested_runtime_template_expression_with_reactive_subscription_preserves_formatter_tir_root() {
-    // A reactive subscription on a nested runtime-template segment is stored in
-    // the TIR store's node-level side-table during construction, so the TIR
-    // formatter can still treat the segment as an opaque anchor and the
-    // parser TIR root owns the formatted output directly.
-    let mut string_table = StringTable::new();
-    let context =
-        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
-    let location = SourceLocation::default();
-
-    let source_path = InternedPath::from_single_str("main.bst/#reactive0", &mut string_table);
-    let subscription = ReactiveSubscription {
-        source: ReactiveSource {
-            path: source_path,
-            kind: ReactiveSourceKind::Declaration,
-        },
-        type_id: builtin_type_ids::STRING,
-        location: location.clone(),
-    };
-
-    let nested_template = Template {
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(TemplateSegment::new(
-                Expression::string_slice(
-                    string_table.intern("nested"),
-                    location.clone(),
-                    ValueMode::ImmutableOwned,
-                ),
-                TemplateSegmentOrigin::Body,
-            ))],
-        },
-        location: location.clone(),
-        ..Template::empty()
-    };
-
-    let mut template = Template {
-        kind: TemplateType::String,
-        style: Style {
-            formatter: Some(markdown_formatter()),
-            ..Style::default()
-        },
-        content: TemplateContent {
-            atoms: vec![TemplateAtom::Content(
-                TemplateSegment::reactive_subscription(
-                    Expression::template(nested_template, ValueMode::ImmutableOwned),
-                    TemplateSegmentOrigin::Body,
-                    subscription,
-                ),
-            )],
-        },
-        location,
-        ..Template::empty()
-    };
-
-    attach_parsed_tir_reference_for_test(&mut template, &context, &string_table);
-
-    let style = template.style.clone();
-    install_formatted_tir_reference_for_linear_template(
-        &mut template,
-        &style,
-        &context,
-        &mut string_table,
-    )
-    .expect("formatted TIR reference installation should succeed");
-
-    assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
-        "reactive subscriptions on nested runtime-template expressions must reuse the formatted TIR root"
+    let store = context.template_ir_store();
+    let store = store.borrow();
+    let children = tir_root_child_ids(&template, &store);
+    assert_eq!(children.len(), 1);
+    assert!(matches!(
+        store
+            .get_node(children[0])
+            .expect("formatted reactive text node should exist")
+            .kind,
+        TemplateIrNodeKind::Text { .. }
+    ));
+    assert_eq!(
+        store
+            .node_reactive_subscription(children[0])
+            .map(|subscription| &subscription.source.path),
+        Some(&expected_source_path),
+        "formatting must preserve the text node's reactive side-table entry"
     );
 }
 

@@ -21,10 +21,10 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B family 1B - replace manual linear formatter `TemplateContent` fixtures with parser or direct registered TIR construction
-LAST_ACCEPTED_COMMIT: `5b5c1ad14` (`test: build AST normalization fixtures from TIR`)
+CURRENT_SLICE: Phase 1B family 1C - replace or delete the remaining manual doc, slot and comment helper `TemplateContent` fixtures
+LAST_ACCEPTED_COMMIT: `62377c47c` (`test: remove parser TIR mirror parity cases`)
 BRANCH: `main`
-WORKTREE: Phase 1B family 1A accepted candidate on `main` at `5b5c1ad14` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
+WORKTREE: Phase 1B family 1B accepted candidate on `main` at `62377c47c` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
@@ -58,15 +58,17 @@ VALIDATION_STATE:
 - Phase 1B family 2 passed full `just validate`: cross-target Clippy, 3356 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 1 ms average improvement, 2 faster and 0 slower.
 - Phase 1B family 1A focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 69 passed.
 - Phase 1B family 1A passed full `just validate`: cross-target Clippy, 3351 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 8 faster and 0 slower.
+- Phase 1B family 1B focused validation passed: `cargo test --quiet parser_tir_tests -- --format terse`, 67 passed.
+- Phase 1B family 1B passed full `just validate`: cross-target Clippy, 3349 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
 - Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: family 1A passed separate Ollama review and parent validation; use an Ollama implementation worker for parser TIR subfamily 1B, with Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: family 1B passed separate Ollama review and parent validation; use an Ollama implementation worker for parser TIR subfamily 1C, with Codex CLI only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit family 1A, then delegate parser TIR subfamily 1B to Ollama
+NEXT_RESUME_ACTION: commit family 1B, then delegate parser TIR subfamily 1C to Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -249,6 +251,7 @@ Completed Phase 1B families:
 - Raw HIR module-constant invariant fixtures now contain only the malformed raw Template shape required by the rejection path. Irrelevant literal content setup was deleted.
 - AST normalization tests now construct registered TIR directly. Detached-content precedence cases and their finalized-content bridge helpers were deleted.
 - Parser-created stale-content parity tests were deleted. Retained parser tests now name final TIR phase, root reuse, formatter output and root-shape invariants.
+- Manual body-dynamic and reactive formatter fixtures now construct direct registered TIR and assert preserved reactive payloads. Obsolete nested-template conversion fixtures were deleted.
 
 #### Slice 1C — Delete the bridge owner
 
