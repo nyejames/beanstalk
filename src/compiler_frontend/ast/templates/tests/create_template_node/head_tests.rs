@@ -3045,16 +3045,16 @@ fn collect_static_tir_fragments(
 
         TemplateIrNodeKind::Text { text, .. } => output.push_str(string_table.resolve(*text)),
 
-        TemplateIrNodeKind::DynamicExpression { expression, .. } => match &expression.kind {
-            ExpressionKind::StringSlice(value) => output.push_str(string_table.resolve(*value)),
-            ExpressionKind::Template(template) => {
-                collect_static_template_fragments(&template.content.atoms, string_table, output)
+        TemplateIrNodeKind::DynamicExpression { expression, .. } => {
+            if let ExpressionKind::StringSlice(value) = &expression.kind {
+                output.push_str(string_table.resolve(*value));
             }
-            _ => {}
-        },
+        }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template) = store.get_template(reference.root.template_id) {
+            if let Some(child_id) = reference.template_id_in_store(store.store_id())
+                && let Some(template) = store.get_template(child_id)
+            {
                 collect_static_tir_fragments(template.root, store, string_table, output);
             }
         }
@@ -3118,8 +3118,9 @@ fn tir_subtree_contains_slot(
             .iter()
             .any(|child| tir_subtree_contains_slot(*child, store)),
 
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => store
-            .get_template(reference.root.template_id)
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference
+            .template_id_in_store(store.store_id())
+            .and_then(|template_id| store.get_template(template_id))
             .is_some_and(|template| tir_subtree_contains_slot(template.root, store)),
         TemplateIrNodeKind::InsertContribution { template } => store
             .get_template(*template)
@@ -3178,8 +3179,9 @@ fn count_tir_loop_control_signals(
             .map(|child| count_tir_loop_control_signals(*child, store))
             .sum(),
 
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => store
-            .get_template(reference.root.template_id)
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference
+            .template_id_in_store(store.store_id())
+            .and_then(|template_id| store.get_template(template_id))
             .map_or(0, |template| {
                 count_tir_loop_control_signals(template.root, store)
             }),

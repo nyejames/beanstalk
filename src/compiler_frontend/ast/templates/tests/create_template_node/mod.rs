@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::control_flow_body_ref_test_helpers::install_same_store_control_flow_body_refs;
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegmentOrigin};
+use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateRef, TemplateTirReference, finalized_template_tir_id,
 };
@@ -473,24 +473,6 @@ fn is_default_error_location(location: &SourceLocation) -> bool {
     location.scope == InternedPath::new()
         && location.start_pos == CharPosition::default()
         && location.end_pos == CharPosition::default()
-}
-
-fn collect_static_template_fragments(
-    atoms: &[TemplateAtom],
-    string_table: &StringTable,
-    output: &mut String,
-) {
-    for atom in atoms {
-        let TemplateAtom::Content(segment) = atom;
-
-        match &segment.expression.kind {
-            ExpressionKind::StringSlice(value) => output.push_str(string_table.resolve(*value)),
-            ExpressionKind::Template(template) => {
-                collect_static_template_fragments(&template.content.atoms, string_table, output)
-            }
-            _ => {}
-        }
-    }
 }
 
 mod builder_tests;
