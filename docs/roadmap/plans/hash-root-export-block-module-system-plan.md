@@ -4,9 +4,9 @@
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
 STATUS: active
-CURRENT_SLICE: The reviewed test-coverage slice is ready to checkpoint. Next is the final benchmark fixture.
-LAST_ACCEPTED_COMMIT: `74ce04813` (`docs: align hash-root module contracts`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `74ce04813`; the reviewed test-coverage slice and this plan are ready to commit. No unrelated changes are present.
+CURRENT_SLICE: The reviewed benchmark-fixture slice is ready to checkpoint. Next is whole-plan final review.
+LAST_ACCEPTED_COMMIT: `ed70cb5b9` (`test: close hash-root coverage gaps`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `ed70cb5b9`; the reviewed benchmark fixture, its registry note and this plan are ready to commit. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -19,8 +19,8 @@ REQUIRED_RELOADS_AFTER_COMPACTION:
 - current source files before editing
 RELEVANT_CONTEXT_NOW:
 - docs: Phase 9 is committed at `74ce04813`. Do not edit official docs during the worker slice.
-- tests: the accepted slice adds `#config.bst` as an ordinary active root, Beandown same-directory root constants through the real build, nearest-root parent lookup and explicit `ActiveModuleRoot` assignment. Existing cases own every other matrix contract.
-- benchmarks: a later slice must add one fixture covering skipped entry-root directories, mixed API/output roots and a cosmetic source-library root. Existing parallelism fixtures cover the other matrix shapes.
+- tests: every integration and focused test-matrix contract is covered and committed at `ed70cb5b9`.
+- benchmarks: `module-root-role-mix` combines eight skipped entry-root boundaries, API-only and output roots and a cosmetic source-library root. Existing parallelism fixtures own the many-roots/few-files and few-roots/many-files shapes.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -193,6 +193,7 @@ VALIDATION_STATE:
 - Phase 10 artifact contract: Ollama added success-only `artifacts_must_not_exist` integration expectations, exact normalized path handling and `NotBuilt` exclusion. The API-only fixture now forbids `api/index.html`, while the configured multiple-library fixture uses both `#alpha.bst` and `#mod.bst`. A separate Ollama final review consolidated parsing and moved new behavior coverage through the runner's success boundary. Parent formatting and 48 focused runner tests passed; full `just validate` passed cross-target Clippy, 3342 unit tests, 1753 integration cases, docs checking and benchmark-check 28/28 at -3 ms with no slower cases.
 - Phase 9 documentation: the parent reconciled language, compiler-design, project-structure, library, benchmark, testing and progress documentation with the landed implementation. Two Ollama read-only reviews found stale facade/entry terminology and misleading fixture labels; every finding was corrected. `cargo run --quiet -- build docs --release` rebuilt 72 files successfully after the final correction and `git diff --check` passed.
 - Coverage tests: Ollama added two integration cases and two focused invariants for the four audited gaps. A separate Ollama review found no correctness, redundancy, assertion or scope issue. Parent `just validate` passed cross-target Clippy, 3344 unit tests, 1755 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
+- Coverage benchmark: Ollama added `module-root-role-mix`; parent strengthened it to eight fixed/configured skipped boundaries and added the README registry note. A separate Ollama review found no validity, fidelity, usefulness, generated-file or documentation issue. Parent `just validate` passed cross-target Clippy, 3344 unit tests, 1755 integration cases, docs checking and benchmark-check 28/28 at -2 ms average with no slower cases. Direct project checking and all 27 focused frontend cases also passed; their comparison correctly reports a changed case set.
 
 DOCS_IMPACT:
 - progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
@@ -200,11 +201,11 @@ DOCS_IMPACT:
 - generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit the reviewed coverage tests, then launch the final benchmark-fixture slice through Ollama.
-DELEGATION_DECISION: parent checkpoint, then Ollama implementation worker for the bounded benchmark fixture.
+- Commit the reviewed benchmark fixture, then start the whole-plan final review protocol.
+DELEGATION_DECISION: parent checkpoint, then the final-review audit order.
 NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean Ollama availability blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: checkpoint the coverage tests and refresh this state at the new commit.
+NEXT_RESUME_ACTION: checkpoint the benchmark fixture and refresh this state at the new commit.
 
 ---
 
@@ -1140,11 +1141,11 @@ Unit/focused tests should cover:
 
 Benchmark fixtures should cover:
 
-- [ ] many irrelevant skipped directories under entry root;
-- [ ] many module roots with one file each;
-- [ ] few modules with many files each;
-- [ ] API-only roots mixed with page/output roots;
-- [ ] source-library root with cosmetic non-`#mod.bst` hash filename.
+- [x] many irrelevant skipped directories under entry root;
+- [x] many module roots with one file each;
+- [x] few modules with many files each;
+- [x] API-only roots mixed with page/output roots;
+- [x] source-library root with cosmetic non-`#mod.bst` hash filename.
 
 ---
 

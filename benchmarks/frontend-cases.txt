@@ -28,6 +28,7 @@ frontend benchmarks/import-fanout
 frontend benchmarks/module-root-stress
 frontend benchmarks/external-js-imports
 frontend benchmarks/adversarial/import-external-churn
+frontend benchmarks/module-root-role-mix
 
 # group: parallelism
 frontend benchmarks/parallelism/tiny-one-file

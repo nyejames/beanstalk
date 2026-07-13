@@ -334,6 +334,9 @@ allocation, lookup, folding, import, and lowering pressure.
 - `module-root-stress/`: directory project with config parsing, multiple
   reachable module directories, and irrelevant non-Beanstalk trees for Stage 0
   module-root/path-resolution attribution.
+- `module-root-role-mix/`: directory project combining many skipped source directories,
+  output-producing and API-only module roots, and a source library whose cosmetic root name is
+  not `#mod.bst`.
 - `external-js-imports/`: HTML project with annotated JavaScript imports, runtime helper imports, opaque external types, namespace imports, and external free functions.
 - `borrow-stress.bst`: valid mutable/exclusive access and borrow-validation coverage.
 - `adversarial/one-module-kitchen-sink.bst`: dense single-module churn across imports, constants,
