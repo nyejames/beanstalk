@@ -21,14 +21,14 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1A — inventory and remove the next bounded test-only compatibility-fixture family
-LAST_ACCEPTED_COMMIT: `4465d0e19` (`templates: remove classification compatibility fixture`)
-BRANCH: `templates-refactor`
-WORKTREE: branch `templates-refactor` at `/Users/aneirinjames/projects/beanstalk/beanstalk`. User-owned `AGENTS.md` and `docs/src/docs/codebase/**` refactor changes are present and must remain unstaged.
+CURRENT_SLICE: Phase 1B family 7 - remove reactive metadata tests that mutate the stale `Template.content` mirror while preserving TIR-view subscription coverage
+LAST_ACCEPTED_COMMIT: `13f6b44fd` (`Huge squash commit of stable TIR implementation, docs updates and other various refactors`), which imported the accepted `templates-refactor` state through `4465d0e19`
+BRANCH: `main`
+WORKTREE: clean `main` at `d5f00a29f1` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
-- Detached content reconstruction is test-only. `TemplateContent`, `TemplateAtom`, the finalized-content bridge, and several migration-shaped fixtures remain solely to support old tests.
+- Detached content reconstruction is test-only. The main remaining fixture owners are parser TIR tests, reactive metadata tests, HIR lowering tests, control-flow body helpers, and the compatibility builder in `tir/finalize_sync.rs`.
 - The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
 - HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
 ACCEPTANCE_CRITERIA:
@@ -38,17 +38,17 @@ ACCEPTANCE_CRITERIA:
 - remove duplicate state, silent fallbacks, migration terminology, and classification-only deep clones
 - preserve parser diagnostics, source locations, markdown/formatter behavior, slots, wrappers, control flow, const folding, reactive metadata, fragment ordering, and the AST/HIR boundary
 VALIDATION_STATE:
-- The last accepted TIR cleanup passed full `just validate`: 3304 unit tests, 1735 integration cases, docs check, and `bench-check` 28/28.
-- The preceding Phase F/G authority-removal slices also passed focused TIR/template suites and full validation; their detailed chronology is retained in Git history, not repeated here.
-- Branch commits after `4465d0e19` are unrelated config/docs work. Re-run the required gate after every new TIR code slice.
+- Current `main` passed full `just validate` at the completed hash-root checkpoint `cf36d5945`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28.
+- No TIR-specific validation has run for the current inventory slice.
+- Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: use one implementation agent per bounded owner/slice; do not parallelize edits to the same TIR owner or test family
-NEXT_WORKER_ORDER: Phase 1A inventory, then the smallest connected bridge caller family
+DELEGATION_DECISION: Ollama implementation worker for Phase 1B family 7; use Codex CLI only after a clean Ollama availability blocker
+NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: run the Phase 1A greps, classify remaining callers by owner and invariant, and delete or rewrite one family
+NEXT_RESUME_ACTION: commit the reviewed Phase 1A inventory checkpoint, then delegate Phase 1B family 7 to Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -59,7 +59,7 @@ This is a temporary implementation checklist.
 - Implement one bounded slice at a time and keep the compiler valid after each slice.
 - Split work by final owner, never by “old path versus new path”.
 - Update only the `Current state` block, the active checkboxes, and one concise accepted-slice note when necessary. Do not rebuild a chronological progress log.
-- Before editing, confirm `templates-refactor`, inspect `git status`, and preserve unrelated user-owned changes.
+- Before editing, confirm `main`, inspect `git status`, and preserve unrelated user-owned changes.
 - Read every edited owner and its focused tests before changing an API.
 - Do not add compatibility wrappers, optional fallback parameters, duplicate structs, or broad utility modules.
 - User-visible behavior belongs in integration cases. Focused unit tests protect only hidden final invariants.
@@ -176,26 +176,36 @@ Do not perform the broad `$md` parser/renderer rewrite during TIR closure. Phase
 
 Remove all detached-content reconstruction and representation-shaped tests without weakening behavior coverage.
 
-#### Slice 1A — Inventory and classify
+#### Slice 1A - Inventory and classify
 
-- [ ] Run focused greps for:
-  - [ ] `TemplateContent`
-  - [ ] `TemplateAtom`
-  - [ ] `TemplateSegment` construction
-  - [ ] `finalized_template_tir_id`
-  - [ ] `build_finalized_tir_root_from_content`
-  - [ ] `build_finalized_tir_root_with_control_flow`
-  - [ ] `TemplateTirSyncMissReason`
-  - [ ] `ChildMaterializationContext`
-  - [ ] `classify_materialized_current_tir_template` in tests
-- [ ] Group every hit by final owner and distinct invariant:
-  - [ ] parser/create-template fixtures
-  - [ ] view/classification/remap fixtures
-  - [ ] slot/wrapper/control-flow fixtures
-  - [ ] folding/finalization fixtures
-  - [ ] HIR handoff fixtures
-- [ ] For each family, record one decision in the working notes: delete as redundant, rewrite through direct TIR construction, or move the unique assertion to the final owner.
-- [ ] Do not create a shared replacement fixture merely to preserve old test ergonomics.
+- [x] Run focused greps for:
+  - [x] `TemplateContent`
+  - [x] `TemplateAtom`
+  - [x] `TemplateSegment` construction
+  - [x] `finalized_template_tir_id`
+  - [x] `build_finalized_tir_root_from_content`
+  - [x] `build_finalized_tir_root_with_control_flow`
+  - [x] `TemplateTirSyncMissReason`
+  - [x] `ChildMaterializationContext`
+  - [x] `classify_materialized_current_tir_template` in tests
+- [x] Group every hit by final owner and distinct invariant:
+  - [x] parser/create-template fixtures
+  - [x] view/classification/remap fixtures
+  - [x] slot/wrapper/control-flow fixtures
+  - [x] folding/finalization fixtures
+  - [x] HIR handoff fixtures
+- [x] For each family, record one decision in the working notes: delete as redundant, rewrite through direct TIR construction, or move the unique assertion to the final owner.
+- [x] Do not create a shared replacement fixture merely to preserve old test ergonomics.
+
+Phase 1A inventory decisions:
+
+- Rewrite parser TIR, AST normalization, HIR lowering, head validation and doc-fragment fixtures through direct registry-qualified TIR construction.
+- Rewrite or remove their shared control-flow body helper only after its parser, HIR and head-validation callers migrate.
+- Delete reactive metadata stale-content assertions. Keep their direct TIR subscription-discovery coverage.
+- Delete the vacuous wrapper content-node counter. Replace it with a TIR invariant only if the owning test lacks effective structural coverage.
+- Replace the static-fragment helper's content walk with an effective TIR view or folded-output assertion.
+- Delete the test-only materializer in `tir/finalize_sync.rs` and the detached content types after every caller family has migrated.
+- Process independent families first. The reactive metadata family is smallest, followed by wrapper counting, static fragments and doc fragments. The shared control-flow helper and bridge owner remain terminal.
 
 #### Slice 1B — Remove one connected family per commit
 
