@@ -7,12 +7,12 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIr, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateRef,
-    TemplateTirPhase, TemplateTirReference, TirView, finalized_template_tir_id,
+    TemplateIr, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
+    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference, TirView,
     format_tir_template,
 };
 use crate::compiler_frontend::ast::templates::top_level_templates::FoldedConstTemplateResult;
@@ -207,35 +207,57 @@ fn collects_top_level_doc_fragments_in_source_order() {
     assert_eq!(string_table.resolve(doc_fragments[2].value), "<p>third</p>");
 }
 
-/// Builds a `$doc` template whose compatibility `TemplateContent` mirror has been
-/// cleared and whose authoritative output lives in a same-store `Formatted` TIR root.
+/// Builds a `$doc` template whose authoritative output is a directly
+/// constructed, same-store formatted TIR root.
 ///
-/// WHAT: creates a markdown-styled doc template, materializes it into `store`, runs
-///       the TIR formatter adapter, and installs the formatted root as the template's
-///       TIR reference.
-/// WHY: lets doc-fragment collection tests prove that folding reads the formatted TIR
-///      root when the compatibility content mirror is stale/cleared.
-fn formatted_doc_template_with_store(
+/// WHAT: pushes a literal body text node into a TIR store with
+///       `TemplateIrBuilder`, finishes a markdown-styled doc template, runs
+///       the TIR formatter adapter, and installs the formatted root as the
+///       template's TIR reference.
+/// WHY: lets doc-fragment collection tests prove that folding reads the
+///      formatted TIR root built directly from TIR, with no detached body
+///      representation involved.
+fn formatted_doc_template_with_direct_tir(
     text: &str,
     string_table: &mut StringTable,
 ) -> (Template, Rc<RefCell<TemplateIrRegistry>>) {
     let location = test_location(2);
-    let mut template = Template::empty();
-    template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
-    template.location = location.clone();
-    template.style.formatter = Some(markdown_formatter());
-    template.content.add_with_origin(
-        Expression::string_slice(
-            string_table.intern(text),
-            location.clone(),
-            ValueMode::ImmutableOwned,
-        ),
-        TemplateSegmentOrigin::Body,
-    );
+    let text_id = string_table.intern(text);
+    let byte_len = text.len() as u32;
+
+    let style = Style {
+        formatter: Some(markdown_formatter()),
+        ..Style::default()
+    };
+
+    // WHAT: record the body-text shape and pending formatter so the parsed
+    //       TIR template carries honest summary facts for the formatter pass.
+    let parsed_summary = TemplateIrSummary {
+        text_node_count: 1,
+        text_byte_count: text.len(),
+        estimated_output_bytes: text.len(),
+        has_formatter: true,
+        ..TemplateIrSummary::default()
+    };
 
     let mut store = TemplateIrStore::new();
-    let parsed_template_id = finalized_template_tir_id(&template, &mut store, string_table)
-        .expect("doc template should convert to TIR");
+    let parsed_template_id = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node(
+            text_id,
+            byte_len,
+            TemplateSegmentOrigin::Body,
+            location.clone(),
+        );
+
+        builder.finish_template(
+            text_node,
+            style.clone(),
+            TemplateType::Comment(CommentDirectiveKind::Doc),
+            parsed_summary.clone(),
+            location.clone(),
+        )
+    };
 
     let store_handle = Rc::new(RefCell::new(store));
     let mut registry = TemplateIrRegistry::new();
@@ -251,47 +273,48 @@ fn formatted_doc_template_with_store(
     )
     .expect("TIR view should be valid");
 
-    let formatter_result = format_tir_template(&view, &template.style, string_table)
-        .expect("TIR formatter should succeed");
+    let formatter_result =
+        format_tir_template(&view, &style, string_table).expect("TIR formatter should succeed");
 
-    let original_template = store_handle
-        .borrow()
-        .get_template(parsed_template_id)
-        .cloned()
-        .expect("parsed template should exist");
-    let mut summary = original_template.summary;
-    summary.has_formatter = false;
+    // WHAT: the formatted root already reflects markdown output, so its summary
+    //       clears the pending-formatter flag to prevent re-formatting.
+    let formatted_summary = TemplateIrSummary {
+        has_formatter: false,
+        ..parsed_summary
+    };
 
     let formatted_template_id = store_handle.borrow_mut().push_template(TemplateIr::new(
         formatter_result.root,
-        original_template.style,
-        original_template.kind,
-        summary,
-        original_template.location,
+        style.clone(),
+        TemplateType::Comment(CommentDirectiveKind::Doc),
+        formatted_summary,
+        location.clone(),
     ));
 
+    let mut template = Template::empty();
+    template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    template.location = location;
+    template.style = style;
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, formatted_template_id),
         store_owner: Arc::clone(&store_handle.borrow().owner()),
-        is_composed: true,
+        is_composed: false,
         phase: TemplateTirPhase::Formatted,
         overlay_set_id,
     });
-
-    // Clear the compatibility content mirror to prove the TIR root is authoritative.
-    template.content.atoms.clear();
 
     let registry = Rc::new(RefCell::new(registry));
     (template, registry)
 }
 
 #[test]
-fn doc_fragment_folding_reads_authoritative_formatted_tir_root_when_content_mirror_is_cleared() {
+fn doc_fragment_folding_reads_directly_constructed_formatted_tir_root() {
     let mut string_table = StringTable::new();
     let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
     let entry_scope = entry_dir.to_owned();
 
-    let (doc_template, registry) = formatted_doc_template_with_store("doc body", &mut string_table);
+    let (doc_template, registry) =
+        formatted_doc_template_with_direct_tir("doc body", &mut string_table);
 
     let mut ast_nodes = vec![start_function_node(
         &entry_dir,
@@ -315,54 +338,7 @@ fn doc_fragment_folding_reads_authoritative_formatted_tir_root_when_content_mirr
     assert_eq!(
         string_table.resolve(doc_fragments[0].value),
         "<p>doc body</p>",
-        "doc fragment folding must read the same-store Formatted TIR root, not the cleared content mirror"
-    );
-}
-
-#[test]
-fn doc_fragment_registry_path_respects_tir_authority_over_stale_content() {
-    let mut string_table = StringTable::new();
-    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
-    let entry_scope = entry_dir.to_owned();
-
-    // Build a doc template with a formatted TIR root, then add stale content
-    // atoms that would have overridden the TIR under the old content-mirror
-    // authority. With content-mirror authority deleted (Slice 4), the TIR
-    // root is authoritative and the stale content must not bypass it.
-    let (mut doc_template, registry) =
-        formatted_doc_template_with_store("tir body", &mut string_table);
-    doc_template.content.add_with_origin(
-        Expression::string_slice(
-            string_table.intern("mirror body"),
-            test_location(2),
-            ValueMode::ImmutableOwned,
-        ),
-        TemplateSegmentOrigin::Body,
-    );
-
-    let mut ast_nodes = vec![start_function_node(
-        &entry_dir,
-        vec![push_start_runtime_fragment_node(
-            doc_template,
-            test_location(2),
-            entry_scope,
-        )],
-        test_location(1),
-        &mut string_table,
-    )];
-
-    let doc_fragments = collect_and_strip_comment_templates_for_tests_with_registry(
-        &mut ast_nodes,
-        &mut string_table,
-        registry,
-    )
-    .expect("doc fragment collection should succeed");
-
-    assert_eq!(doc_fragments.len(), 1);
-    assert_eq!(
-        string_table.resolve(doc_fragments[0].value),
-        "<p>tir body</p>",
-        "registry-backed doc folding must respect the authoritative TIR root, not stale content atoms"
+        "doc fragment folding must read the directly constructed formatted TIR root"
     );
 }
 
