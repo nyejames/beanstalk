@@ -11,7 +11,6 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
     OwnedRuntimeTemplateNode,
 };
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -24,10 +23,8 @@ fn test_location() -> SourceLocation {
 fn empty_runtime_template_handoff() -> OwnedRuntimeTemplateHandoff {
     let location = test_location();
     OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
             children: Vec::new(),
-            location: location.clone(),
         }),
         location,
     }
@@ -38,7 +35,6 @@ fn empty_runtime_slot_application_handoff() -> OwnedRuntimeSlotApplicationHandof
     OwnedRuntimeSlotApplicationHandoff {
         wrapper: OwnedRuntimeTemplateNode::Sequence {
             children: Vec::new(),
-            location: location.clone(),
         },
         contribution_sources: Vec::new(),
         slot_sites: Vec::new(),

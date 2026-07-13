@@ -1086,7 +1086,7 @@ fn annotate_owned_runtime_template_node(
         | OwnedRuntimeTemplateNode::ChildTemplate { .. }
         | OwnedRuntimeTemplateNode::ConditionalWrapper { .. }
         | OwnedRuntimeTemplateNode::Text { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}

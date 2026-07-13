@@ -1,8 +1,8 @@
 //! Parser-local mutable build state for template construction.
 //!
 //! WHAT: `TemplateBuildState` is the mutable parser accumulator for template
-//! head/body metadata — `kind`, `style`, direct-child wrapper refs, control-flow
-//! parse metadata, and parser-local `id` — while a template is being parsed.
+//! head/body metadata — `kind`, `style`, direct-child wrapper refs, and
+//! parser-local `id` — while a template is being parsed.
 //!
 //! WHY: `Template` is the durable AST value. The mutable parser accumulator is
 //! shorter-lived: it exists only while syntax is being parsed, render units are
@@ -12,16 +12,15 @@
 //! throughout parsing.
 
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateControlFlow;
 use crate::compiler_frontend::ast::templates::tir::{
     MaterializedTirTemplateClassification, TemplateWrapperReference,
 };
 
 /// Parser-local mutable state accumulated during template head and body parsing.
 ///
-/// WHAT: carries `kind`, mutable `style`, direct-child wrapper refs,
-///       control-flow parse metadata, and the parser-local `id` that head and
-///       body parsing need to share without threading `&mut Template`.
+/// WHAT: carries `kind`, mutable `style`, direct-child wrapper refs and the
+///       parser-local `id` that head and body parsing need to share without
+///       threading `&mut Template`.
 /// WHY: the durable `Template` is constructed once after authoritative TIR
 ///      identity exists; this build state is the single mutable owner during
 ///      parsing and render-unit preparation.
@@ -29,7 +28,6 @@ pub(crate) struct TemplateBuildState {
     pub(crate) kind: TemplateType,
     pub(crate) style: Style,
     pub(crate) child_wrappers: Vec<TemplateWrapperReference>,
-    pub(crate) control_flow: Option<TemplateControlFlow>,
     pub(crate) id: String,
 }
 
@@ -40,7 +38,6 @@ impl TemplateBuildState {
             kind: TemplateType::StringFunction,
             style: Style::default(),
             child_wrappers: vec![],
-            control_flow: None,
             id: String::new(),
         }
     }

@@ -256,9 +256,15 @@ impl Template {
         // can stay lazy.
         let style = build_state.style.to_owned();
         let child_wrappers = build_state.child_wrappers.to_owned();
-        if build_state.control_flow.is_some() {
+        let has_control_flow = {
+            let store = construction_context.store();
+            construction_context
+                .builder()
+                .control_flow_node_id(&store)
+                .is_some()
+        };
+        if has_control_flow {
             prepare_control_flow_render_units(
-                &mut build_state,
                 &mut construction_context,
                 ControlFlowRenderUnitRequest {
                     style: &style,
@@ -278,7 +284,6 @@ impl Template {
         // render-unit preparation has installed formatted body content. Linear
         // templates start at Parsed; linear formatting installs the formatted
         // reference below.
-        let has_control_flow = build_state.control_flow.is_some();
         let owner_phase = if has_control_flow {
             TemplateTirPhase::Formatted
         } else {
@@ -455,7 +460,6 @@ impl Template {
         // Construct the durable `Template` now that authoritative TIR identity
         // and classified kind exist. The build state fields are moved into it.
         let template = Template {
-            control_flow: build_state.control_flow,
             kind: build_state.kind,
             style: build_state.style,
             child_wrappers: build_state.child_wrappers,

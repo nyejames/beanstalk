@@ -697,9 +697,8 @@ fn debug_validate_loop_bindings_type_ids(
 // -------------------------
 //
 // These helpers walk the owned runtime handoff shapes that the finalizer
-// materializes before this debug check runs. They mirror the recursive
-// structure of `remap_string_ids` in `runtime_handoff` so that every dynamic
-// expression payload carried by finalized HIR-bound templates is validated.
+// materializes before this debug check runs so every dynamic expression
+// payload carried by finalized HIR-bound templates is validated.
 
 fn debug_validate_runtime_template_handoff_type_ids(
     handoff: &OwnedRuntimeTemplateHandoff,
@@ -773,7 +772,7 @@ fn debug_validate_runtime_template_node_type_ids(
         }
 
         OwnedRuntimeTemplateNode::Text { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}

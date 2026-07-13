@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallAccessMode {
@@ -100,23 +100,6 @@ impl CallArgument {
     pub fn with_passing_mode(mut self, passing_mode: CallPassingMode) -> Self {
         self.passing_mode = passing_mode;
         self
-    }
-
-    /// Remap all interned string IDs in this argument recursively.
-    ///
-    /// WHAT: updates `value`, `target_param`, and both source locations.
-    /// WHY: per-file header parsing produces argument expressions using local string tables;
-    ///      remapping keeps them valid after merge into the module/global table.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.value.remap_string_ids(remap);
-        if let Some(target_param) = &mut self.target_param {
-            *target_param = remap.get(*target_param);
-        }
-        self.location.remap_string_ids(remap);
-        if let Some(target_location) = &mut self.target_location {
-            target_location.remap_string_ids(remap);
-        }
     }
 }
 

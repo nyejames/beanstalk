@@ -12,7 +12,7 @@ use super::environment::TypeEnvironment;
 use super::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 // -----------------------------------------------------------
 //  Identity Keys (HIR / Diagnostic Bridge)
@@ -71,71 +71,6 @@ pub enum TypeIdentityKey {
         error: Box<TypeIdentityKey>,
     },
     GenericInstance(GenericInstantiationKey),
-}
-
-impl GenericBaseType {
-    /// Remap interned names and paths in this generic base type.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            GenericBaseType::Named(name) => {
-                *name = remap.get(*name);
-            }
-
-            GenericBaseType::ResolvedNominal(path) => {
-                path.remap_string_ids(remap);
-            }
-
-            GenericBaseType::External(_) | GenericBaseType::Builtin(_) => {}
-        }
-    }
-}
-
-impl GenericInstantiationKey {
-    /// Remap the base path and every argument key recursively.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.base_path.remap_string_ids(remap);
-        for argument in &mut self.arguments {
-            argument.remap_string_ids(remap);
-        }
-    }
-}
-
-impl TypeIdentityKey {
-    /// Remap interned paths in this identity key recursively.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            TypeIdentityKey::Builtin(_) | TypeIdentityKey::External(_) => {}
-
-            TypeIdentityKey::Nominal(path) => {
-                path.remap_string_ids(remap);
-            }
-
-            TypeIdentityKey::Collection { element: inner, .. } => {
-                inner.remap_string_ids(remap);
-            }
-
-            TypeIdentityKey::Map { key, value } => {
-                key.remap_string_ids(remap);
-                value.remap_string_ids(remap);
-            }
-
-            TypeIdentityKey::Option(inner) => {
-                inner.remap_string_ids(remap);
-            }
-
-            TypeIdentityKey::FallibleCarrier { success, error } => {
-                success.remap_string_ids(remap);
-                error.remap_string_ids(remap);
-            }
-
-            TypeIdentityKey::GenericInstance(instance) => {
-                instance.remap_string_ids(remap);
-            }
-        }
-    }
 }
 
 // -----------------------------------------------------------

@@ -9,7 +9,6 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::datatypes::ids::GenericParameterId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId};
 
 /// Value-level classification for const-record semantics.
@@ -96,19 +95,6 @@ pub(crate) enum ResolvedCastEvidence {
     },
 }
 
-impl ResolvedCastEvidence {
-    /// Remap any interned string IDs or paths carried by this evidence.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            Self::Builtin { .. } | Self::GenericBound { .. } => {}
-
-            Self::UserDefined { method_path, .. } => {
-                method_path.remap_string_ids(remap);
-            }
-        }
-    }
-}
-
 /// User-visible handling form for a cast.
 #[derive(Clone, Debug)]
 pub(crate) enum CastHandling {
@@ -123,13 +109,6 @@ pub(crate) enum CastHandling {
     /// WHAT: records only that the cast recovers locally. The handler body is owned by
     /// `ValueCatchBlock` so expression variants stay bodyless.
     Recover,
-}
-
-impl CastHandling {
-    /// Keep the remap hook symmetric with other expression payloads.
-    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {
-        // Recovery handler bodies are stored on `ValueCatchBlock`, not here.
-    }
 }
 
 /// Bodyless fallible handling stored by expression variants.
@@ -172,38 +151,7 @@ pub enum FallibleHandling {
 /// Name and path binding for a caught error in a `catch` handler.
 #[derive(Clone, Debug)]
 pub struct CatchErrorBinding {
-    pub error_name: StringId,
     pub error_binding: InternedPath,
-}
-
-impl FallibleHandling {
-    /// Remap error binding names and body AST nodes in this handling shape.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            FallibleHandling::Propagate => {}
-
-            FallibleHandling::Handler { error, body } => {
-                if let Some(error_binding) = error {
-                    error_binding.remap_string_ids(remap);
-                }
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-        }
-    }
-}
-
-impl CatchErrorBinding {
-    /// Remap error name and binding path.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.error_name = remap.get(self.error_name);
-        self.error_binding.remap_string_ids(remap);
-    }
 }
 
 /// Success or error variant for fallible carrier construction.

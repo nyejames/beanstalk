@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 use super::definitions::TypeDefinition;
 use super::display::format_fallible_signature_parts;
@@ -66,8 +66,6 @@ pub enum DataType {
         const_record: bool,
         generic_instance_key: Option<GenericInstantiationKey>,
     },
-    #[cfg(test)]
-    Reference(Box<DataType>),
     Range, // Iterable that must always be owned.
     Returns(Vec<DataType>),
     Function(Box<Option<ReceiverKey>>, FunctionSignature), // Receiver, signature
@@ -266,117 +264,6 @@ impl DataType {
     }
 
     // -----------------
-    //  Remap
-    // -----------------
-
-    /// Remap all interned string IDs and paths in this diagnostic type spelling.
-    ///
-    /// WHAT: updates `StringId`, `InternedPath`, `SourceLocation`, and nested `DataType`
-    ///       fields recursively, including generic arguments, struct/choice paths, function
-    ///       signatures, and declaration shells.
-    /// WHY: per-file header parsing produces `DataType` values using local string tables;
-    ///      remapping keeps them valid after merge into the module/global table.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            DataType::Inferred => {}
-
-            DataType::NamedType(name) => {
-                *name = remap.get(*name);
-            }
-
-            DataType::NamespacedType { path } => {
-                for component in path {
-                    *component = remap.get(*component);
-                }
-            }
-
-            DataType::TypeParameter { name, .. } => {
-                *name = remap.get(*name);
-            }
-
-            DataType::GenericInstance { base, arguments } => {
-                base.remap_string_ids(remap);
-                for argument in arguments {
-                    argument.remap_string_ids(remap);
-                }
-            }
-
-            DataType::Struct {
-                nominal_path,
-                generic_instance_key,
-                ..
-            } => {
-                nominal_path.remap_string_ids(remap);
-                if let Some(key) = generic_instance_key {
-                    key.remap_string_ids(remap);
-                }
-            }
-
-            #[cfg(test)]
-            DataType::Reference(inner) => {
-                inner.remap_string_ids(remap);
-            }
-
-            DataType::Range => {}
-
-            DataType::Returns(return_types) => {
-                for return_type in return_types {
-                    return_type.remap_string_ids(remap);
-                }
-            }
-
-            DataType::Function(receiver, signature) => {
-                if let Some(receiver_key) = receiver.as_mut() {
-                    receiver_key.remap_string_ids(remap);
-                }
-                signature.remap_string_ids(remap);
-            }
-
-            DataType::Path(_) => {}
-
-            DataType::Template => {}
-
-            DataType::Bool
-            | DataType::Int
-            | DataType::Float
-            | DataType::Decimal
-            | DataType::StringSlice
-            | DataType::Char => {}
-
-            DataType::Parameters(declarations) => {
-                for declaration in declarations {
-                    declaration.remap_string_ids(remap);
-                }
-            }
-
-            DataType::Choices {
-                nominal_path,
-                generic_instance_key,
-                ..
-            } => {
-                nominal_path.remap_string_ids(remap);
-                if let Some(key) = generic_instance_key {
-                    key.remap_string_ids(remap);
-                }
-            }
-
-            DataType::External { .. } => {}
-
-            DataType::Option(inner) => {
-                inner.remap_string_ids(remap);
-            }
-
-            DataType::FallibleCarrier { success, error } => {
-                success.remap_string_ids(remap);
-                error.remap_string_ids(remap);
-            }
-
-            DataType::None | DataType::True | DataType::False => {}
-        }
-    }
-
-    // -----------------
     //  Display
     // -----------------
 
@@ -384,10 +271,6 @@ impl DataType {
     /// This method should be used instead of Display when a StringTable is available.
     pub fn display_with_table(&self, string_table: &StringTable) -> String {
         match self {
-            #[cfg(test)]
-            DataType::Reference(inner_type) => {
-                format!("{} Reference", inner_type.display_with_table(string_table),)
-            }
             DataType::Inferred => "Inferred".to_string(),
             DataType::NamedType(name) => string_table.resolve(*name).to_string(),
             DataType::NamespacedType { path } => path
@@ -602,8 +485,6 @@ impl PartialEq for DataType {
                     arguments: arguments_b,
                 },
             ) => base_a == base_b && arguments_a == arguments_b,
-            #[cfg(test)]
-            (DataType::Reference(a), DataType::Reference(b)) => a == b,
             (DataType::Bool, DataType::Bool) => true,
             (DataType::Range, DataType::Range) => true,
             (DataType::None, DataType::None) => true,

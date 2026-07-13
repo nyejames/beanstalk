@@ -52,9 +52,6 @@ fn generic_type_references_nominal_path(
 
         DataType::Option(inner) => generic_type_references_nominal_path(inner, declaration_path),
 
-        #[cfg(test)]
-        DataType::Reference(inner) => generic_type_references_nominal_path(inner, declaration_path),
-
         DataType::FallibleCarrier { success, error } => {
             generic_type_references_nominal_path(success, declaration_path)
                 || generic_type_references_nominal_path(error, declaration_path)
@@ -159,9 +156,6 @@ fn collect_runtime_struct_dependencies(
         }
 
         DataType::Option(inner) => collect_runtime_struct_dependencies(inner, dependencies),
-
-        #[cfg(test)]
-        DataType::Reference(inner) => collect_runtime_struct_dependencies(inner, dependencies),
 
         DataType::FallibleCarrier { success, error } => {
             collect_runtime_struct_dependencies(success, dependencies);

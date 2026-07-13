@@ -103,12 +103,9 @@ pub(crate) fn same_store_tir_id(
 ///
 /// WHAT: walks the subtree rooted at `root` (recursing through child templates
 ///       and nested control-flow bodies) for unresolved `Slot` nodes. The
-///       caller already holds a finalized same-store root, such as a
-///       control-flow body root recovered through
-///       `finalized_control_flow_body_tir_reference`.
+///       caller already holds a finalized same-store root.
 /// WHY: runtime control-flow slot-artifact validation prefers the finalized
-///      body root after render-unit preparation, while still reading the
-///      template body fields when no same-store root exists.
+///      body root after render-unit preparation.
 pub(crate) fn tir_subtree_has_unresolved_slots(
     store: &TemplateIrStore,
     root: TemplateIrNodeId,

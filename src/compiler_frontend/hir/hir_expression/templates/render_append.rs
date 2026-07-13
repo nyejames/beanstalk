@@ -184,7 +184,7 @@ impl<'a> HirBuilder<'a> {
 
             OwnedRuntimeTemplateNode::BranchChain { .. }
             | OwnedRuntimeTemplateNode::Loop { .. }
-            | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+            | OwnedRuntimeTemplateNode::AggregateOutput
             | OwnedRuntimeTemplateNode::LoopControl { .. }
             | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. } => {
                 return_hir_transformation_error!(
@@ -287,7 +287,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             OwnedRuntimeTemplateNode::Text { .. }
-            | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+            | OwnedRuntimeTemplateNode::AggregateOutput
             | OwnedRuntimeTemplateNode::LoopControl { .. }
             | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
             | OwnedRuntimeTemplateNode::Slot { .. } => false,
@@ -563,7 +563,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             ),
 
-            OwnedRuntimeTemplateNode::AggregateOutput { .. } => {
+            OwnedRuntimeTemplateNode::AggregateOutput => {
                 let Some(aggregate) = aggregate_local else {
                     return_hir_transformation_error!(
                         "Owned runtime template aggregate output appeared outside an aggregate wrapper context.",
@@ -1568,7 +1568,7 @@ fn owned_runtime_template_node_contains_runtime_slot_application(
         }
 
         OwnedRuntimeTemplateNode::Text { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => false,

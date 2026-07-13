@@ -272,7 +272,6 @@ pub(super) fn parse_choice_construct(
 
             let choice_expr = Expression::choice_construct(ChoiceConstructInput {
                 nominal_path: nominal_path.clone(),
-                variant: variant_name,
                 tag: variant_index,
                 fields: vec![],
                 diagnostic_type,
@@ -400,7 +399,6 @@ pub(super) fn parse_choice_construct(
 
             let choice_expr = Expression::choice_construct(ChoiceConstructInput {
                 nominal_path: nominal_path.clone(),
-                variant: variant_name,
                 tag: variant_index,
                 fields: choice_fields,
                 diagnostic_type,

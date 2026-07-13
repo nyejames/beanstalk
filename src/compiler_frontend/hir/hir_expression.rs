@@ -94,7 +94,6 @@ impl<'a> HirBuilder<'a> {
         let lowered = match &expr.kind {
             ExpressionKind::ChoiceConstruct {
                 nominal_path,
-                variant: _,
                 tag,
                 fields,
             } => {
@@ -239,7 +238,6 @@ impl<'a> HirBuilder<'a> {
             ExpressionKind::MethodCall {
                 receiver,
                 method_path,
-                method: _,
                 args,
                 result_type_ids,
                 location,

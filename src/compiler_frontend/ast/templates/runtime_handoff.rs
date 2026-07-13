@@ -11,16 +11,14 @@
 //! keeping the handoff walkers co-located with the data they traverse.
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, TemplateType,
-};
+use crate::compiler_frontend::ast::templates::template::ReactiveSubscription;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_slots::{
     RuntimeSlotContributionSourceId, RuntimeSlotSiteId,
 };
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// Owned runtime slot-application plan prepared for HIR lowering.
@@ -41,7 +39,6 @@ pub struct OwnedRuntimeSlotApplicationHandoff {
 /// Runtime template value materialized for a child-template boundary.
 #[derive(Clone, Debug)]
 pub struct OwnedRuntimeTemplateHandoff {
-    pub(crate) kind: TemplateType,
     pub(crate) body: OwnedRuntimeTemplateBody,
     pub(crate) location: SourceLocation,
 }
@@ -72,7 +69,6 @@ pub(crate) enum OwnedRuntimeTemplateBody {
 pub(crate) enum OwnedRuntimeTemplateNode {
     Sequence {
         children: Vec<OwnedRuntimeTemplateNode>,
-        location: SourceLocation,
     },
 
     Text {
@@ -85,12 +81,10 @@ pub(crate) enum OwnedRuntimeTemplateNode {
     DynamicExpression {
         expression: Box<Expression>,
         reactive_subscription: Option<ReactiveSubscription>,
-        location: SourceLocation,
     },
 
     ChildTemplate {
         template: Box<OwnedRuntimeTemplateHandoff>,
-        location: SourceLocation,
     },
 
     /// Output-conditioned wrapper application around one child occurrence.
@@ -120,9 +114,7 @@ pub(crate) enum OwnedRuntimeTemplateNode {
         location: SourceLocation,
     },
 
-    AggregateOutput {
-        location: SourceLocation,
-    },
+    AggregateOutput,
 
     LoopControl {
         kind: TemplateLoopControlKind,
@@ -131,7 +123,6 @@ pub(crate) enum OwnedRuntimeTemplateNode {
 
     RuntimeSlotSite {
         site: RuntimeSlotSiteId,
-        location: SourceLocation,
     },
 
     /// Structural slot placeholder that survived as a runtime value.
@@ -160,7 +151,6 @@ pub(crate) struct OwnedRuntimeTemplateBranch {
 #[derive(Clone, Debug)]
 pub(crate) struct OwnedRuntimeSlotContributionSource {
     pub(crate) source: RuntimeSlotContributionSourceId,
-    pub(crate) target: SlotKey,
     pub(crate) render_root: OwnedRuntimeTemplateNode,
     pub(crate) renders_wrapper_unconditionally: bool,
     pub(crate) location: SourceLocation,
@@ -170,7 +160,6 @@ pub(crate) struct OwnedRuntimeSlotContributionSource {
 #[derive(Clone, Debug)]
 pub(crate) struct OwnedRuntimeSlotSite {
     pub(crate) site: RuntimeSlotSiteId,
-    pub(crate) key: SlotKey,
     pub(crate) render_plan: OwnedRuntimeSlotSiteRenderPlan,
     pub(crate) location: SourceLocation,
 }
@@ -186,184 +175,6 @@ pub(crate) struct OwnedRuntimeSlotSiteRenderPlan {
 pub(crate) enum OwnedRuntimeSlotSiteRenderPiece {
     Render(OwnedRuntimeTemplateNode),
     ContributionSource(RuntimeSlotContributionSourceId),
-}
-
-// -------------------------
-//  String-table remapping
-// -------------------------
-
-impl OwnedRuntimeSlotApplicationHandoff {
-    /// Remaps all interned string and source-location IDs in this handoff.
-    ///
-    /// WHAT: walks the owned runtime slot handoff recursively.
-    /// WHY: the handoff is normally populated after per-file string remapping,
-    /// but keeping the remap contract complete prevents stale IDs if the AST
-    /// finalization order changes.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.wrapper.remap_string_ids(remap);
-        for source in &mut self.contribution_sources {
-            source.remap_string_ids(remap);
-        }
-        for site in &mut self.slot_sites {
-            site.remap_string_ids(remap);
-        }
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl OwnedRuntimeTemplateHandoff {
-    /// Remaps interned string identities stored in this runtime template handoff.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.kind.remap_string_ids(remap);
-        self.body.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl OwnedRuntimeTemplateBody {
-    /// Remaps interned string identities stored in this runtime template body.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            OwnedRuntimeTemplateBody::Render(node) => {
-                node.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateBody::RuntimeSlotApplication(handoff) => {
-                handoff.remap_string_ids(remap);
-            }
-        }
-    }
-}
-
-impl OwnedRuntimeTemplateNode {
-    /// Remaps interned string identities stored in this owned runtime node tree.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            OwnedRuntimeTemplateNode::Sequence { children, location } => {
-                for child in children {
-                    child.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::Text { text, location, .. } => {
-                *text = remap.get(*text);
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::DynamicExpression {
-                expression,
-                reactive_subscription,
-                location,
-                ..
-            } => {
-                expression.remap_string_ids(remap);
-                if let Some(subscription) = reactive_subscription {
-                    subscription.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::ChildTemplate { template, location } => {
-                template.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::ConditionalWrapper {
-                child,
-                wrapper,
-                location,
-            } => {
-                child.remap_string_ids(remap);
-                wrapper.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::BranchChain {
-                branches,
-                fallback,
-                location,
-            } => {
-                for branch in branches {
-                    branch.remap_string_ids(remap);
-                }
-                if let Some(fallback) = fallback {
-                    fallback.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::Loop {
-                header,
-                body,
-                aggregate_wrapper,
-                location,
-            } => {
-                header.remap_string_ids(remap);
-                body.remap_string_ids(remap);
-                if let Some(aggregate_wrapper) = aggregate_wrapper {
-                    aggregate_wrapper.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeTemplateNode::AggregateOutput { location }
-            | OwnedRuntimeTemplateNode::LoopControl { location, .. }
-            | OwnedRuntimeTemplateNode::RuntimeSlotSite { location, .. }
-            | OwnedRuntimeTemplateNode::Slot { location } => {
-                location.remap_string_ids(remap);
-            }
-        }
-    }
-}
-
-impl OwnedRuntimeTemplateBranch {
-    /// Remaps interned string identities stored on this owned runtime branch.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.selector.remap_string_ids(remap);
-        self.body.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl OwnedRuntimeSlotContributionSource {
-    /// Remaps interned string identities stored on this contribution source.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.target.remap_string_ids(remap);
-        self.render_root.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl OwnedRuntimeSlotSite {
-    /// Remaps interned string identities stored on this runtime slot site.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.key.remap_string_ids(remap);
-        self.render_plan.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl OwnedRuntimeSlotSiteRenderPlan {
-    /// Remaps interned string identities stored in this slot-site render plan.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for piece in &mut self.pieces {
-            piece.remap_string_ids(remap);
-        }
-    }
-}
-
-impl OwnedRuntimeSlotSiteRenderPiece {
-    /// Remaps interned string identities stored in this slot-site render piece.
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            OwnedRuntimeSlotSiteRenderPiece::Render(node) => {
-                node.remap_string_ids(remap);
-            }
-
-            OwnedRuntimeSlotSiteRenderPiece::ContributionSource(_) => {}
-        }
-    }
 }
 
 /// Walks every nested `OwnedRuntimeTemplateNode` in `handoff` and calls `callback` for each.
@@ -471,7 +282,7 @@ pub(crate) fn walk_owned_runtime_template_node(
 
         OwnedRuntimeTemplateNode::Text { .. }
         | OwnedRuntimeTemplateNode::DynamicExpression { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}
@@ -598,7 +409,7 @@ pub(crate) fn walk_owned_runtime_template_node_mut<E>(
 
         OwnedRuntimeTemplateNode::Text { .. }
         | OwnedRuntimeTemplateNode::DynamicExpression { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}

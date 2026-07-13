@@ -7,12 +7,10 @@
 //! so other modules can depend on the struct without pulling in the full parser.
 
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateControlFlow;
 use crate::compiler_frontend::ast::templates::tir::{
     MaterializedTirTemplateClassification, TemplateIrId, TemplateIrStoreOwner,
     TemplateTirReference, TemplateWrapperReference,
 };
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::sync::Arc;
 
@@ -33,7 +31,6 @@ use std::sync::Arc;
 ///   must not be overwritten by generic cleanup.
 #[derive(Debug)]
 pub struct Template {
-    pub(crate) control_flow: Option<TemplateControlFlow>,
     pub kind: TemplateType,
     pub style: Style,
 
@@ -63,7 +60,6 @@ pub struct Template {
 impl Clone for Template {
     fn clone(&self) -> Self {
         Self {
-            control_flow: self.control_flow.to_owned(),
             kind: self.kind.to_owned(),
             style: self.style.to_owned(),
             child_wrappers: self.child_wrappers.to_owned(),
@@ -96,7 +92,6 @@ impl Template {
     #[cfg(test)]
     fn build_empty() -> Template {
         Template {
-            control_flow: None,
             kind: TemplateType::StringFunction,
             style: Style::default(),
             child_wrappers: vec![],
@@ -150,26 +145,5 @@ impl Template {
         self.tir_reference
             .as_ref()
             .map(|reference| reference.root.template_id)
-    }
-
-    /// Recursively remap interned string IDs in this template's live AST state
-    /// and owned children.
-    ///
-    /// WHAT: rewrites source locations, control flow, kind markers and all
-    ///       recursive child templates with the caller's string-id remap.
-    /// WHY: the per-file frontend remaps string IDs before module-wide
-    ///      dependency sorting. Template body expressions are owned and
-    ///      remapped by the module-scoped TIR store.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.location.remap_string_ids(remap);
-        if let Some(control_flow) = &mut self.control_flow {
-            control_flow.remap_string_ids(remap);
-        }
-        self.kind.remap_string_ids(remap);
-
-        // The finalized TIR reference only carries a store-local ID and an
-        // owner token. The TIR store is always consumed before the module-wide
-        // StringId remap boundary, so no per-template TIR remap is needed here.
     }
 }

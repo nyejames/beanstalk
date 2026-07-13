@@ -112,7 +112,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_
 ) -> Result<TemplateIrId, TemplateError> {
     let mut summary = TemplateIrSummary::default();
     let mut children = Vec::with_capacity(head_prefix_nodes.len() + body_children.len());
-    let root_location = head_prefix_node_location(store, head_prefix_nodes);
+    let root_location = branch_body_candidate_location(store, head_prefix_nodes, body_children);
 
     // Convert each head-prefix node so same-store children are reused and
     // cross-store child templates (recorded by the parser as opaque
@@ -157,6 +157,26 @@ fn head_prefix_node_location(
 ) -> SourceLocation {
     head_prefix_nodes
         .first()
+        .copied()
+        .and_then(|node_id| store.get_node(node_id))
+        .map(|node| node.location.to_owned())
+        .unwrap_or_default()
+}
+
+/// Returns the source location for a branch/fallback body candidate root.
+///
+/// WHAT: prefers the first shared head-prefix node and otherwise uses the first
+///       prepared body child.
+/// WHY: branch templates without a head prefix still need a concrete body span
+///      after their temporary composition root is built.
+fn branch_body_candidate_location(
+    store: &TemplateIrStore,
+    head_prefix_nodes: &[TemplateIrNodeId],
+    body_children: &[TemplateIrNodeId],
+) -> SourceLocation {
+    head_prefix_nodes
+        .first()
+        .or_else(|| body_children.first())
         .copied()
         .and_then(|node_id| store.get_node(node_id))
         .map(|node| node.location.to_owned())

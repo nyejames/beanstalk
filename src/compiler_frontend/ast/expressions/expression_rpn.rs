@@ -13,7 +13,7 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Reverse-Polish-Notation payload for a runtime expression.
@@ -31,13 +31,6 @@ impl ExpressionRpn {
     #[cfg(test)]
     pub fn empty() -> Self {
         Self { items: Vec::new() }
-    }
-
-    /// Remap all interned string IDs in operands and operator source locations.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for item in &mut self.items {
-            item.remap_string_ids(remap);
-        }
     }
 
     /// Returns true if the RPN contains at least one regular division operator.
@@ -92,14 +85,6 @@ impl ExpressionRpnItem {
             ExpressionRpnItem::Operator { location, .. } => location.clone(),
         }
     }
-
-    /// Remap interned string IDs inside this item.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            ExpressionRpnItem::Operand(expression) => expression.remap_string_ids(remap),
-            ExpressionRpnItem::Operator { location, .. } => location.remap_string_ids(remap),
-        }
-    }
 }
 
 /// Frontend place expression.
@@ -122,13 +107,6 @@ impl PlaceExpression {
     pub fn is_mutable(&self) -> bool {
         self.value_mode.is_mutable()
     }
-
-    /// Remap all interned string IDs inside this place recursively.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.kind.remap_string_ids(remap);
-        self.diagnostic_type.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -140,16 +118,4 @@ pub enum PlaceExpressionKind {
         base: Box<PlaceExpression>,
         field: StringId,
     },
-}
-
-impl PlaceExpressionKind {
-    fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            PlaceExpressionKind::Local(path) => path.remap_string_ids(remap),
-            PlaceExpressionKind::Field { base, field } => {
-                base.remap_string_ids(remap);
-                *field = remap.get(*field);
-            }
-        }
-    }
 }

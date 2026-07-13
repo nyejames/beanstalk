@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// One arm of a match expression, pairing a pattern with an optional guard and body.
@@ -26,7 +26,6 @@ pub struct MatchArm {
 /// names in declaration order.
 #[derive(Debug, Clone)]
 pub struct ParsedChoicePayloadCapture {
-    pub field_name: StringId,
     pub binding_name: StringId,
     pub field_index: usize,
     pub type_id: TypeId,
@@ -40,13 +39,10 @@ pub struct ParsedChoicePayloadCapture {
 /// that later lowering stages use to register the arm-local binding.
 #[derive(Debug, Clone)]
 pub struct ChoicePayloadCapture {
-    pub field_name: StringId,
-    pub binding_name: StringId,
     pub field_index: usize,
     pub type_id: TypeId,
     pub binding_path: InternedPath,
     pub location: SourceLocation,
-    pub binding_location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
@@ -95,7 +91,6 @@ pub enum MatchPattern {
 
     ChoiceVariant {
         nominal_path: InternedPath,
-        variant: StringId,
         tag: usize,
         captures: Vec<ChoicePayloadCapture>,
         location: SourceLocation,
@@ -106,7 +101,6 @@ pub enum MatchPattern {
     /// WHAT: a bare symbol in pattern position that is not a known constructor
     /// becomes a capture binding visible only in the arm guard and body.
     Capture {
-        name: StringId,
         binding_path: InternedPath,
         location: SourceLocation,
     },
@@ -135,101 +129,6 @@ pub struct ParsedChoicePattern {
     pub tag: usize,
     pub captures: Vec<ParsedChoicePayloadCapture>,
     pub location: SourceLocation,
-}
-
-impl MatchArm {
-    /// Remap pattern, guard, and body expressions/nodes recursively.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.pattern.remap_string_ids(remap);
-        if let Some(guard) = &mut self.guard {
-            guard.remap_string_ids(remap);
-        }
-        for node in &mut self.body {
-            node.remap_string_ids(remap);
-        }
-    }
-}
-
-impl MatchPattern {
-    /// Remap interned names, paths, and nested expressions in this match pattern.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            MatchPattern::Literal(expression) => {
-                expression.remap_string_ids(remap);
-            }
-
-            MatchPattern::OptionNone { location } => {
-                location.remap_string_ids(remap);
-            }
-
-            MatchPattern::OptionValue { value, location } => {
-                value.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            MatchPattern::OptionPresentCapture {
-                name,
-                binding_path,
-                location,
-                binding_location,
-                ..
-            } => {
-                *name = remap.get(*name);
-                binding_path.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-                binding_location.remap_string_ids(remap);
-            }
-
-            MatchPattern::Relational {
-                value, location, ..
-            } => {
-                value.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-
-            MatchPattern::ChoiceVariant {
-                nominal_path,
-                variant,
-                captures,
-                location,
-                ..
-            } => {
-                nominal_path.remap_string_ids(remap);
-                *variant = remap.get(*variant);
-                for capture in captures {
-                    capture.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            MatchPattern::Capture {
-                name,
-                binding_path,
-                location,
-            } => {
-                *name = remap.get(*name);
-                binding_path.remap_string_ids(remap);
-                location.remap_string_ids(remap);
-            }
-        }
-    }
-}
-
-impl ChoicePayloadCapture {
-    /// Remap field names, binding names, and paths in this capture.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.field_name = remap.get(self.field_name);
-        self.binding_name = remap.get(self.binding_name);
-        self.binding_path.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-        self.binding_location.remap_string_ids(remap);
-    }
 }
 
 /// Relational operators allowed in match patterns.

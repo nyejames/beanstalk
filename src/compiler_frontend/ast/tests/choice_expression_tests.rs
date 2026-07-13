@@ -42,13 +42,10 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         })
         .expect("expected 'current' declaration in start function");
 
-    let (nominal_path, variant, tag) = match &current_declaration.value.kind {
+    let (nominal_path, tag) = match &current_declaration.value.kind {
         ExpressionKind::ChoiceConstruct {
-            nominal_path,
-            variant,
-            tag,
-            ..
-        } => (nominal_path, *variant, *tag),
+            nominal_path, tag, ..
+        } => (nominal_path, *tag),
         other => panic!("expected ChoiceConstruct, got {other:?}"),
     };
     assert_eq!(tag, 0, "expected Status::Ready to have tag 0");
@@ -56,11 +53,6 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         nominal_path.name_str(&string_table),
         Some("Status"),
         "expected nominal path to be Status"
-    );
-    assert_eq!(
-        string_table.resolve(variant),
-        "Ready",
-        "expected variant name to be Ready"
     );
     assert!(
         matches!(
@@ -86,13 +78,10 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         })
         .expect("expected 'selected' declaration in make_status");
 
-    let (nominal_path, variant, tag) = match &selected_declaration.value.kind {
+    let (nominal_path, tag) = match &selected_declaration.value.kind {
         ExpressionKind::ChoiceConstruct {
-            nominal_path,
-            variant,
-            tag,
-            ..
-        } => (nominal_path, *variant, *tag),
+            nominal_path, tag, ..
+        } => (nominal_path, *tag),
         other => panic!("expected ChoiceConstruct, got {other:?}"),
     };
     assert_eq!(tag, 1, "expected Status::Busy to have tag 1");
@@ -100,11 +89,6 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         nominal_path.name_str(&string_table),
         Some("Status"),
         "expected nominal path to be Status"
-    );
-    assert_eq!(
-        string_table.resolve(variant),
-        "Busy",
-        "expected variant name to be Busy"
     );
     assert!(
         matches!(

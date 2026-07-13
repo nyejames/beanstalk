@@ -35,9 +35,7 @@ use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey, diagnostic_type_spelling};
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -148,12 +146,6 @@ pub struct ReactiveSource {
     pub kind: ReactiveSourceKind,
 }
 
-impl ReactiveSource {
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.path.remap_string_ids(remap);
-    }
-}
-
 /// A `String` parameter whose runtime value may itself be a template string.
 ///
 /// WHAT: records the parameter identity used by a template body, for example `[content]` where
@@ -173,11 +165,6 @@ impl ReactiveTemplateParameterDependency {
             parameter,
             location,
         }
-    }
-
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.parameter.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
     }
 }
 
@@ -303,16 +290,6 @@ impl ReactiveTemplateMetadata {
             || !instantiated.subscriptions.is_empty()
             || !instantiated.template_value_parameters.is_empty())
         .then_some(instantiated)
-    }
-
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for subscription in &mut self.subscriptions {
-            subscription.remap_string_ids(remap);
-        }
-
-        for dependency in &mut self.template_value_parameters {
-            dependency.remap_string_ids(remap);
-        }
     }
 }
 
@@ -452,7 +429,6 @@ pub(crate) fn type_id_hint_for_diagnostic_type(data_type: &DataType) -> TypeId {
 /// Input struct for `Expression::choice_construct` to avoid a long parameter list.
 pub struct ChoiceConstructInput {
     pub nominal_path: InternedPath,
-    pub variant: StringId,
     pub tag: usize,
     pub fields: Vec<Declaration>,
     pub diagnostic_type: DataType,
@@ -462,107 +438,6 @@ pub struct ChoiceConstructInput {
 }
 
 impl Expression {
-    /// Returns the narrow string projection used by constant-expression fixtures.
-    ///
-    /// WHAT: converts literal-like expression shapes into their folded text representation and
-    /// returns an empty string for non-renderable runtime constructs.
-    /// WHY: this is not a user-facing renderer. Runtime output and public path strings have
-    /// stronger formatting contracts owned by template lowering and path formatting.
-    #[cfg(test)]
-    pub fn as_string(&self, string_table: &StringTable) -> String {
-        match &self.kind {
-            // Scalar literals
-            ExpressionKind::StringSlice(interned_string) => {
-                string_table.resolve(*interned_string).to_owned()
-            }
-            ExpressionKind::Int(int) => int.to_string(),
-            ExpressionKind::Float(float) => float.to_string(),
-            ExpressionKind::Bool(bool) => bool.to_string(),
-            ExpressionKind::Char(char) => char.to_string(),
-
-            // Paths and references
-            ExpressionKind::Path(ct_paths) => {
-                // WHAT: This returns a bare public-path view without origin.
-                // WHY: It is an intermediate representation only (diagnostics/debug/folding
-                // contexts that have not crossed the runtime/public formatting boundary).
-                // Final runtime/public path strings must go through the shared path formatter
-                // (`format_compile_time_path(s)`), where leading `/`, trailing `/`, and
-                // `#origin` are applied exactly once. Do not re-prefix origin onto strings
-                // that may already be formatted, or origin components can stack.
-                ct_paths
-                    .paths
-                    .iter()
-                    .map(|p| p.public_path.to_portable_string(string_table))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
-            ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
-
-            // Opaque / non-renderable
-            ExpressionKind::Copy(..) => String::new(),
-            ExpressionKind::Template(..) => String::new(),
-            ExpressionKind::RuntimeTemplateHandoff(..) => String::new(),
-            ExpressionKind::RuntimeSlotApplicationHandoff(..) => String::new(),
-
-            // Aggregates
-            ExpressionKind::Collection(items, ..) => {
-                let mut result = String::new();
-                for item in items {
-                    result.push_str(&item.as_string(string_table));
-                }
-                result
-            }
-            ExpressionKind::MapLiteral(_) => {
-                // Map literals are not foldable to strings; return empty to
-                // avoid silently rendering them as folded constants.
-                String::new()
-            }
-            ExpressionKind::StructInstance(args) | ExpressionKind::StructDefinition(args) => {
-                let mut result = String::new();
-                for arg in args {
-                    result.push_str(&arg.value.as_string(string_table));
-                }
-                result
-            }
-            ExpressionKind::Range(lower, upper) => {
-                format!(
-                    "{} to {}",
-                    lower.as_string(string_table),
-                    upper.as_string(string_table)
-                )
-            }
-            ExpressionKind::ChoiceConstruct { variant, .. } => {
-                string_table.resolve(*variant).to_owned()
-            }
-
-            // Functions, calls, and expression-owned member/builtin access.
-            ExpressionKind::Function(..) => String::new(),
-            ExpressionKind::FunctionCall { .. } => String::new(),
-            ExpressionKind::HandledFallibleFunctionCall { .. } => String::new(),
-            ExpressionKind::HandledFallibleHostFunctionCall { .. } => String::new(),
-            ExpressionKind::Cast { .. } => String::new(),
-            ExpressionKind::HandledFallibleExpression { .. } => String::new(),
-            ExpressionKind::OptionPropagation { .. } => String::new(),
-            ExpressionKind::HostFunctionCall { .. } => String::new(),
-            ExpressionKind::FieldAccess { .. } => String::new(),
-            ExpressionKind::MethodCall { .. } => String::new(),
-            ExpressionKind::CollectionBuiltinCall { .. } => String::new(),
-            ExpressionKind::MapBuiltinCall { .. } => String::new(),
-
-            // Carriers and special forms
-            ExpressionKind::FallibleCarrierConstruct { variant, value } => match variant {
-                FallibleCarrierVariant::Success => value.as_string(string_table),
-                FallibleCarrierVariant::Error => String::new(),
-            },
-            ExpressionKind::Runtime(..) => String::new(),
-            ExpressionKind::NoValue => String::new(),
-            ExpressionKind::OptionNone => String::new(),
-            ExpressionKind::Coerced { value, .. } => value.as_string(string_table),
-
-            ExpressionKind::ValueBlock { .. } => String::new(),
-        }
-    }
-
     /// Generic constructor for an expression with the given kind and type metadata.
     pub fn new(
         kind: ExpressionKind,
@@ -809,7 +684,6 @@ impl Expression {
     pub(crate) fn method_call_with_typed_arguments(
         receiver: Expression,
         method_path: InternedPath,
-        method: StringId,
         args: Vec<CallArgument>,
         result_type_ids: Vec<TypeId>,
         type_environment: &mut TypeEnvironment,
@@ -822,7 +696,6 @@ impl Expression {
             ExpressionKind::MethodCall {
                 receiver: Box::new(receiver),
                 method_path,
-                method,
                 args,
                 result_type_ids,
                 location: location.clone(),
@@ -1346,7 +1219,6 @@ impl Expression {
         Self::new(
             ExpressionKind::ChoiceConstruct {
                 nominal_path: input.nominal_path,
-                variant: input.variant,
                 tag: input.tag,
                 fields: input.fields,
             },
@@ -1538,27 +1410,5 @@ impl Expression {
             TemplateConstValueKind::SlotInsertHelper => ConstValueKind::SlotInsertTemplate,
             TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
         }
-    }
-
-    /// Remap all interned string IDs in this expression recursively.
-    ///
-    /// WHAT: updates `diagnostic_type`, `function_receiver`, `location`, and the
-    ///       expression kind, including nested declarations, AST nodes, and templates.
-    /// WHY: per-file header parsing produces expression defaults using local string tables;
-    ///      remapping keeps them valid after merge into the module/global table.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.diagnostic_type.remap_string_ids(remap);
-        if let Some(receiver) = &mut self.function_receiver {
-            receiver.remap_string_ids(remap);
-        }
-        if let Some(source) = &mut self.reactive_source {
-            source.remap_string_ids(remap);
-        }
-        if let Some(metadata) = &mut self.reactive_template {
-            metadata.remap_string_ids(remap);
-        }
-        self.location.remap_string_ids(remap);
-        self.kind.remap_string_ids(remap);
     }
 }

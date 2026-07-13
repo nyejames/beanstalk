@@ -1307,7 +1307,7 @@ fn normalize_owned_runtime_template_node_for_hir(
         | OwnedRuntimeTemplateNode::BranchChain { .. }
         | OwnedRuntimeTemplateNode::Loop { .. }
         | OwnedRuntimeTemplateNode::Text { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}

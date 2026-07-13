@@ -11,8 +11,7 @@ use crate::compiler_frontend::ast::templates::template_body_parser::{
 use crate::compiler_frontend::ast::templates::template_body_sentinels::TemplateBodyControlContext;
 use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateControlFlow,
-    TemplateControlFlowValidationMode, TemplateLoopControlFlow, TemplateLoopHeader,
+    TemplateBranchSelector, TemplateControlFlowValidationMode, TemplateLoopHeader,
     validate_const_required_template_control_flow,
     validate_runtime_template_control_flow_slot_artifacts,
 };
@@ -23,8 +22,8 @@ use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBranch,
     TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
     TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateRef,
-    TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
-    TirSlotResolution, TirSlotResolutionOverlay,
+    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
+    TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -202,10 +201,10 @@ fn const_required_template_head_folds_const_record_instance_field() {
 fn source_authored_template_if_suffix_reaches_ast() {
     let (template, context, string_table) = parse_runtime_template("[if true: Visible]");
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Visible",
@@ -246,12 +245,8 @@ fn source_authored_template_option_capture_if_suffix_reaches_ast() {
     )
     .expect("option-present template if should reach AST");
 
-    let branch_chain = expect_branch_chain(&template);
-    let selector = &branch_chain
-        .branches
-        .first()
-        .expect("template if should contain a primary branch")
-        .selector;
+    let branch_chain = expect_branch_chain_node(&template, &context);
+    let selector = branch_selector(branch_chain, 0, &context);
 
     assert!(matches!(
         selector,
@@ -318,26 +313,27 @@ fn template_option_capture_binding_is_not_visible_in_else_branch() {
 
 #[test]
 fn source_authored_template_range_loop_suffix_reaches_ast() {
-    let (template, _context, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
+    let (template, context, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
 
-    assert!(matches!(
-        template.control_flow,
-        Some(TemplateControlFlow::Loop(_))
-    ));
+    let store = context.template_ir_store.borrow();
+    let template_id = template
+        .tir_template_id()
+        .expect("template should carry a TIR reference");
+    assert!(
+        store
+            .control_flow_node_id_for_template(template_id)
+            .is_some()
+    );
 }
 
 #[test]
 fn source_authored_template_conditional_loop_suffix_reaches_ast() {
-    let (template, _context, _unused_table) = parse_runtime_template("[loop true: Waiting]");
+    let (template, context, _unused_table) = parse_runtime_template("[loop true: Waiting]");
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = &template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
+    let header = loop_header(loop_node, &context);
 
-    assert!(matches!(
-        template_loop.header,
-        TemplateLoopHeader::Conditional { .. }
-    ));
+    assert!(matches!(header, TemplateLoopHeader::Conditional { .. }));
 }
 
 #[test]
@@ -465,33 +461,33 @@ fn template_else_if_adds_conditional_branch_in_source_order() {
         ]",
     );
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
     assert_eq!(
-        branch_chain.branches.len(),
+        branch_count(branch_chain, &context),
         3,
         "`else if` sentinels should add branches to the same chain"
     );
-    assert_body_ref_static_contains(
-        branch_body_ref(branch_chain, 0),
+    assert_body_node_static_contains(
+        branch_body_node(branch_chain, 0, &context),
         &context,
         &string_table,
         "First",
     );
-    assert_body_ref_static_contains(
-        branch_body_ref(branch_chain, 1),
+    assert_body_node_static_contains(
+        branch_body_node(branch_chain, 1, &context),
         &context,
         &string_table,
         "Second",
     );
-    assert_body_ref_static_contains(
-        branch_body_ref(branch_chain, 2),
+    assert_body_node_static_contains(
+        branch_body_node(branch_chain, 2, &context),
         &context,
         &string_table,
         "Third",
     );
-    assert_body_ref_static_contains(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Fallback",
@@ -517,27 +513,27 @@ fn nested_template_else_if_builds_independent_branch_chains() {
         ]",
     );
 
-    let outer_chain = expect_branch_chain(&template);
+    let outer_chain = expect_branch_chain_node(&template, &context);
     assert_eq!(
-        outer_chain.branches.len(),
+        branch_count(outer_chain, &context),
         2,
         "outer else-if should extend only the outer chain"
     );
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(outer_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(outer_chain, &context),
         &context,
         &string_table,
         "Inner second",
     );
-    assert_body_ref_static_contains(
-        first_branch_body_ref(outer_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(outer_chain, &context),
         &context,
         &string_table,
         "Inner fallback",
     );
-    assert_body_ref_static_contains(
-        fallback_body_ref(outer_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(outer_chain, &context),
         &context,
         &string_table,
         "Outer fallback",
@@ -612,28 +608,28 @@ fn template_if_body_splits_on_direct_else_sentinel() {
         ]",
     );
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Visible",
     );
-    assert_body_ref_static_contains(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Hidden",
     );
-    assert_body_ref_static_excludes(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_excludes(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "else",
     );
-    assert_body_ref_static_excludes(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_excludes(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "else",
@@ -654,16 +650,16 @@ fn nested_template_if_consumes_its_own_else_sentinel() {
         ]",
     );
 
-    let outer_if = expect_branch_chain(&template);
+    let outer_if = expect_branch_chain_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(outer_if),
+    assert_body_node_static_contains(
+        first_branch_body_node(outer_if, &context),
         &context,
         &string_table,
         "Inner else",
     );
-    assert_body_ref_static_contains(
-        fallback_body_ref(outer_if),
+    assert_body_node_static_contains(
+        fallback_body_node(outer_if, &context),
         &context,
         &string_table,
         "Outer else",
@@ -675,12 +671,10 @@ fn template_loop_body_stores_normal_body_content() {
     let (template, context, string_table) =
         parse_control_flow_template_after_body_parse("[loop 0 to 3 |i|: Item [i]]");
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        loop_body_ref(&template_loop),
+    assert_body_node_static_contains(
+        loop_body_node(loop_node, &context),
         &context,
         &string_table,
         "Item",
@@ -891,10 +885,13 @@ fn template_if_allows_slot_on_previous_line_before_else_sentinel() {
         ]",
     );
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
     assert!(
-        body_ref_contains_unresolved_slots(first_branch_body_ref(branch_chain), &context),
+        body_node_contains_unresolved_slots(
+            first_branch_body_node(branch_chain, &context),
+            &context
+        ),
         "slot placeholders before a next-line else sentinel should remain valid branch content"
     );
 }
@@ -929,12 +926,10 @@ fn template_loop_break_is_structural_body_signal() {
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
 
     assert_eq!(
-        body_ref_loop_control_signal_count(loop_body_ref(&template_loop), &context),
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
         1
     );
 }
@@ -947,12 +942,10 @@ fn template_loop_continue_is_structural_body_signal() {
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
 
     assert_eq!(
-        body_ref_loop_control_signal_count(loop_body_ref(&template_loop), &context),
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
         1
     );
 }
@@ -967,11 +960,9 @@ fn nested_template_if_break_inside_loop_is_structural_signal() {
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
     assert_eq!(
-        body_ref_loop_control_signal_count(loop_body_ref(&template_loop), &context),
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
         1
     );
 }
@@ -986,12 +977,28 @@ fn nested_template_if_continue_inside_loop_is_structural_signal() {
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
     assert_eq!(
-        body_ref_loop_control_signal_count(loop_body_ref(&template_loop), &context),
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
         1
+    );
+}
+
+#[test]
+fn nested_template_with_loop_control_uses_enclosing_loop_without_owning_control_flow() {
+    let (template, context, _unused_table) = parse_runtime_template(
+        "[loop 0 to 2 |i|:
+            [:
+                [continue]
+            ]
+        ]",
+    );
+
+    let loop_node = expect_loop_node(&template, &context);
+    assert_eq!(
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
+        1,
+        "the nested child should retain its loop-control node without being prepared as an owning loop",
     );
 }
 
@@ -1007,12 +1014,10 @@ fn nested_template_if_inside_loop_consumes_its_own_else_sentinel() {
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        loop_body_ref(&template_loop),
+    assert_body_node_static_contains(
+        loop_body_node(loop_node, &context),
         &context,
         &string_table,
         "Inner else",
@@ -1029,29 +1034,29 @@ fn template_if_composition_formats_each_branch_independently() {
         ]",
     );
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "<h1>Visible</h1>",
     );
 
-    assert_body_ref_static_contains(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "<h1>Hidden</h1>",
     );
-    assert_body_ref_static_excludes(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_excludes(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Hidden",
     );
-    assert_body_ref_static_excludes(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_excludes(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Visible",
@@ -1105,29 +1110,29 @@ fn template_if_composition_applies_shared_head_prefix_to_each_branch() {
     )
     .expect("template if should parse through control-flow composition");
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "<card>",
     );
-    assert_body_ref_static_contains(
-        first_branch_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        first_branch_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Visible",
     );
 
-    assert_body_ref_static_contains(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "<card>",
     );
-    assert_body_ref_static_contains(
-        fallback_body_ref(branch_chain),
+    assert_body_node_static_contains(
+        fallback_body_node(branch_chain, &context),
         &context,
         &string_table,
         "Hidden",
@@ -1142,27 +1147,22 @@ fn template_loop_composition_formats_body_without_repeating_shared_head_prefix()
         ]",
     );
 
-    let Some(TemplateControlFlow::Loop(template_loop)) = template.control_flow else {
-        panic!("expected template loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
 
-    assert_body_ref_static_contains(
-        template_loop
-            .aggregate_wrapper_tir_reference
-            .as_ref()
-            .expect("loop should preserve its shared head prefix in aggregate-wrapper TIR"),
+    assert_body_node_static_contains(
+        loop_aggregate_wrapper_node(loop_node, &context),
         &context,
         &string_table,
         "prefix",
     );
-    assert_body_ref_static_contains(
-        loop_body_ref(&template_loop),
+    assert_body_node_static_contains(
+        loop_body_node(loop_node, &context),
         &context,
         &string_table,
         "<h1>Item</h1>",
     );
-    assert_body_ref_static_excludes(
-        loop_body_ref(&template_loop),
+    assert_body_node_static_excludes(
+        loop_body_node(loop_node, &context),
         &context,
         &string_table,
         "prefix",
@@ -1244,15 +1244,9 @@ fn runtime_template_loop_with_continue_preserves_loop_control_signal() {
         ]",
     );
 
-    let loop_control_flow = template
-        .control_flow
-        .as_ref()
-        .expect("template should have control flow");
-    let TemplateControlFlow::Loop(loop_cf) = loop_control_flow else {
-        panic!("expected a loop control flow");
-    };
+    let loop_node = expect_loop_node(&template, &context);
     assert_eq!(
-        body_ref_loop_control_signal_count(loop_body_ref(loop_cf), &context),
+        body_node_loop_control_signal_count(loop_body_node(loop_node, &context), &context),
         1,
         "loop body should contain a loop control signal",
     );
@@ -1376,10 +1370,13 @@ fn const_required_template_if_allows_unresolved_slot_wrapper() {
         ]",
     );
 
-    let branch_chain = expect_branch_chain(&template);
+    let branch_chain = expect_branch_chain_node(&template, &context);
 
     assert!(
-        body_ref_contains_unresolved_slots(first_branch_body_ref(branch_chain), &context),
+        body_node_contains_unresolved_slots(
+            first_branch_body_node(branch_chain, &context),
+            &context
+        ),
         "const-required helper templates may keep slot structure for later composition"
     );
 }
@@ -2507,12 +2504,18 @@ fn parse_control_flow_template_after_body_parse(
     )
     .expect("template body should parse");
 
+    let tir_reference = construction_context.finish(
+        build_state.style.clone(),
+        build_state.kind.clone(),
+        crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
+        construction_context.location().to_owned(),
+    );
+
     let template = Template {
-        control_flow: build_state.control_flow,
         kind: build_state.kind,
         style: build_state.style,
         child_wrappers: build_state.child_wrappers,
-        tir_reference: None,
+        tir_reference: Some(tir_reference),
         id: build_state.id,
         location: construction_context.location().to_owned(),
     };
@@ -2626,7 +2629,6 @@ fn parse_runtime_template_without_validation(
         construction_context.finish(style, kind, TemplateTirPhase::Parsed, location);
 
     let template = Template {
-        control_flow: build_state.control_flow,
         kind: build_state.kind,
         style: build_state.style,
         child_wrappers: build_state.child_wrappers,
@@ -2994,17 +2996,14 @@ fn install_slot_resolution_overlay_on_template(
     }
 }
 
-fn body_ref_static_text(
-    body_ref: &TemplateTirBodyReference,
+fn body_node_static_text(
+    body_node: TemplateIrNodeId,
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> String {
     let store = context.template_ir_store.borrow();
-    let root = body_ref
-        .same_store_root(&store)
-        .expect("control-flow body should resolve in the parser test store");
     let mut rendered = String::new();
-    collect_static_tir_fragments(root, &store, string_table, &mut rendered);
+    collect_static_tir_fragments(body_node, &store, string_table, &mut rendered);
     rendered
 }
 
@@ -3073,16 +3072,12 @@ fn collect_static_tir_fragments(
     }
 }
 
-fn body_ref_contains_unresolved_slots(
-    body_ref: &TemplateTirBodyReference,
+fn body_node_contains_unresolved_slots(
+    body_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> bool {
     let store = context.template_ir_store.borrow();
-    let root = body_ref
-        .same_store_root(&store)
-        .expect("control-flow body should resolve in the parser test store");
-
-    tir_subtree_contains_slot(root, &store)
+    tir_subtree_contains_slot(body_node, &store)
 }
 
 fn tir_subtree_contains_slot(
@@ -3133,16 +3128,12 @@ fn tir_subtree_contains_slot(
     }
 }
 
-fn body_ref_loop_control_signal_count(
-    body_ref: &TemplateTirBodyReference,
+fn body_node_loop_control_signal_count(
+    body_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> usize {
     let store = context.template_ir_store.borrow();
-    let root = body_ref
-        .same_store_root(&store)
-        .expect("control-flow body should resolve in the parser test store");
-
-    count_tir_loop_control_signals(root, &store)
+    count_tir_loop_control_signals(body_node, &store)
 }
 
 fn count_tir_loop_control_signals(
@@ -3201,26 +3192,26 @@ fn count_tir_loop_control_signals(
     }
 }
 
-fn assert_body_ref_static_contains(
-    body_ref: &TemplateTirBodyReference,
+fn assert_body_node_static_contains(
+    body_node: TemplateIrNodeId,
     context: &ScopeContext,
     string_table: &StringTable,
     expected: &str,
 ) {
-    let rendered = body_ref_static_text(body_ref, context, string_table);
+    let rendered = body_node_static_text(body_node, context, string_table);
     assert!(
         rendered.contains(expected),
         "expected {rendered:?} to contain {expected:?}"
     );
 }
 
-fn assert_body_ref_static_excludes(
-    body_ref: &TemplateTirBodyReference,
+fn assert_body_node_static_excludes(
+    body_node: TemplateIrNodeId,
     context: &ScopeContext,
     string_table: &StringTable,
     unexpected: &str,
 ) {
-    let rendered = body_ref_static_text(body_ref, context, string_table);
+    let rendered = body_node_static_text(body_node, context, string_table);
     assert!(
         !rendered.contains(unexpected),
         "expected {rendered:?} to exclude {unexpected:?}"
@@ -3239,40 +3230,148 @@ fn assert_invalid_template_structure(
     }
 }
 
-fn expect_branch_chain(template: &Template) -> &TemplateBranchChain {
-    let Some(TemplateControlFlow::BranchChain(branch_chain)) = &template.control_flow else {
-        panic!("expected template branch-chain control flow");
+fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let template_id = template
+        .tir_template_id()
+        .expect("template should carry a finalized TIR reference");
+    let control_flow_node_id = store
+        .control_flow_node_id_for_template(template_id)
+        .expect("template should contain a control-flow node");
+    let node = store
+        .get_node(control_flow_node_id)
+        .expect("control-flow node should exist in the store");
+    assert!(
+        matches!(node.kind, TemplateIrNodeKind::BranchChain { .. }),
+        "expected BranchChain control-flow node"
+    );
+    control_flow_node_id
+}
+
+fn expect_loop_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let template_id = template
+        .tir_template_id()
+        .expect("template should carry a finalized TIR reference");
+    let control_flow_node_id = store
+        .control_flow_node_id_for_template(template_id)
+        .expect("template should contain a control-flow node");
+    let node = store
+        .get_node(control_flow_node_id)
+        .expect("control-flow node should exist in the store");
+    assert!(
+        matches!(node.kind, TemplateIrNodeKind::Loop { .. }),
+        "expected Loop control-flow node"
+    );
+    control_flow_node_id
+}
+
+fn first_branch_body_node(
+    branch_chain_node: TemplateIrNodeId,
+    context: &ScopeContext,
+) -> TemplateIrNodeId {
+    branch_body_node(branch_chain_node, 0, context)
+}
+
+fn branch_body_node(
+    branch_chain_node: TemplateIrNodeId,
+    index: usize,
+    context: &ScopeContext,
+) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let node = store
+        .get_node(branch_chain_node)
+        .expect("branch chain node should exist");
+    let TemplateIrNodeKind::BranchChain { branches, .. } = &node.kind else {
+        panic!("expected BranchChain node");
     };
-
-    branch_chain
-}
-
-fn first_branch_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateTirBodyReference {
-    &branch_chain
-        .branches
-        .first()
-        .expect("branch chain should contain a primary branch")
-        .body_tir_reference
-}
-
-fn branch_body_ref(branch_chain: &TemplateBranchChain, index: usize) -> &TemplateTirBodyReference {
-    &branch_chain
-        .branches
+    branches
         .get(index)
-        .expect("branch chain should contain requested branch")
-        .body_tir_reference
+        .unwrap_or_else(|| panic!("branch chain should contain branch {index}"))
+        .body
 }
 
-fn fallback_body_ref(branch_chain: &TemplateBranchChain) -> &TemplateTirBodyReference {
-    &branch_chain
-        .fallback
+fn fallback_body_node(
+    branch_chain_node: TemplateIrNodeId,
+    context: &ScopeContext,
+) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let node = store
+        .get_node(branch_chain_node)
+        .expect("branch chain node should exist");
+    let TemplateIrNodeKind::BranchChain { fallback, .. } = &node.kind else {
+        panic!("expected BranchChain node");
+    };
+    fallback
         .as_ref()
+        .copied()
         .expect("branch chain should contain fallback")
-        .body_tir_reference
 }
 
-fn loop_body_ref(template_loop: &TemplateLoopControlFlow) -> &TemplateTirBodyReference {
-    &template_loop.body_tir_reference
+fn loop_body_node(loop_node: TemplateIrNodeId, context: &ScopeContext) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let node = store.get_node(loop_node).expect("loop node should exist");
+    let TemplateIrNodeKind::Loop { body, .. } = &node.kind else {
+        panic!("expected Loop node");
+    };
+    *body
+}
+
+fn branch_count(branch_chain_node: TemplateIrNodeId, context: &ScopeContext) -> usize {
+    let store = context.template_ir_store.borrow();
+    let node = store
+        .get_node(branch_chain_node)
+        .expect("branch chain node should exist");
+    let TemplateIrNodeKind::BranchChain { branches, .. } = &node.kind else {
+        panic!("expected BranchChain node");
+    };
+    branches.len()
+}
+
+fn loop_aggregate_wrapper_node(
+    loop_node: TemplateIrNodeId,
+    context: &ScopeContext,
+) -> TemplateIrNodeId {
+    let store = context.template_ir_store.borrow();
+    let node = store.get_node(loop_node).expect("loop node should exist");
+    let TemplateIrNodeKind::Loop {
+        aggregate_wrapper, ..
+    } = &node.kind
+    else {
+        panic!("expected Loop node");
+    };
+    aggregate_wrapper
+        .as_ref()
+        .copied()
+        .expect("loop should have an aggregate wrapper installed")
+}
+
+fn loop_header(loop_node: TemplateIrNodeId, context: &ScopeContext) -> TemplateLoopHeader {
+    let store = context.template_ir_store.borrow();
+    let node = store.get_node(loop_node).expect("loop node should exist");
+    let TemplateIrNodeKind::Loop { header, .. } = &node.kind else {
+        panic!("expected Loop node");
+    };
+    header.clone()
+}
+
+fn branch_selector(
+    branch_chain_node: TemplateIrNodeId,
+    index: usize,
+    context: &ScopeContext,
+) -> TemplateBranchSelector {
+    let store = context.template_ir_store.borrow();
+    let node = store
+        .get_node(branch_chain_node)
+        .expect("branch chain node should exist");
+    let TemplateIrNodeKind::BranchChain { branches, .. } = &node.kind else {
+        panic!("expected BranchChain node");
+    };
+    branches
+        .get(index)
+        .unwrap_or_else(|| panic!("branch chain should contain branch {index}"))
+        .selector
+        .clone()
 }
 
 /// Returns true when the TIR subtree rooted at `node_id` contains a

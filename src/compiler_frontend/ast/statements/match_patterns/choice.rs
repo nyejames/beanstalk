@@ -239,7 +239,6 @@ fn parse_choice_pattern_captures(
                 }
 
                 captures.push(ParsedChoicePayloadCapture {
-                    field_name,
                     binding_name,
                     field_index,
                     type_id: field_decl.value.type_id,

@@ -21,48 +21,33 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B3 next - remove durable `Template.control_flow` and duplicate control-flow carrier structs from parsing and render-unit preparation
-LAST_ACCEPTED_COMMIT: `a688cc3be` (`refactor: require prepared control-flow body roots`)
+CURRENT_SLICE: Phase 2B3 accepted - next is Phase 2C style and wrapper duplication removal
+LAST_ACCEPTED_COMMIT: `26fde34db` (`refactor: finalize templates through root TIR views`)
 BRANCH: `main`
-WORKTREE: `main`; Phase 2B2 is accepted by the checkpoint containing this plan refresh; resolve exact `HEAD` before delegation
-REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
+WORKTREE: `main`; accepted Phase 2B3 source, tests and this plan update are pending the checkpoint commit
+REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
-- Phase 1 removed detached content reconstruction from production and tests. TIR references are now required by the remaining fold fixtures.
-- The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
-- HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
-- `TemplateBuildState` is the single parser-local mutable owner. Production constructs durable `Template` only after required TIR identity exists.
-- Effective TIR classification owns foldability, including reactive text side-table subscriptions. Parse-time `can_fold` and `BodyOwnerSnapshot` are deleted.
-- Control-flow bodies now carry required direct `TemplateTirBodyReference` identities. Scratch copies, the forwarding wrapper, silent preparation fallback and builder formatter-suppression state are deleted.
-- AST normalization, reactive annotation and runtime handoff use one root-reference expression overlay and the finalized effective `TirView`. The obsolete subtree view, body-overlay side table and node-level handoff path are deleted.
-- Root-first overlay resolution preserves prior root and same-store child expression overrides while leaving child-owned slot and wrapper dimensions intact.
-- Durable `Template.control_flow` remains only in parsing and render-unit preparation. Finalization no longer reads it.
+- `Template.control_flow`, duplicate branch/fallback/loop carriers and `TemplateTirBodyReference` are deleted. Parser and render-unit preparation update the exact owning TIR control-flow node.
+- Reactive metadata and runtime handoff read selectors, headers, bodies and aggregate wrappers from the finalized TIR root.
+- Removing the last durable remap root exposed an unreachable AST/TIR string-ID remap graph. Its test-only APIs and representation fixtures are deleted while header, diagnostic, parsed-type, type-environment and HIR remap boundaries remain.
+- The durable `Template` still duplicates TIR-owned `style` and `child_wrappers`. Its reference remains optional and retains the redundant `is_composed` marker for later Phase 2 slices.
 ACCEPTANCE_CRITERIA:
-- remove `Template.control_flow` and the remaining duplicate durable branch/fallback/loop carrier structs
-- make parser and render-unit preparation update the owning TIR control-flow node directly through parse-local state and required roots
-- retain shared selector, header and loop-control semantic types only where parser, TIR, fold and owned handoff genuinely share them
-- replace `template_contains_control_flow` dual checks with TIR summary/view classification
-- delete obsolete body-reference types, helpers and fixtures once no live parser/preparation caller remains
-- preserve diagnostics, output, reactivity and final handoff behavior with focused tests and full validation
+- remove durable `Template.style`, `apply_style` and `apply_style_updates`
+- keep mutable parse-time style on `TemplateBuildState` and effective style on TIR
+- normalize `$children(..)` arguments at the directive boundary and attach final wrapper context through TIR wrapper sets/overlays
+- remove durable `Template.child_wrappers`
+- keep folding, formatting, classification and runtime handoff on effective TIR views
 VALIDATION_STATE:
-- Phase 1 focused gate passed 66 HIR expression, 19 normalization, 285 create-template, 441 TIR and 91 head tests plus a warning-free lib-test build.
-- Phase 1 full `just validate` passed at `2fed82778`: cross-target Clippy, 3344 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower.
-- Phase 2A focused validation passed 285 create-template, 91 head, 61 parser-TIR, 17 reactive metadata, 443 TIR, 7 slot-constant, 10 builtin-directive and 23 classification tests plus a warning-free lib-test build.
-- Separate read-only Ollama final review found no blocking issue. Its two low risks were covered by slot-focused tests and the planned later durable-kind thinning.
-- Phase 2A full `just validate` passed: cross-target Clippy, 3346 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 9 faster and 0 slower.
-- Phase 2B1 focused validation passed 285 create-template, 46 control-flow, 27 body-root, 19 normalization, 17 reactive-metadata and 443 TIR tests plus a warning-free lib-test build.
-- Separate read-only Ollama final review found no blocker. Parent review made root selection structural and retained concrete parser locations on prepared body refs.
-- Phase 2B1 full `just validate` passed: cross-target Clippy, 3346 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 14 faster and 0 slower.
-- Phase 2B2 focused validation passes 14 reactive, 18 expression-walker, 9 HIR handoff, 18 normalization and 46 control-flow tests plus a warning-free lib-test build.
-- Separate read-only Ollama final review found no blocking correctness, ownership, duplication or coverage issue. It confirmed root-first expression precedence, child-owned slot/wrapper lookup, environment handling and complete dead-path deletion.
-- Phase 2B2 full `just validate` passed: cross-target Clippy, 3345 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
-DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
+- Phase 2B3 focused tests passed: 286 create-template, 73 parser-TIR, 16 reactive-metadata, 44 control-flow, 539 TIR, 46 choice, 125 match, 163 loop and 96 datatype tests plus a warning-free lib-test build.
+- Separate read-only Ollama review found no blocker. Its one actionable low-risk test-name finding was corrected before the final gate.
+- Phase 2B3 `just validate` passed: cross-target Clippy, 3300 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower.
+DOCS_IMPACT: progress matrix unchanged for representation-only slices. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: use an Ollama implementation worker for the remaining Phase 2B durable control-flow deletion
+DELEGATION_DECISION: Ollama implementation worker for Phase 2C - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: after the Phase 2B2 commit, reload exact `HEAD` and delegate the bounded Phase 2B3 durable control-flow deletion
+NEXT_RESUME_ACTION: commit accepted Phase 2B3, refresh the accepted hash and delegate bounded Phase 2C
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -295,20 +280,22 @@ TIR `BranchChain`, `Loop`, and `LoopControl` nodes already own selectors/headers
 
 - [x] Make render-unit preparation operate on parser TIR node IDs/body refs and parse-local scratch directly.
 - [x] Replace `TemplateControlFlowBodyScratch` with the smallest explicit parser result needed by preparation, or delete it if the authoritative control-flow node/body refs already provide the same information.
-- [ ] Remove `Template.control_flow` and the take/restore borrow workaround in `prepare_control_flow_render_units`.
-- [ ] Delete duplicate durable structs:
-  - [ ] `TemplateControlFlow`
-  - [ ] `TemplateBranchChain`
-  - [ ] `TemplateConditionalBranch`
-  - [ ] `TemplateFallbackBranch`
-  - [ ] `TemplateLoopControlFlow`
+- [x] Remove `Template.control_flow` and the take/restore borrow workaround in `prepare_control_flow_render_units`.
+- [x] Delete duplicate durable structs:
+  - [x] `TemplateControlFlow`
+  - [x] `TemplateBranchChain`
+  - [x] `TemplateConditionalBranch`
+  - [x] `TemplateFallbackBranch`
+  - [x] `TemplateLoopControlFlow`
 - [x] Replace `TemplateControlFlowTirReference` with `TemplateTirBodyReference` or direct TIR node/view identity; do not keep a wrapper that only forwards methods.
-- [ ] Keep shared semantic selector/header/loop-control types only where parser, TIR, fold, and HIR handoff genuinely share them.
-- [ ] Replace `template_contains_control_flow` dual checks with TIR summary/view classification only.
+- [x] Keep shared semantic selector/header/loop-control types only where parser, TIR, fold, and HIR handoff genuinely share them.
+- [x] Replace `template_contains_control_flow` dual checks with TIR summary/view classification only.
 - [x] Remove body “sync/refreshed/previous-ref” fallback logic. Prepared body roots are required results.
 - [x] Delete `suppress_formatter_summary_on_finish`; preparation must return/install an explicit formatted root and phase rather than mutating a builder-side lifecycle flag.
 
 Phase 2B2 checkpoint: normalization, reactive annotation and owned runtime handoff now read selectors, headers, bodies and aggregate wrappers from one root `TirView`. One root expression overlay preserves earlier effective root and same-store child expressions. `TirSubtreeView`, per-body overlay storage and node-level handoff materialization are deleted.
+
+Phase 2B3 checkpoint: control-flow structure now exists only in TIR. The obsolete body-reference layer and unreachable AST/TIR remap graph are deleted, with real build-boundary remapping retained at headers, diagnostics, parsed types, `TypeEnvironment` and HIR.
 
 #### Slice 2C — Remove style and wrapper duplication
 

@@ -1,7 +1,6 @@
-//! Core AST node declarations and AST string-remapping helpers.
+//! Core AST node declarations.
 //!
-//! WHAT: defines statement node shapes, temporary statement-side place nodes, and remapping for
-//! interned identifiers stored in AST payloads.
+//! WHAT: defines statement node shapes and temporary statement-side place nodes.
 //! WHY: parser output, HIR lowering, and frontend finalization need one authoritative AST surface
 //! while expression internals stay owned by `ast/expressions`.
 //!
@@ -19,7 +18,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_compiler_error;
@@ -37,13 +36,6 @@ impl Declaration {
         matches!(self.value.kind, ExpressionKind::NoValue)
             && matches!(self.value.diagnostic_type, DataType::Inferred)
     }
-
-    /// Remap interned path and expression in this declaration.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.id.remap_string_ids(remap);
-        self.value.remap_string_ids(remap);
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +47,6 @@ pub enum MultiBindTargetKind {
 #[derive(Debug, Clone)]
 pub struct MultiBindTarget {
     pub id: InternedPath,
-    pub diagnostic_type: DataType,
     pub type_id: TypeId,
     pub value_mode: ValueMode,
     pub kind: MultiBindTargetKind,
@@ -105,7 +96,6 @@ pub enum MatchExhaustiveness {
 #[derive(Debug, Clone)]
 pub struct AssertMessage {
     pub text: StringId,
-    pub location: SourceLocation,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -250,198 +240,6 @@ impl AstNode {
                     "AST invariant: tried to inspect the const-record value state of a non-expression AST node: {:?}",
                     &self.kind
                 );
-            }
-        }
-    }
-}
-
-impl MultiBindTarget {
-    /// Remap interned path, diagnostic type, and location.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.id.remap_string_ids(remap);
-        self.diagnostic_type.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl AssertMessage {
-    /// Remap the interned string ID in this assertion message.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.text = remap.get(self.text);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl LoopBindings {
-    /// Remap declaration names/expressions in loop bindings.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        if let Some(item) = &mut self.item {
-            item.remap_string_ids(remap);
-        }
-        if let Some(index) = &mut self.index {
-            index.remap_string_ids(remap);
-        }
-    }
-}
-
-impl RangeLoopSpec {
-    /// Remap expressions in range bounds and step.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.start.remap_string_ids(remap);
-        self.end.remap_string_ids(remap);
-        if let Some(step) = &mut self.step {
-            step.remap_string_ids(remap);
-        }
-    }
-}
-
-impl AstNode {
-    /// Remap scope, location, and kind for this AST node.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.scope.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-        self.kind.remap_string_ids(remap);
-    }
-}
-
-impl NodeKind {
-    /// Remap all interned string IDs and paths in this node kind recursively.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            NodeKind::Return(expressions) => {
-                for expression in expressions {
-                    expression.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::ReturnError(expression) => {
-                expression.remap_string_ids(remap);
-            }
-
-            NodeKind::If(condition, if_true, if_false) => {
-                condition.remap_string_ids(remap);
-                for node in if_true {
-                    node.remap_string_ids(remap);
-                }
-                if let Some(else_body) = if_false {
-                    for node in else_body {
-                        node.remap_string_ids(remap);
-                    }
-                }
-            }
-
-            NodeKind::Match {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                scrutinee.remap_string_ids(remap);
-                for arm in arms {
-                    arm.remap_string_ids(remap);
-                }
-                if let Some(default_body) = default {
-                    for node in default_body {
-                        node.remap_string_ids(remap);
-                    }
-                }
-            }
-
-            NodeKind::ScopedBlock { body } => {
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::RangeLoop {
-                bindings,
-                range,
-                body,
-            } => {
-                bindings.remap_string_ids(remap);
-                range.remap_string_ids(remap);
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::CollectionLoop {
-                bindings,
-                iterable,
-                body,
-            } => {
-                bindings.remap_string_ids(remap);
-                iterable.remap_string_ids(remap);
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::WhileLoop(condition, body) => {
-                condition.remap_string_ids(remap);
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::Assert { condition, message } => {
-                condition.remap_string_ids(remap);
-                if let Some(message) = message {
-                    message.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::Break | NodeKind::Continue => {}
-
-            NodeKind::ThenValue(produced_values) => {
-                for expression in &mut produced_values.expressions {
-                    expression.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::VariableDeclaration(declaration) => {
-                declaration.remap_string_ids(remap);
-            }
-
-            NodeKind::PushStartRuntimeFragment(expression) => {
-                expression.remap_string_ids(remap);
-            }
-
-            NodeKind::StructDefinition(name, fields) => {
-                name.remap_string_ids(remap);
-                for field in fields {
-                    field.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::Function(name, signature, body) => {
-                name.remap_string_ids(remap);
-                signature.remap_string_ids(remap);
-                for node in body {
-                    node.remap_string_ids(remap);
-                }
-            }
-
-            NodeKind::Assignment { target, value } => {
-                target.remap_string_ids(remap);
-                value.remap_string_ids(remap);
-            }
-
-            NodeKind::MultiBind { targets, value } => {
-                for target in targets {
-                    target.remap_string_ids(remap);
-                }
-                value.remap_string_ids(remap);
-            }
-
-            NodeKind::ExpressionStatement(expression) => {
-                expression.remap_string_ids(remap);
             }
         }
     }

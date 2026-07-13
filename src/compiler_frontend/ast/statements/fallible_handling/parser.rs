@@ -362,7 +362,6 @@ pub(crate) fn wrap_catch_expression(
             block: Box::new(ValueBlock::Catch(ValueCatchBlock {
                 handled_value: Box::new(handled_expression),
                 handler,
-                location: location.clone(),
                 result_type_ids,
             })),
         },

@@ -22,7 +22,6 @@ fn assert_slot_insert_fold_error(result: Result<TemplateEmission, TemplateError>
     );
 }
 
-mod body_root_ref_tests;
 mod body_root_wrapper_tests;
 mod builder_tests;
 mod classification_tests;
@@ -36,7 +35,6 @@ mod ids_tests;
 mod overlays_tests;
 mod refs_tests;
 mod registry_tests;
-mod remap_tests;
 mod render_unit_tests;
 mod slot_composition_tests;
 mod store_tests;

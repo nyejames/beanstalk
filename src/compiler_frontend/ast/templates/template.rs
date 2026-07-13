@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::tir::TemplateWrapperReference;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use std::sync::Arc;
@@ -37,18 +37,6 @@ pub enum SlotKey {
 impl SlotKey {
     pub fn named(name: StringId) -> Self {
         Self::Named(name)
-    }
-
-    /// Remap the named slot key, if any.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            SlotKey::Default | SlotKey::Positional(_) => {}
-
-            SlotKey::Named(name) => {
-                *name = remap.get(*name);
-            }
-        }
     }
 }
 
@@ -84,20 +72,6 @@ pub enum TemplateType {
 
     /// A comment or documentation directive.
     Comment(CommentDirectiveKind),
-}
-
-impl TemplateType {
-    /// Remap slot keys carried by template head directives.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            TemplateType::SlotDefinition(key) | TemplateType::SlotInsert(key) => {
-                key.remap_string_ids(remap);
-            }
-
-            TemplateType::StringFunction | TemplateType::String | TemplateType::Comment(_) => {}
-        }
-    }
 }
 
 /// Classifies the context in which a template is being parsed.
@@ -189,15 +163,6 @@ pub struct ReactiveSubscription {
     pub source: ReactiveSource,
     pub type_id: TypeId,
     pub location: SourceLocation,
-}
-
-impl ReactiveSubscription {
-    /// Remap source identity and location across per-file string-table merges.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.source.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
 }
 
 // -------------------------

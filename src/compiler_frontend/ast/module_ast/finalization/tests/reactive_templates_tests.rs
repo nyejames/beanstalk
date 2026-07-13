@@ -16,7 +16,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::runtime_handoff::OwnedRuntimeSlotSiteRenderPlan;
 use crate::compiler_frontend::ast::templates::template::{
-    ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
+    ReactiveSubscription, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
@@ -1248,12 +1248,10 @@ fn annotates_reactive_subscription_in_runtime_slot_site_render_piece() {
     let render_piece_node = OwnedRuntimeTemplateNode::DynamicExpression {
         expression: Box::new(inner_expression),
         reactive_subscription: None,
-        location: location.clone(),
     };
 
     let slot_site = OwnedRuntimeSlotSite {
         site: RuntimeSlotSiteId(0),
-        key: SlotKey::Default,
         render_plan: OwnedRuntimeSlotSiteRenderPlan {
             pieces: vec![OwnedRuntimeSlotSiteRenderPiece::Render(render_piece_node)],
         },
@@ -1263,7 +1261,6 @@ fn annotates_reactive_subscription_in_runtime_slot_site_render_piece() {
     let handoff = OwnedRuntimeSlotApplicationHandoff {
         wrapper: OwnedRuntimeTemplateNode::RuntimeSlotSite {
             site: RuntimeSlotSiteId(0),
-            location: location.clone(),
         },
         contribution_sources: vec![],
         slot_sites: vec![slot_site],

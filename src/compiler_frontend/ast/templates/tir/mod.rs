@@ -53,7 +53,7 @@
 //! ├── expression_payload_walker.rs     Shared read-only expression-payload traversal
 //! ├── construction.rs                  TIR construction helpers (atom-to-node, summary)
 //! ├── subtree_copy.rs                  TIR-native active-context subtree copying
-//! ├── control_flow_roots.rs            Install and resolve finalized control-flow body roots
+//! ├── control_flow_roots.rs            Install prepared control-flow body roots
 //! ├── classification.rs                Store-aware TIR shape queries for classification
 //! ├── fold.rs                          TIR-native compile-time folding
 //! ├── formatter_view.rs                TIR-native formatter feed
@@ -80,7 +80,6 @@ use std::sync::Arc;
 // their item-level dead-code exceptions local to reserved fields or narrow
 // forward-parity hooks with explicit reasons.
 
-mod body_root_ref;
 mod classification;
 mod construction;
 mod contribution_shape;
@@ -213,9 +212,6 @@ pub(crate) use refs::{
 };
 pub(crate) use wrapper_sets::wrapper_reference_for_template;
 
-// Body/root reference that carries the view-system identity (store, phase,
-// overlay set, source location, and same-store proof) for control-flow bodies.
-pub(crate) use body_root_ref::TemplateTirBodyReference;
 // Extra store-qualified ref types needed by focused TIR tests. Keep them off
 // the normal production surface.
 #[cfg(test)]
@@ -236,10 +232,10 @@ pub(crate) use overlays::{TirSlotResolution, TirSlotResolutionOverlay};
 // Builder: narrow parser-facing facade for direct TIR emission.
 pub(crate) use builder::TemplateIrBuilder;
 
-// Control-flow root installation and resolution after render-unit preparation.
+// Control-flow root installation after render-unit preparation.
 pub(crate) use control_flow_roots::{
-    ControlFlowBodyKind, finalized_control_flow_body_tir_reference,
-    replace_control_flow_body_tir_root, replace_loop_aggregate_wrapper_tir_root,
+    ControlFlowBodyKind, replace_control_flow_body_tir_root,
+    replace_loop_aggregate_wrapper_tir_root,
 };
 
 // TIR-native child-contribution classification shared by slot composition and

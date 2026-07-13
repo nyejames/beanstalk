@@ -144,9 +144,6 @@ pub(crate) fn collect_type_parameter_ids_from_type(
 
         DataType::Option(inner) => collect_type_parameter_ids_from_type(inner, used_parameters),
 
-        #[cfg(test)]
-        DataType::Reference(inner) => collect_type_parameter_ids_from_type(inner, used_parameters),
-
         DataType::FallibleCarrier { success, error } => {
             collect_type_parameter_ids_from_type(success, used_parameters);
             collect_type_parameter_ids_from_type(error, used_parameters);

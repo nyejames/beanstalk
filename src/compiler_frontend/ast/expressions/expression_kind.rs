@@ -29,7 +29,7 @@ use crate::compiler_frontend::external_packages::ExternalFunctionId;
 #[cfg(test)]
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 /// One key/value pair inside a `{...}` map literal.
 ///
@@ -125,7 +125,6 @@ pub enum ExpressionKind {
     MethodCall {
         receiver: Box<Expression>,
         method_path: InternedPath,
-        method: StringId,
         args: Vec<CallArgument>,
         result_type_ids: Vec<TypeId>,
         location: SourceLocation,
@@ -273,13 +272,11 @@ pub enum ExpressionKind {
     /// Explicit choice variant construction: `Choice::Variant` or `Choice::Variant(...)`.
     ///
     /// WHY: choice values must not masquerade as raw integer literals in AST.
-    /// The tag index is deterministic but is an implementation detail; the
-    /// nominal path and variant name are the semantic identity.
+    /// The tag index is deterministic within the resolved nominal choice.
     /// For unit variants, `fields` is empty. For payload variants, `fields`
     /// carries the resolved constructor arguments in declaration order.
     ChoiceConstruct {
         nominal_path: InternedPath,
-        variant: StringId,
         tag: usize,
         fields: Vec<Declaration>,
     },
@@ -317,186 +314,6 @@ impl ExpressionKind {
         }
 
         false
-    }
-
-    /// Remap all interned string IDs and paths in this expression kind recursively.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            // Leaf variants: nothing to remap.
-            ExpressionKind::NoValue
-            | ExpressionKind::OptionNone
-            | ExpressionKind::Int(_)
-            | ExpressionKind::Float(_)
-            | ExpressionKind::Bool(_)
-            | ExpressionKind::Char(_) => {}
-
-            ExpressionKind::StringSlice(name) => {
-                *name = remap.get(*name);
-            }
-
-            #[cfg(test)]
-            ExpressionKind::Path(paths) => {
-                paths.remap_string_ids(remap);
-            }
-
-            ExpressionKind::Reference(path) => {
-                path.remap_string_ids(remap);
-            }
-
-            ExpressionKind::Copy(place) => {
-                place.remap_string_ids(remap);
-            }
-
-            ExpressionKind::Function(signature) => {
-                signature.remap_string_ids(remap);
-            }
-
-            ExpressionKind::FunctionCall { name, args, .. } => {
-                name.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::FieldAccess { base, field } => {
-                base.remap_string_ids(remap);
-                *field = remap.get(*field);
-            }
-
-            ExpressionKind::MethodCall {
-                receiver,
-                method_path,
-                method,
-                args,
-                location,
-                ..
-            } => {
-                receiver.remap_string_ids(remap);
-                method_path.remap_string_ids(remap);
-                *method = remap.get(*method);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            ExpressionKind::CollectionBuiltinCall {
-                receiver,
-                args,
-                location,
-                ..
-            }
-            | ExpressionKind::MapBuiltinCall {
-                receiver,
-                args,
-                location,
-                ..
-            } => {
-                receiver.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            ExpressionKind::HandledFallibleFunctionCall { name, args, .. } => {
-                name.remap_string_ids(remap);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::HandledFallibleHostFunctionCall { args, .. } => {
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-            }
-
-            // These variants wrap a single inner expression.
-            #[cfg(test)]
-            ExpressionKind::FallibleCarrierConstruct { value, .. } => {
-                value.remap_string_ids(remap);
-            }
-
-            ExpressionKind::OptionPropagation { value } | ExpressionKind::Coerced { value, .. } => {
-                value.remap_string_ids(remap);
-            }
-
-            ExpressionKind::Cast(cast) => {
-                cast.source.remap_string_ids(remap);
-                cast.evidence.remap_string_ids(remap);
-                cast.handling.remap_string_ids(remap);
-            }
-
-            ExpressionKind::HandledFallibleExpression { value, .. } => {
-                value.remap_string_ids(remap);
-            }
-
-            ExpressionKind::HostFunctionCall { args, .. } => {
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::Template(template) => {
-                template.remap_string_ids(remap);
-            }
-
-            ExpressionKind::RuntimeTemplateHandoff(handoff) => {
-                handoff.remap_string_ids(remap);
-            }
-
-            ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => {
-                handoff.remap_string_ids(remap);
-            }
-
-            ExpressionKind::Collection(items) => {
-                for item in items {
-                    item.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::MapLiteral(entries) => {
-                for entry in entries {
-                    entry.key.remap_string_ids(remap);
-                    entry.value.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::StructDefinition(fields) | ExpressionKind::StructInstance(fields) => {
-                for field in fields {
-                    field.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::Range(start, end) => {
-                start.remap_string_ids(remap);
-                end.remap_string_ids(remap);
-            }
-
-            ExpressionKind::ChoiceConstruct {
-                nominal_path,
-                variant,
-                fields,
-                ..
-            } => {
-                nominal_path.remap_string_ids(remap);
-                *variant = remap.get(*variant);
-                for field in fields {
-                    field.remap_string_ids(remap);
-                }
-            }
-
-            ExpressionKind::Runtime(nodes) => {
-                nodes.remap_string_ids(remap);
-            }
-
-            ExpressionKind::ValueBlock { block } => {
-                block.remap_string_ids(remap);
-            }
-        }
     }
 }
 

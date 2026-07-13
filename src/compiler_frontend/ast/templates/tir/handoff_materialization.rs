@@ -260,7 +260,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         active_slot_plan: Option<TemplateSlotPlanId>,
     ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
         let template = self.get_template(id)?;
-        let kind = template.kind.clone();
         let location = template.location.clone();
         let runtime_slot_plan = template.runtime_slot_plan;
         let root = template.root;
@@ -279,11 +278,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                     )
                 };
 
-                Ok(OwnedRuntimeTemplateHandoff {
-                    kind,
-                    body,
-                    location,
-                })
+                Ok(OwnedRuntimeTemplateHandoff { body, location })
             },
         )
     }
@@ -325,7 +320,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         for source in &slot_plan.contribution_sources {
             sources.push(OwnedRuntimeSlotContributionSource {
                 source: source.source,
-                target: source.target.clone(),
                 render_root: self.materialize_node(source.render_root, Some(slot_plan_id))?,
                 renders_wrapper_unconditionally: source.renders_wrapper_unconditionally,
                 location: source.location.clone(),
@@ -360,7 +354,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
             sites.push(OwnedRuntimeSlotSite {
                 site: site.site,
-                key: site.key.clone(),
                 render_plan: OwnedRuntimeSlotSiteRenderPlan { pieces },
                 location: site.location.clone(),
             });
@@ -388,7 +381,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
                     Ok(OwnedRuntimeTemplateNode::Sequence {
                         children: owned_children,
-                        location: node.location,
                     })
                 }
 
@@ -413,7 +405,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                         materializer.effective_expression(site_id, expression.as_ref())?,
                     ),
                     reactive_subscription,
-                    location: node.location,
                 }),
 
                 TemplateIrNodeKind::ChildTemplate {
@@ -498,9 +489,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 }
 
                 TemplateIrNodeKind::AggregateOutput => {
-                    Ok(OwnedRuntimeTemplateNode::AggregateOutput {
-                        location: node.location,
-                    })
+                    Ok(OwnedRuntimeTemplateNode::AggregateOutput)
                 }
 
                 TemplateIrNodeKind::LoopControl { kind } => {
@@ -517,10 +506,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                         ));
                     }
 
-                    Ok(OwnedRuntimeTemplateNode::RuntimeSlotSite {
-                        site,
-                        location: node.location,
-                    })
+                    Ok(OwnedRuntimeTemplateNode::RuntimeSlotSite { site })
                 }
 
                 TemplateIrNodeKind::Slot { placeholder } => {
@@ -545,7 +531,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                         template: Box::new(
                             materializer.materialize_template(template, active_slot_plan)?,
                         ),
-                        location: node.location,
                     })
                 }
             }
@@ -837,7 +822,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         let is_cross_store = reference.root.store_id != self.store.store_id();
 
         if is_cross_store {
-            return self.materialize_cross_store_child(reference, location);
+            return self.materialize_cross_store_child(reference);
         }
 
         // Same-store child: resolve the store-local ID and materialize through
@@ -862,7 +847,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),
-            location: location.to_owned(),
         })
     }
 
@@ -881,7 +865,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     fn materialize_cross_store_child(
         &mut self,
         reference: &TemplateTirChildReference,
-        location: &SourceLocation,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         let registry = self
             .registry
@@ -934,7 +917,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff),
-            location: location.to_owned(),
         })
     }
 
@@ -971,10 +953,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             )?);
         }
 
-        Ok(OwnedRuntimeTemplateNode::Sequence {
-            children,
-            location: location.to_owned(),
-        })
+        Ok(OwnedRuntimeTemplateNode::Sequence { children })
     }
 
     /// Materializes one resolved slot source into an owned runtime handoff node.
@@ -1043,11 +1022,8 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         let wrapper_references: Vec<TemplateWrapperReference> = wrapper_set.wrappers.clone();
 
         match context.application_mode {
-            TirWrapperApplicationMode::Always => self.apply_wrapper_templates_around_child_handoff(
-                &wrapper_references,
-                child_handoff,
-                child_location,
-            ),
+            TirWrapperApplicationMode::Always => self
+                .apply_wrapper_templates_around_child_handoff(&wrapper_references, child_handoff),
 
             TirWrapperApplicationMode::IfChildEmits => self
                 .apply_conditional_wrapper_templates_around_child_handoff(
@@ -1069,15 +1045,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &mut self,
         wrapper_references: &[TemplateWrapperReference],
         child_handoff: OwnedRuntimeTemplateNode,
-        child_location: &SourceLocation,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         let mut current = child_handoff;
         for wrapper_reference in wrapper_references.iter().rev() {
-            current = self.apply_single_wrapper_template_around_child_handoff(
-                *wrapper_reference,
-                current,
-                child_location,
-            )?;
+            current = self
+                .apply_single_wrapper_template_around_child_handoff(*wrapper_reference, current)?;
         }
         Ok(current)
     }
@@ -1100,15 +1072,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             return Ok(child_handoff);
         }
 
-        let mut wrapper = OwnedRuntimeTemplateNode::AggregateOutput {
-            location: child_location.to_owned(),
-        };
+        let mut wrapper = OwnedRuntimeTemplateNode::AggregateOutput;
         for wrapper_reference in wrapper_references.iter().rev() {
-            wrapper = self.apply_single_wrapper_template_around_child_handoff(
-                *wrapper_reference,
-                wrapper,
-                child_location,
-            )?;
+            wrapper = self
+                .apply_single_wrapper_template_around_child_handoff(*wrapper_reference, wrapper)?;
         }
 
         Ok(OwnedRuntimeTemplateNode::ConditionalWrapper {
@@ -1131,7 +1098,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         wrapper_root: TemplateIrNodeId,
         fill_target_key: Option<SlotKey>,
         child_handoff: OwnedRuntimeTemplateNode,
-        child_location: &SourceLocation,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         match fill_target_key {
             Some(fill_target_key) => materializer.materialize_wrapper_node_with_node_injection(
@@ -1143,7 +1109,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 let wrapper_content = materializer.materialize_node(wrapper_root, None)?;
                 Ok(OwnedRuntimeTemplateNode::Sequence {
                     children: vec![wrapper_content, child_handoff],
-                    location: child_location.to_owned(),
                 })
             }
         }
@@ -1156,13 +1121,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     ///       appends the child after the wrapper content (for slot-less wrappers).
     ///       Runtime slot-plan wrappers are rejected because inherited `$children(..)`
     ///       wrappers must be ordinary render templates.
-    /// WHY: this produces the same owned shape the current-state structural path
-    ///      builds by composing wrapper templates around a child template node.
+    /// WHY: this produces the same owned shape as TIR wrapper composition
+    ///      without exposing TIR identity across the HIR boundary.
     fn apply_single_wrapper_template_around_child_handoff(
         &mut self,
         wrapper_reference: TemplateWrapperReference,
         child_handoff: OwnedRuntimeTemplateNode,
-        child_location: &SourceLocation,
     ) -> Result<OwnedRuntimeTemplateNode, CompilerError> {
         // Resolve the wrapper template and its owning store, supporting cross-store
         // references through the module-local registry.
@@ -1231,7 +1195,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 wrapper_template.root,
                 fill_target_key,
                 child_handoff,
-                child_location,
             )
         } else {
             Self::materialize_wrapper_with_child(
@@ -1239,7 +1202,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 wrapper_template.root,
                 fill_target_key,
                 child_handoff,
-                child_location,
             )
         }
     }
@@ -1278,7 +1240,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 }
                 Ok(OwnedRuntimeTemplateNode::Sequence {
                     children: owned_children,
-                    location: node.location,
                 })
             }
 

@@ -1286,7 +1286,7 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
     assert!(
         children
             .iter()
-            .any(|child| matches!(child, OwnedRuntimeTemplateNode::AggregateOutput { .. }))
+            .any(|child| matches!(child, OwnedRuntimeTemplateNode::AggregateOutput))
     );
 }
 
@@ -1364,7 +1364,7 @@ fn collect_owned_node_string_slice_expressions(
         }
 
         OwnedRuntimeTemplateNode::Text { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}

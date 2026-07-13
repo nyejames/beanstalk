@@ -10,7 +10,6 @@ use crate::compiler_frontend::ast::ast_nodes::MatchExhaustiveness;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, FallibleHandling};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// Values produced by a `then` statement inside a value-producing block.
@@ -72,16 +71,6 @@ pub enum ValueBlock {
     Catch(ValueCatchBlock),
 }
 
-impl ValueBlock {
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            ValueBlock::If(value_if) => value_if.remap_string_ids(remap),
-            ValueBlock::Match(value_match) => value_match.remap_string_ids(remap),
-            ValueBlock::Catch(value_catch) => value_catch.remap_string_ids(remap),
-        }
-    }
-}
-
 /// Single `if` value-producing block.
 ///
 /// WHAT: `if condition then a else b` or the colon/block equivalent.
@@ -101,19 +90,6 @@ pub struct ValueIfBlock {
     pub result_type_ids: Vec<TypeId>,
 }
 
-impl ValueIfBlock {
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.condition.remap_string_ids(remap);
-        for node in &mut self.then_body {
-            node.remap_string_ids(remap);
-        }
-        for node in &mut self.else_body {
-            node.remap_string_ids(remap);
-        }
-        self.location.remap_string_ids(remap);
-    }
-}
-
 /// Full value-producing match block.
 ///
 /// WHAT: `if value is:` used at a closed receiving site, with each reachable arm
@@ -130,21 +106,6 @@ pub struct ValueMatchBlock {
     pub result_type_ids: Vec<TypeId>,
 }
 
-impl ValueMatchBlock {
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.scrutinee.remap_string_ids(remap);
-        for arm in &mut self.arms {
-            arm.remap_string_ids(remap);
-        }
-        if let Some(default_body) = &mut self.default {
-            for node in default_body {
-                node.remap_string_ids(remap);
-            }
-        }
-        self.location.remap_string_ids(remap);
-    }
-}
-
 /// Value-producing catch block.
 ///
 /// WHAT: wraps a handled fallible expression whose catch handler body uses
@@ -155,16 +116,7 @@ impl ValueMatchBlock {
 pub struct ValueCatchBlock {
     pub handled_value: Box<Expression>,
     pub handler: FallibleHandling,
-    pub location: SourceLocation,
     pub result_type_ids: Vec<TypeId>,
-}
-
-impl ValueCatchBlock {
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.handled_value.remap_string_ids(remap);
-        self.handler.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
 }
 
 /// Result of analyzing a body's control flow for value production.

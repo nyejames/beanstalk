@@ -1,18 +1,12 @@
-//! Control-flow root installation and resolution.
+//! Control-flow root installation.
 //!
-//! WHAT: installs and resolves TIR-derived control-flow body roots after
-//! render-unit preparation.
+//! WHAT: installs TIR-derived control-flow body roots after render-unit
+//!       preparation.
 //! WHY: production readers need a single owner for same-store control-flow
-//! body replacement and finalized body-root resolution.
+//!      body replacement.
 
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrNodeId, TemplateIrStore, TemplateParserIrBuilderState, TemplateTirBodyReference,
-    TemplateTirPhase,
-};
+use crate::compiler_frontend::ast::templates::tir::{TemplateIrNodeId, TemplateIrStore};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use std::sync::Arc;
 
 // -------------------------
 //  Control-flow body target
@@ -40,62 +34,39 @@ pub(crate) enum ControlFlowBodyKind {
 
 /// Replaces one control-flow body node with an already-built TIR root.
 ///
-/// WHAT: locates the owning control-flow node through the in-progress parser
-///       builder, then points the requested body slot at `new_body_root`.
+/// WHAT: points the requested body slot on `control_flow_node_id` at
+///       `new_body_root`.
 /// WHY: TIR-derived branch/fallback and loop body paths need the same
-///      control-flow-node lookup and replacement step. Sharing it keeps the
-///      store-owner proof and replacement logic in one place so callers only
-///      differ in how they build the root. Returns `CompilerError` when the
-///      parser TIR control-flow node or body slot is missing.
+///      replacement step. Sharing it keeps mutation in the TIR store owner so
+///      callers only differ in how they build the root. Returns `CompilerError`
+///      when the parser TIR control-flow node or body slot is missing.
 pub(crate) fn replace_control_flow_body_tir_root(
-    builder: &TemplateParserIrBuilderState,
     store: &mut TemplateIrStore,
+    control_flow_node_id: TemplateIrNodeId,
     body_kind: ControlFlowBodyKind,
     new_body_root: TemplateIrNodeId,
-    phase: TemplateTirPhase,
-    location: SourceLocation,
-) -> Result<TemplateTirBodyReference, CompilerError> {
-    let control_flow_node_id = builder.control_flow_node_id(store).ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Control-flow body replacement could not find the owning parser TIR control-flow node.",
-        )
-    })?;
-
+) -> Result<(), CompilerError> {
     if !store.replace_control_flow_body_node_by_id(control_flow_node_id, body_kind, new_body_root) {
         return Err(CompilerError::compiler_error(
             "Control-flow body replacement failed to install the prepared root onto the parser TIR node.",
         ));
     }
 
-    Ok(TemplateTirBodyReference::new(
-        store.owner(),
-        store.store_id(),
-        new_body_root,
-        phase,
-        location,
-    ))
+    Ok(())
 }
 
 /// Replaces the aggregate-wrapper subtree on the owning template's same-store
 /// `Loop` control-flow node.
 ///
-/// WHAT: finds the loop node through the same owner/template-or-builder lookup
-///       used by `replace_control_flow_body_tir_root`, then installs
-///       `new_aggregate_wrapper_root` as the `aggregate_wrapper` field.
+/// WHAT: installs `new_aggregate_wrapper_root` on the supplied TIR `Loop` node.
 /// WHY: loop aggregate wrappers are now composed as normal TIR subtrees during
-///      render-unit preparation. Sharing the lookup keeps the installation path
-///      consistent with body-root replacement.
+///      render-unit preparation. Keeping the mutation here makes its invariant
+///      handling consistent with body-root replacement.
 pub(crate) fn replace_loop_aggregate_wrapper_tir_root(
-    builder: &TemplateParserIrBuilderState,
     store: &mut TemplateIrStore,
+    control_flow_node_id: TemplateIrNodeId,
     new_aggregate_wrapper_root: TemplateIrNodeId,
 ) -> Result<(), CompilerError> {
-    let control_flow_node_id = builder.control_flow_node_id(store).ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Loop aggregate-wrapper installation could not find the owning parser TIR loop node.",
-        )
-    })?;
-
     if !store
         .replace_loop_aggregate_wrapper_node_by_id(control_flow_node_id, new_aggregate_wrapper_root)
     {
@@ -105,41 +76,4 @@ pub(crate) fn replace_loop_aggregate_wrapper_tir_root(
     }
 
     Ok(())
-}
-
-/// Resolves a finalized control-flow body root from the module TIR store.
-///
-/// WHAT: finds the owning control-flow node through the template's same-store
-/// finalized reference, then returns the requested body root as a
-/// store-proven reference.
-/// WHY: production readers use this TIR-owned root after render-unit
-/// preparation installs finalized bodies into the store. A missing same-store
-/// root means the template is not available through the TIR authority.
-pub(crate) fn finalized_control_flow_body_tir_reference(
-    template: &Template,
-    store: &TemplateIrStore,
-    body_kind: ControlFlowBodyKind,
-) -> Option<TemplateTirBodyReference> {
-    let store_owner = store.owner();
-    let control_flow_node_id = template
-        .tir_reference
-        .as_ref()
-        .filter(|reference| Arc::ptr_eq(&reference.store_owner, &store_owner))
-        .and_then(|reference| {
-            store.control_flow_node_id_for_template(reference.root.template_id)
-        })?;
-
-    let root = store.control_flow_body_node_id_by_id(control_flow_node_id, body_kind)?;
-
-    Some(TemplateTirBodyReference::new(
-        store_owner.clone(),
-        store.store_id(),
-        root,
-        template
-            .tir_reference
-            .as_ref()
-            .map(|reference| reference.phase)
-            .unwrap_or(TemplateTirPhase::Composed),
-        template.location.to_owned(),
-    ))
 }

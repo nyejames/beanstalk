@@ -426,13 +426,10 @@ fn build_arm_scope_with_choice_captures(
 
         arm_scope.add_var(declaration);
         captures.push(ChoicePayloadCapture {
-            field_name: capture.field_name,
-            binding_name: capture.binding_name,
             field_index: capture.field_index,
             type_id: capture.type_id,
             binding_path,
             location: capture.location,
-            binding_location: capture.binding_location,
         });
     }
 
@@ -440,7 +437,6 @@ fn build_arm_scope_with_choice_captures(
         arm_scope,
         MatchPattern::ChoiceVariant {
             nominal_path: parsed_pattern.nominal_path,
-            variant: parsed_pattern.variant,
             tag: parsed_pattern.tag,
             captures,
             location: parsed_pattern.location,
@@ -494,7 +490,6 @@ fn build_arm_scope_with_capture(
     arm_scope.add_var(declaration);
 
     let pattern = MatchPattern::Capture {
-        name: capture_name,
         binding_path,
         location: capture_location.clone(),
     };

@@ -35,8 +35,6 @@ use crate::compiler_frontend::ast::templates::tir::refs::{
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::wrapper_sets::wrapper_sets_are_equivalent;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -595,9 +593,9 @@ impl TemplateIrStore {
     /// WHAT: parser-emitted control-flow templates store their `BranchChain` or
     ///       `Loop` node inside the root sequence. This lookup finds that node
     ///       without mutating the store.
-    /// WHY: body sync proves the replacement target exists before allocating a
-    ///      finalized replacement root, so failed conservative syncs do not leave
-    ///      orphan TIR nodes behind.
+    /// WHY: render-unit preparation resolves the exact owning node before it
+    ///      builds replacement body roots, so a missing owner fails as an
+    ///      internal invariant instead of leaving ambiguous state behind.
     pub(crate) fn control_flow_node_id_for_template(
         &self,
         owning_template_id: TemplateIrId,
@@ -735,8 +733,8 @@ impl TemplateIrStore {
 
     /// Replaces one body node ID inside a specific control-flow parser-TIR node.
     ///
-    /// WHAT: the caller supplies the control-flow node ID (e.g., from an
-    ///       in-progress parser builder state) so body sync can run before the
+    /// WHAT: the caller supplies the control-flow node ID from the in-progress
+    ///       parser builder state so body preparation can run before the
     ///       builder state is finished into a `TemplateIrId`.
     /// WHY: render-unit preparation runs before parser construction finishes,
     ///      so the finalized owning-template ID does not exist yet.
@@ -807,35 +805,6 @@ impl TemplateIrStore {
         }
     }
 
-    /// Returns one body node ID inside a specific control-flow TIR node.
-    ///
-    /// WHAT: read-only counterpart to `replace_control_flow_body_node_by_id`.
-    /// WHY: render-unit preparation updates the store-owned body IDs in place;
-    /// later production readers can recover those finalized roots from the
-    /// store instead of reading legacy body fields.
-    pub(crate) fn control_flow_body_node_id_by_id(
-        &self,
-        control_flow_node_id: TemplateIrNodeId,
-        body_kind: ControlFlowBodyKind,
-    ) -> Option<TemplateIrNodeId> {
-        let control_flow_node = self.nodes.get(control_flow_node_id.index())?;
-
-        match (&control_flow_node.kind, body_kind) {
-            (
-                TemplateIrNodeKind::BranchChain { branches, .. },
-                ControlFlowBodyKind::Branch { index },
-            ) => branches.get(index).map(|branch| branch.body),
-
-            (TemplateIrNodeKind::BranchChain { fallback, .. }, ControlFlowBodyKind::Fallback) => {
-                *fallback
-            }
-
-            (TemplateIrNodeKind::Loop { body, .. }, ControlFlowBodyKind::LoopBody) => Some(*body),
-
-            _ => None,
-        }
-    }
-
     /// Returns a reference to the template at the given ID, or `None` if out of bounds.
     pub(crate) fn get_template(&self, id: TemplateIrId) -> Option<&TemplateIr> {
         self.templates.get(id.index())
@@ -855,59 +824,6 @@ impl TemplateIrStore {
     pub(crate) fn get_slot_plan(&self, id: TemplateSlotPlanId) -> Option<&TemplateSlotPlan> {
         self.slot_plans.get(id.index())
     }
-
-    /// Remap interned string identities across every store-owned collection.
-    ///
-    /// WHAT: walks all TIR templates, nodes, wrapper sets, and slot plans, remapping
-    /// every `StringId`, `SourceLocation`, `Expression`, `Template`, `TemplateType`,
-    /// `SlotKey`, branch selector, and loop header they contain.
-    /// WHY: per-file frontend string-table merges produce a `StringIdRemap` that must
-    /// be applied to all AST-local template state before module-wide compilation
-    /// continues.
-    ///
-    /// NOTE: store-local typed IDs (`TemplateIrId`, `TemplateIrNodeId`,
-    /// `TemplateWrapperSetId`, `TemplateSlotPlanId`, `RuntimeSlotSiteId`,
-    /// `RuntimeSlotContributionSourceId`) are collection indexes, not string
-    /// identities, and are intentionally left unchanged.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        if remap.is_identity() {
-            return;
-        }
-
-        for template in &mut self.templates {
-            template.remap_string_ids(remap);
-        }
-
-        for node in &mut self.nodes {
-            node.remap_string_ids(remap);
-        }
-
-        for wrapper_set in &mut self.wrapper_sets {
-            wrapper_set.remap_string_ids(remap);
-        }
-
-        for slot_plan in &mut self.slot_plans {
-            slot_plan.remap_string_ids(remap);
-        }
-
-        // Formatter anchors carry only reserved marker data; nothing to remap.
-        for subscription in self.node_reactive_subscriptions.iter_mut().flatten() {
-            subscription.remap_string_ids(remap);
-        }
-    }
-}
-
-impl TemplateWrapperSet {
-    /// Remap interned string identities stored inside wrapper templates.
-    ///
-    /// WHAT: wrapper sets hold `TemplateWrapperReference` values, which carry
-    /// `TemplateRef`, `TemplateTirPhase`, and `TemplateOverlaySetId` — none of
-    /// which contain `StringId`s — so no per-entry remapping is required. The
-    /// store-level `remap_string_ids` walk already remaps the underlying
-    /// template and node payloads directly.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {}
 }
 
 impl Default for TemplateIrStore {

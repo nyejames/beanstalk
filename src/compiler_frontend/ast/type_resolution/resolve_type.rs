@@ -357,10 +357,6 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
             let error_id = resolve_diagnostic_type_to_type_id_opt(error, type_environment)?;
             Some(type_environment.intern_fallible_carrier(success_id, error_id))
         }
-        #[cfg(test)]
-        DataType::Reference(inner) => {
-            resolve_diagnostic_type_to_type_id_opt(inner, type_environment)
-        }
         DataType::Struct {
             type_id,
             nominal_path,
@@ -544,13 +540,6 @@ pub(crate) fn resolve_type(
 
             Ok(DataType::Option(Box::new(resolved_inner)))
         }
-        #[cfg(test)]
-        DataType::Reference(inner) => Ok(DataType::Reference(Box::new(resolve_type(
-            inner,
-            location,
-            context,
-            string_table,
-        )?))),
         DataType::Returns(values) => {
             let mut resolved_values = Vec::with_capacity(values.len());
             for value in values {

@@ -148,17 +148,13 @@ fn field_symbol(
 fn expressions_to_owned_render_node(
     expressions: &[Expression],
     string_table: &StringTable,
-    location: &SourceLocation,
 ) -> OwnedRuntimeTemplateNode {
     let children: Vec<OwnedRuntimeTemplateNode> = expressions
         .iter()
         .map(|expression| expression_to_owned_node(expression, string_table))
         .collect();
 
-    OwnedRuntimeTemplateNode::Sequence {
-        children,
-        location: location.to_owned(),
-    }
+    OwnedRuntimeTemplateNode::Sequence { children }
 }
 
 fn expression_to_owned_node(
@@ -178,7 +174,6 @@ fn expression_to_owned_node(
         _ => OwnedRuntimeTemplateNode::DynamicExpression {
             expression: Box::new(expression.clone()),
             reactive_subscription: None,
-            location: expression.location.to_owned(),
         },
     }
 }
@@ -204,9 +199,7 @@ fn text_aggregate_wrapper_node(
                 reactive_subscription: None,
                 location: location.to_owned(),
             },
-            OwnedRuntimeTemplateNode::AggregateOutput {
-                location: location.to_owned(),
-            },
+            OwnedRuntimeTemplateNode::AggregateOutput,
             OwnedRuntimeTemplateNode::Text {
                 text: suffix,
                 byte_len: suffix_len,
@@ -214,7 +207,6 @@ fn text_aggregate_wrapper_node(
                 location: location.to_owned(),
             },
         ],
-        location: location.to_owned(),
     }
 }
 
@@ -223,9 +215,8 @@ pub(crate) fn runtime_template_expression(
     content: Vec<Expression>,
     string_table: &StringTable,
 ) -> Expression {
-    let body = expressions_to_owned_render_node(&content, string_table, &location);
+    let body = expressions_to_owned_render_node(&content, string_table);
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(body),
         location: location.clone(),
     };
@@ -240,14 +231,9 @@ fn runtime_template_bool_if_expression(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let then_body = expressions_to_owned_render_node(&then_content, string_table, &location);
-    let fallback = else_content.map(|content| {
-        Box::new(expressions_to_owned_render_node(
-            &content,
-            string_table,
-            &location,
-        ))
-    });
+    let then_body = expressions_to_owned_render_node(&then_content, string_table);
+    let fallback = else_content
+        .map(|content| Box::new(expressions_to_owned_render_node(&content, string_table)));
 
     let body = OwnedRuntimeTemplateNode::BranchChain {
         branches: vec![OwnedRuntimeTemplateBranch {
@@ -260,7 +246,6 @@ fn runtime_template_bool_if_expression(
     };
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(body),
         location: location.clone(),
     };
@@ -282,14 +267,9 @@ fn runtime_template_option_capture_expression(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let then_body = expressions_to_owned_render_node(&then_content, string_table, &location);
-    let fallback = else_content.map(|content| {
-        Box::new(expressions_to_owned_render_node(
-            &content,
-            string_table,
-            &location,
-        ))
-    });
+    let then_body = expressions_to_owned_render_node(&then_content, string_table);
+    let fallback = else_content
+        .map(|content| Box::new(expressions_to_owned_render_node(&content, string_table)));
 
     let body = OwnedRuntimeTemplateNode::BranchChain {
         branches: vec![OwnedRuntimeTemplateBranch {
@@ -311,7 +291,6 @@ fn runtime_template_option_capture_expression(
     };
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(body),
         location: location.clone(),
     };
@@ -328,7 +307,7 @@ fn runtime_template_range_loop_expression(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let body = expressions_to_owned_render_node(&body_content, string_table);
     let aggregate_wrapper =
         text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
 
@@ -343,7 +322,6 @@ fn runtime_template_range_loop_expression(
     };
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(node),
         location: location.clone(),
     };
@@ -360,7 +338,7 @@ fn runtime_template_collection_loop_expression(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let body = expressions_to_owned_render_node(&body_content, string_table);
     let aggregate_wrapper =
         text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
 
@@ -375,7 +353,6 @@ fn runtime_template_collection_loop_expression(
     };
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(node),
         location: location.clone(),
     };
@@ -391,7 +368,7 @@ fn runtime_template_conditional_loop_expression(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Expression {
-    let body = expressions_to_owned_render_node(&body_content, string_table, &location);
+    let body = expressions_to_owned_render_node(&body_content, string_table);
     let aggregate_wrapper =
         text_aggregate_wrapper_node(aggregate_prefix, aggregate_suffix, string_table, &location);
 
@@ -405,7 +382,6 @@ fn runtime_template_conditional_loop_expression(
     };
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(node),
         location: location.clone(),
     };
@@ -434,7 +410,6 @@ fn runtime_template_slot_placeholder_materializes_as_no_output_owned_node() {
     let location = location(1);
 
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: crate::compiler_frontend::ast::templates::template::TemplateType::String,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
             children: vec![
                 OwnedRuntimeTemplateNode::Text {
@@ -453,7 +428,6 @@ fn runtime_template_slot_placeholder_materializes_as_no_output_owned_node() {
                     location: location.clone(),
                 },
             ],
-            location: location.clone(),
         }),
         location,
     };
@@ -557,7 +531,6 @@ fn top_level_loop_control_handoff_reports_compiler_bug() {
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::LoopControl {
             kind: TemplateLoopControlKind::Break,
             location: location.clone(),
@@ -1355,7 +1328,6 @@ fn lowers_fresh_mutable_call_argument_via_hidden_local_with_origin_metadata() {
 fn lowers_receiver_method_call_with_receiver_as_first_argument() {
     let mut string_table = StringTable::new();
     let method_path = super::symbol("Vector2/reset", &mut string_table);
-    let method_name = string_table.intern("reset");
     let receiver_name = super::symbol("vec", &mut string_table);
     let receiver_struct = super::symbol("Vector2", &mut string_table);
     let location = location(6);
@@ -1387,7 +1359,6 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
             ValueMode::MutableReference,
         ),
         method_path.clone(),
-        method_name,
         vec![CallArgument::positional(
             Expression::int(7, location.clone(), ValueMode::ImmutableOwned),
             CallAccessMode::Shared,
@@ -1422,7 +1393,6 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
 fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() {
     let mut string_table = StringTable::new();
     let method_path = super::symbol("Int/double", &mut string_table);
-    let method_name = string_table.intern("double");
     let receiver_name = super::symbol("value", &mut string_table);
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
@@ -1445,7 +1415,6 @@ fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() 
             ValueMode::ImmutableReference,
         ),
         method_path.clone(),
-        method_name,
         vec![],
         vec![builtin_type_ids::INT],
         &mut builder.type_environment,
@@ -1777,14 +1746,11 @@ fn reactive_linear_template_keeps_subscription_chunks_lazy() {
         location: location.clone(),
     };
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
             children: vec![OwnedRuntimeTemplateNode::DynamicExpression {
                 expression: Box::new(count_expression),
                 reactive_subscription: Some(subscription),
-                location: location.clone(),
             }],
-            location: location.clone(),
         }),
         location: location.clone(),
     };
@@ -3522,7 +3488,6 @@ fn lowers_choice_variant_expression_to_hir_variant_construct() {
 
     let choice_expr = choice_construct_expr(
         status_path.clone(),
-        ready_name,
         0,
         vec![],
         choice_type_id,

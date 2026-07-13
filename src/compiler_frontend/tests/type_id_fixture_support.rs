@@ -296,7 +296,6 @@ pub(crate) fn multi_bind_target(
 ) -> MultiBindTarget {
     MultiBindTarget {
         id,
-        diagnostic_type: DataType::Inferred,
         type_id,
         value_mode,
         kind,
@@ -335,7 +334,6 @@ pub(crate) fn field_access_node(
 
 pub(crate) fn choice_construct_expr(
     nominal_path: InternedPath,
-    variant: crate::compiler_frontend::symbols::string_interning::StringId,
     tag: usize,
     fields: Vec<Declaration>,
     type_id: TypeId,
@@ -345,7 +343,6 @@ pub(crate) fn choice_construct_expr(
     Expression::choice_construct(
         crate::compiler_frontend::ast::expressions::expression::ChoiceConstructInput {
             nominal_path,
-            variant,
             tag,
             fields,
             diagnostic_type: DataType::Inferred,

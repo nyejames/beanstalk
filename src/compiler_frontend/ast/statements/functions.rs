@@ -31,7 +31,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 };
 use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_data_type;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::{
     cast_target_context_for_type_id, parse_expectation_for_type_id,
@@ -202,50 +202,6 @@ impl FunctionSignature {
             .iter()
             .find(|slot| slot.channel == ReturnChannel::Error)
             .and_then(|slot| slot.type_id)
-    }
-
-    /// Remap all interned string IDs in parameters and return slots.
-    ///
-    /// WHAT: updates parameter declaration names/expressions and return-slot diagnostic types.
-    /// WHY: per-file header parsing produces function signatures using local string tables;
-    ///      remapping keeps them valid after merge into the module/global table.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for parameter in &mut self.parameters {
-            parameter.remap_string_ids(remap);
-        }
-        for return_slot in &mut self.returns {
-            return_slot.remap_string_ids(remap);
-        }
-    }
-}
-
-impl FunctionReturn {
-    /// Remap interned string IDs in the diagnostic type spelling.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            FunctionReturn::Value(data_type) => {
-                data_type.remap_string_ids(remap);
-            }
-
-            FunctionReturn::AliasCandidates { data_type, .. } => {
-                data_type.remap_string_ids(remap);
-            }
-        }
-    }
-}
-
-impl ReturnSlot {
-    /// Remap interned string IDs in the return slot's diagnostic type.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.value.remap_string_ids(remap);
-        if let Some(metadata) = &mut self.reactive_template {
-            metadata.remap_string_ids(remap);
-        }
-        // type_id is a canonical semantic ID and must not be remapped.
-        // channel is an enum discriminator with no string data.
     }
 }
 
@@ -584,7 +540,3 @@ fn return_slot_from_syntax(
 #[cfg(test)]
 #[path = "tests/function_parsing_tests.rs"]
 mod function_parsing_tests;
-
-#[cfg(test)]
-#[path = "tests/signature_remap_tests.rs"]
-mod signature_remap_tests;

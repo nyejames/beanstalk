@@ -26,15 +26,14 @@ use crate::compiler_frontend::ast::templates::template_body_sentinels::{
 };
 use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBodyParseMode, TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch,
-    TemplateControlFlow, TemplateControlFlowValidationMode, TemplateFallbackBranch,
-    TemplateIfBodyParseInput, TemplateLoopBodyParseInput, TemplateLoopControlFlow,
-    TemplateLoopControlKind, inline_source_consts_for_const_required_if_condition,
+    TemplateBodyParseMode, TemplateBranchSelector, TemplateControlFlowValidationMode,
+    TemplateIfBodyParseInput, TemplateLoopBodyParseInput, TemplateLoopControlKind,
+    inline_source_consts_for_const_required_if_condition,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateConstructionContext, TemplateIrBranch, TemplateIrNodeId, TemplateIrNodeKind,
-    TemplateTirBodyReference, TemplateTirPhase, TemplateWrapperReference,
+    TemplateTirPhase, TemplateWrapperReference,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
@@ -325,13 +324,11 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         input: TemplateIfBodyParseInput,
         control_context: TemplateBodyControlContext,
     ) -> BodyParseResult<()> {
-        let mut branches = Vec::new();
         let mut branch_tir_branches = Vec::new();
         let mut branch_selector = input.selector;
         let mut branch_context = input.then_context;
         let mut branch_location = input.location.clone();
         let mut branch_starts_after_else_if = false;
-        let fallback;
         let mut fallback_tir_body = None;
 
         // -------------------
@@ -359,7 +356,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 branch_construction_context.trim_leading_whitespace(self.string_table);
             }
 
-            let (branch_body_tir_reference, branch_body_node_id) = finalize_tir_body_builder(
+            let branch_body_node_id = finalize_tir_body_builder(
                 build_state.style.clone(),
                 build_state.kind.clone(),
                 branch_location_snapshot,
@@ -371,12 +368,6 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                 branch_body_node_id,
                 branch_location.clone(),
             ));
-
-            branches.push(TemplateConditionalBranch {
-                selector: branch_selector,
-                body_tir_reference: branch_body_tir_reference,
-                location: branch_location,
-            });
 
             match boundary {
                 TemplateBodyBoundary::ElseIf {
@@ -404,14 +395,11 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                         control_context,
                         location,
                     )?;
-                    let fallback_body_node_id = fallback_branch.body_node_id;
-                    fallback = Some(fallback_branch.branch);
-                    fallback_tir_body = Some(fallback_body_node_id);
+                    fallback_tir_body = Some(fallback_branch.body_node_id);
                     break;
                 }
 
                 TemplateBodyBoundary::TemplateClose => {
-                    fallback = None;
                     break;
                 }
             }
@@ -426,14 +414,6 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             fallback_tir_body,
             input.location.clone(),
         );
-
-        build_state.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-            TemplateBranchChain {
-                branches,
-                fallback,
-                location: input.location,
-            },
-        )));
 
         Ok(())
     }
@@ -471,7 +451,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         )?;
         else_construction_context.trim_leading_whitespace(self.string_table);
 
-        let (fallback_body_tir_reference, fallback_body_node_id) = finalize_tir_body_builder(
+        let fallback_body_node_id = finalize_tir_body_builder(
             build_state.style.clone(),
             build_state.kind.clone(),
             opening_location.to_owned(),
@@ -479,10 +459,6 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         );
 
         Ok(ParsedFallbackBranch {
-            branch: TemplateFallbackBranch {
-                body_tir_reference: fallback_body_tir_reference,
-                location: location.clone(),
-            },
             body_node_id: fallback_body_node_id,
         })
     }
@@ -562,27 +538,14 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
 
         self.parse_content(parse_input, &mut body_construction_context)?;
 
-        let (body_tir_reference, body_node_id) = finalize_tir_body_builder(
+        let body_node_id = finalize_tir_body_builder(
             build_state.style.clone(),
             build_state.kind.clone(),
             loop_location_snapshot,
             &mut body_construction_context,
         );
 
-        construction_context.record_loop(
-            input.header.clone(),
-            body_node_id,
-            input.location.clone(),
-        );
-
-        build_state.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-            TemplateLoopControlFlow {
-                header: input.header,
-                body_tir_reference,
-                aggregate_wrapper_tir_reference: None,
-                location: input.location,
-            },
-        )));
+        construction_context.record_loop(input.header, body_node_id, input.location);
 
         Ok(())
     }
@@ -632,12 +595,17 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             }
         }
 
-        // Control-flow children are fully TIR-owned: their TIR body roots carry
+        // Control-flow children are fully TIR-owned: their body roots carry the
         // branch/loop structure and the child template node is already recorded
-        // above through `record_parser_tir_child_template`. No content mirror is
-        // needed.
-        if child_template.control_flow.is_some() {
-            return Ok(());
+        // above through `record_parser_tir_child_template`.
+        if let Some(child_template_id) = child_template.tir_template_id() {
+            let store = construction_context.store();
+            if store
+                .control_flow_node_id_for_template(child_template_id)
+                .is_some()
+            {
+                return Ok(());
+            }
         }
 
         match &child_template.kind {
@@ -752,7 +720,6 @@ struct ParsedElseIfBranch {
 }
 
 struct ParsedFallbackBranch {
-    branch: TemplateFallbackBranch,
     body_node_id: TemplateIrNodeId,
 }
 
@@ -840,39 +807,30 @@ fn body_sentinel_target<'a>(
     }
 }
 
-/// Finalizes a control-flow body template's parser-emitted TIR and returns a
-/// store-qualified body reference plus the body root node ID.
+/// Finalizes a control-flow body template's parser-emitted TIR and returns the
+/// body root node ID.
 ///
 /// WHAT: every branch/loop body shell starts a `TemplateConstructionContext`
 ///       with its own parser TIR builder state. This helper seals that builder
-///       state into a finalized `TemplateIr`, reads the root node from the
-///       shared store, and wraps it in a `TemplateTirBodyReference`.
+///       state into a finalized `TemplateIr` and reads the root node from the
+///       shared store.
 /// WHY: control-flow bodies are emitted directly into TIR, so the body only
-///      needs to be finished and referenced.
+///      needs to be finished. The body root node ID is all render-unit
+///      preparation needs to format, wrap and install the body.
 fn finalize_tir_body_builder(
     style: Style,
     kind: TemplateType,
     location: SourceLocation,
     construction_context: &mut TemplateConstructionContext,
-) -> (TemplateTirBodyReference, TemplateIrNodeId) {
+) -> TemplateIrNodeId {
     let tir_reference =
-        construction_context.finish(style, kind, TemplateTirPhase::Parsed, location.clone());
+        construction_context.finish(style, kind, TemplateTirPhase::Parsed, location);
 
     let store = construction_context.store();
     let template_ir = store
         .get_template(tir_reference.root.template_id)
         .expect("finalized control-flow body template should exist in the TIR store");
-    let root = template_ir.root;
-
-    let body_reference = TemplateTirBodyReference::new(
-        store.owner(),
-        tir_reference.root.store_id,
-        root,
-        tir_reference.phase,
-        location,
-    );
-
-    (body_reference, root)
+    template_ir.root
 }
 
 /// Ensures an `[else]` fallback body starts on a new boundary line.

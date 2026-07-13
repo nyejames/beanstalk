@@ -183,7 +183,6 @@ fn parse_catch_error_binding(
     token_stream.advance();
 
     Ok(CatchErrorBinding {
-        error_name: handler_name,
         error_binding: context.scope.append(handler_name),
     })
 }

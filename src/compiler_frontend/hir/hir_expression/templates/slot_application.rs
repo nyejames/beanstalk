@@ -331,7 +331,7 @@ fn owned_runtime_template_node_guarantees_output(
             *byte_len > 0 && !string_table.resolve(*text).trim().is_empty()
         }
 
-        OwnedRuntimeTemplateNode::AggregateOutput { .. } => true,
+        OwnedRuntimeTemplateNode::AggregateOutput => true,
 
         OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } => {
             dynamic_expression_guarantees_output(expression, string_table)

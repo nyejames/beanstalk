@@ -1069,7 +1069,6 @@ fn statement_catch_handler_lowering_builds_explicit_result_branching() {
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let can_fail_name = super::symbol("can_fail", &mut string_table);
     let location = test_location(10);
-    let error_name = string_table.intern("err");
     let error_binding = start_name.join_str("err", &mut string_table);
 
     let can_fail_function = function_node(
@@ -1108,10 +1107,7 @@ fn statement_catch_handler_lowering_builds_explicit_result_branching() {
                     location.clone(),
                 ),
                 FallibleHandling::Handler {
-                    error: Some(CatchErrorBinding {
-                        error_name,
-                        error_binding,
-                    }),
+                    error: Some(CatchErrorBinding { error_binding }),
                     body: vec![],
                 },
                 vec![],

@@ -9,9 +9,7 @@ use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatt
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateControlFlow, TemplateLoopControlKind,
-};
+use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
@@ -1354,7 +1352,13 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
-    let has_control_flow = template.control_flow.is_some();
+    let has_control_flow = {
+        let store = context.template_ir_store.borrow();
+        template
+            .tir_template_id()
+            .and_then(|id| store.control_flow_node_id_for_template(id))
+            .is_some()
+    };
     let tir_reference = template
         .tir_reference
         .as_mut()
@@ -1441,7 +1445,13 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
-    let has_control_flow = template.control_flow.is_some();
+    let has_control_flow = {
+        let store = context.template_ir_store.borrow();
+        template
+            .tir_template_id()
+            .and_then(|id| store.control_flow_node_id_for_template(id))
+            .is_some()
+    };
     let tir_reference = template
         .tir_reference
         .as_mut()
@@ -1547,7 +1557,13 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
     );
 
     let style = template.style.clone();
-    let has_control_flow = template.control_flow.is_some();
+    let has_control_flow = {
+        let store = context.template_ir_store.borrow();
+        template
+            .tir_template_id()
+            .and_then(|id| store.control_flow_node_id_for_template(id))
+            .is_some()
+    };
     let tir_reference = template
         .tir_reference
         .as_mut()
@@ -2188,19 +2204,6 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
         branch_body_text, "<p> body</p>",
         "render-unit preparation should install finalized formatter output into the branch body node"
     );
-
-    let control_flow = template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::BranchChain(branch_chain) = control_flow else {
-        panic!("expected branch-chain control-flow state");
-    };
-    assert_eq!(
-        branch_chain.branches[0].body_tir_reference.phase,
-        TemplateTirPhase::Formatted,
-        "explicit formatter branch bodies should reach the Formatted phase"
-    );
 }
 
 #[test]
@@ -2243,39 +2246,26 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
         "<p>fallback</p>"
     );
 
-    let control_flow = template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::BranchChain(branch_chain) = control_flow else {
-        panic!("expected branch-chain control-flow state");
-    };
-    assert_eq!(
-        branch_chain.branches[0].body_tir_reference.phase,
-        TemplateTirPhase::Formatted
+    assert_ne!(
+        branches[0].location,
+        SourceLocation::default(),
+        "prepared branch should retain a concrete parser source location"
     );
     assert_ne!(
-        branch_chain.branches[0].body_tir_reference.location,
+        store
+            .get_node(branches[0].body)
+            .expect("prepared branch body root should exist")
+            .location,
         SourceLocation::default(),
-        "prepared branch body references should retain a concrete parser source location"
+        "prepared branch body root should retain a concrete parser source location"
     );
-    assert_eq!(
-        branch_chain
-            .fallback
-            .as_ref()
-            .map(|fallback| &fallback.body_tir_reference)
-            .expect("fallback should keep a body TIR reference")
-            .phase,
-        TemplateTirPhase::Formatted
-    );
-    let fallback = branch_chain
-        .fallback
-        .as_ref()
-        .expect("fallback should keep a body TIR reference");
     assert_ne!(
-        fallback.body_tir_reference.location,
+        store
+            .get_node(fallback_body)
+            .expect("prepared fallback body root should exist")
+            .location,
         SourceLocation::default(),
-        "prepared fallback body references should retain a concrete parser source location"
+        "prepared fallback body root should retain a concrete parser source location"
     );
 }
 
@@ -2320,32 +2310,22 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
     );
 
     assert_eq!(body_text(*body, &store, &string_table), "<p> body</p>");
-
-    let control_flow = template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::Loop(template_loop) = control_flow else {
-        panic!("expected loop control-flow state");
-    };
-    assert_eq!(
-        template_loop.body_tir_reference.phase,
-        TemplateTirPhase::Formatted,
-        "explicit formatter loop bodies should reach the Formatted phase"
-    );
     assert_ne!(
-        template_loop.body_tir_reference.location,
+        store
+            .get_node(*body)
+            .expect("prepared loop body root should exist")
+            .location,
         SourceLocation::default(),
-        "prepared loop body references should retain a concrete parser source location"
+        "prepared loop body root should retain a concrete parser source location"
     );
 }
 
 #[test]
-fn no_formatter_control_flow_body_reaches_formatted_phase() {
+fn no_formatter_control_flow_owner_reaches_formatted_phase() {
     // No-formatter branch/fallback/loop bodies run through the same TIR formatter
     // adapter used by explicit-formatter bodies (default-whitespace normalization
-    // / `$raw` preservation). Their body TIR references should reach the
-    // `Formatted` phase while preserving normalized output.
+    // / `$raw` preservation). Their owning TIR references should reach the
+    // owning `Formatted` phase while preserving normalized body output.
     let mut string_table = StringTable::new();
 
     let (branch_template, store) = parse_template("[if true: body]", &mut string_table);
@@ -2360,18 +2340,13 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         " body",
         "no-formatter branch body should preserve normalized output"
     );
-
-    let branch_control_flow = branch_template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::BranchChain(branch_ast) = branch_control_flow else {
-        panic!("expected branch-chain control-flow state");
-    };
     assert_eq!(
-        branch_ast.branches[0].body_tir_reference.phase,
+        branch_template
+            .tir_reference
+            .as_ref()
+            .expect("branch template should keep its TIR reference")
+            .phase,
         TemplateTirPhase::Formatted,
-        "no-formatter branch body should reach the Formatted phase"
     );
 
     let (fallback_template, store) =
@@ -2390,28 +2365,13 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         "fallback",
         "no-formatter fallback body should preserve normalized output"
     );
-
-    let fallback_control_flow = fallback_template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::BranchChain(fallback_ast) = fallback_control_flow else {
-        panic!("expected branch-chain control-flow state");
-    };
     assert_eq!(
-        fallback_ast.branches[0].body_tir_reference.phase,
-        TemplateTirPhase::Formatted,
-        "no-formatter branch body should reach the Formatted phase"
-    );
-    assert_eq!(
-        fallback_ast
-            .fallback
+        fallback_template
+            .tir_reference
             .as_ref()
-            .map(|fallback| &fallback.body_tir_reference)
-            .expect("fallback should keep a body TIR reference")
+            .expect("fallback template should keep its TIR reference")
             .phase,
         TemplateTirPhase::Formatted,
-        "no-formatter fallback body should reach the Formatted phase"
     );
 
     let (loop_template, store) = parse_template("[loop true: body]", &mut string_table);
@@ -2425,18 +2385,13 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         " body",
         "no-formatter loop body should preserve normalized output"
     );
-
-    let loop_control_flow = loop_template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::Loop(template_loop) = loop_control_flow else {
-        panic!("expected loop control-flow state");
-    };
     assert_eq!(
-        template_loop.body_tir_reference.phase,
+        loop_template
+            .tir_reference
+            .as_ref()
+            .expect("loop template should keep its TIR reference")
+            .phase,
         TemplateTirPhase::Formatted,
-        "no-formatter loop body should reach the Formatted phase"
     );
 
     let (raw_template, store) = parse_template("[$raw, if true:\n    raw\n]", &mut string_table);
@@ -2450,18 +2405,13 @@ fn no_formatter_control_flow_body_reaches_formatted_phase() {
         "\n    raw\n",
         "$raw branch body should preserve authored whitespace"
     );
-
-    let raw_control_flow = raw_template
-        .control_flow
-        .as_ref()
-        .expect("template should carry control-flow state");
-    let TemplateControlFlow::BranchChain(raw_branch_ast) = raw_control_flow else {
-        panic!("expected branch-chain control-flow state");
-    };
     assert_eq!(
-        raw_branch_ast.branches[0].body_tir_reference.phase,
+        raw_template
+            .tir_reference
+            .as_ref()
+            .expect("raw branch template should keep its TIR reference")
+            .phase,
         TemplateTirPhase::Formatted,
-        "$raw branch body should reach the Formatted phase"
     );
 }
 

@@ -40,7 +40,6 @@ pub use ids::*;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathKind;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 
 // -----------------------------------------------------------
 //  Compile-Time Paths
@@ -85,22 +84,6 @@ pub enum ReceiverKey {
     Choice(InternedPath),
     External(ExternalTypeId),
     BuiltinScalar(BuiltinScalarReceiver),
-}
-
-impl ReceiverKey {
-    /// Remap interned path components for nominal receivers into the merged string table.
-    ///
-    /// Builtin scalar receivers carry no string IDs and are left unchanged.
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            ReceiverKey::Struct(path) | ReceiverKey::Choice(path) => {
-                path.remap_string_ids(remap);
-            }
-
-            ReceiverKey::External(_) | ReceiverKey::BuiltinScalar(_) => {}
-        }
-    }
 }
 
 #[cfg(test)]

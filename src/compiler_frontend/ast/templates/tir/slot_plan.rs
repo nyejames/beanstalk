@@ -18,8 +18,6 @@ use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrNodeId, Templ
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNode, TemplateIrNodeKind};
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// TIR side-table entry for a slot-routing plan.
@@ -79,52 +77,6 @@ pub(crate) struct TemplateSlotSiteRenderPlan {
 pub(crate) enum TemplateSlotSiteRenderPiece {
     Render(TemplateIrNodeId),
     ContributionSource(RuntimeSlotContributionSourceId),
-}
-
-impl TemplateSlotPlan {
-    /// Remap interned string identities stored in this slot plan.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.location.remap_string_ids(remap);
-
-        for source in &mut self.contribution_sources {
-            source.remap_string_ids(remap);
-        }
-
-        for site in &mut self.slot_sites {
-            site.remap_string_ids(remap);
-        }
-    }
-}
-
-impl TemplateSlotContributionSourcePlan {
-    /// Remap interned string identities stored in this contribution source.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.target.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl TemplateSlotSitePlan {
-    /// Remap interned string identities stored in this slot site.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.key.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-        self.render_plan.remap_string_ids(remap);
-    }
-}
-
-impl TemplateSlotSiteRenderPlan {
-    /// Remap interned string identities stored in this render plan.
-    ///
-    /// WHAT: render pieces reference store-local node IDs and contribution source
-    /// IDs, neither of which are string identities.
-    /// WHY: the store-wide node walk remaps the referenced nodes directly, so the
-    /// render plan itself has no string-bearing fields to rewrite.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {}
 }
 
 pub(super) fn convert_runtime_slot_site(

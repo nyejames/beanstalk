@@ -480,7 +480,6 @@ fn resolve_multi_bind_targets(
 
             resolved_bindings.push(MultiBindTarget {
                 id: target_id,
-                diagnostic_type: target_data_type,
                 type_id: *slot_type,
                 value_mode: target_ownership,
                 kind: MultiBindTargetKind::Declaration,
@@ -559,7 +558,6 @@ fn resolve_existing_target(
 
     Ok(MultiBindTarget {
         id: existing_declaration.id.to_owned(),
-        diagnostic_type: existing_declaration.value.diagnostic_type.to_owned(),
         type_id: slot_type,
         value_mode: existing_declaration.value.value_mode.to_owned(),
         kind: MultiBindTargetKind::Assignment,

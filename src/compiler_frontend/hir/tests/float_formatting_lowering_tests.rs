@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExp
 use crate::compiler_frontend::ast::expressions::expression_types::{
     CastHandling, ResolvedCastEvidence,
 };
-use crate::compiler_frontend::ast::templates::template::{ReactiveSubscription, TemplateType};
+use crate::compiler_frontend::ast::templates::template::ReactiveSubscription;
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
@@ -364,14 +364,11 @@ fn reactive_float_template_subscription_keeps_lazy_formatter_expression() {
         location: loc.clone(),
     };
     let handoff = OwnedRuntimeTemplateHandoff {
-        kind: TemplateType::StringFunction,
         body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Sequence {
             children: vec![OwnedRuntimeTemplateNode::DynamicExpression {
                 expression: Box::new(value_ref),
                 reactive_subscription: Some(subscription),
-                location: loc.clone(),
             }],
-            location: loc.clone(),
         }),
         location: loc.clone(),
     };

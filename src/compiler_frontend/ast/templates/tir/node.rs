@@ -40,8 +40,6 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::symbols::string_interning::StringId;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // -------------------------
@@ -391,13 +389,6 @@ impl TirSlotPlaceholder {
             skip_parent_child_wrappers,
         }
     }
-
-    /// Remaps interned names stored by the slot key and source location.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.key.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-    }
 }
 
 // -------------------------
@@ -514,92 +505,5 @@ impl TemplateIrBranch {
             TemplateBranchSelector::Bool(expression) => expression,
             TemplateBranchSelector::OptionPresentCapture { scrutinee, .. } => scrutinee,
         }
-    }
-}
-
-// -------------------------
-//  String-table remapping
-// -------------------------
-
-impl TemplateIr {
-    /// Remap interned string identities stored on this template entry.
-    ///
-    /// WHAT: remaps the source location, template kind (for slot keys), and any
-    /// owned wrapper child templates carried by the style.
-    /// WHY: per-file string-table merges require every interned path/name in the
-    /// TIR store to be rewritten to the merged table's IDs.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.location.remap_string_ids(remap);
-        self.kind.remap_string_ids(remap);
-    }
-}
-
-impl TemplateIrNode {
-    /// Remap interned string identities stored on this node.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.location.remap_string_ids(remap);
-        self.kind.remap_string_ids(remap);
-    }
-}
-
-impl TemplateIrNodeKind {
-    /// Remap interned string identities inside the node payload.
-    ///
-    /// NOTE: store-local IDs such as `TemplateIrId` and `TemplateIrNodeId` are
-    /// indexes, not string identities, and must not be remapped. The store-level
-    /// walk visits every template and node directly, so child/parent references do
-    /// not need recursive traversal here.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            TemplateIrNodeKind::Sequence { .. } => {}
-
-            TemplateIrNodeKind::Text { text, .. } => {
-                *text = remap.get(*text);
-            }
-
-            TemplateIrNodeKind::DynamicExpression {
-                expression,
-                reactive_subscription,
-                ..
-            } => {
-                expression.remap_string_ids(remap);
-                if let Some(subscription) = reactive_subscription {
-                    subscription.remap_string_ids(remap);
-                }
-            }
-
-            TemplateIrNodeKind::ChildTemplate { .. } => {}
-            TemplateIrNodeKind::InsertContribution { .. } => {}
-
-            TemplateIrNodeKind::Slot { placeholder } => {
-                placeholder.remap_string_ids(remap);
-            }
-
-            TemplateIrNodeKind::BranchChain { branches, .. } => {
-                for branch in branches {
-                    branch.remap_string_ids(remap);
-                }
-            }
-
-            TemplateIrNodeKind::Loop { header, .. } => {
-                header.remap_string_ids(remap);
-            }
-
-            TemplateIrNodeKind::AggregateOutput => {}
-            TemplateIrNodeKind::LoopControl { .. } => {}
-            TemplateIrNodeKind::RuntimeSlotSite { .. } => {}
-        }
-    }
-}
-
-impl TemplateIrBranch {
-    /// Remap interned string identities stored on this branch.
-    #[cfg(test)]
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.selector.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
     }
 }

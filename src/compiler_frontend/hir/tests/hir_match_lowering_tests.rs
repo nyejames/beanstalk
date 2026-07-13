@@ -166,7 +166,6 @@ fn non_unit_function_with_exhaustive_choice_match_returns_on_all_arms() {
                     MatchArm {
                         pattern: MatchPattern::ChoiceVariant {
                             nominal_path: status_path.clone(),
-                            variant: ready_name,
                             tag: 0,
                             captures: vec![],
                             location: test_location(22),
@@ -184,7 +183,6 @@ fn non_unit_function_with_exhaustive_choice_match_returns_on_all_arms() {
                     MatchArm {
                         pattern: MatchPattern::ChoiceVariant {
                             nominal_path: status_path.clone(),
-                            variant: busy_name,
                             tag: 1,
                             captures: vec![],
                             location: test_location(23),
@@ -897,7 +895,6 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                 MatchArm {
                     pattern: MatchPattern::ChoiceVariant {
                         nominal_path: status_path.clone(),
-                        variant: ready_name,
                         tag: 0,
                         captures: vec![],
                         location: test_location(4),
@@ -915,7 +912,6 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                 MatchArm {
                     pattern: MatchPattern::ChoiceVariant {
                         nominal_path: status_path.clone(),
-                        variant: busy_name,
                         tag: 1,
                         captures: vec![],
                         location: test_location(5),
@@ -1014,7 +1010,6 @@ fn lowers_capture_pattern_to_hir_capture_with_assignment() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let x = super::symbol("x", &mut string_table);
-    let capture_name = string_table.intern("captured");
     let capture_path = InternedPath::from_single_str("captured", &mut string_table);
 
     let match_node = node(
@@ -1027,7 +1022,6 @@ fn lowers_capture_pattern_to_hir_capture_with_assignment() {
             ),
             arms: vec![MatchArm {
                 pattern: MatchPattern::Capture {
-                    name: capture_name,
                     binding_path: capture_path.clone(),
                     location: test_location(3),
                 },

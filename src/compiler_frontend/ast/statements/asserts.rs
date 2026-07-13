@@ -95,10 +95,7 @@ pub(crate) fn parse_assert_statement(
         // For Alpha, only string slice literals are accepted as messages.
         match token_stream.current_token_kind() {
             TokenKind::StringSliceLiteral(text) => {
-                let msg = AssertMessage {
-                    text: *text,
-                    location: token_stream.current_location(),
-                };
+                let msg = AssertMessage { text: *text };
                 token_stream.advance();
                 Some(msg)
             }

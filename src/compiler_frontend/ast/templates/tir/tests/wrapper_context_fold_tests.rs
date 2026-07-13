@@ -799,7 +799,7 @@ fn handoff_tir_view_materializes_if_child_emits_as_conditional_wrapper() {
     assert_text_node(&children[0], "before", &string_table);
     assert!(matches!(
         children[1],
-        OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        OwnedRuntimeTemplateNode::AggregateOutput
     ));
     assert_text_node(&children[2], "after", &string_table);
 }

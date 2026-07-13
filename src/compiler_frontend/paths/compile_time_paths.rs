@@ -11,8 +11,6 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCompileTimePathReason,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::{Path, PathBuf};
 
@@ -62,25 +60,6 @@ pub struct CompileTimePath {
 
     /// Whether the target is a file or a directory.
     pub kind: CompileTimePathKind,
-}
-
-impl CompileTimePath {
-    /// Remap source and public paths for isolated AST remap fixtures.
-    #[cfg(test)]
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.source_path.remap_string_ids(remap);
-        self.public_path.remap_string_ids(remap);
-    }
-}
-
-impl CompileTimePaths {
-    /// Remap every compile-time path for isolated AST remap fixtures.
-    #[cfg(test)]
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for path in &mut self.paths {
-            path.remap_string_ids(remap);
-        }
-    }
 }
 
 /// A collection of one or more resolved compile-time path values.

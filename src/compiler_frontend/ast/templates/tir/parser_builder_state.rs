@@ -385,10 +385,11 @@ impl TemplateParserIrBuilderState {
     ///
     /// WHAT: searches the in-progress root children, walking only nested sequence
     ///       nodes and never following child-template references.
-    /// WHY: body sync runs before `TemplateConstructionContext::finish`, so the
-    ///      finalized `tir_reference` does not exist yet. Runtime slot fills can
-    ///      wrap the control-flow node before validation, so direct-child lookup
-    ///      is not enough.
+    /// WHY: render-unit preparation runs before
+    ///      `TemplateConstructionContext::finish`, so the finalized
+    ///      `tir_reference` does not exist yet. Runtime slot fills can wrap the
+    ///      control-flow node before validation, so direct-child lookup is not
+    ///      enough.
     pub(crate) fn control_flow_node_id(&self, store: &TemplateIrStore) -> Option<TemplateIrNodeId> {
         self.children
             .iter()

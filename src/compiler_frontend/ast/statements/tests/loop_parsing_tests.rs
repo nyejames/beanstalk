@@ -171,10 +171,7 @@ fn parses_collection_loop_with_pipe_item_binding() {
     );
     assert!(bindings.index.is_none());
     assert!(matches!(iterable.kind, ExpressionKind::Reference(_)));
-    assert!(
-        iterable.diagnostic_type.is_collection()
-            || matches!(iterable.diagnostic_type, DataType::Reference(_))
-    );
+    assert!(iterable.diagnostic_type.is_collection());
     assert_eq!(loop_body.len(), 1);
 }
 

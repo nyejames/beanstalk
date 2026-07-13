@@ -235,7 +235,6 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
     let method_call_expression = Expression::method_call_with_typed_arguments(
         receiver_expression,
         method_path,
-        member_name,
         normalize_call_arguments(&args),
         result_type_ids,
         type_interner.environment_mut_for_derived_types(),

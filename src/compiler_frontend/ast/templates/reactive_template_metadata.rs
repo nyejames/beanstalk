@@ -23,27 +23,25 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchSelector, TemplateControlFlow, TemplateLoopHeader,
+    TemplateBranchSelector, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    ControlFlowBodyKind, ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind,
-    TemplateIrRegistry, TemplateIrStore, TemplateLoopHeaderExpressionSites, TemplateNodeRef,
-    TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase,
-    TirView, finalized_control_flow_body_tir_reference,
+    ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
+    TemplateIrStore, TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateSlotPlanId,
+    TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase, TirView,
 };
 use std::sync::Arc;
 
 /// Store-aware reactive-template metadata traversal.
 ///
-/// WHAT: walks same-store TIR roots where they are authoritative. Control-flow
-/// branch, fallback, and loop bodies are recovered through
-/// `finalized_control_flow_body_tir_reference`. Linear templates with
-/// same-store `Composed`-or-later TIR roots read their body metadata from that
-/// root.
-/// Selector and header metadata still come from the AST control-flow header.
+/// WHAT: walks same-store TIR roots where they are authoritative. Both linear
+///       and control-flow templates read their body metadata from the
+///       `Composed`-or-later TIR root. The TIR node walker discovers
+///       `BranchChain` selectors, `Loop` headers, branch/fallback/loop bodies
+///       and aggregate wrappers directly from the TIR tree.
 /// WHY: AST finalization has access to the module-scoped `TemplateIrStore`.
-/// Walking TIR body roots keeps reactive metadata aligned with the finalized
+/// Walking the TIR root keeps reactive metadata aligned with the finalized
 /// TIR representation that render-unit preparation wrote into the store.
 /// Missing or below-Composed roots are not an invitation to fall back to a
 /// non-TIR representation.
@@ -53,35 +51,24 @@ pub(crate) fn merge_reactive_template_metadata_with_store_and_resolver(
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
 ) {
-    if let Some(root) = authoritative_linear_tir_root_for_template(template, store) {
+    if let Some(root) = authoritative_tir_root_for_template(template, store) {
         merge_tir_node_metadata(store, root, metadata, resolver);
     }
-
-    merge_control_flow_metadata_with_store(
-        template,
-        store,
-        &template.control_flow,
-        metadata,
-        resolver,
-    );
 }
 
-/// Returns the authoritative same-store TIR root for a linear template.
+/// Returns the authoritative same-store TIR root for a template.
 ///
 /// WHAT: accepts same-store TIR references whose phase is Composed or later.
-///       The reference must belong to the current store and the template must
-///       be linear (no control-flow header).
-/// WHY: the formatted TIR root is the structural authority for linear output.
+///       The reference must belong to the current store. Both linear and
+///       control-flow templates use this root because the TIR node walker
+///       handles `BranchChain` and `Loop` nodes directly.
+/// WHY: the finalized TIR root is the structural authority for template output.
 ///      Reactive metadata must follow that authority or subscriptions can be
 ///      dropped and hide reactive backend requirements.
-fn authoritative_linear_tir_root_for_template(
+fn authoritative_tir_root_for_template(
     template: &Template,
     store: &TemplateIrStore,
 ) -> Option<TemplateIrNodeId> {
-    if template.control_flow.is_some() {
-        return None;
-    }
-
     let reference = template.tir_reference.as_ref()?;
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return None;
@@ -201,7 +188,7 @@ fn merge_owned_runtime_template_node_metadata(
         OwnedRuntimeTemplateNode::Sequence { .. }
         | OwnedRuntimeTemplateNode::ChildTemplate { .. }
         | OwnedRuntimeTemplateNode::ConditionalWrapper { .. }
-        | OwnedRuntimeTemplateNode::AggregateOutput { .. }
+        | OwnedRuntimeTemplateNode::AggregateOutput
         | OwnedRuntimeTemplateNode::LoopControl { .. }
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}
@@ -234,97 +221,6 @@ fn merge_expression_metadata(
         }
 
         _ => {}
-    }
-}
-
-/// Store-aware control-flow metadata traversal.
-///
-/// WHAT: walks selectors and headers from the AST control-flow header, while
-/// branch, fallback, and loop bodies are read only from finalized same-store
-/// TIR body roots.
-/// WHY: render-unit preparation mirrors finalized bodies into the module TIR
-/// store. Reading those roots keeps reactive metadata consistent with the TIR
-/// representation instead of the legacy content fields.
-fn merge_control_flow_metadata_with_store(
-    template: &Template,
-    store: &TemplateIrStore,
-    control_flow: &Option<TemplateControlFlow>,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    let Some(control_flow) = control_flow else {
-        return;
-    };
-
-    match control_flow {
-        TemplateControlFlow::BranchChain(branch_chain) => {
-            for (index, branch) in branch_chain.branches.iter().enumerate() {
-                merge_branch_selector_metadata(&branch.selector, metadata, resolver);
-                merge_control_flow_body_metadata_with_store(
-                    template,
-                    store,
-                    ControlFlowBodyKind::Branch { index },
-                    metadata,
-                    resolver,
-                );
-            }
-
-            if branch_chain.fallback.is_some() {
-                merge_control_flow_body_metadata_with_store(
-                    template,
-                    store,
-                    ControlFlowBodyKind::Fallback,
-                    metadata,
-                    resolver,
-                );
-            }
-        }
-
-        TemplateControlFlow::Loop(template_loop) => {
-            merge_loop_header_metadata(&template_loop.header, metadata, resolver);
-            merge_control_flow_body_metadata_with_store(
-                template,
-                store,
-                ControlFlowBodyKind::LoopBody,
-                metadata,
-                resolver,
-            );
-
-            // Render-unit preparation installs the loop aggregate wrapper as a
-            // same-store TIR subtree and caches its root on the AST loop. Walk
-            // that cached root directly instead of rediscovering it through the
-            // owning template's TIR root.
-            if let Some(wrapper_root) = template_loop
-                .aggregate_wrapper_tir_reference
-                .as_ref()
-                .and_then(|reference| reference.same_store_root(store))
-            {
-                merge_tir_node_metadata(store, wrapper_root, metadata, resolver);
-            }
-        }
-    }
-}
-
-/// Merges reactive metadata from one finalized same-store control-flow body root.
-///
-/// WHAT: resolves the body root through `finalized_control_flow_body_tir_reference`
-/// and walks the TIR node tree only when the root belongs to `store`.
-/// WHY: store-aware callers run after render-unit preparation has mirrored
-/// production branch/fallback/loop bodies into the module store. Skipping a
-/// missing or cross-store root keeps this path from silently reviving stale
-/// parser/render-unit mirror content.
-fn merge_control_flow_body_metadata_with_store(
-    template: &Template,
-    store: &TemplateIrStore,
-    body_kind: ControlFlowBodyKind,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    let body_root = finalized_control_flow_body_tir_reference(template, store, body_kind)
-        .and_then(|reference| reference.same_store_root(store));
-
-    if let Some(root) = body_root {
-        merge_tir_node_metadata(store, root, metadata, resolver);
     }
 }
 
@@ -1162,8 +1058,7 @@ mod tests {
         ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
     };
     use crate::compiler_frontend::ast::templates::template_control_flow::{
-        TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch,
-        TemplateControlFlow, TemplateFallbackBranch, TemplateLoopControlFlow, TemplateLoopHeader,
+        TemplateBranchSelector, TemplateLoopHeader,
     };
     use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotContributionSourceId;
     use crate::compiler_frontend::ast::templates::tir::{
@@ -1171,8 +1066,7 @@ mod tests {
         TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
         TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
         TemplateOverlaySetId, TemplateRef, TemplateSlotContributionSourcePlan, TemplateSlotPlan,
-        TemplateStoreId, TemplateTirBodyReference, TemplateTirPhase, TemplateTirReference,
-        TirExpressionOverlay,
+        TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
     };
     use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
     use crate::compiler_frontend::datatypes::DataType;
@@ -1411,28 +1305,9 @@ mod tests {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
             is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
+            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-            TemplateBranchChain {
-                branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                        &store,
-                        TemplateIrNodeId::new(0),
-                        TemplateTirPhase::Parsed,
-                    ),
-                    selector: TemplateBranchSelector::Bool(Expression::bool(
-                        true,
-                        test_location(),
-                        ValueMode::ImmutableOwned,
-                    )),
-                    location: test_location(),
-                }],
-                fallback: None,
-                location: test_location(),
-            },
-        )));
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_resolver(
@@ -1443,37 +1318,6 @@ mod tests {
         );
 
         assert_eq!(metadata.subscriptions, vec![subscription]);
-    }
-
-    #[test]
-    fn store_aware_control_flow_metadata_ignores_content_without_body_root() {
-        let store = TemplateIrStore::new();
-        let mut template = Template::empty();
-        template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-            TemplateBranchChain {
-                branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                        &store,
-                        TemplateIrNodeId::new(0),
-                        TemplateTirPhase::Parsed,
-                    ),
-                    selector: bool_selector(),
-                    location: test_location(),
-                }],
-                fallback: None,
-                location: test_location(),
-            },
-        )));
-
-        let mut metadata = ReactiveTemplateMetadata::template_backed();
-        merge_reactive_template_metadata_with_store_and_resolver(
-            &template,
-            &store,
-            &mut metadata,
-            &mut |expression| expression.reactive_template.clone(),
-        );
-
-        assert!(metadata.subscriptions.is_empty());
     }
 
     #[test]
@@ -1498,7 +1342,6 @@ mod tests {
             location: test_location(),
         };
         let template_handoff = OwnedRuntimeTemplateHandoff {
-            kind: TemplateType::StringFunction,
             body: OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::Text {
                 text: string_table.intern("template"),
                 byte_len: "template".len() as u32,
@@ -1550,31 +1393,9 @@ mod tests {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
             is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
+            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
-            TemplateBranchChain {
-                branches: vec![TemplateConditionalBranch {
-                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                        &store,
-                        TemplateIrNodeId::new(0),
-                        TemplateTirPhase::Parsed,
-                    ),
-                    selector: bool_selector(),
-                    location: test_location(),
-                }],
-                fallback: Some(TemplateFallbackBranch {
-                    body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                        &store,
-                        TemplateIrNodeId::new(0),
-                        TemplateTirPhase::Parsed,
-                    ),
-                    location: test_location(),
-                }),
-                location: test_location(),
-            },
-        )));
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1599,21 +1420,9 @@ mod tests {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
             is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
+            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-            TemplateLoopControlFlow {
-                body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                    &store,
-                    TemplateIrNodeId::new(0),
-                    TemplateTirPhase::Parsed,
-                ),
-                header: conditional_loop_header(),
-                aggregate_wrapper_tir_reference: None,
-                location: test_location(),
-            },
-        )));
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1649,27 +1458,9 @@ mod tests {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
             is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
+            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         });
-        template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
-            TemplateLoopControlFlow {
-                body_tir_reference: TemplateTirBodyReference::with_store_local_identity(
-                    &store,
-                    TemplateIrNodeId::new(0),
-                    TemplateTirPhase::Parsed,
-                ),
-                header: conditional_loop_header(),
-                aggregate_wrapper_tir_reference: Some(
-                    TemplateTirBodyReference::with_store_local_identity(
-                        &store,
-                        tir_wrapper_root,
-                        TemplateTirPhase::Composed,
-                    ),
-                ),
-                location: test_location(),
-            },
-        )));
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
