@@ -3,10 +3,10 @@
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/hash-root-export-block-module-system-plan.md`
-STATUS: final review
-CURRENT_SLICE: The focused audit correction is reviewed and fully validated. Checkpoint it, then complete parent documentation, plan and roadmap alignment.
-LAST_ACCEPTED_COMMIT: `4a50cee80` (`fix: stabilize source library ordering`)
-WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `4a50cee80`; the single-file collision preflight correction, direct regression test and this plan are ready to commit. No unrelated changes are present.
+STATUS: complete
+CURRENT_SLICE: Final review complete. All acceptance criteria, audits, corrections, documentation alignment and validation gates are closed.
+LAST_ACCEPTED_COMMIT: `cf36d5945` (`fix: validate single-file source libraries`)
+WORKTREE: main worktree `/Users/aneirinjames/projects/beanstalk/beanstalk` on branch `main` at `cf36d5945`; parent-owned progress source/generated output, plan and roadmap completion edits are ready for the completion commit. No unrelated changes are present.
 REQUIRED_RELOADS_AFTER_COMPACTION:
 - `AGENTS.md`
 - mandatory docs named by `AGENTS.md`
@@ -21,7 +21,7 @@ RELEVANT_CONTEXT_NOW:
 - docs: Phase 9 is committed at `74ce04813`. Do not edit official docs during the worker slice.
 - tests: every integration and focused test-matrix contract is covered and committed at `ed70cb5b9`.
 - benchmarks: every benchmark-shape contract is covered through `d841133b5`.
-- final review: audit corrections 1 and 2 are committed at `c427bebc4` and `4a50cee80`. The focused Codex CLI audit accepted those owners and its only required finding is now resolved by reusing the source-library-tree collision preflight in direct single-file Stage 0. A separate Ollama review found no defect. Historic facade-named fixtures remain accepted regression identifiers. Progress and roadmap alignment remain parent-owned cleanup.
+- final review: audit corrections 1 and 2 are committed at `c427bebc4` and `4a50cee80`; the focused correction is committed at `cf36d5945`. The focused Codex CLI audit accepted the consolidated owners after its single-file finding was resolved. The final whole-plan Ollama review passed every acceptance, ownership, test, progress and roadmap check with no correction. Historic facade-named fixtures remain accepted regression identifiers.
 ACCEPTANCE_CRITERIA:
 - One non-config `#*.bst` root file per module directory.
 - `config.bst` is the only project config filename. No alternate filename receives config-specific handling or diagnostics.
@@ -201,6 +201,8 @@ VALIDATION_STATE:
 - Audit correction 2: Ollama replaced unordered source-library registry, prepared-root and project-local discovery surfaces with canonical prefix ordering. Parent consolidated overlapping-root selection in `ProjectPathResolver::source_library_for_file` and reused it for logical paths, header membership and provider boundaries. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3357 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
 - Focused correction audit: Codex CLI found one required omission. Direct single-file Stage 0 validates source-library hash roots but does not invoke the existing source-library-tree collision validator before reachable discovery. The audit found no other defect in either correction.
 - Focused audit correction: Ollama added the existing source-library-tree collision preflight to direct single-file orchestration and a direct pipeline test that rejects an unimported `.bst` file/folder collision with `InvalidConfigReason::BstFileFolderCollision`. A separate Ollama review found no defect. Parent `just validate` passed cross-target Clippy, 3358 unit tests, 1756 integration cases, docs checking and benchmark-check 28/28 at -3 ms average with no slower cases.
+- Final parent alignment: the ownership, duplication, obsolete-path, panic, diagnostics, coverage and progress-matrix audits found no remaining required correction. `cargo run --quiet -- build docs --release` rebuilt 72 files successfully and `git diff --check` passed.
+- Final whole-plan Ollama review: all seven acceptance criteria, three audit corrections, progress rows, generated route and roadmap cleanup passed with no remaining risk or correction.
 
 DOCS_IMPACT:
 - progress matrix: aligned with generic roots, strict export blocks, active/imported root behavior and current coverage
@@ -208,11 +210,11 @@ DOCS_IMPACT:
 - generated docs: rebuilt successfully from all changed source pages
 
 NEXT_ACTION:
-- Commit the focused audit correction, then align the progress matrix, plan completion state and roadmap link before the final whole-plan review.
-DELEGATION_DECISION: parent checkpoint and final alignment.
-NEXT_WORKER_ORDER: none until final Ollama review
+- Commit these completion edits, then select the first roadmap plan, `docs/roadmap/plans/final-tir-completion-plan.md`.
+DELEGATION_DECISION: parent completion commit, then Ollama implementation workers for the TIR plan.
+NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean availability blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: stage the intended correction files and commit the accepted slice.
+NEXT_RESUME_ACTION: stage the four intended completion files, commit and reload the TIR plan.
 
 ---
 
@@ -438,8 +440,7 @@ This phase is a validation-baseline cleanup only. It must not implement the hash
 - [x] Run `cargo fmt`.
 - [x] Run `cargo test --lib build_system::create_project_modules --quiet`.
 - [x] Run `cargo clippy --lib --quiet`.
-- [ ] Run `just validate` if focused clippy passes.
-  - Blocked: broader `result_large_err` warnings outside this Stage 0 boundary fail all-target clippy with `-D warnings`.
+- [x] `just validate` was initially blocked by broader `result_large_err` warnings, then passed after the Phase 0B baseline cleanup.
 - [x] Confirm no source-language behavior, diagnostics or module/export semantics changed.
 - [x] Update the current-state block with the validation result before Phase 0 benchmark capture resumes.
 
@@ -1084,33 +1085,32 @@ This phase proves the refactor achieved its performance and simplification goals
   - [x] `RAYON_NUM_THREADS=4 just bench-frontend-check`
   - [x] `just bench-check`
   - [x] `just bench-report`
-- [ ] Confirm acceptance gates:
+- [x] Confirm acceptance gates:
   - [x] exactly one source-tree discovery run per directory build;
   - [x] module-root stress/source-tree discovery stage improved versus baseline;
   - [x] no broad compile-time regression;
   - [x] no hidden path resolver scan;
   - [x] no artifact emitted for API-only HTML modules;
   - [x] imported root start bodies do not execute in importers.
-- [ ] If benchmark results are mixed:
-  - [ ] run `just profile-case <case> terse` for regressed cases;
-  - [ ] record concise explanation;
-  - [ ] either fix or explicitly update the plan with accepted tradeoff before completion.
+- [x] Benchmark-result triage:
+  - [x] final checks reported no slower cases, so targeted regression profiles were not required;
+  - [x] no performance tradeoff or benchmark-history update was accepted.
 
 ### Final review / audit / validation
 
-- [ ] Manual style-guide review:
-  - [ ] clear stage ownership;
-  - [ ] no duplicated boundary paths;
-  - [ ] no obsolete APIs left behind;
-  - [ ] files have clear file-level docs;
-  - [ ] functions use named steps and explicit control flow;
-  - [ ] no user-input `panic!`, `todo!`, or unsafe `.unwrap()` paths.
-- [ ] Manual compiler-boundary review:
-  - [ ] Stage 0 owns tree discovery;
-  - [ ] header parsing owns export/root-body splitting;
-  - [ ] AST owns semantic validation but not syntax rediscovery;
-  - [ ] HIR/backend receive explicit root activity metadata.
-- [ ] Update active context capsule one final time with final commit and validation state.
+- [x] Manual style-guide review:
+  - [x] clear stage ownership;
+  - [x] no duplicated boundary paths;
+  - [x] no obsolete APIs left behind;
+  - [x] files have clear file-level docs;
+  - [x] functions use named steps and explicit control flow;
+  - [x] no user-input `panic!`, `todo!`, or unsafe `.unwrap()` paths.
+- [x] Manual compiler-boundary review:
+  - [x] Stage 0 owns tree discovery;
+  - [x] header parsing owns export/root-body splitting;
+  - [x] AST owns semantic validation but not syntax rediscovery;
+  - [x] HIR/backend receive explicit root activity metadata.
+- [x] Update active context capsule one final time with the final accepted implementation commit and validation state.
 
 ---
 

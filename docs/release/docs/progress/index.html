@@ -410,9 +410,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Active module roots and implicit start</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, and fragment-order coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, fragment-order, and API-only artifact-filtering coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;  "> Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. The implicit <code>start</code> function is build-system-owned and not importable or callable as a user declaration.</td>
+     <td style="padding: 0.2em 0.5em;  "> Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. API-only roots remain importable but emit no HTML page artifact. The implicit <code>start</code> function is build-system-owned and not importable or callable as a user declaration.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -626,9 +626,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> HTML project builds</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad routing, document shell, metadata, tracked asset, config, output cleanup, external JS glue, and page-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad routing, API-only artifact filtering, document shell, metadata, tracked asset, config, output cleanup, external JS glue, and page-fragment coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> This is the release-critical project backend. HTML-Wasm behavior is tracked under experimental surfaces.</td>
+     <td style="padding: 0.2em 0.5em;  "> This is the release-critical project backend. Only roots with HTML artifact activity participate in page, runtime asset, tracked asset, and homepage planning. HTML-Wasm behavior is tracked under experimental surfaces.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

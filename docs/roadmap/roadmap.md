@@ -9,7 +9,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 
 # Plans
 - [TIR Finalisation plan](docs/roadmap/plans/final-tir-completion-plan.md)
-- [New Module and export system updates](docs/roadmap/plans/hash-root-export-block-module-system-plan.md)
 - [Diagnostics Improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 - [Config Blocks replacing top level project builder keys](docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md)
 - [New Number type for precise numerical values](docs/roadmap/plans/number_type_numeric_plan.md)
@@ -30,8 +29,6 @@ The final TIR architecture creates safe extension hooks, but the actual optimisa
 - parallel nested-template folding after a separate profiling-backed plan.
 
 # Follow up notes and possible TODOs for future plans
-
-- Investigate slow module root discovery
 
 - [Optimisation plan](docs/roadmap/plans/frontend-arena-semantic-invariant-optimization-plan.md):
   template churn/capacity/clone-reduction work has been split out into the active

@@ -124,9 +124,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Active module roots and implicit start]
             [: Supported]
-            [: Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, and fragment-order coverage.]
+            [: Broad active-root start, dependency-sort, normal-file top-level rejection, imported-root suppression, fragment-order, and API-only artifact-filtering coverage.]
             [: Frontend / HTML builder]
-            [: Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. The implicit [$html:<code>start</code>] function is build-system-owned and not importable or callable as a user declaration.]
+            [: Only active module roots run top-level runtime code. Imported roots expose their public API without replaying runtime work. API-only roots remain importable but emit no HTML page artifact. The implicit [$html:<code>start</code>] function is build-system-owned and not importable or callable as a user declaration.]
         ]
 
         [data:
@@ -340,9 +340,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: HTML project builds]
             [: Supported]
-            [: Broad routing, document shell, metadata, tracked asset, config, output cleanup, external JS glue, and page-fragment coverage.]
+            [: Broad routing, API-only artifact filtering, document shell, metadata, tracked asset, config, output cleanup, external JS glue, and page-fragment coverage.]
             [: HTML / JS]
-            [: This is the release-critical project backend. HTML-Wasm behavior is tracked under experimental surfaces.]
+            [: This is the release-critical project backend. Only roots with HTML artifact activity participate in page, runtime asset, tracked asset, and homepage planning. HTML-Wasm behavior is tracked under experimental surfaces.]
         ]
 
         [data:
