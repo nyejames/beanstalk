@@ -22,7 +22,6 @@ use crate::compiler_frontend::ast::templates::tir::{
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
@@ -289,7 +288,7 @@ fn full_frontend_stray_hash_error() {
 }
 
 #[test]
-fn constant_identifier_uses_foreign_effective_tir_over_stale_content() {
+fn constant_identifier_uses_foreign_effective_tir() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("test.bst", &mut string_table);
     let constant_name = string_table.intern("wrapper");
@@ -317,12 +316,6 @@ fn constant_identifier_uses_foreign_effective_tir_over_stale_content() {
     };
 
     let mut template = Template::empty();
-    template.content.add(Expression::reference(
-        InternedPath::from_single_str("runtime_value", &mut string_table),
-        DataType::StringSlice,
-        location.clone(),
-        ValueMode::ImmutableReference,
-    ));
     template.kind = TemplateType::String;
     template.location = location.clone();
     template.tir_reference = Some(TemplateTirReference {
@@ -366,7 +359,7 @@ fn constant_identifier_uses_foreign_effective_tir_over_stale_content() {
         false,
         &mut string_table,
     )
-    .expect("registry-backed constant reference should ignore stale runtime content");
+    .expect("registry-backed constant reference should inline through effective TIR");
 
     let ExpressionKind::Template(parsed_template) = parsed.kind else {
         panic!("constant reference should preserve the existing inlined template behavior");

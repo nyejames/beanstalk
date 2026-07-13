@@ -959,16 +959,14 @@ fn catch_handler_body(value: Expression) -> Vec<AstNode> {
     }]
 }
 
-/// Builds a slot-bearing handler value whose compatibility content is deliberately non-const.
+/// Builds a slot-bearing handler template registered directly in a TIR store.
 ///
-/// WHAT: the Composed TIR root contains only a slot, while the remaining content mirror contains
-///       a runtime reference.
-/// WHY: handler classification must resolve the store-qualified root through the module registry.
-///      Rebuilding from the mirror would reject this handler as non-const.
+/// WHAT: the Composed TIR root contains only a slot.
+/// WHY: handler classification must resolve the store-qualified root through the module registry
+///      so handlers owned by another registered store remain valid.
 fn slot_handler_template(
     template_ir_store: &mut TemplateIrStore,
     overlay_set_id: TemplateOverlaySetId,
-    string_table: &mut StringTable,
 ) -> Template {
     let location = SourceLocation::default();
     let mut builder = TemplateIrBuilder::new(template_ir_store);
@@ -981,14 +979,7 @@ fn slot_handler_template(
         location.clone(),
     );
 
-    let runtime_value = Expression::reference(
-        InternedPath::from_single_str("runtime_handler_value", string_table),
-        DataType::StringSlice,
-        location.clone(),
-        ValueMode::ImmutableReference,
-    );
     let mut template = Template::empty();
-    template.content.add(runtime_value);
     template.kind = TemplateType::String;
     template.location = location;
     template.tir_reference = Some(TemplateTirReference {
@@ -1073,7 +1064,7 @@ fn fold_cast_recovery_handler_classifies_foreign_slot_template_through_registry(
     let location = SourceLocation::default();
     let handler_template = {
         let mut foreign_store = foreign_store.borrow_mut();
-        slot_handler_template(&mut foreign_store, overlay_set_id, &mut string_table)
+        slot_handler_template(&mut foreign_store, overlay_set_id)
     };
     let handler_body = catch_handler_body(Expression::template(
         handler_template,

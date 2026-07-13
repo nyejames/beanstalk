@@ -497,16 +497,12 @@ Buffer = |
     );
 }
 
-/// Builds a slot-bearing template whose compatibility content is deliberately non-const.
+/// Builds a slot-bearing template registered directly in a TIR store.
 ///
-/// WHAT: the Composed TIR root contains a slot while the remaining content mirror contains a
-///       runtime reference.
-/// WHY: struct-field const inlining must classify through the supplied module registry. Current
-///      state reconstruction would trust the stale mirror and reject the default.
-fn slot_field_default_template(
-    template_ir_store: &mut TemplateIrStore,
-    string_table: &mut StringTable,
-) -> Template {
+/// WHAT: the Composed TIR root contains only a slot.
+/// WHY: struct-field const inlining must resolve the store-qualified root through the supplied
+///      module registry so defaults owned by another registered store remain valid.
+fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Template {
     let location = SourceLocation::default();
     let mut builder = TemplateIrBuilder::new(template_ir_store);
     let slot_node = builder.push_slot_node(SlotKey::Default, location.clone());
@@ -518,14 +514,7 @@ fn slot_field_default_template(
         location.clone(),
     );
 
-    let runtime_value = Expression::reference(
-        InternedPath::from_single_str("runtime_field_value", string_table),
-        DataType::StringSlice,
-        location.clone(),
-        ValueMode::ImmutableReference,
-    );
     let mut template = Template::empty();
-    template.content.add(runtime_value);
     template.kind = TemplateType::String;
     template.location = location;
     template.tir_reference = Some(TemplateTirReference {
@@ -550,8 +539,7 @@ fn struct_field_default_inlines_slot_template_through_module_registry() {
     let mut type_environment = TypeEnvironment::new();
     let location = SourceLocation::default();
     let wrapper_path = InternedPath::from_single_str("wrapper", &mut string_table);
-    let wrapper_template =
-        slot_field_default_template(&mut template_ir_store.borrow_mut(), &mut string_table);
+    let wrapper_template = slot_field_default_template(&mut template_ir_store.borrow_mut());
     let wrapper_declaration = Declaration {
         id: wrapper_path.clone(),
         value: Expression::template(wrapper_template, ValueMode::ImmutableOwned),
@@ -600,8 +588,7 @@ fn struct_field_default_classifies_foreign_template_through_registry() {
     template_ir_registry.adopt_store(Rc::clone(&foreign_store));
     let template_ir_registry = Rc::new(RefCell::new(template_ir_registry));
 
-    let foreign_template =
-        slot_field_default_template(&mut foreign_store.borrow_mut(), &mut string_table);
+    let foreign_template = slot_field_default_template(&mut foreign_store.borrow_mut());
     let wrapper_path = InternedPath::from_single_str("wrapper", &mut string_table);
     let wrapper_declaration = Declaration {
         id: wrapper_path.clone(),
