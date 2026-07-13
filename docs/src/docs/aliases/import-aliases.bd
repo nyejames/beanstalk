@@ -43,7 +43,7 @@ Import aliases must not collide with any visible name in the same file, includin
 Aliases do not shadow an existing visible name. A collision is a compile error.
 
 [codeblock, $code("bst"):
-    render ||:
+    render || -> String:
         return "local"
     ;
 
@@ -108,17 +108,14 @@ A grouped import cannot use a single alias for the whole group.
 
 ### Facade and public-name distinction
 
-An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. The current `#mod.bst` export syntax is owned by @../project-structure (Project Structure) and @../libraries (Libraries). Do not treat a local import alias as a public API rename.
+An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself does not choose a special facade role. The current export syntax is owned by @../project-structure (Project Structure) and @../libraries (Libraries). Do not treat a local import alias as a public API rename.
 
 [codeblock, $code("bst"):
     -- Ordinary local import alias
     import @models { User as ModelUser }
-
-    -- Public facade re-export is a separate surface
-    -- export @models { User as PublicUser }
 ]
 
-The local `ModelUser` is visible only in this file. The exact public export syntax must match the current compiler's explicit `export:` block rules.
+The local `ModelUser` is visible only in this file. A public rename belongs inside the module root's current explicit `export:` block. See @../project-structure (Project Structure) and @../libraries (Libraries) for the exact current form.
 
 ### Import aliases with type aliases
 
@@ -136,4 +133,4 @@ This combines a file-local import rename with a domain-specific type alias.
 
 - For type aliases see the previous section.
 - For payload capture aliases see the next section.
-- For import syntax and `#mod.bst` see @../libraries (Libraries) and @../project-structure (Project Structure).
+- For import syntax and module roots see @../libraries (Libraries) and @../project-structure (Project Structure).

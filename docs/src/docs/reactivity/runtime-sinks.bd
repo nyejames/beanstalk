@@ -20,7 +20,7 @@ Plain string fragments keep ordinary insertion behaviour.
 
 ### Target gates
 
-- HTML-JS supports reachable reactive runtime features.
+- HTML-JS supports the accepted V1 reactive source and template feature set when it reaches the supported top-level runtime HTML-fragment sink.
 - HTML-Wasm rejects reachable reactive runtime features until it has equivalent support.
 - Unsupported sinks must not silently become live.
 
@@ -35,5 +35,5 @@ The language contract is the source syntax, the metadata and the supported sink 
 
 ### Related concepts
 
-- For subscriptions see @./subscriptions (Subscriptions).
+- For subscriptions see @#subscriptions (Subscriptions).
 - For project structure and HTML output see @../project-structure (Project Structure).

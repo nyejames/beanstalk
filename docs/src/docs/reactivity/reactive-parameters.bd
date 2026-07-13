@@ -57,5 +57,5 @@ The source is read once and the snapshot value is passed.
 
 ### Related concepts
 
-- For reactive sources see @./reactive-sources (Reactive sources).
-- For subscriptions see @./subscriptions (Subscriptions).
+- For reactive sources see @#reactive-sources (Reactive sources).
+- For subscriptions see @#subscriptions (Subscriptions).

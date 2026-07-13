@@ -29,7 +29,7 @@ When you match a choice with a payload, the field name becomes the local variabl
     ;
 ]
 
-Without the alias, the arm would shadow the outer `message`. The alias keeps both names distinct.
+Without the alias, the capture would collide with the visible outer `message` and be rejected. The alias keeps both names distinct.
 
 ### Remember
 

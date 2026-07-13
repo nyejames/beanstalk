@@ -41,14 +41,19 @@ Inference does not use:
 Use an intermediate annotation when a nested generic call would otherwise need evidence from its parent call.
 
 [codeblock, $code("bst"):
-    parse_json type A |text String| -> A, Error!:
-        return A() -- placeholder body
+    empty type A || -> {A}:
+        return {}
     ;
 
-    save_user |user User|:
+    consume |values {Int}|:
     ;
 
-    -- user User = parse_json(text)! -- if inference failed, annotate
+    -- Rejected: outer parameter context does not solve the nested call.
+    consume(empty())
+
+    -- Valid: annotate the nested result first.
+    items {Int} = empty()
+    consume(items)
 ]
 
 ### Optional and fallible generic returns
@@ -60,19 +65,13 @@ Generic functions may return optional or fallible values when the concrete envel
         return value
     ;
 
-    read_or_raise type T, E |value T, err E, fail Bool| -> T, E!:
-        if fail:
-            return! err
-        ;
-
-        return value
+    always_fail type T, E |fallback T, err E| -> T, E!:
+        return! err
     ;
 
     maybe_name String? = wrap_optional("Ana")
 
-    value = read_or_raise(7, Error("bad"), false) catch:
-        then 0
-    ;
+    value = always_fail(7, Error("bad")) catch |err| then 0
 ]
 
 A bare `none` cannot infer an otherwise unknown parameter by itself.
@@ -84,6 +83,19 @@ Visible imported generic functions use the same local inference rules. There is 
 ### Cast boundary
 
 Generic inference does not look through `cast`. The cast target must be selected after the generic call has already been solved.
+
+### Generic error parameter inference
+
+A concrete callee error type does not specialise an otherwise unsolved generic error parameter merely because it appears inside the generic body. Immediate declaration and call-site evidence must still solve the parameter.
+
+[codeblock, $code("bst"):
+    -- Rejected: E is not solved by the concrete Error inside the body.
+    generic_fail type E || -> Int, E!:
+        return! Error("bad")
+    ;
+]
+
+A generic error parameter must be solved by immediate call-site evidence, just like any other generic parameter.
 
 ### Explicit call-site syntax is rejected
 
@@ -98,5 +110,5 @@ All of these are rejected:
 
 ### Related concepts
 
-- For generic declarations see @./generic-declarations (Generic declarations).
-- For concrete instance behaviour see @./generic-instances (Generic instances).
+- For generic declarations see @#generic-declarations (Generic declarations).
+- For concrete instance behaviour see @#generic-instances (Generic instances).

@@ -37,5 +37,5 @@ A trait name may appear in trait declarations, conformance declarations and gene
 
 ### Related concepts
 
-- For requirement syntax see @./trait-requirements (Trait requirements).
-- For conformance see @./conformance (Conformance).
+- For requirement syntax see @#trait-requirements (Trait requirements).
+- For conformance see @#conformance (Conformance).

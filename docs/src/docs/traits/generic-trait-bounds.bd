@@ -50,7 +50,9 @@ Generic bounds use traits to promise that a generic parameter provides certain b
 
 ### Evidence must be visible
 
-Concrete calls and instantiations require reusable evidence. The evidence is created by a same-file conformance declaration.
+Concrete calls and instantiations require reusable evidence. User-authored reusable evidence originates from the canonical conformance declared with the same-file target type. Callers may reuse that evidence wherever both the type and trait are visible.
+
+Compiler-owned evidence also exists for the builtin cast table.
 
 [codeblock, $code("bst"):
     Label = |
@@ -68,5 +70,5 @@ Concrete calls and instantiations require reusable evidence. The evidence is cre
 
 ### Related concepts
 
-- For conformance see @./conformance (Conformance).
+- For conformance see @#conformance (Conformance).
 - For generics see @../generics (Generics).

@@ -2327,7 +2327,7 @@ Keep these visible until separately resolved. Classification:
 | 12 | Assert optional message arity | Required | Optional literal accepted | Confirmed current language |
 | 13 | Option ordering operators | Not discussed | Rejected | Confirmed rejection |
 | 14 | Function parameter default cross-parameter dependency | Not discussed | Rejected | Confirmed rejection |
-| 15 | Unused generic parameter policy | Accepted | Rejected with BST-RULE-0043 | Confirmed rejection |
+| 15 | Unused generic parameter policy | Silent | Rejected with BST-RULE-0043 | Confirmed rejection |
 | 16 | Aligned declaration-site generic receiver methods | Mentioned | Accepted with `type A \|this Box of A\|` syntax | Confirmed current language |
 | 17 | Receiver methods on concrete generic instances | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
 | 18 | Nested inline `of` type application | Rejected | Rejected with explicit diagnostic | Confirmed Alpha restriction |
@@ -2343,17 +2343,77 @@ Keep these visible until separately resolved. Classification:
 | 28 | Empty or multiple subscription arguments | Rejected | Rejected with explicit diagnostic | Confirmed rejection |
 | 29 | Whitespace-separated `$ (source)` subscription syntax | Rejected | Rejected with invalid-character diagnostic | Confirmed rejection |
 | 30 | HTML-Wasm runtime support for reactive features | Not discussed | Rejected before lowering | Confirmed target gate |
+| 31 | Alias name as constructor for struct/choice target | Not discussed | Rejected with BST-RULE-0037; only canonical name constructs | Confirmed rejection |
+| 32 | Nested `of` inside collection element annotation | Not discussed | Rejected with BST-SYNTAX-0015; single `of` in element is accepted | Confirmed Alpha restriction |
+| 33 | Concrete callee error solving generic error parameter | Not discussed | Rejected; parameter must be solved by immediate evidence | Confirmed rejection |
 
 Ordinary documentation migration patches do not authorise compiler changes for
 these discrepancies.
 
-### 21.6 Aliases, Generics, Traits and Reactivity verification pass
+### 21.6 Aliases, Generics, Traits and Reactivity batch
 
-This batch verified and documented the surfaces above. The previous correction
-pass confirmed the following current language facts and gaps, which remain
-accurate:
+This batch landed at commit `10ee84b29a1fd8a3cd24f7f9fef9fb129abf3643`.
+
+Route pairs landed:
+
+- Aliases: `type-aliases`, `import-aliases`, `payload-capture-aliases`
+- Generics: `generic-declarations`, `type-application`, `generic-inference`, `generic-instances`, `generic-limits`
+- Traits: `trait-declarations`, `trait-requirements`, `conformance`, `generic-trait-bounds`, `trait-incompatibility`, `core-cast-traits`, `trait-design-scope`
+- Reactivity: `reactive-sources`, `subscriptions`, `reactive-parameters`, `mutation-and-invalidation`, `runtime-sinks`, `reactivity-scope`
+
+Generated pages built and inspected for all four routes.
+
+A correction pass was required because the implementation agent hit its usage limit during final
+review. The correction pass repaired the following findings:
+
+#### Review findings
+
+- alias constructor spelling: the blanket claim "type aliases are not constructors" was suspect.
+  Probes confirmed that only the target's canonical nominal name constructs; the alias spelling is
+  rejected with `BST-RULE-0037` for both struct and choice aliases. Documentation updated with the
+  exact rule.
+- generic invalid placeholder constructor example: `parse_json` used `return A()`, which is not a
+  valid generic operation. Replaced with the verified `empty()` / `consume()` nested-inference
+  probe.
+- generic nested `return!` example: `read_or_raise` used `return!` inside an `if` block, which the
+  compiler rejects. Replaced with a top-level `always_fail` example that uses `return!` at function
+  scope.
+- broken intra-page concept links: detailed files used file-like links such as `@./type-application`
+  instead of same-page anchors `@#type-application`. Cross-page concept links such as
+  `@../traits/generic-trait-bounds` were corrected to `@../traits/#generic-trait-bounds`.
+- stale `#mod.bst` wording: Aliases documentation referred to `#mod.bst` as a semantic facade.
+  Corrected to use neutral module-root wording and link to Project Structure and Libraries.
+- incomplete fallible cast conformance example: the Advanced `TRY_CASTABLE_TO_INT` example declared
+  conformance without defining the required `try_to_int` method. Replaced with a complete verified
+  implementation showing success with `return`, failure with `return!`, local recovery with
+  `cast ... catch`, propagation with `cast!`, and the rejection of `cast! ... catch`.
+- invalid Basic fallible cast example: the Basic `TRY_CASTABLE_TO_INT` example used `return 0,
+  Error("not implemented")` instead of `return!`, and combined `cast!` with `catch`. Replaced with
+  a coherent fallible method using `return!` and a local recovery call using `cast ... catch`.
+- unhandled reactive collection mutation example: both Basic and Advanced used
+  `~names.push("Grace")!` at top level, which is rejected because no error channel exists.
+  Replaced with the handled `catch` form.
+
+#### Verified discrepancy classifications
+
+- unused generic parameter: the monolith is silent rather than affirmatively accepting unused
+  parameters. The compiler rejects them with `BST-RULE-0043`.
+- alias constructor spelling: verified. Only the target's canonical nominal name constructs. The
+  alias spelling is rejected for structs, choices and builtins alike.
+- collection-element nested `of`: verified. One inline `of` application inside a collection element
+  annotation is accepted (such as `{Box of String}`). Nested `of` inside a collection element is
+  rejected with `BST-SYNTAX-0015`, matching the general nested `of` restriction.
+- generic error inference: verified. A concrete callee error type does not specialise an otherwise
+  unsolved generic error parameter. The parameter must be solved by immediate declaration and
+  call-site evidence.
+- reactive metadata propagation: all listed paths (assignment, return, direct argument passing,
+  ordinary `String` parameters inserted into templates) are deliberate and tested in the reactive
+  template metadata test suite.
 
 #### Confirmed current language or stale monolith
+
+The previous verification pass confirmed the following current language facts and gaps, which
+remain accurate:
 
 - optional assert message
 - inline bound catch
@@ -2373,14 +2433,9 @@ accurate:
 
 ### Next route work
 
-The current migration batch is:
+The Aliases, Generics, Traits and Reactivity batch is complete and has passed correction review.
 
-1. Aliases
-2. Generics
-3. Traits
-4. Reactivity
-
-After this batch passes review, continue with:
+Continue with:
 
 1. Project Structure
 2. Libraries and Imports

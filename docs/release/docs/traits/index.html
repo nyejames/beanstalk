@@ -729,7 +729,7 @@ body {
     </code></pre><h3>Exact contract</h3><ul><li>A trait is an explicit nominal method contract.</li><li>Trait names use all-caps identifiers.</li><li>Trait declarations are top-level.</li><li><code>TRAIT must:</code> opens a trait declaration.</li><li>One final semicolon closes the declaration.</li><li>Requirements are method signatures only.</li><li>Marker traits with no requirements are valid.</li><li>Traits are compile-time static contracts.</li><li>Traits are not runtime values.</li><li>Static non-method requirements are deferred.</li><li>Generic traits and generic trait methods are outside scope.</li></ul><h3>Marker traits</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>SERIALIZABLE</span> must<span class='bst-code-operator'>:</span>
     ;
-    </code></pre><p>A marker trait carries no requirements but still represents a deliberate contract that a type may declare.</p><h3>Traits are not value types</h3><p>A trait name may appear in trait declarations, conformance declarations and generic bounds. It is invalid as an ordinary variable, parameter, field, return, collection element, choice payload or alias target type.</p><h3>Related concepts</h3><ul><li>For requirement syntax see <a href="./trait-requirements">Trait requirements</a>.</li><li>For conformance see <a href="./conformance">Conformance</a>.</li></ul>
+    </code></pre><p>A marker trait carries no requirements but still represents a deliberate contract that a type may declare.</p><h3>Traits are not value types</h3><p>A trait name may appear in trait declarations, conformance declarations and generic bounds. It is invalid as an ordinary variable, parameter, field, return, collection element, choice payload or alias target type.</p><h3>Related concepts</h3><ul><li>For requirement syntax see <a href="#trait-requirements">Trait requirements</a>.</li><li>For conformance see <a href="#conformance">Conformance</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -815,7 +815,7 @@ body {
     <span class='bst-code-struct'>SAME</span> must<span class='bst-code-operator'>:</span>
         equals <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> other <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Bool</span>
     ;
-    </code></pre><p><code>This</code> as a non-receiver parameter must carry a name.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="./trait-declarations">Trait declarations</a>.</li><li>For conformance matching see <a href="./conformance">Conformance</a>.</li></ul>
+    </code></pre><p><code>This</code> as a non-receiver parameter must carry a name.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="#trait-declarations">Trait declarations</a>.</li><li>For conformance matching see <a href="#conformance">Conformance</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -914,7 +914,7 @@ body {
     </code></pre><h3>Rejected targets</h3><pre style=""><code class='codeblock'>
     <span class='bst-code-comment'>-- Error: builtin types cannot declare user-authored conformance</span>
     <span class='bst-code-type'>Int</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
-    </code></pre><p>Use a local wrapper choice or struct when adapting a value owned by another file or package.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="./trait-declarations">Trait declarations</a>.</li><li>For generic bounds see <a href="./generic-trait-bounds">Generic trait bounds</a>.</li><li>For receiver methods see <a href="../structs/receiver-methods">Receiver methods</a>.</li></ul>
+    </code></pre><p>Use a local wrapper choice or struct when adapting a value owned by another file or package.</p><h3>Related concepts</h3><ul><li>For trait declarations see <a href="#trait-declarations">Trait declarations</a>.</li><li>For generic bounds see <a href="#generic-trait-bounds">Generic trait bounds</a>.</li><li>For receiver methods see <a href="../structs/#receiver-methods">Receiver methods</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -1006,7 +1006,7 @@ body {
     render_pair type <span class='bst-code-struct'>A</span> is <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>B</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>A,</span> right <span class='bst-code-struct'>B</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> left.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>+</span> right.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><h3>Evidence must be visible</h3><p>Concrete calls and instantiations require reusable evidence. The evidence is created by a same-file conformance declaration.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Evidence must be visible</h3><p>Concrete calls and instantiations require reusable evidence. User-authored reusable evidence originates from the canonical conformance declared with the same-file target type. Callers may reuse that evidence wherever both the type and trait are visible.</p><p>Compiler-owned evidence also exists for the builtin cast table.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
@@ -1018,7 +1018,7 @@ body {
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
 
     value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h3>Related concepts</h3><ul><li>For conformance see <a href="./conformance">Conformance</a>.</li><li>For generics see <a href="../generics">Generics</a>.</li></ul>
+    </code></pre><h3>Related concepts</h3><ul><li>For conformance see <a href="#conformance">Conformance</a>.</li><li>For generics see <a href="../generics">Generics</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -1094,7 +1094,7 @@ body {
     ;
 
     <span class='bst-code-struct'>TEXT</span> must not <span class='bst-code-struct'>FALLIBLE_TEXT</span>
-    </code></pre><h3>Exact contract</h3><ul><li>Incompatibility is trait metadata.</li><li>It is symmetric.</li><li>A concrete type cannot explicitly conform to both sides.</li><li>Several incompatible traits may be listed.</li><li>It affects conformance validation only.</li><li>It does not:<ul><li>add requirements</li><li>imply negative conformance</li><li>create trait composition</li><li>create inheritance</li><li>affect runtime dispatch</li></ul></li></ul><h3>Compiler-owned pairs</h3><p>The compiler uses <code>must not</code> for incompatible core cast trait pairs. For example, <code>CASTABLE_TO_STRING</code> and <code>TRY_CASTABLE_TO_STRING</code> cannot both be claimed for the same target type.</p><h3>Related concepts</h3><ul><li>For conformance see <a href="./conformance">Conformance</a>.</li><li>For core cast traits see <a href="./core-cast-traits">Core cast traits</a>.</li></ul>
+    </code></pre><h3>Exact contract</h3><ul><li>Incompatibility is trait metadata.</li><li>It is symmetric.</li><li>A concrete type cannot explicitly conform to both sides.</li><li>Several incompatible traits may be listed.</li><li>It affects conformance validation only.</li><li>It does not:<ul><li>add requirements</li><li>imply negative conformance</li><li>create trait composition</li><li>create inheritance</li><li>affect runtime dispatch</li></ul></li></ul><h3>Compiler-owned pairs</h3><p>The compiler uses <code>must not</code> for incompatible core cast trait pairs. For example, <code>CASTABLE_TO_STRING</code> and <code>TRY_CASTABLE_TO_STRING</code> cannot both be claimed for the same source type. The conforming type is the cast source type; the trait name identifies the cast target.</p><h3>Related concepts</h3><ul><li>For conformance see <a href="#conformance">Conformance</a>.</li><li>For core cast traits see <a href="#core-cast-traits">Core cast traits</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -1164,15 +1164,15 @@ body {
     <span class='bst-code-operator'>|</span>
 
     try_to_int <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>, <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not implemented&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not a number&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
 
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>TRY_CASTABLE_TO_INT</span>
 
-    number <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    number <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-    </code></pre><p><code>TRY_CASTABLE_TO_INT</code> means: this type may become an <code>Int</code>, but it can also fail.</p><h3>Remember</h3><ul><li>Core cast trait names are owned by the compiler.</li><li>You cannot redefine, import, export or alias them.</li><li>You declare conformance the same way as for user traits.</li></ul>
+    </code></pre><p><code>TRY_CASTABLE_TO_INT</code> means: this type may become an <code>Int</code>, but it can also fail. The method signals failure with <code>return!</code> and the caller recovers with <code>cast ... catch</code>.</p><h3>Remember</h3><ul><li>Core cast trait names are owned by the compiler.</li><li>You cannot redefine, import, export or alias them.</li><li>You declare conformance the same way as for user traits.</li></ul>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
@@ -1194,9 +1194,28 @@ body {
 
     <span class='bst-code-comment'>-- Fallible: source may produce the target or an error</span>
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>TRY_CASTABLE_TO_INT</span>
+    </code></pre><p>A fallible conformance requires the matching <code>try_to_*</code> method. The method returns success with <code>return</code> and failure with <code>return!</code>:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
 
-    number <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h3>Related concepts</h3><ul><li>For cast target selection and fallible handling see <a href="../casts">Casts</a>.</li><li>For trait incompatibility see <a href="./trait-incompatibility">Trait incompatibility</a>.</li></ul>
+    try_to_int <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> this.text
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>TRY_CASTABLE_TO_INT</span>
+
+    <span class='bst-code-comment'>-- Local recovery with `cast ... catch`.</span>
+    number <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;42&quot;</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>Propagation through a compatible <code>Error!</code> function uses <code>cast!</code>:</p><pre style=""><code class='codeblock'>
+    parse_label <span class='bst-code-operator'>|</span>label <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast<span class='bst-code-operator'>!</span> label
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p><code>cast!</code> and <code>catch</code> are mutually exclusive. <code>cast! ... catch</code> is rejected.</p><h3>Related concepts</h3><ul><li>For cast target selection and fallible handling see <a href="../casts">Casts</a>.</li><li>For trait incompatibility see <a href="#trait-incompatibility">Trait incompatibility</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -1270,7 +1289,7 @@ body {
         <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
         <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
     ;
-    </code></pre><p>Static traits are backend-independent. Backends do not receive trait objects, erased dispatch or runtime evidence tables.</p><h3>Deferred</h3><ul><li>static non-method requirements</li><li>compiler-owned builtin conformance facts</li><li>broader standard trait taxonomy that does not create runtime trait values</li></ul><h3>Outside scope</h3><ul><li>default methods</li><li>associated types and constants</li><li>inheritance</li><li>trait aliases and composition</li><li>generic traits and generic methods</li><li>blanket, conditional, negative or specialised conformance</li><li>structural conformance</li><li>dynamic trait values and trait objects</li><li>downcasting and reflection</li><li>output coercion</li><li>operator integration</li><li>automatic primitive conformance</li><li>derive-style hashing, ordering, formatting, iteration or serialization families</li></ul><p>Do not treat compiler-owned test-only or scaffold traits as public language features.</p><h3>Related concepts</h3><ul><li>For runtime heterogeneity see <a href="../choices">Choices</a>.</li><li>For generic bounds see <a href="./generic-trait-bounds">Generic trait bounds</a>.</li></ul>
+    </code></pre><p>Static traits are backend-independent. Backends do not receive trait objects, erased dispatch or runtime evidence tables.</p><h3>Deferred</h3><ul><li>static non-method requirements</li><li>additional compiler-owned builtin conformance families beyond the current closed core-cast evidence table</li><li>broader standard trait taxonomy that does not create runtime trait values</li></ul><h3>Outside scope</h3><ul><li>default methods</li><li>associated types and constants</li><li>inheritance</li><li>trait aliases and composition</li><li>generic traits and generic methods</li><li>blanket, conditional, negative or specialised conformance</li><li>structural conformance</li><li>dynamic trait values and trait objects</li><li>downcasting and reflection</li><li>output coercion</li><li>operator integration</li><li>automatic primitive conformance</li><li>derive-style hashing, ordering, formatting, iteration or serialization families</li></ul><p>Do not treat compiler-owned test-only or scaffold traits as public language features.</p><h3>Related concepts</h3><ul><li>For runtime heterogeneity see <a href="../choices">Choices</a>.</li><li>For generic bounds see <a href="#generic-trait-bounds">Generic trait bounds</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">

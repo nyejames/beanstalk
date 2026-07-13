@@ -730,7 +730,7 @@ body {
     <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
 
     names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><h3>Remember</h3><ul><li>A type alias is for naming, not for creating a new type.</li><li>Aliases work in parameters, fields, returns and local annotations.</li><li>Aliases are not values. You cannot pass <code>UserId</code> to a function or call it as a constructor.</li></ul>
+    </code></pre><h3>Remember</h3><ul><li>A type alias is for naming, not for creating a new type.</li><li>Aliases work in parameters, fields, returns and local annotations.</li><li>Aliases are not values. You cannot pass <code>UserId</code> to a function or call it as a constructor. Even when an alias targets a struct or choice, only the target&#39;s canonical name constructs.</li></ul>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
@@ -759,15 +759,33 @@ body {
     <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Name</span><span class='bst-code-parenthesis'>}</span>
 
     names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><h3>Cycles</h3><p>Alias cycles are invalid. The compiler reports a circular dependency.</p><h3>Type aliases are not constructors</h3><p>If an alias targets a constructible type, construct the real target type. The alias name is not a constructor.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Cycles</h3><p>Alias cycles are invalid. The compiler reports a circular dependency.</p><h3>Aliases are not constructors</h3><p>An alias does not create a new constructor. The alias name is not callable even when the alias targets a constructible nominal type. Construct the target type using its canonical nominal name.</p><p>For struct aliases, only the struct&#39;s canonical name constructs:</p><pre style=""><code class='codeblock'>
     <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         name <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
 
     <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Person</span>
 
+    <span class='bst-code-comment'>-- Valid: construct with the canonical name</span>
     person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h3>Visibility and facade behaviour</h3><p>Type aliases follow ordinary visibility and facade rules. A type alias declared in a source file is importable by other files in the same module. Cross-module exposure is controlled by the module&#39;s <code>#mod.bst</code> facade. A public facade may re-export an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.</p><h3>Related concepts</h3><ul><li>For concrete generic application see <a href="../generics">Generics</a>.</li><li>For import aliasing see the next section.</li><li>For project visibility and <code>#mod.bst</code> see <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>.</li></ul>
+
+    <span class='bst-code-comment'>-- Error: MainPerson is a type, not a constructor</span>
+    <span class='bst-code-comment'>-- person MainPerson = MainPerson(&quot;Ada&quot;)</span>
+    </code></pre><p>For choice aliases, only the choice&#39;s canonical name constructs variants:</p><pre style=""><code class='codeblock'>
+    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready,</span>
+        <span class='bst-code-struct'>Failed</span> <span class='bst-code-operator'>|</span> message <span class='bst-code-type'>String</span> <span class='bst-code-operator'>|</span>,
+    ;
+
+    <span class='bst-code-struct'>State</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Status</span>
+
+    <span class='bst-code-comment'>-- Valid: construct with the canonical name</span>
+    ready <span class='bst-code-struct'>State</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    failed <span class='bst-code-struct'>State</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Failed</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-comment'>-- Error: State is a type, not a constructor</span>
+    <span class='bst-code-comment'>-- ready State = State::Ready</span>
+    </code></pre><p>Aliases to scalar or otherwise non-constructible targets are not callable for the same reason: the alias name is a type, not a value.</p><h3>Visibility and facade behaviour</h3><p>Type aliases follow ordinary visibility and facade rules. A type alias declared in a source file is importable by other files in the same module. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself does not choose a special facade role. A public re-export may expose an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.</p><h3>Related concepts</h3><ul><li>For concrete generic application see <a href="../generics">Generics</a>.</li><li>For import aliasing see the next section.</li><li>For project visibility and module roots see <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -841,7 +859,7 @@ body {
         <span class='bst-code-struct'>PI</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>CIRCLE_PI,</span>
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><h3>Exact contract</h3><ul><li>A namespace alias changes the namespace name visible in one file.</li><li>A grouped symbol alias changes one imported binding visible in one file.</li><li>The source declaration keeps its canonical exported identity.</li><li>Ordinary import aliases are file-local.</li><li>Ordinary import aliases are not automatically re-exported.</li><li>Aliases work for every importable symbol category the import surface supports: functions, constants, structs, choices, type aliases and external package members.</li><li>External package aliases follow the same local collision policy as source imports.</li><li>Each grouped entry is renamed separately.</li><li>A grouped import cannot use one trailing group-level alias.</li></ul><h3>Collision rules</h3><p>Import aliases must not collide with any visible name in the same file, including:</p><ul><li>same-file declarations</li><li>other imports</li><li>other aliases</li><li>type aliases</li><li>builtins</li><li>preluded names</li></ul><p>Aliases do not shadow an existing visible name. A collision is a compile error.</p><pre style=""><code class='codeblock'>
-    render <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    render <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;local&quot;</span>
     ;
 
@@ -876,17 +894,14 @@ body {
         <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiButton,</span>
         <span class='bst-code-struct'>Card</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiCard,</span>
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><h3>Facade and public-name distinction</h3><p>An ordinary import alias is private to the importing file. A public name chosen in a module root&#39;s export surface is a different operation. The current <code>#mod.bst</code> export syntax is owned by <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>. Do not treat a local import alias as a public API rename.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Facade and public-name distinction</h3><p>An ordinary import alias is private to the importing file. A public name chosen in a module root&#39;s export surface is a different operation. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself does not choose a special facade role. The current export syntax is owned by <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>. Do not treat a local import alias as a public API rename.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-comment'>-- Ordinary local import alias</span>
     import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-comment'>-- Public facade re-export is a separate surface</span>
-    <span class='bst-code-comment'>-- export @models { User as PublicUser }</span>
-    </code></pre><p>The local <code>ModelUser</code> is visible only in this file. The exact public export syntax must match the current compiler&#39;s explicit <code>export:</code> block rules.</p><h3>Import aliases with type aliases</h3><p>A type alias may target an imported type alias.</p><pre style=""><code class='codeblock'>
+    </code></pre><p>The local <code>ModelUser</code> is visible only in this file. A public rename belongs inside the module root&#39;s current explicit <code>export:</code> block. See <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a> for the exact current form.</p><h3>Import aliases with type aliases</h3><p>A type alias may target an imported type alias.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span> <span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-struct'>CurrentUser</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span>
-    </code></pre><p>This combines a file-local import rename with a domain-specific type alias.</p><h3>Related concepts</h3><ul><li>For type aliases see the previous section.</li><li>For payload capture aliases see the next section.</li><li>For import syntax and <code>#mod.bst</code> see <a href="../libraries">Libraries</a> and <a href="../project-structure">Project Structure</a>.</li></ul>
+    </code></pre><p>This combines a file-local import rename with a domain-specific type alias.</p><h3>Related concepts</h3><ul><li>For type aliases see the previous section.</li><li>For payload capture aliases see the next section.</li><li>For import syntax and module roots see <a href="../libraries">Libraries</a> and <a href="../project-structure">Project Structure</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -957,7 +972,7 @@ body {
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> failure_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>failure_message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io.line<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Without the alias, the arm would shadow the outer <code>message</code>. The alias keeps both names distinct.</p><h3>Remember</h3><ul><li>The name before <code>as</code> must match the field name.</li><li>The new name is visible only inside that arm.</li><li>It does not rename the field on the choice.</li></ul>
+    </code></pre><p>Without the alias, the capture would collide with the visible outer <code>message</code> and be rejected. The alias keeps both names distinct.</p><h3>Remember</h3><ul><li>The name before <code>as</code> must match the field name.</li><li>The new name is visible only inside that arm.</li><li>It does not rename the field on the choice.</li></ul>
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">

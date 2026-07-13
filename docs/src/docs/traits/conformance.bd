@@ -73,6 +73,6 @@ Use a local wrapper choice or struct when adapting a value owned by another file
 
 ### Related concepts
 
-- For trait declarations see @./trait-declarations (Trait declarations).
-- For generic bounds see @./generic-trait-bounds (Generic trait bounds).
-- For receiver methods see @../structs/receiver-methods (Receiver methods).
+- For trait declarations see @#trait-declarations (Trait declarations).
+- For generic bounds see @#generic-trait-bounds (Generic trait bounds).
+- For receiver methods see @../structs/#receiver-methods (Receiver methods).

@@ -51,5 +51,5 @@ Multiple method requirements may appear in one trait. The current separator betw
 
 ### Related concepts
 
-- For trait declarations see @./trait-declarations (Trait declarations).
-- For conformance matching see @./conformance (Conformance).
+- For trait declarations see @#trait-declarations (Trait declarations).
+- For conformance matching see @#conformance (Conformance).

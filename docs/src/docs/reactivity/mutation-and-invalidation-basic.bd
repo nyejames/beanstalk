@@ -13,10 +13,13 @@ Assigning to `count` updates the source. Anything subscribed to `count` will kno
 
 [codeblock, $code("bst"):
     names ${String} = {"Ada"}
-    ~names.push("Grace")!
+
+    ~names.push("Grace") catch:
+        io.line("push failed")
+    ;
 ]
 
-You still need `~` to mutate the collection. Reactivity does not relax the access rules.
+You still need `~` to mutate the collection. Reactivity does not relax the access rules. Fallible operations like `push` must be handled with `catch` or propagated inside a compatible `Error!` function.
 
 ### Remember
 

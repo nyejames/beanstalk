@@ -26,17 +26,17 @@ The compiler owns a fixed set of traits that let user types work with `cast`.
     |
 
     try_to_int |this Label| -> Int, Error!:
-        return 0, Error("not implemented")
+        return! Error("not a number")
     ;
 
     Label must TRY_CASTABLE_TO_INT
 
-    number = cast! Label("42") catch:
+    number Int = cast Label("42") catch |err|:
         then 0
     ;
 ]
 
-`TRY_CASTABLE_TO_INT` means: this type may become an `Int`, but it can also fail.
+`TRY_CASTABLE_TO_INT` means: this type may become an `Int`, but it can also fail. The method signals failure with `return!` and the caller recovers with `cast ... catch`.
 
 ### Remember
 

@@ -51,4 +51,4 @@ An alias can name a collection type.
 
 - A type alias is for naming, not for creating a new type.
 - Aliases work in parameters, fields, returns and local annotations.
-- Aliases are not values. You cannot pass `UserId` to a function or call it as a constructor.
+- Aliases are not values. You cannot pass `UserId` to a function or call it as a constructor. Even when an alias targets a struct or choice, only the target's canonical name constructs.

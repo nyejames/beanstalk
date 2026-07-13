@@ -70,6 +70,6 @@ Header parsing records generic parameter lists and declaration metadata. AST res
 
 ### Related concepts
 
-- For applying concrete type arguments see @./type-application (Type application).
-- For call-site inference see @./generic-inference (Generic inference).
-- For trait bounds see @../traits/generic-trait-bounds (Generic trait bounds).
+- For applying concrete type arguments see @#type-application (Type application).
+- For call-site inference see @#generic-inference (Generic inference).
+- For trait bounds see @../traits/#generic-trait-bounds (Generic trait bounds).

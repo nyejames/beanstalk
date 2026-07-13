@@ -84,9 +84,11 @@ Aliases may chain through other aliases. The chain remains transparent and resol
 
 Alias cycles are invalid. The compiler reports a circular dependency.
 
-### Type aliases are not constructors
+### Aliases are not constructors
 
-If an alias targets a constructible type, construct the real target type. The alias name is not a constructor.
+An alias does not create a new constructor. The alias name is not callable even when the alias targets a constructible nominal type. Construct the target type using its canonical nominal name.
+
+For struct aliases, only the struct's canonical name constructs:
 
 [codeblock, $code("bst"):
     Person = |
@@ -95,15 +97,39 @@ If an alias targets a constructible type, construct the real target type. The al
 
     MainPerson as Person
 
+    -- Valid: construct with the canonical name
     person MainPerson = Person("Ada")
+
+    -- Error: MainPerson is a type, not a constructor
+    -- person MainPerson = MainPerson("Ada")
 ]
+
+For choice aliases, only the choice's canonical name constructs variants:
+
+[codeblock, $code("bst"):
+    Status ::
+        Ready,
+        Failed | message String |,
+    ;
+
+    State as Status
+
+    -- Valid: construct with the canonical name
+    ready State = Status::Ready
+    failed State = Status::Failed("bad")
+
+    -- Error: State is a type, not a constructor
+    -- ready State = State::Ready
+]
+
+Aliases to scalar or otherwise non-constructible targets are not callable for the same reason: the alias name is a type, not a value.
 
 ### Visibility and facade behaviour
 
-Type aliases follow ordinary visibility and facade rules. A type alias declared in a source file is importable by other files in the same module. Cross-module exposure is controlled by the module's `#mod.bst` facade. A public facade may re-export an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.
+Type aliases follow ordinary visibility and facade rules. A type alias declared in a source file is importable by other files in the same module. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself does not choose a special facade role. A public re-export may expose an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.
 
 ### Related concepts
 
 - For concrete generic application see @../generics (Generics).
 - For import aliasing see the next section.
-- For project visibility and `#mod.bst` see @../project-structure (Project Structure) and @../libraries (Libraries).
+- For project visibility and module roots see @../project-structure (Project Structure) and @../libraries (Libraries).

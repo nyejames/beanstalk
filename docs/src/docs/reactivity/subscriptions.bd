@@ -54,6 +54,6 @@ The first reads the value once. The second records a dependency that may rerende
 
 ### Related concepts
 
-- For reactive sources see @./reactive-sources (Reactive sources).
-- For reactive parameters see @./reactive-parameters (Reactive parameters).
+- For reactive sources see @#reactive-sources (Reactive sources).
+- For reactive parameters see @#reactive-parameters (Reactive parameters).
 - For template syntax see @../templates (Templates).

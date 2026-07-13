@@ -55,11 +55,40 @@ Each trait requires one receiver method:
 
     -- Fallible: source may produce the target or an error
     Label must TRY_CASTABLE_TO_INT
-
-    number Int = cast! Label("42")
 ]
+
+A fallible conformance requires the matching `try_to_*` method. The method returns success with `return` and failure with `return!`:
+
+[codeblock, $code("bst"):
+    Label = |
+        text String,
+    |
+
+    try_to_int |this Label| -> Int, Error!:
+        value Int = cast! this.text
+        return value
+    ;
+
+    Label must TRY_CASTABLE_TO_INT
+
+    -- Local recovery with `cast ... catch`.
+    number Int = cast Label("42") catch |err|:
+        then 0
+    ;
+]
+
+Propagation through a compatible `Error!` function uses `cast!`:
+
+[codeblock, $code("bst"):
+    parse_label |label Label| -> Int, Error!:
+        value Int = cast! label
+        return value
+    ;
+]
+
+`cast!` and `catch` are mutually exclusive. `cast! ... catch` is rejected.
 
 ### Related concepts
 
 - For cast target selection and fallible handling see @../casts (Casts).
-- For trait incompatibility see @./trait-incompatibility (Trait incompatibility).
+- For trait incompatibility see @#trait-incompatibility (Trait incompatibility).

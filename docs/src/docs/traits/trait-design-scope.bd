@@ -37,7 +37,7 @@ Static traits are backend-independent. Backends do not receive trait objects, er
 ### Deferred
 
 - static non-method requirements
-- compiler-owned builtin conformance facts
+- additional compiler-owned builtin conformance families beyond the current closed core-cast evidence table
 - broader standard trait taxonomy that does not create runtime trait values
 
 ### Outside scope
@@ -61,4 +61,4 @@ Do not treat compiler-owned test-only or scaffold traits as public language feat
 ### Related concepts
 
 - For runtime heterogeneity see @../choices (Choices).
-- For generic bounds see @./generic-trait-bounds (Generic trait bounds).
+- For generic bounds see @#generic-trait-bounds (Generic trait bounds).
