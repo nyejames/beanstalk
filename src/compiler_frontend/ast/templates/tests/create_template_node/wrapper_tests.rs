@@ -1,13 +1,12 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::template::TemplateAtom;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
-fn docs_style_data_wrapper_keeps_ast_structure_bounded_for_many_rows() {
+fn docs_style_data_wrapper_keeps_tir_node_count_bounded_for_many_rows() {
     let mut string_table = StringTable::new();
     let declarations = docs_style_table_and_data_declarations(&mut string_table);
 
@@ -26,12 +25,33 @@ fn docs_style_data_wrapper_keeps_ast_structure_bounded_for_many_rows() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("docs-style table with many rows should parse");
-    let structural_nodes = count_template_structure_nodes(&template);
 
-    // Guard against composition regressions that re-introduce runaway structural growth.
+    let reference = template
+        .tir_reference
+        .as_ref()
+        .expect("docs-style table should produce a TIR reference");
+
+    let store = context.template_ir_store();
+    let store_borrow = store.borrow();
+
     assert!(
-        structural_nodes <= 3000,
-        "unexpectedly large composed template structure: {structural_nodes} nodes for {row_count} rows"
+        std::sync::Arc::ptr_eq(&reference.store_owner, &store_borrow.owner()),
+        "TIR reference must belong to the same store as the parsing context"
+    );
+    assert!(
+        reference.phase.is_at_least(TemplateTirPhase::Composed),
+        "docs-style wrapper composition must reach at least the Composed phase"
+    );
+
+    let node_count = store_borrow.node_count();
+
+    assert!(
+        node_count > 0,
+        "composed docs-style table should produce a nonzero TIR node count"
+    );
+    assert!(
+        node_count <= 3000,
+        "unexpectedly large TIR node count: {node_count} nodes for {row_count} rows"
     );
 }
 
@@ -81,25 +101,6 @@ fn docs_style_table_and_data_declarations(string_table: &mut StringTable) -> Vec
             value: Expression::template(data, ValueMode::ImmutableOwned),
         },
     ]
-}
-
-fn count_template_structure_nodes(template: &Template) -> usize {
-    let mut total = template.content.atoms.len();
-
-    for atom in &template.content.atoms {
-        total += count_atom_structure_nodes(atom);
-    }
-
-    total
-}
-
-fn count_atom_structure_nodes(atom: &TemplateAtom) -> usize {
-    match atom {
-        TemplateAtom::Content(segment) => match &segment.expression.kind {
-            ExpressionKind::Template(template) => count_template_structure_nodes(template),
-            _ => 0,
-        },
-    }
 }
 
 #[test]

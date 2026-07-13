@@ -21,14 +21,14 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1B family 8 - replace the vacuous wrapper compatibility-content node counter with the smallest final TIR invariant, or delete it if existing assertions already own the behavior
-LAST_ACCEPTED_COMMIT: `171207b09` (`docs: inventory remaining TIR content bridge`)
+CURRENT_SLICE: Phase 1B family 9 - replace the create-template static-fragment helper's compatibility-content walk with an effective TIR or folded-output assertion
+LAST_ACCEPTED_COMMIT: `ae5caf940` (`test: remove reactive content mirror fixtures`)
 BRANCH: `main`
-WORKTREE: clean `main` at `171207b09f` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
+WORKTREE: clean `main` at `ae5caf940c` in `/Users/aneirinjames/projects/beanstalk/beanstalk`
 REQUIRED_RELOADS: startup files, this plan, `docs/language-overview.md`, `docs/src/docs/templates/#page.bst`, and the current source/diff
 RELEVANT_CONTEXT_NOW:
 - Production parsing, composition, formatting, folding, classification, reactive metadata, const handling, and runtime handoff are TIR-backed.
-- Detached content reconstruction is test-only. The reactive metadata family no longer reads or mutates it. The main remaining fixture owners are parser TIR tests, HIR lowering tests, control-flow body helpers, AST normalization tests, wrapper/static-fragment helpers, doc-fragment tests, and the compatibility builder in `tir/finalize_sync.rs`.
+- Detached content reconstruction is test-only. Reactive metadata and wrapper stress tests no longer read or mutate it. The main remaining fixture owners are parser TIR tests, HIR lowering tests, control-flow body helpers, AST normalization tests, the static-fragment helper, doc-fragment tests, and the compatibility builder in `tir/finalize_sync.rs`.
 - The durable `Template` still duplicates TIR-owned state through `control_flow`, `style`, `child_wrappers`, optional TIR identity, and a redundant `TemplateTirReference::is_composed` flag.
 - HIR consumes owned runtime handoffs. Its remaining raw-`Template` entry is an invariant-error shim, not a real lowering path.
 ACCEPTANCE_CRITERIA:
@@ -42,15 +42,17 @@ VALIDATION_STATE:
 - Current `main` last passed full `just validate` at the completed hash-root checkpoint `cf36d5945`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28.
 - Phase 1B family 7 focused validation passed: `cargo test --quiet reactive_template_metadata -- --format terse`, 17 passed.
 - Phase 1B family 7 passed full `just validate`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
+- Phase 1B family 8 focused validation passed: `cargo test --quiet docs_style_data_wrapper -- --format terse`, 1 passed, and `cargo test --quiet wrapper_tests -- --format terse`, 11 passed.
+- Phase 1B family 8 passed full `just validate`: cross-target Clippy, 3358 unit tests, 1756 integration cases, docs check, and `bench-check` 28/28 with a 0 ms average delta, 2 faster and 1 slower.
 - Re-run the required gate after every new TIR code slice.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices; Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - Remaining old authority is test-only, but its caller graph must be removed in bounded owner-based slices.
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: complete the separate Ollama pre-commit review and parent validation for family 7, then use an Ollama implementation worker for family 8; use Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: complete the separate Ollama pre-commit review and parent validation for family 8, then use an Ollama implementation worker for family 9; use Codex CLI only after a clean Ollama availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit family 7, then delegate family 8
+NEXT_RESUME_ACTION: commit family 8, then delegate family 9
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -225,6 +227,7 @@ Repeat Slice 1B until only the bridge owner remains.
 Completed Phase 1B families:
 
 - Reactive metadata tests now protect formatted-root discovery, Parsed-phase gating and expression-overlay resolution directly through TIR. Obsolete stale-content setup and imports were removed.
+- The docs-style wrapper stress test now measures a nonzero, bounded same-store TIR node count at Composed-or-later phase. Its vacuous compatibility-content walker was deleted.
 
 #### Slice 1C — Delete the bridge owner
 
