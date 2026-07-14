@@ -1,11 +1,15 @@
 //! Tests for the final TIR reference contract.
 //!
-//! WHAT: exercises store-qualified `TemplateTirReference` ownership and cloning
-//!       of the live `Template` payload.
-//! WHY: these handle invariants remain useful for AST-owned TIR payloads.
+//! WHAT: exercises store-qualified `TemplateTirReference` ownership, the
+//!       numeric-store-ID collision invariant, and cloning of the live
+//!       `Template` payload.
+//! WHY: `TemplateStoreId` is a registry-local index that can collide across
+//!      registries. The owner token prevents a local `TemplateIrId` from being
+//!      used against a different logical store at the same numeric index.
 
 use super::super::ids::TemplateIrId;
 use super::super::overlays::TemplateOverlaySetId;
+use super::super::registry::TemplateIrRegistry;
 use super::super::store::TemplateIrStore;
 use super::super::{TemplateRef, TemplateTirReference};
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -41,9 +45,22 @@ fn tir_references_from_same_store_have_ptr_eq_owners() {
 }
 
 #[test]
-fn tir_reference_matches_correct_store_owner_and_rejects_wrong_owner() {
-    let correct_store = TemplateIrStore::new();
-    let wrong_store = TemplateIrStore::new();
+fn registry_local_store_ids_need_owner_identity() {
+    let mut correct_registry = TemplateIrRegistry::new();
+    let mut wrong_registry = TemplateIrRegistry::new();
+    let correct_store_id = correct_registry.allocate_store();
+    let wrong_store_id = wrong_registry.allocate_store();
+
+    assert_eq!(correct_store_id, wrong_store_id);
+
+    let correct_handle = correct_registry
+        .store_handle(correct_store_id)
+        .expect("correct registry store should exist");
+    let wrong_handle = wrong_registry
+        .store_handle(wrong_store_id)
+        .expect("wrong registry store should exist");
+    let correct_store = correct_handle.borrow();
+    let wrong_store = wrong_handle.borrow();
     let reference = make_reference(TemplateIrId::new(0), &correct_store);
 
     assert!(Arc::ptr_eq(&reference.store_owner, &correct_store.owner()));

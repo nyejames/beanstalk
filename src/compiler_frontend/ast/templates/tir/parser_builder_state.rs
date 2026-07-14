@@ -39,15 +39,14 @@ use std::sync::Arc;
 
 /// Long-lived reference to a finalized parser-emitted TIR template.
 ///
-/// WHAT: holds the store-qualified `TemplateRef` root allocated when a parser
-///       builder state is finished, plus the store-owner token needed to prove
-///       same-store instance identity.
+/// WHAT: holds the store-qualified root allocated when a parser builder finishes,
+///       plus the owner token needed to prove same-store origin.
 /// WHY: after parsing, the in-progress `TemplateParserIrBuilderState` is
-///      discarded; this narrow reference keeps the registry-resolvable root and
-///      ownership token without carrying the builder state's in-progress
-///      child/summary state. The store-owner `Arc` remains the authoritative
-///      same-store proof because detached snapshots and direct stores can share
-///      numeric `TemplateStoreId` values.
+///      discarded. This narrow reference keeps the registry-resolvable identity
+///      without carrying builder-local children or summary state. The owner token
+///      remains necessary because `TemplateStoreId` is registry-local: direct-store
+///      consumers must reject a reference from another registry at the same index
+///      before using its `TemplateIrId` against the current store.
 #[derive(Clone, Debug)]
 pub(crate) struct TemplateTirReference {
     pub(crate) root: TemplateRef,

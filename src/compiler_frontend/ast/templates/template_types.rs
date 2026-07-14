@@ -38,11 +38,11 @@ pub struct Template {
 
     /// Authoritative TIR reference.
     ///
-    /// WHAT: holds the store-qualified `TemplateRef` root and store-owner token
-    /// WHY: this is the long-lived reference; the `TemplateRef` makes the owning
-    ///      store explicit for registry/view consumers, while the store-owner
-    ///      `Arc` keeps the same-store instance-identity proof that numeric store
-    ///      IDs alone cannot provide.
+    /// WHAT: holds the store-qualified root, logical store-owner token, pipeline
+    ///       phase, and overlay-set ID.
+    /// WHY: this is the long-lived reference. The `TemplateRef` makes the owning
+    ///      store explicit for registry/view consumers, while the owner token
+    ///      distinguishes equal registry-local store IDs from different registries.
     pub(crate) tir_reference: TemplateTirReference,
 
     pub id: String,
@@ -92,15 +92,13 @@ impl Template {
         };
     }
 
-    /// Returns the store-owner token for this template's authoritative TIR
-    /// reference.
+    /// Returns the logical store-owner token for this template's TIR reference.
     ///
-    /// WHAT: lets callers prove that a finalized `TemplateIrId` belongs to the
-    ///       same `TemplateIrStore` they are writing into before recording it as
-    ///       a `ChildTemplate` reference.
-    /// WHY: ordinary `Template::clone()` preserves the authoritative reference after
-    ///      parsing so callers can prove same-store ownership of a finished
-    ///      `TemplateIrId` without carrying the full builder-state children/summary.
+    /// WHAT: lets direct-store consumers prove a `TemplateIrId` belongs to the
+    ///       same logical store before using it as a local ID.
+    /// WHY: these consumers may already hold a store borrow, so they cannot
+    ///      re-borrow through the registry. The token also rejects references
+    ///      from another registry whose numeric store ID happens to match.
     pub(crate) fn tir_store_owner(&self) -> Arc<TemplateIrStoreOwner> {
         Arc::clone(&self.tir_reference.store_owner)
     }

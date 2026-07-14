@@ -95,7 +95,12 @@ impl TemplateConstructionContext {
         }
     }
 
-    /// Returns the store-owner token for the store this context writes into.
+    /// Returns the logical store-owner token for the store this context writes into.
+    ///
+    /// WHAT: the `head_expressions` cross-store gate compares this token with
+    ///       `value.tir_store_owner()` on an incoming child `Template` to decide
+    ///       whether to record a raw `TemplateIrId` child reference (same store)
+    ///       or an opaque dynamic expression (foreign store).
     pub(crate) fn store_owner(&self) -> Arc<TemplateIrStoreOwner> {
         self.debug_assert_registered_store();
         self.store.borrow().owner()

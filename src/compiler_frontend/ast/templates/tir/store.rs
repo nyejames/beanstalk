@@ -127,14 +127,14 @@ pub(crate) enum TemplateStoreState {
 //  Template IR Store
 // -------------------------
 
-/// Identity token proving that a `TemplateParserIrBuilderState` was allocated from a
-/// specific `TemplateIrStore`.
+/// Identity token for one logical TIR store origin.
 ///
-/// WHAT: stores an `Arc` handle whose pointer identity corresponds to one store
-///       instance. Builder states created in that store hold a clone of the same `Arc`,
-///       so `Arc::ptr_eq` proves same-store ownership without exposing the store.
-/// WHY: cross-context template references (e.g. imported const templates) may
-///      carry `TemplateIrId`s from a different store; raw IDs must not be mixed.
+/// WHAT: every directly constructed store receives a fresh token. Durable
+///       template references and read-only snapshots cloned from that store
+///       share the token, so `Arc::ptr_eq` proves common store origin.
+/// WHY: `TemplateStoreId` is a registry-local index and can collide numerically
+///      across registries. Direct-store consumers use this token when an active
+///      borrow prevents resolving the reference back through the registry.
 ///
 /// NOTE: `Arc` is used instead of `Rc` so that `Template` (which may carry a
 ///       finalized TIR reference) remains `Send + Sync` and existing
@@ -223,12 +223,11 @@ pub(crate) struct TemplateIrStore {
     ///      materialization without broadening the `TemplateIrNodeKind` enum shape.
     pub(crate) node_reactive_subscriptions: Vec<Option<ReactiveSubscription>>,
 
-    /// Identity token for this store instance.
+    /// Logical origin token for this store.
     ///
-    /// WHAT: parser-emitted builder states hold a clone of this token so callers can
-    ///       prove a `TemplateIrId` originated from this store before using it.
-    /// WHY: keeps cross-store ownership checks local to the store identity rather
-    ///      than comparing store handles or exposing internal vectors.
+    /// WHAT: references finalized from this store carry a clone of the token.
+    /// WHY: consumers compare it before using a store-local `TemplateIrId`, since
+    ///      equal registry-local store IDs do not imply a common store origin.
     owner: Arc<TemplateIrStoreOwner>,
 
     /// Registry-level ID for this store.
@@ -293,26 +292,9 @@ impl TemplateIrStore {
         }
     }
 
-    /// Returns the identity token for this store instance.
+    /// Returns the logical origin token for this store.
     pub(crate) fn owner(&self) -> Arc<TemplateIrStoreOwner> {
         Arc::clone(&self.owner)
-    }
-
-    /// Clones store data without preserving same-store ownership identity.
-    ///
-    /// WHAT: keeps the current vectors available for read/materialization work,
-    ///       but assigns a fresh owner token so refs created while using the
-    ///       snapshot cannot later pass same-store checks against the live
-    ///       module store.
-    /// WHY: AST finalization sometimes needs a reentrant, read-oriented store
-    ///      view while a TIR walker mutates the live store. A normal `Clone`
-    ///      would share the owner token and could leave snapshot-created roots
-    ///      looking valid for the live store after the snapshot is dropped.
-    #[cfg(test)]
-    pub(crate) fn detached_snapshot(&self) -> Self {
-        let mut snapshot = self.clone();
-        snapshot.owner = TemplateIrStoreOwner::new();
-        snapshot
     }
 
     /// Returns the registry-level store ID assigned to this store.

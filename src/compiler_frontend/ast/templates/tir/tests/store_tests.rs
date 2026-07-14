@@ -14,7 +14,6 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use std::sync::Arc;
 
 fn empty_location() -> SourceLocation {
     SourceLocation::default()
@@ -50,21 +49,6 @@ fn store_starts_empty() {
     let store = TemplateIrStore::new();
     assert_eq!(store.template_count(), 0);
     assert_eq!(store.node_count(), 0);
-}
-
-#[test]
-fn detached_snapshot_keeps_data_but_uses_fresh_owner() {
-    let mut store = TemplateIrStore::new();
-    let template_id = build_finalized_tir_template(&mut store);
-
-    let snapshot = store.detached_snapshot();
-
-    assert_eq!(snapshot.template_count(), store.template_count());
-    assert!(snapshot.get_template(template_id).is_some());
-    assert!(
-        !Arc::ptr_eq(&snapshot.owner(), &store.owner()),
-        "detached snapshots must not pass same-store owner checks"
-    );
 }
 
 #[test]

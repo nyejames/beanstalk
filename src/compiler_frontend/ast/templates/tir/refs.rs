@@ -146,10 +146,10 @@ impl fmt::Display for TemplateRef {
 ///      folding safe and keeps the eventual production `fold_tir_view` path
 ///      precise without guessing from the parent view.
 ///
-/// This type is intentionally smaller than [`TemplateTirReference`]: it does not
-/// carry the `store_owner` token because the registry resolves stores by
-/// `TemplateStoreId`; the phase and overlay already describe the structural
-/// context.
+/// This type is intentionally smaller than [`TemplateTirReference`]. The parser
+/// proves same-store before recording a child, while foreign children resolve
+/// through the owning registry. A durable `Template` retains the owner token
+/// because direct-store consumers may inspect it outside that registry context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TemplateTirChildReference {
     pub(crate) root: TemplateRef,
