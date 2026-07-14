@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
-use crate::compiler_frontend::ast::templates::tir::TirWrapperApplicationMode;
+use crate::compiler_frontend::ast::templates::tir::overlays::TirWrapperApplicationMode;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;

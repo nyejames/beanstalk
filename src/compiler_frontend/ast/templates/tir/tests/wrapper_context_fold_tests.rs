@@ -15,7 +15,6 @@ use crate::compiler_frontend::ast::templates::template_control_flow::TemplateBra
 use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
-use crate::compiler_frontend::ast::templates::tir::TirWrapperApplicationMode;
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_view;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCache;
@@ -24,6 +23,7 @@ use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, SlotOccurrenceId, TemplateWrapperSetId,
 };
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrBranch;
+use crate::compiler_frontend::ast::templates::tir::overlays::TirWrapperApplicationMode;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolution, TirSlotResolutionOverlay,
     TirWrapperContext, TirWrapperContextOverlay,

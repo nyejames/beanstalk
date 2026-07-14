@@ -175,8 +175,7 @@ mod tests;
 // IDs are the primary external interface — consumers use them to reference
 // store entries without reaching into the store module directly.
 pub(crate) use ids::{
-    ChildTemplateOccurrenceId, ExpressionSiteId, TemplateIrId, TemplateIrNodeId,
-    TemplateSlotPlanId, TemplateWrapperSetId,
+    ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId, TemplateWrapperSetId,
 };
 
 // Focused cross-module tests need to construct overlay payloads directly. Keep
@@ -211,10 +210,8 @@ pub(crate) use summary::TemplateIrSummary;
 // Registry-qualified handles used by production TIR registry and view consumers.
 #[cfg(test)]
 pub(crate) use refs::TemplateTirChildReference;
-pub(crate) use refs::{
-    TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateWrapperReference, TemplateWrapperSetRef,
-};
-pub(crate) use wrapper_sets::wrapper_reference_for_template;
+pub(crate) use refs::{TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateWrapperReference};
+pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
 
 // Extra store-qualified ref types needed by focused TIR tests. Keep them off
 // the normal production surface.
@@ -226,10 +223,7 @@ pub(crate) use registry::{RegisteredTemplateIrStore, TemplateIrRegistry};
 
 // Final overlay set and expression-overlay types consumed by production
 // template creation and finalization.
-pub(crate) use overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirWrapperApplicationMode,
-    TirWrapperContext, TirWrapperContextOverlay, TirWrapperContextOverlayId,
-};
+pub(crate) use overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
 #[cfg(test)]
 pub(crate) use overlays::{TirSlotResolution, TirSlotResolutionOverlay};
 

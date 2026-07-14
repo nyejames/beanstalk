@@ -2,7 +2,9 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
-use crate::compiler_frontend::ast::templates::tir::TirView;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TirView,
+};
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal, terse,

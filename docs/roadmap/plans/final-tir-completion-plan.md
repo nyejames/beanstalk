@@ -21,33 +21,29 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3A2 - consolidate registry-aware expression-payload traversal
-LAST_ACCEPTED_COMMIT: `bc2576a9c` (`refactor: consolidate TIR view classification`)
+CURRENT_SLICE: Phase 3B1 - move wrapper-context construction to its TIR owner and propagate failures
+LAST_ACCEPTED_COMMIT: `c59c2dd3a` (`refactor: centralize TIR expression traversal`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 3A2 patch ready to commit, 14 commits ahead of `origin/main`
+WORKTREE: `main`, reviewed and validated Phase 3B1 patch ready to commit, 15 commits ahead of `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- `walk_expression_payloads_with_nested_tir_views` now owns nested `ExpressionKind` and effective-view inspection with one exact root, phase and overlay visited set.
-- Template-head runtime-slot detection delegates to that owner and retains conservative failure behavior without local recursion or identity state.
-- AST normalization's site-keyed clone collector and reactive annotation's environment-aware collector remain separate because their semantics do not match the predicate walker.
+- `tir/wrapper_sets.rs` now owns wrapper-context collection, registry-aware child metadata resolution, canonical wrapper-set reuse and overlay attachment.
+- Exact root store identity plus current and child overlay authority are validated before durable allocation. Missing nodes, stores or templates and composition failures propagate as internal errors.
+- `create_template_node.rs` only orders the pass and maps its internal error through the existing template diagnostic boundary.
 ACCEPTANCE_CRITERIA:
-- Phase 3A2 traversal ownership, exact identity, conservative failure behavior and focused invariant checks are satisfied
+- Phase 3B1 owner, registry-awareness, transactional allocation, explicit failure and focused invariant checks are satisfied
 VALIDATION_STATE:
-- Phase 2E `just validate`: passed before commit `e039b7547`; cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
-- Ollama implementation: passed 3299 unit tests, 20 classification tests, 791 template tests, 35 AST finalization tests and all-target warnings-as-errors Clippy
-- Parent correction: passed 20 classification tests and 791 template tests
-- Separate fresh Ollama final review after the phase-guard test: complete with no actionable finding
-- Phase 3A1 `just validate`: passed cross-target Clippy, 3299 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower
-- Ollama implementation: passed 23 walker tests, 19 template-head tests, 35 finalization tests, 796 template tests and all-target warnings-as-errors Clippy before parent correction
-- Parent correction: passed 22 walker tests, 19 template-head tests, 35 finalization tests, 795 template tests and all-target warnings-as-errors Clippy
-- Separate fresh Ollama final review: complete with no actionable findings; 22 walker tests, 920 template-filtered tests, 35 finalization tests, native Clippy and `git diff --check` passed
-- Phase 3A2 `just validate`: passed cross-target Clippy, 3303 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- Phase 3A2 accepted in `c59c2dd3a`; fresh Ollama review found no actionable issue and `just validate` passed cross-target Clippy, 3303 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28
+- Ollama implementation: passed 31 wrapper-context tests, 287 create-template tests, 800 template tests and all-target warnings-as-errors Clippy before parent correction
+- Parent correction: passed 34 wrapper-context tests, 287 create-template tests, 803 template tests and all-target warnings-as-errors Clippy
+- Separate fresh Ollama final review: complete with no actionable findings; 8 construction tests, 287 create-template tests, 431 TIR tests, native Clippy and `git diff --check` passed
+- Phase 3B1 `just validate`: passed cross-target Clippy, 3311 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only final review complete
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3A2, reload the plan and delegate the first bounded Phase 3B slice
+NEXT_RESUME_ACTION: commit Phase 3B1, reload the plan and inventory the next bounded Phase 3B failure-propagation slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -383,10 +379,12 @@ Phase 3A2 checkpoint: nested expression and effective-view predicate traversal n
 - [ ] Rename `try_sync_*`, `body_sync_*`, `refreshed_*`, and similar migration names to final `prepare_*`/`prepared_*` terminology.
 - [ ] Convert required `Option` returns and `.ok()?` chains to `Result`.
 - [ ] Do not fall back to a previous body root after a preparation error.
-- [ ] Move wrapper-context overlay collection out of `create_template_node.rs` into the existing TIR wrapper/overlay owner.
-- [ ] Make that traversal registry-aware and reuse existing wrapper-set canonicalization.
+- [x] Move wrapper-context overlay collection out of `create_template_node.rs` into the existing TIR wrapper/overlay owner.
+- [x] Make that traversal registry-aware and reuse existing wrapper-set canonicalization.
 - [ ] Propagate missing-node, missing-store, and overlay-compose failures as internal errors; do not silently return or ignore `Err`.
 - [ ] Remove local recursive walkers that duplicate `tir/slot_composition`, `tir/render_unit`, or `TirView`.
+
+Phase 3B1 checkpoint: wrapper-context construction now belongs to the TIR wrapper-set owner. The pass resolves same-store and foreign child metadata without re-entering the current store, validates exact root and overlay authority before allocation, reuses one canonical inherited wrapper set and reports missing authority or composition failures instead of silently skipping them.
 
 #### Slice 3C — Consolidate TIR summary construction
 

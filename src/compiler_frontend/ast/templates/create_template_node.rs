@@ -38,12 +38,10 @@ use crate::compiler_frontend::ast::templates::template_render_units::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    ChildTemplateOccurrenceId, TemplateConstructionContext, TemplateIr, TemplateIrId,
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet,
-    TemplateRef, TemplateTirPhase, TemplateTirReference, TemplateWrapperReference,
-    TemplateWrapperSetRef, TirView, TirWrapperApplicationMode, TirWrapperContext,
-    TirWrapperContextOverlay, TirWrapperContextOverlayId, classify_effective_tir_view_template,
-    compose_tir_head_chain_with_overlays, merge_tir_slot_resolution_overlay_sets,
+    TemplateConstructionContext, TemplateIr, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TemplateWrapperReference, TirView, attach_wrapper_context_overlay,
+    classify_effective_tir_view_template, compose_tir_head_chain_with_overlays,
+    merge_tir_slot_resolution_overlay_sets,
 };
 
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -415,11 +413,12 @@ impl Template {
             // the final authoritative root after head-chain composition so the
             // occurrence keys match the structural root consumed downstream.
             if wrapper_context_owns_direct_children {
-                attach_wrapper_context_overlay_to_template(
+                attach_wrapper_context_overlay(
                     &mut tir_reference,
                     &build_state.child_wrappers,
-                    context,
-                );
+                    &context.registered_template_ir_store,
+                )
+                .map_err(|error| TemplateError::from(error).into_diagnostic())?;
             }
         }
 
@@ -599,150 +598,6 @@ fn apply_default_style_if_needed(
 
     if let Some(default_style) = default_style {
         build_state.style = default_style.to_owned();
-    }
-}
-
-fn attach_wrapper_context_overlay_to_template(
-    tir_reference: &mut TemplateTirReference,
-    child_wrappers: &[TemplateWrapperReference],
-    context: &ScopeContext,
-) {
-    let template_id = tir_reference.root.template_id;
-
-    let wrapper_overlay_id = {
-        let mut store = context.registered_template_ir_store.store().borrow_mut();
-        let mut registry = context.registered_template_ir_store.registry().borrow_mut();
-        build_wrapper_context_overlay_for_template(
-            &mut store,
-            template_id,
-            Some(child_wrappers),
-            &mut registry,
-        )
-    };
-
-    let Some(wrapper_overlay_id) = wrapper_overlay_id else {
-        return;
-    };
-
-    let mut registry = context.registered_template_ir_store.registry().borrow_mut();
-    let current_overlay_set_id = tir_reference.overlay_set_id;
-
-    let wrapper_only_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
-        slot_resolution: None,
-        wrapper_context: Some(wrapper_overlay_id),
-    });
-
-    if let Ok(merged_overlay_set_id) =
-        registry.compose_overlay_sets(&[current_overlay_set_id, wrapper_only_overlay_set_id])
-    {
-        tir_reference.overlay_set_id = merged_overlay_set_id;
-        if !tir_reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            tir_reference.phase = TemplateTirPhase::Composed;
-        }
-    }
-}
-
-/// Builds a wrapper-context overlay for a template's child-template occurrences.
-///
-/// WHAT: recursively walks the template's TIR tree, finds `ChildTemplate` nodes,
-///       and records `$fresh` suppression for preserved children. For templates
-///       where structural child-wrapper wrapping was deferred, also records
-///       inherited wrapper context for non-fresh direct children.
-/// WHY: this is the Phase C Step 3 production path for wrapper-context overlays.
-fn build_wrapper_context_overlay_for_template(
-    store: &mut TemplateIrStore,
-    template_id: TemplateIrId,
-    inherited_wrapper_refs: Option<&[TemplateWrapperReference]>,
-    registry: &mut TemplateIrRegistry,
-) -> Option<TirWrapperContextOverlayId> {
-    let template = store.get_template(template_id)?;
-    let mut contexts = Vec::new();
-    collect_wrapper_contexts(store, template.root, inherited_wrapper_refs, &mut contexts);
-    if contexts.is_empty() {
-        None
-    } else {
-        Some(registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay { contexts }))
-    }
-}
-
-fn collect_wrapper_contexts(
-    store: &mut TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    inherited_wrapper_refs: Option<&[TemplateWrapperReference]>,
-    contexts: &mut Vec<(ChildTemplateOccurrenceId, TirWrapperContext)>,
-) {
-    let node = match store.get_node(node_id) {
-        Some(node) => node.clone(),
-        None => return,
-    };
-
-    match &node.kind {
-        TemplateIrNodeKind::ChildTemplate {
-            reference,
-            occurrence_id,
-        } => {
-            if let Some(child_id) = reference.template_id_in_store(store.store_id())
-                && let Some(child_template) = store.get_template(child_id).cloned()
-            {
-                if child_template.style.skip_parent_child_wrappers {
-                    contexts.push((
-                        *occurrence_id,
-                        TirWrapperContext {
-                            inherited_wrapper_set: None,
-                            skip_parent_child_wrappers: true,
-                            application_mode: TirWrapperApplicationMode::Always,
-                        },
-                    ));
-                } else if let Some(wrapper_refs) = inherited_wrapper_refs
-                    && !wrapper_refs.is_empty()
-                {
-                    // Record inherited context only after all wrappers normalize
-                    // to TIR refs; partial wrapper sets would create a silent
-                    // parallel composition path.
-                    let wrapper_set_id = store.push_or_reuse_wrapper_set(wrapper_refs.to_vec());
-                    let wrapper_set_ref =
-                        TemplateWrapperSetRef::new(store.store_id(), wrapper_set_id);
-                    let application_mode = if child_template.summary.has_control_flow {
-                        TirWrapperApplicationMode::IfChildEmits
-                    } else {
-                        TirWrapperApplicationMode::Always
-                    };
-                    contexts.push((
-                        *occurrence_id,
-                        TirWrapperContext {
-                            inherited_wrapper_set: Some(wrapper_set_ref),
-                            skip_parent_child_wrappers: false,
-                            application_mode,
-                        },
-                    ));
-                }
-            }
-        }
-        TemplateIrNodeKind::Sequence { children } => {
-            for child_id in children {
-                collect_wrapper_contexts(store, *child_id, inherited_wrapper_refs, contexts);
-            }
-        }
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                collect_wrapper_contexts(store, branch.body, inherited_wrapper_refs, contexts);
-            }
-            if let Some(fallback_id) = fallback {
-                collect_wrapper_contexts(store, *fallback_id, inherited_wrapper_refs, contexts);
-            }
-        }
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            collect_wrapper_contexts(store, *body, inherited_wrapper_refs, contexts);
-            if let Some(wrapper_id) = aggregate_wrapper {
-                collect_wrapper_contexts(store, *wrapper_id, inherited_wrapper_refs, contexts);
-            }
-        }
-        _ => {}
     }
 }
 
