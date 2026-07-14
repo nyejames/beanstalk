@@ -309,12 +309,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         &self,
         source_file: &InternedPath,
     ) -> Option<FxHashSet<PublicExportEntry>> {
-        for (library_prefix, root_file) in &self.module_symbols.source_library_root_files {
+        for (package_prefix, root_file) in &self.module_symbols.source_package_root_files {
             if root_file == source_file {
                 return self
                     .module_symbols
-                    .source_library_public_exports
-                    .get(library_prefix)
+                    .source_package_public_exports
+                    .get(package_prefix)
                     .cloned();
             }
         }
@@ -344,14 +344,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return None;
         }
 
-        if let Some(target) = self.resolve_source_library_public_export(components, source_file) {
+        if let Some(target) = self.resolve_source_package_public_export(components, source_file) {
             return Some(target);
         }
 
         self.resolve_module_root_public_export(&import.header_path, source_file)
     }
 
-    fn resolve_source_library_public_export(
+    fn resolve_source_package_public_export(
         &mut self,
         components: &[StringId],
         source_file: &InternedPath,
@@ -360,24 +360,24 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return None;
         }
 
-        let library_prefix = self.string_table.resolve(components[0]).to_owned();
+        let package_prefix = self.string_table.resolve(components[0]).to_owned();
         if !self
             .module_symbols
-            .source_library_public_exports
-            .contains_key(&library_prefix)
+            .source_package_public_exports
+            .contains_key(&package_prefix)
         {
             return None;
         }
 
-        let importer_library = self.module_symbols.file_library_membership.get(source_file);
-        if importer_library.map(String::as_str) == Some(library_prefix.as_str()) {
+        let importer_package = self.module_symbols.file_package_membership.get(source_file);
+        if importer_package.map(String::as_str) == Some(package_prefix.as_str()) {
             return None;
         }
 
         let root_file = self
             .module_symbols
-            .source_library_root_files
-            .get(&library_prefix)?
+            .source_package_root_files
+            .get(&package_prefix)?
             .clone();
 
         self.module_symbols
@@ -447,28 +447,28 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         source_file: &InternedPath,
     ) -> NamespaceImportResult<()> {
-        if let Some(target_library) = self
+        if let Some(target_package) = self
             .module_symbols
-            .file_library_membership
+            .file_package_membership
             .get(target_file)
             .cloned()
         {
-            let importer_library = self.module_symbols.file_library_membership.get(source_file);
-            if importer_library.map(String::as_str) != Some(target_library.as_str()) {
+            let importer_package = self.module_symbols.file_package_membership.get(source_file);
+            if importer_package.map(String::as_str) != Some(target_package.as_str()) {
                 if self
                     .module_symbols
-                    .source_library_root_files
-                    .get(&target_library)
+                    .source_package_root_files
+                    .get(&target_package)
                     .is_some_and(|root_file| target_file == root_file)
                 {
                     return Ok(());
                 }
 
-                let public_surface_name_id = self.string_table.intern(&target_library);
+                let public_surface_name_id = self.string_table.intern(&target_package);
                 return Err(Box::new(diagnostics::not_exported_by_public_surface(
                     &import.header_path,
                     public_surface_name_id,
-                    ImportPublicSurfaceType::SourceLibrary,
+                    ImportPublicSurfaceType::SourcePackage,
                     import.location.clone(),
                 )));
             }

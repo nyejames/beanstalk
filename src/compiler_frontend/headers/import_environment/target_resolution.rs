@@ -7,6 +7,7 @@
 //! MUST NOT: register visible names, enforce file-local collision policy, or validate export
 //! flags (those belong in the orchestration layer and `visible_names.rs`).
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
@@ -14,7 +15,6 @@ use crate::compiler_frontend::headers::module_symbols::PublicExportEntry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::libraries::SourceFileKind;
 use rustc_hash::FxHashSet;
 
 /// Resolved target of a single import path.
@@ -75,7 +75,7 @@ pub(crate) enum ExternalPackageSymbolLookup {
 /// Input bundle for external-package-only symbol lookup.
 ///
 /// This deliberately does not include source files or source symbols, so callers cannot use it
-/// to bypass source-library or module-root public export checks.
+/// to bypass source-backed package or module-root public export checks.
 pub(crate) struct ExternalPackageSymbolResolutionInput<'a> {
     pub(crate) import_path: &'a InternedPath,
     pub(crate) external_package_registry: &'a ExternalPackageRegistry,

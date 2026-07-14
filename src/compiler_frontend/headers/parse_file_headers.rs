@@ -5,6 +5,7 @@
 //! WHY: per-file parsing and module aggregation are separate boundaries so callers can merge and
 //! remap local string-table outputs before dependency sorting and AST construction.
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::arena::{HeaderStats, TokenStats};
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -24,12 +25,11 @@ pub use crate::compiler_frontend::headers::types::{
     HeaderParseOptions, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::{
+use crate::compiler_frontend::source_packages::root_file::{
     file_name_is_config_file, file_name_is_hash_root_file,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::Path;
 
 /// Parse one tokenized file using the supplied string table.

@@ -1,6 +1,6 @@
 //! Public export and file-membership data for header imports.
 //!
-//! WHAT: derives source-library and module-root public export maps from parsed headers and strict
+//! WHAT: derives source-backed package and module-root public export maps from parsed headers and strict
 //! `export:` block imports.
 //! WHY: import environment preparation needs a single header-owned view of which declarations are
 //! exposed across module-root boundaries and which source files belong to each boundary.
@@ -26,8 +26,8 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::{
     ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, ImportTargetResolutionInput,
     ModuleBoundaryCheckInput, PublicExportLookupResult, PublicExportResolutionInput,
-    PublicExportSurfaceType, ResolvedImportTarget, SourceLibraryBoundaryCheckInput,
-    check_module_boundary, check_source_library_boundary, resolve_external_package_symbol,
+    PublicExportSurfaceType, ResolvedImportTarget, SourcePackageBoundaryCheckInput,
+    check_module_boundary, check_source_package_boundary, resolve_external_package_symbol,
     resolve_import_target, resolve_public_export_boundary,
 };
 use crate::compiler_frontend::headers::module_symbols::{
@@ -86,15 +86,15 @@ pub(super) fn build_public_exports(
     string_table: &mut StringTable,
 ) -> PublicExportDataResult<()> {
     // Pass 1: collect public authored declarations for all root files.
-    build_source_library_public_exports(module_symbols, headers, resolver, string_table)?;
+    build_source_package_public_exports(module_symbols, headers, resolver, string_table)?;
     build_module_root_public_exports_pass1(module_symbols, headers, resolver, string_table)?;
 
     // Membership does not depend on import resolution.
-    build_source_library_membership(module_symbols, resolver, string_table);
+    build_source_package_membership(module_symbols, resolver, string_table);
     build_module_root_membership(module_symbols, resolver, string_table);
 
     // Pass 2: resolve strict `export:` imports against the completed authored export maps.
-    build_source_library_public_imports(
+    build_source_package_public_imports(
         module_symbols,
         resolver,
         external_package_registry,
@@ -111,16 +111,16 @@ pub(super) fn build_public_exports(
 }
 
 // --------------------------
-//  Source-library public exports
+//  Source-backed package public exports
 // --------------------------
 
-fn build_source_library_public_exports(
+fn build_source_package_public_exports(
     module_symbols: &mut ModuleSymbols,
     headers: &[Header],
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> PublicExportDataResult<()> {
-    for (prefix, root_file) in resolver.source_library_public_surface_files() {
+    for (prefix, root_file) in resolver.source_package_public_surface_files() {
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
@@ -129,10 +129,10 @@ fn build_source_library_public_exports(
         let mut collector = PublicExportCollector::default();
 
         module_symbols
-            .file_library_membership
+            .file_package_membership
             .insert(root_file_interned.clone(), prefix.clone());
         module_symbols
-            .source_library_root_files
+            .source_package_root_files
             .insert(prefix.clone(), root_file_interned.clone());
 
         for header in headers {
@@ -160,27 +160,27 @@ fn build_source_library_public_exports(
         }
 
         module_symbols
-            .source_library_public_exports
+            .source_package_public_exports
             .insert(prefix.clone(), collector.exports);
     }
 
     Ok(())
 }
 
-fn build_source_library_public_imports(
+fn build_source_package_public_imports(
     module_symbols: &mut ModuleSymbols,
     resolver: &ProjectPathResolver,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> PublicExportDataResult<()> {
-    for (prefix, root_file) in resolver.source_library_public_surface_files() {
+    for (prefix, root_file) in resolver.source_package_public_surface_files() {
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
         let root_file_interned = InternedPath::from_path_buf(&root_file_logical, string_table);
 
         let current_exports = module_symbols
-            .source_library_public_exports
+            .source_package_public_exports
             .get(prefix)
             .cloned()
             .unwrap_or_default();
@@ -214,7 +214,7 @@ fn build_source_library_public_imports(
         }
 
         module_symbols
-            .source_library_public_exports
+            .source_package_public_exports
             .insert(prefix.clone(), collector.exports);
     }
 
@@ -446,8 +446,8 @@ fn resolve_public_export_import(
     let public_boundary_input = PublicExportResolutionInput {
         importer_file: root_file,
         header_path: &import.header_path,
-        source_library_public_exports: &module_symbols.source_library_public_exports,
-        file_library_membership: &module_symbols.file_library_membership,
+        source_package_public_exports: &module_symbols.source_package_public_exports,
+        file_package_membership: &module_symbols.file_package_membership,
         module_root_public_exports: &module_symbols.module_root_public_exports,
         file_module_membership: &module_symbols.file_module_membership,
         module_root_boundaries: &module_symbols.module_root_boundaries,
@@ -479,8 +479,8 @@ fn resolve_public_export_import(
                     // Preserve the same diagnostic that a normal importer would see.
                     let public_surface_name_id = string_table.intern(&public_surface_name);
                     let diagnostic_public_surface_type = match public_surface_type {
-                        PublicExportSurfaceType::SourceLibrary => {
-                            ImportPublicSurfaceType::SourceLibrary
+                        PublicExportSurfaceType::SourcePackage => {
+                            ImportPublicSurfaceType::SourcePackage
                         }
                         PublicExportSurfaceType::ModuleRoot => ImportPublicSurfaceType::ModuleRoot,
                     };
@@ -516,13 +516,13 @@ fn resolve_public_export_import(
                 .canonical_source_by_symbol_path
                 .get(&symbol_path)
             {
-                check_source_library_boundary(SourceLibraryBoundaryCheckInput {
+                check_source_package_boundary(SourcePackageBoundaryCheckInput {
                     importer_file: root_file,
                     target_file,
                     requested_path: &import.header_path,
                     location: import.location.clone(),
-                    file_library_membership: &module_symbols.file_library_membership,
-                    source_library_root_files: &module_symbols.source_library_root_files,
+                    file_package_membership: &module_symbols.file_package_membership,
+                    source_package_root_files: &module_symbols.source_package_root_files,
                     string_table,
                 })?;
                 check_module_boundary(ModuleBoundaryCheckInput {
@@ -599,22 +599,22 @@ impl PublicExportCollector {
 //  Membership helpers
 // --------------------------
 
-fn build_source_library_membership(
+fn build_source_package_membership(
     module_symbols: &mut ModuleSymbols,
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) {
     for (source_file, canonical_path) in module_symbols.canonical_os_path_by_source.clone() {
-        let Some((membership_prefix, _)) = resolver.source_library_for_file(&canonical_path) else {
+        let Some((membership_prefix, _)) = resolver.source_package_for_file(&canonical_path) else {
             continue;
         };
 
         let canonical_source = InternedPath::from_path_buf(&canonical_path, string_table);
         module_symbols
-            .file_library_membership
+            .file_package_membership
             .insert(source_file.clone(), membership_prefix.to_owned());
         module_symbols
-            .file_library_membership
+            .file_package_membership
             .insert(canonical_source, membership_prefix.to_owned());
     }
 }

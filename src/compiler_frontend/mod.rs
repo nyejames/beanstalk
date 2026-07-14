@@ -9,7 +9,7 @@ pub(crate) mod headers;
 pub(crate) mod module_dependencies;
 pub(crate) mod numeric_text;
 pub(crate) mod plain_markdown;
-pub(crate) mod source_libraries;
+pub(crate) mod source_packages;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 

@@ -1784,8 +1784,8 @@ path = "config_deprecated_src_key_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_libraries_replaced_by_library_folders_rejected"
-path = "config_libraries_replaced_by_library_folders_rejected"
+id = "config_libraries_replaced_by_package_folders_rejected"
+path = "config_libraries_replaced_by_package_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -1799,8 +1799,8 @@ path = "config_multi_error"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_root_folders_replaced_by_library_folders_rejected"
-path = "config_root_folders_replaced_by_library_folders_rejected"
+id = "config_root_folders_replaced_by_package_folders_rejected"
+path = "config_root_folders_replaced_by_package_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -1819,8 +1819,8 @@ path = "config_plain_project_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_plain_library_folders_rejected"
-path = "config_plain_library_folders_rejected"
+id = "config_plain_package_folders_rejected"
+path = "config_plain_package_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -1844,8 +1844,8 @@ path = "config_const_record_field_projection_success"
 tags = ["integration","config","constants"]
 
 [[case]]
-id = "config_single_string_library_folders_success"
-path = "config_single_string_library_folders_success"
+id = "config_single_string_package_folders_success"
+path = "config_single_string_package_folders_success"
 tags = ["integration","config"]
 
 [[case]]
@@ -1939,8 +1939,8 @@ path = "config_js_import_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_library_folders_import_rejected"
-path = "config_library_folders_import_rejected"
+id = "config_package_folders_import_rejected"
+path = "config_package_folders_import_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -6114,58 +6114,58 @@ path = "source_lib_project_local"
 tags = ["integration", "source-libraries", "imports"]
 
 [[case]]
-id = "config_library_folder_default_lib_success"
-path = "config_library_folder_default_lib_success"
+id = "config_package_folder_default_lib_success"
+path = "config_package_folder_default_lib_success"
 tags = ["integration", "config", "libraries", "imports"]
 
 [[case]]
-id = "config_custom_library_folder_success"
-path = "config_custom_library_folder_success"
+id = "config_custom_package_folder_success"
+path = "config_custom_package_folder_success"
 tags = ["integration", "config", "libraries", "imports"]
 
 [[case]]
-id = "config_multiple_library_folders_success"
-path = "config_multiple_library_folders_success"
+id = "config_multiple_package_folders_success"
+path = "config_multiple_package_folders_success"
 tags = ["integration", "config", "libraries", "imports"]
 
 [[case]]
-id = "config_library_folder_missing_rejected"
-path = "config_library_folder_missing_rejected"
+id = "config_package_folder_missing_rejected"
+path = "config_package_folder_missing_rejected"
 tags = ["integration", "config", "libraries", "diagnostics"]
 
 [[case]]
-id = "config_library_folder_absolute_path_rejected"
-path = "config_library_folder_absolute_path_rejected"
+id = "config_package_folder_absolute_path_rejected"
+path = "config_package_folder_absolute_path_rejected"
 tags = ["integration", "config", "libraries", "diagnostics"]
 
 [[case]]
-id = "config_library_folder_dotdot_rejected"
-path = "config_library_folder_dotdot_rejected"
+id = "config_package_folder_dotdot_rejected"
+path = "config_package_folder_dotdot_rejected"
 tags = ["integration", "config", "libraries", "diagnostics"]
 
 [[case]]
-id = "config_library_folder_duplicate_rejected"
-path = "config_library_folder_duplicate_rejected"
+id = "config_package_folder_duplicate_rejected"
+path = "config_package_folder_duplicate_rejected"
 tags = ["integration", "config", "libraries", "diagnostics"]
 
 [[case]]
-id = "config_library_folder_builder_collision_rejected"
-path = "config_library_folder_builder_collision_rejected"
+id = "config_package_folder_builder_collision_rejected"
+path = "config_package_folder_builder_collision_rejected"
 tags = ["integration", "config", "libraries", "builder-libraries", "diagnostics"]
 
 [[case]]
-id = "config_library_folder_missing_default_ignored"
-path = "config_library_folder_missing_default_ignored"
+id = "config_package_folder_missing_default_ignored"
+path = "config_package_folder_missing_default_ignored"
 tags = ["integration", "config", "libraries"]
 
 [[case]]
-id = "config_library_folder_nested_path_rejected"
-path = "config_library_folder_nested_path_rejected"
+id = "config_package_folder_nested_path_rejected"
+path = "config_package_folder_nested_path_rejected"
 tags = ["integration", "config", "libraries", "diagnostics"]
 
 [[case]]
-id = "custom_library_import_resolves_through_mod"
-path = "custom_library_import_resolves_through_mod"
+id = "custom_package_import_resolves_through_mod"
+path = "custom_package_import_resolves_through_mod"
 tags = ["integration", "config", "libraries", "imports", "facades"]
 
 [[case]]
@@ -6324,18 +6324,18 @@ path = "source_lib_reexport_no_local_binding"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_cross_library_single"
-path = "source_lib_reexport_cross_library_single"
+id = "source_package_reexport_cross_package_single"
+path = "source_package_reexport_cross_package_single"
 tags = ["integration", "language", "imports", "facade", "source-libraries"]
 
 [[case]]
-id = "source_lib_reexport_cross_library_alias"
-path = "source_lib_reexport_cross_library_alias"
+id = "source_package_reexport_cross_package_alias"
+path = "source_package_reexport_cross_package_alias"
 tags = ["integration", "language", "imports", "facade", "source-libraries"]
 
 [[case]]
-id = "source_lib_reexport_cross_library_not_exported"
-path = "source_lib_reexport_cross_library_not_exported"
+id = "source_package_reexport_cross_package_not_exported"
+path = "source_package_reexport_cross_package_not_exported"
 tags = ["integration", "language", "imports", "facade", "source-libraries", "diagnostics"]
 
 [[case]]
@@ -6799,8 +6799,8 @@ path = "linear_constant_resolution_order"
 tags = ["integration", "constants", "dependency-resolution", "header-sorting"]
 
 [[case]]
-id = "const_template_head_imported_source_library"
-path = "const_template_head_imported_source_library"
+id = "const_template_head_imported_source_package"
+path = "const_template_head_imported_source_package"
 tags = ["integration", "constants", "templates", "source-libraries", "imports"]
 
 [[case]]

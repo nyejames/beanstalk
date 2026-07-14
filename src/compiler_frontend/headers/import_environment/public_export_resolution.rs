@@ -2,7 +2,7 @@
 //!
 //! WHAT: resolves cross-library and cross-module-root imports through the target module's public
 //! export maps.
-//! WHY: source-library modules and regular module roots expose symbols only through their
+//! WHY: source-backed package modules and regular module roots expose symbols only through their
 //! prepared root files; external importers cannot bypass those public surfaces.
 //! MUST NOT: perform general import target resolution (that belongs in `target_resolution.rs`).
 
@@ -20,7 +20,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Boxed diagnostic result for public export boundary checks.
 ///
-/// WHAT: gives source-library and module privacy checks one small error boundary.
+/// WHAT: gives source-backed package and module privacy checks one small error boundary.
 /// WHY: both callers already propagate boxed diagnostics, so the checks can preserve
 ///      structured errors without unboxing and reboxing them.
 type BoundaryCheckResult<T> = Result<T, Box<CompilerDiagnostic>>;
@@ -45,7 +45,7 @@ pub(crate) enum PublicExportLookupResult {
 
 /// Classification of public export for diagnostic messages.
 pub(crate) enum PublicExportSurfaceType {
-    SourceLibrary,
+    SourcePackage,
     ModuleRoot,
 }
 
@@ -55,8 +55,8 @@ pub(crate) enum PublicExportSurfaceType {
 pub(crate) struct PublicExportResolutionInput<'a> {
     pub(crate) importer_file: &'a InternedPath,
     pub(crate) header_path: &'a InternedPath,
-    pub(crate) source_library_public_exports: &'a FxHashMap<String, FxHashSet<PublicExportEntry>>,
-    pub(crate) file_library_membership: &'a FxHashMap<InternedPath, String>,
+    pub(crate) source_package_public_exports: &'a FxHashMap<String, FxHashSet<PublicExportEntry>>,
+    pub(crate) file_package_membership: &'a FxHashMap<InternedPath, String>,
     pub(crate) module_root_public_exports:
         &'a FxHashMap<InternedPath, FxHashSet<PublicExportEntry>>,
     pub(crate) file_module_membership: &'a FxHashMap<InternedPath, InternedPath>,
@@ -64,16 +64,16 @@ pub(crate) struct PublicExportResolutionInput<'a> {
     pub(crate) string_table: &'a StringTable,
 }
 
-/// Attempt to resolve an import through a source-library or module-root public surface.
+/// Attempt to resolve an import through a source-backed package or module-root public surface.
 ///
-/// WHAT: checks whether the import path starts with a known library prefix or module root,
+/// WHAT: checks whether the import path starts with a known package prefix or module root,
 /// and whether the importer is outside that module. If so, looks up the symbol name in the
 /// public surface's exported entries.
 pub(crate) fn resolve_public_export_boundary(
     input: &PublicExportResolutionInput<'_>,
 ) -> Option<PublicExportLookupResult> {
     // Try cross-library public export resolution first.
-    if let Some(result) = try_resolve_library_public_export(input) {
+    if let Some(result) = try_resolve_package_public_export(input) {
         return Some(result);
     }
 
@@ -83,9 +83,9 @@ pub(crate) fn resolve_public_export_boundary(
 
 /// Cross-library public export lookup.
 ///
-/// WHAT: when an import path starts with a library prefix and the importer is outside that
+/// WHAT: when an import path starts with a package prefix and the importer is outside that
 /// library, the symbol must be exported by the module's root-file public surface.
-fn try_resolve_library_public_export(
+fn try_resolve_package_public_export(
     input: &PublicExportResolutionInput<'_>,
 ) -> Option<PublicExportLookupResult> {
     let components = input.header_path.as_components();
@@ -94,28 +94,28 @@ fn try_resolve_library_public_export(
     }
 
     let first = input.string_table.resolve(components[0]);
-    let library_prefix = input
-        .source_library_public_exports
+    let package_prefix = input
+        .source_package_public_exports
         .keys()
         .find(|p| *p == first)?;
 
     // Internal imports within the same library use normal file-based resolution.
-    let importer_library = input.file_library_membership.get(input.importer_file);
-    if importer_library.map(|s| s.as_str()) == Some(library_prefix) {
+    let importer_package = input.file_package_membership.get(input.importer_file);
+    if importer_package.map(|s| s.as_str()) == Some(package_prefix) {
         return Some(PublicExportLookupResult::NotAPublicExportBoundary);
     }
 
-    // Imports from outside the source library must request exactly one public symbol from the
+    // Imports from outside the source-backed package must request exactly one public symbol from the
     // public root. Extra path components are implementation details, not part of the public API.
     if components.len() != 2 {
         return Some(PublicExportLookupResult::NotExported {
-            public_surface_name: library_prefix.clone(),
-            public_surface_type: PublicExportSurfaceType::SourceLibrary,
+            public_surface_name: package_prefix.clone(),
+            public_surface_type: PublicExportSurfaceType::SourcePackage,
         });
     }
 
     let symbol_name = components[1];
-    let exports = input.source_library_public_exports.get(library_prefix)?;
+    let exports = input.source_package_public_exports.get(package_prefix)?;
     for entry in exports {
         if entry.export_name == symbol_name {
             match &entry.target {
@@ -135,8 +135,8 @@ fn try_resolve_library_public_export(
     }
 
     Some(PublicExportLookupResult::NotExported {
-        public_surface_name: library_prefix.clone(),
-        public_surface_type: PublicExportSurfaceType::SourceLibrary,
+        public_surface_name: package_prefix.clone(),
+        public_surface_type: PublicExportSurfaceType::SourcePackage,
     })
 }
 
@@ -259,48 +259,48 @@ fn try_resolve_module_root_public_export(
     None
 }
 
-/// Input bundle for source-library boundary checking.
-pub(crate) struct SourceLibraryBoundaryCheckInput<'a> {
+/// Input bundle for source-backed package boundary checking.
+pub(crate) struct SourcePackageBoundaryCheckInput<'a> {
     pub(crate) importer_file: &'a InternedPath,
     pub(crate) target_file: &'a InternedPath,
     pub(crate) requested_path: &'a InternedPath,
     pub(crate) location: SourceLocation,
-    pub(crate) file_library_membership: &'a FxHashMap<InternedPath, String>,
-    pub(crate) source_library_root_files: &'a FxHashMap<String, InternedPath>,
+    pub(crate) file_package_membership: &'a FxHashMap<InternedPath, String>,
+    pub(crate) source_package_root_files: &'a FxHashMap<String, InternedPath>,
     pub(crate) string_table: &'a mut StringTable,
 }
 
-/// Enforces source-library public-surface privacy for concrete source-file imports.
+/// Enforces source-backed package public-surface privacy for concrete source-file imports.
 ///
-/// WHAT: after normal source resolution reaches a file inside a source library, an importer
+/// WHAT: after normal source resolution reaches a file inside a source-backed package, an importer
 /// outside that library may only import the library's prepared root file. Grouped public symbol
 /// imports should already have resolved through `resolve_public_export_boundary`.
-pub(crate) fn check_source_library_boundary(
-    input: SourceLibraryBoundaryCheckInput<'_>,
+pub(crate) fn check_source_package_boundary(
+    input: SourcePackageBoundaryCheckInput<'_>,
 ) -> BoundaryCheckResult<()> {
-    let Some(target_library) = input.file_library_membership.get(input.target_file) else {
+    let Some(target_package) = input.file_package_membership.get(input.target_file) else {
         return Ok(());
     };
 
-    let importer_library = input.file_library_membership.get(input.importer_file);
-    if importer_library.map(String::as_str) == Some(target_library.as_str()) {
+    let importer_package = input.file_package_membership.get(input.importer_file);
+    if importer_package.map(String::as_str) == Some(target_package.as_str()) {
         return Ok(());
     }
 
     if input
-        .source_library_root_files
-        .get(target_library)
+        .source_package_root_files
+        .get(target_package)
         .is_some_and(|root_file| input.target_file == root_file)
     {
         return Ok(());
     }
 
-    let public_surface_name_id = input.string_table.intern(target_library);
+    let public_surface_name_id = input.string_table.intern(target_package);
     Err(Box::new(
         CompilerDiagnostic::not_exported_by_public_surface(
             input.requested_path.clone(),
             public_surface_name_id,
-            ImportPublicSurfaceType::SourceLibrary,
+            ImportPublicSurfaceType::SourcePackage,
             input.location,
         ),
     ))
@@ -332,7 +332,7 @@ pub(crate) fn check_module_boundary(
     let importer_root = input.file_module_membership.get(input.importer_file);
     let target_root = input.file_module_membership.get(input.target_file);
 
-    // Skip if either file has no module root membership (e.g., source libraries handled separately).
+    // Skip if either file has no module root membership (e.g., source-backed packages handled separately).
     let (Some(importer_root), Some(target_root)) = (importer_root, target_root) else {
         return Ok(());
     };

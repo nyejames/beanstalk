@@ -124,7 +124,7 @@ pub fn run_frontend_benchmark(
         mut config,
         style_directives,
         mut string_table,
-        mut libraries,
+        mut frontend_surface,
     } = match bootstrap_project_build(&project_builder, valid_path) {
         Ok(bootstrap) => bootstrap,
         Err(messages) => {
@@ -146,7 +146,7 @@ pub fn run_frontend_benchmark(
         &mut config,
         &flags,
         &style_directives,
-        &mut libraries,
+        &mut frontend_surface,
         &mut string_table,
     ) {
         Ok(_modules) => CompilerMessages::empty(string_table),

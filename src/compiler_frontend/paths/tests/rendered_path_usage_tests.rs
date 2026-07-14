@@ -37,8 +37,9 @@ impl TestHarness {
         let resolver = ProjectPathResolver::new(
             project_root.clone(),
             entry_root,
-            crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
-            &crate::libraries::SourceFileKindRegistry::default(),
+            crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(
+            ),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
         )
         .expect("resolver should build");
 

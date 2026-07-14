@@ -4,6 +4,9 @@
 //! `content #String` constant with a structurally generated `$md` template initializer.
 
 use super::prepare_beandown_file;
+use crate::builder_surface::PackageOrigin;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry, SourcePackageRegistry};
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
@@ -33,8 +36,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizerEntryMode};
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::collections::BTreeMap;
 use std::fs;
@@ -100,7 +101,7 @@ fn ast_from_beandown_source(source: &str) -> (Ast, StringTable) {
     let project_path_resolver = ProjectPathResolver::new(
         project_path.clone(),
         project_path,
-        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
+        crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(),
         &SourceFileKindRegistry::default(),
     )
     .expect("test project path resolver should build");
@@ -183,7 +184,7 @@ impl BeandownScopeFixture {
         let html_root = temp_dir.path().join("html_library");
 
         fs::create_dir_all(&entry_root).expect("entry root should be created");
-        fs::create_dir_all(&html_root).expect("HTML source library should be created");
+        fs::create_dir_all(&html_root).expect("HTML source-backed package should be created");
         let project_root =
             fs::canonicalize(project_root).expect("project root should canonicalize");
         let entry_root = fs::canonicalize(entry_root).expect("entry root should canonicalize");
@@ -205,7 +206,7 @@ impl BeandownScopeFixture {
 ;
 "#,
         )
-        .expect("HTML source library root should be written");
+        .expect("HTML source-backed package root should be written");
 
         let mut canonical_files = vec![html_root_file.clone()];
         for (relative_path, source) in files {
@@ -217,8 +218,8 @@ impl BeandownScopeFixture {
             canonical_files.push(fs::canonicalize(path).expect("source path should canonicalize"));
         }
 
-        let mut source_libraries = SourceLibraryRegistry::new();
-        source_libraries.register_filesystem_root("html", html_root.clone());
+        let mut source_packages = SourcePackageRegistry::new();
+        source_packages.register_filesystem_root("html", html_root.clone(), PackageOrigin::Builder);
 
         let mut source_file_kinds = SourceFileKindRegistry::new();
         source_file_kinds.register("bd", SourceFileKind::Beandown);
@@ -227,8 +228,8 @@ impl BeandownScopeFixture {
         let project_path_resolver = ProjectPathResolver::new_with_module_roots(
             project_root.clone(),
             entry_root.clone(),
-            crate::build_system::create_project_modules::source_library_discovery::
-                prepare_source_library_roots(&source_libraries),
+            crate::build_system::create_project_modules::source_package_discovery::
+                prepare_source_package_roots(&source_packages),
             &source_file_kinds,
             module_roots,
         )
@@ -1309,7 +1310,7 @@ fn beandown_folded_output_matches_authored_markdown_template() {
     let project_path_resolver = ProjectPathResolver::new(
         project_path.clone(),
         project_path,
-        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
+        crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(),
         &SourceFileKindRegistry::default(),
     )
     .expect("test project path resolver should build");

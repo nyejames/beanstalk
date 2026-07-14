@@ -4,12 +4,12 @@
 //! WHY: compiler stages should carry stable IDs, source locations, and typed context rather than
 //! pre-rendered strings or generic argument maps.
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
-use crate::libraries::SourceFileKind;
 
 mod remap;
 mod types;

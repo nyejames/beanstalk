@@ -5,11 +5,11 @@
 //! payload facts themselves must become user-facing text through one dispatch path.
 
 use super::*;
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
     InvalidTraitKeywordUsageReason, NamingConvention, ReservedNameOwner,
 };
-use crate::libraries::SourceFileKind;
 
 pub(crate) struct RenderedPayload {
     pub(crate) message: String,
@@ -763,9 +763,9 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
             let path_text = requested_path.to_portable_string(string_table);
             let public_surface_name = string_table.resolve(*public_surface_name);
             match public_surface_type {
-                crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::SourceLibrary => {
+                crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::SourcePackage => {
                     format!(
-                        "Cannot import '{path_text}' from source library '@{public_surface_name}' because it is not exported by the library public surface."
+                        "Cannot import '{path_text}' from source-backed package '@{public_surface_name}' because it is not exported by the library public surface."
                     )
                 }
                 crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::ModuleRoot => {

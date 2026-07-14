@@ -6,6 +6,7 @@
 //!      here breaks cross-file visibility and AST constant dependency ordering.
 
 use super::*;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -17,7 +18,6 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::PathBuf;
 
 fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, StringTable) {
@@ -569,7 +569,7 @@ fn trait_incompatibility_references_do_not_create_dependency_sort_edges() {
 }
 
 #[test]
-fn source_library_public_export_dependency_edges_do_not_require_concrete_header_paths() {
+fn source_package_public_export_dependency_edges_do_not_require_concrete_header_paths() {
     let (mut headers, mut string_table) = parse_module_headers(
         &[("src/page.bst", "NeedsWidget #String = \"ok\"\n")],
         "src/page.bst",
@@ -592,7 +592,7 @@ fn source_library_public_export_dependency_edges_do_not_require_concrete_header_
 
     headers
         .module_symbols
-        .source_library_public_exports
+        .source_package_public_exports
         .entry("helper".to_owned())
         .or_default()
         .insert(PublicExportEntry {
@@ -613,6 +613,6 @@ fn source_library_public_export_dependency_edges_do_not_require_concrete_header_
     assert_eq!(
         non_start_names,
         vec!["NeedsWidget"],
-        "source-library public export paths may differ from concrete source headers"
+        "source-backed package public export paths may differ from concrete source headers"
     );
 }

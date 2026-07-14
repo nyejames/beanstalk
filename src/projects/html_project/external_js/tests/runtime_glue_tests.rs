@@ -8,8 +8,8 @@ use super::*;
 use crate::build_system::build::{FileKind, Module};
 use crate::compiler_frontend::external_packages::{
     ExternalAbiType, ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings,
-    ExternalJsLowering, ExternalPackageId, ExternalPackageOrigin, ExternalPackageRegistry,
-    ExternalReturnSlot, ExternalSignatureType,
+    ExternalJsLowering, ExternalPackageId, ExternalPackageRegistry, ExternalReturnSlot,
+    ExternalSignatureType,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::external_js::runtime_emission_plan::HtmlExternalRuntimeEmissionPlan;
@@ -84,7 +84,7 @@ fn generate_module_glue_empty_when_export_registered_but_not_referenced() {
         .push(crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
-                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
                     canonical_source_path: PathBuf::from("/project/lib.js"),
                     asset_kind: "js".to_owned(),
                 },
@@ -121,7 +121,7 @@ fn generate_module_glue_emits_glue_file_for_referenced_export() {
         .push(crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
-                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
                     canonical_source_path: PathBuf::from("/project/lib.js"),
                     asset_kind: "js".to_owned(),
                 },
@@ -176,7 +176,7 @@ fn generate_module_glue_nested_html_output_path() {
         .push(crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
-                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
                     canonical_source_path: PathBuf::from("/project/lib.js"),
                     asset_kind: "js".to_owned(),
                 },
@@ -214,7 +214,7 @@ fn generate_module_glue_asset_import_relative_to_glue_module() {
         .push(crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
-                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
                     canonical_source_path: PathBuf::from("/project/lib.js"),
                     asset_kind: "js".to_owned(),
                 },
@@ -255,7 +255,7 @@ fn generate_module_glue_fallible_wrapper_validates_result_shape() {
         .push(crate::build_system::build::ModuleExternalImport {
             package_id: ExternalPackageId(0),
             runtime_asset: Some(
-                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity {
                     canonical_source_path: PathBuf::from("/project/lib.js"),
                     asset_kind: "js".to_owned(),
                 },
@@ -388,7 +388,7 @@ fn build_import_map_html_deduplicates_by_specifier() {
             package_id: ExternalPackageId(1),
             runtime_asset: None,
             required_runtime_imports: vec![
-                crate::libraries::external_import_providers::provider::RequiredRuntimeImport {
+                crate::builder_surface::external_import_providers::provider::RequiredRuntimeImport {
                     module_name: "@beanstalk/runtime".to_owned(),
                     imported_names: vec!["bstOk".to_owned()],
                 },
@@ -417,7 +417,7 @@ fn create_module_with_runtime_requirement() -> Module {
             package_id: ExternalPackageId(0),
             runtime_asset: None,
             required_runtime_imports: vec![
-                crate::libraries::external_import_providers::provider::RequiredRuntimeImport {
+                crate::builder_surface::external_import_providers::provider::RequiredRuntimeImport {
                     module_name: "@beanstalk/runtime".to_owned(),
                     imported_names: vec!["bstOk".to_owned(), "bstErr".to_owned()],
                 },
@@ -436,7 +436,12 @@ fn create_registry_with_export(
 ) {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("test/pkg", ExternalPackageOrigin::ProjectLocalJs)
+        .register_package(
+            "test/pkg",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::ProjectLocal,
+            ),
+        )
         .unwrap();
     let function_id = ExternalFunctionId::Synthetic(42);
     registry
@@ -470,7 +475,12 @@ fn create_registry_with_fallible_export(
 ) {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("test/pkg", ExternalPackageOrigin::ProjectLocalJs)
+        .register_package(
+            "test/pkg",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::ProjectLocal,
+            ),
+        )
         .unwrap();
     let function_id = ExternalFunctionId::Synthetic(43);
     registry

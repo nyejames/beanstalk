@@ -16,7 +16,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
 
-use crate::libraries::{LibrarySet, SourceFileKind};
+use crate::builder_surface::{BuilderSurface, SourceFileKind};
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 use rayon::prelude::*;
@@ -26,13 +26,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::collision_detection::validate_source_library_tree_collisions;
+use super::collision_detection::validate_source_package_tree_collisions;
 use super::frontend_orchestration::FrontendModuleBuildContext;
 use super::module_inventory;
 use super::project_roots;
 use super::reachable_file_discovery;
-use super::root_validation::validate_source_library_roots;
-use super::source_library_discovery::prepare_source_library_roots;
+use super::root_validation::validate_source_package_roots;
+use super::source_package_discovery::prepare_source_package_roots;
 use super::source_tree_index::SourceTreeIndex;
 
 /// Record a Stage 0 build-system timing through the central `timers` substrate.
@@ -57,7 +57,7 @@ pub(crate) fn compile_single_file_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
-    libraries: &mut LibrarySet,
+    builder_surface: &mut BuilderSurface,
     extension: &OsStr,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
@@ -120,9 +120,10 @@ pub(crate) fn compile_single_file_frontend(
 
     // 3. Initialize path resolver for imports.
     let path_resolver_start = crate::timing::start_pipeline_timing();
-    let prepared_source_library_roots = prepare_source_library_roots(&libraries.source_libraries);
+    let prepared_source_package_roots =
+        prepare_source_package_roots(&builder_surface.source_packages);
     if let Err(messages) =
-        validate_source_library_roots(&prepared_source_library_roots, string_table)
+        validate_source_package_roots(&prepared_source_package_roots, string_table)
     {
         log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
         log_stage_timing("stage0.single_file.total", total_start);
@@ -130,7 +131,7 @@ pub(crate) fn compile_single_file_frontend(
     }
 
     if let Err(messages) =
-        validate_source_library_tree_collisions(&libraries.source_libraries, string_table)
+        validate_source_package_tree_collisions(&builder_surface.source_packages, string_table)
     {
         log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
         log_stage_timing("stage0.single_file.total", total_start);
@@ -145,7 +146,7 @@ pub(crate) fn compile_single_file_frontend(
         match SourceTreeIndex::bounded_module_roots_for_single_file(
             &entry_path,
             config,
-            &libraries.source_libraries,
+            &builder_surface.source_packages,
             string_table,
         ) {
             Ok(module_roots) => module_roots,
@@ -161,8 +162,8 @@ pub(crate) fn compile_single_file_frontend(
     let project_path_resolver = match ProjectPathResolver::new_with_module_roots(
         source_root.clone(),
         source_root.clone(),
-        prepared_source_library_roots,
-        &libraries.source_file_kinds,
+        prepared_source_package_roots,
+        &builder_surface.source_file_kinds,
         module_roots,
     ) {
         Ok(resolver) => resolver,
@@ -176,10 +177,10 @@ pub(crate) fn compile_single_file_frontend(
 
     // 4. Discover all transitively reachable files.
     let mut external_imports = reachable_file_discovery::ExternalImportDiscoveryState {
-        external_packages: &mut libraries.external_packages,
-        providers: &libraries.external_import_providers,
-        cache: &mut libraries.external_import_cache,
-        resolution_table: &mut libraries.external_import_resolution_table,
+        external_packages: &mut builder_surface.binding_packages,
+        providers: &builder_surface.external_import_providers,
+        cache: &mut builder_surface.external_import_cache,
+        resolution_table: &mut builder_surface.external_import_resolution_table,
     };
 
     let reachable_files_start = crate::timing::start_pipeline_timing();
@@ -201,7 +202,7 @@ pub(crate) fn compile_single_file_frontend(
 
     // Share the effective external package registry immutably for the rest of the frontend
     // pipeline so each stage does not need its own deep clone.
-    let external_packages = Arc::new(libraries.external_packages.clone());
+    let external_packages = Arc::new(builder_surface.binding_packages.clone());
 
     // 5. Run the module compilation pipeline with a local string-table delta.
     add_frontend_counter(FrontendCounter::ModuleCompilationSerialCount, 1);
@@ -221,8 +222,8 @@ pub(crate) fn compile_single_file_frontend(
         project_path_resolver: Some(project_path_resolver),
         style_directives,
         external_packages: Arc::clone(&external_packages),
-        external_import_resolution_table: &libraries.external_import_resolution_table,
-        builder_runtime_packages: &libraries.builder_runtime_packages,
+        external_import_resolution_table: &builder_surface.external_import_resolution_table,
+        builder_runtime_packages: &builder_surface.builder_runtime_packages,
     })
     .compile_module(&input_files, &entry_path, local_table)
     {
@@ -277,7 +278,7 @@ struct DirectoryModuleCompileContext<'a> {
     project_path_resolver: &'a ProjectPathResolver,
     style_directives: &'a StyleDirectiveRegistry,
     external_packages: &'a Arc<ExternalPackageRegistry>,
-    libraries: &'a LibrarySet,
+    builder_surface: &'a BuilderSurface,
 }
 
 impl DirectoryModuleCompileContext<'_> {
@@ -290,8 +291,10 @@ impl DirectoryModuleCompileContext<'_> {
             project_path_resolver: Some(self.project_path_resolver.clone()),
             style_directives: self.style_directives,
             external_packages: Arc::clone(self.external_packages),
-            external_import_resolution_table: &self.libraries.external_import_resolution_table,
-            builder_runtime_packages: &self.libraries.builder_runtime_packages,
+            external_import_resolution_table: &self
+                .builder_surface
+                .external_import_resolution_table,
+            builder_runtime_packages: &self.builder_surface.builder_runtime_packages,
         }
         .compile_module(
             &discovered.input_files,
@@ -312,7 +315,7 @@ pub(crate) fn compile_directory_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
-    libraries: &mut LibrarySet,
+    builder_surface: &mut BuilderSurface,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     let total_start = crate::timing::start_pipeline_timing();
@@ -321,8 +324,8 @@ pub(crate) fn compile_directory_frontend(
     let path_resolver_start = crate::timing::start_pipeline_timing();
     let project_setup = match project_roots::build_project_path_resolver_with_index(
         config,
-        &libraries.source_libraries,
-        &libraries.source_file_kinds,
+        &builder_surface.source_packages,
+        &builder_surface.source_file_kinds,
         string_table,
     ) {
         Ok(resolver) => resolver,
@@ -337,10 +340,10 @@ pub(crate) fn compile_directory_frontend(
 
     // 2. Scan the directory for entry modules and their reachable files.
     let mut external_imports = reachable_file_discovery::ExternalImportDiscoveryState {
-        external_packages: &mut libraries.external_packages,
-        providers: &libraries.external_import_providers,
-        cache: &mut libraries.external_import_cache,
-        resolution_table: &mut libraries.external_import_resolution_table,
+        external_packages: &mut builder_surface.binding_packages,
+        providers: &builder_surface.external_import_providers,
+        cache: &mut builder_surface.external_import_cache,
+        resolution_table: &mut builder_surface.external_import_resolution_table,
     };
 
     let module_inventory_start = crate::timing::start_pipeline_timing();
@@ -363,7 +366,7 @@ pub(crate) fn compile_directory_frontend(
 
     // Share the effective external package registry immutably across all module compilations;
     // directory modules may compile in parallel and can safely read the same Arc.
-    let external_packages = Arc::new(libraries.external_packages.clone());
+    let external_packages = Arc::new(builder_surface.binding_packages.clone());
 
     // 3. Compile modules, each with its own local string-table delta.
     //
@@ -377,7 +380,7 @@ pub(crate) fn compile_directory_frontend(
         project_path_resolver: &project_path_resolver,
         style_directives,
         external_packages: &external_packages,
-        libraries,
+        builder_surface,
     };
     let compile_in_parallel = discovered_modules.len() > 1;
     if compile_in_parallel {

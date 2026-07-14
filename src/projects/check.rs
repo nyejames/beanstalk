@@ -88,7 +88,7 @@ fn execute_check(path: &str) -> CheckOutcome {
         mut config,
         style_directives,
         mut string_table,
-        mut libraries,
+        mut frontend_surface,
     } = match bootstrap_project_build(&project_builder, valid_path) {
         Ok(bootstrap) => {
             log_check_timing("command.check.bootstrap", bootstrap_start);
@@ -108,7 +108,7 @@ fn execute_check(path: &str) -> CheckOutcome {
         &mut config,
         &[],
         &style_directives,
-        &mut libraries,
+        &mut frontend_surface,
         &mut string_table,
     ) {
         Ok(modules) => {

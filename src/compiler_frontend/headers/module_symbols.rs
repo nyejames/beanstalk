@@ -160,17 +160,17 @@ pub(crate) struct ModuleSymbols {
     //      enough to avoid importing unrelated methods from the same source file.
     pub(crate) receiver_method_receiver_names: FxHashMap<InternedPath, StringId>,
 
-    // Public export data: maps source-library import prefixes to exported root-file entries.
+    // Public export data: maps source-backed package import prefixes to exported root-file entries.
     // Each entry records the export name (which may differ from the target path name via alias)
     // and the resolved target (source symbol path or external symbol id).
-    pub(crate) source_library_public_exports: FxHashMap<String, FxHashSet<PublicExportEntry>>,
-    // Maps source-library import prefix to the actual logical root source file.
+    pub(crate) source_package_public_exports: FxHashMap<String, FxHashSet<PublicExportEntry>>,
+    // Maps source-backed package import prefix to the actual logical root source file.
     // WHY: namespace imports need the prepared root file itself, not a synthetic path spelling,
-    // because source-library roots usually live under configured folders such as `lib/`.
-    pub(crate) source_library_root_files: FxHashMap<String, InternedPath>,
-    // Maps source file logical path to its library prefix, if the file belongs to a source library.
-    pub(crate) file_library_membership: FxHashMap<InternedPath, String>,
-    // Module root membership for entry-root files (not source libraries).
+    // because source-backed package roots usually live under configured folders such as `lib/`.
+    pub(crate) source_package_root_files: FxHashMap<String, InternedPath>,
+    // Maps source file logical path to its package prefix, if the file belongs to a source-backed package.
+    pub(crate) file_package_membership: FxHashMap<InternedPath, String>,
+    // Module root membership for entry-root files (not source-backed packages).
     // Maps file path (logical or canonical) to its module root path.
     pub(crate) file_module_membership: FxHashMap<InternedPath, InternedPath>,
     // Public exports for module roots, keyed by module root path.
@@ -205,9 +205,9 @@ impl ModuleSymbols {
             nominal_type_paths: FxHashSet::default(),
             trait_paths: FxHashSet::default(),
             generic_declarations_by_path: FxHashMap::default(),
-            source_library_public_exports: FxHashMap::default(),
-            source_library_root_files: FxHashMap::default(),
-            file_library_membership: FxHashMap::default(),
+            source_package_public_exports: FxHashMap::default(),
+            source_package_root_files: FxHashMap::default(),
+            file_package_membership: FxHashMap::default(),
             file_module_membership: FxHashMap::default(),
             module_root_public_exports: FxHashMap::default(),
             module_root_boundaries: Vec::new(),

@@ -25,8 +25,8 @@ pub(crate) use bindings::{
 };
 pub(crate) use public_export_resolution::{
     ModuleBoundaryCheckInput, PublicExportLookupResult, PublicExportResolutionInput,
-    PublicExportSurfaceType, SourceLibraryBoundaryCheckInput, check_module_boundary,
-    check_source_library_boundary, resolve_public_export_boundary,
+    PublicExportSurfaceType, SourcePackageBoundaryCheckInput, check_module_boundary,
+    check_source_package_boundary, resolve_public_export_boundary,
 };
 
 pub(crate) use target_resolution::{
@@ -39,11 +39,11 @@ pub(crate) use visible_names::{VisibleNameBinding, VisibleNameRegistry, check_al
 
 pub(crate) use builder::ImportEnvironmentBuilder;
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 
 /// Input bundle for preparing the module-wide import environment.
 ///

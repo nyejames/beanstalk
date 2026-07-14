@@ -43,8 +43,8 @@ impl WatchScope {
             let project_root = canonical_if_exists(&config.entry_dir);
             scope.watch_exact_file_or_parent(&project_root.join(CONFIG_FILE_NAME));
             scope.watch_directory_or_parent(&resolve_project_entry_root(config));
-            for library_folder in &config.library_folders {
-                scope.watch_directory_or_parent(&project_root.join(library_folder));
+            for package_folder in &config.package_folders {
+                scope.watch_directory_or_parent(&project_root.join(package_folder));
             }
             return scope;
         }

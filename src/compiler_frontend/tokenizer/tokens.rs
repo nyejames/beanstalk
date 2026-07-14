@@ -3,6 +3,7 @@
 //! WHAT: defines token kinds, token records, and the location metadata threaded through parsing.
 //! WHY: every frontend stage past lexing depends on one canonical token and location model.
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::arena::TokenStats;
 pub use crate::compiler_frontend::compiler_messages::source_location::{
     CharPosition, SourceLocation,
@@ -11,7 +12,6 @@ use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
-use crate::libraries::SourceFileKind;
 use crate::token_log;
 use std::iter::Peekable;
 use std::path::PathBuf;

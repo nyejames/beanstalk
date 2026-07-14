@@ -8,6 +8,14 @@
 
 use crate::build_system::build::InputFile;
 
+use crate::builder_surface::SourceFileKind;
+use crate::builder_surface::external_import_providers::cache::ExternalImportCacheKey;
+use crate::builder_surface::external_import_providers::cache::ExternalImportProviderCache;
+use crate::builder_surface::external_import_providers::provider::{
+    ExternalImportProvider, ExternalImportProviderContext, ExternalImportRequest,
+};
+use crate::builder_surface::external_import_providers::registry::ExternalImportProviderRegistry;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
@@ -18,14 +26,6 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceFileKind;
-use crate::libraries::external_import_providers::cache::ExternalImportCacheKey;
-use crate::libraries::external_import_providers::cache::ExternalImportProviderCache;
-use crate::libraries::external_import_providers::provider::{
-    ExternalImportProvider, ExternalImportProviderContext, ExternalImportRequest,
-};
-use crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
@@ -367,10 +367,10 @@ fn traverse_reachable_source_files(
         });
     }
 
-    // Seed every source library root file so its authored public surface is available.
+    // Seed every source-backed package root file so its authored public surface is available.
     // WHY: imports may directly resolve to a target file after Stage 0 path scanning, but the
     // root file still needs to be compiled so its public declarations can be checked later.
-    for (_, root_path) in project_path_resolver.source_library_public_surface_files() {
+    for (_, root_path) in project_path_resolver.source_package_public_surface_files() {
         queue.push_back(ReachableSourceFile {
             path: root_path.clone(),
             kind: SourceFileKind::Beanstalk,
@@ -1013,7 +1013,7 @@ fn resolve_provider_backed_import(
 
     // Enforce module/library boundaries for provider-backed imports.
     // A file may only directly import a .js file that lives in the same module,
-    // source library, or default entry-root area.
+    // source-backed package, or default entry-root area.
     check_provider_import_module_boundary(
         request.importer_canonical_path,
         &canonical_source_path,
@@ -1104,7 +1104,7 @@ fn insert_external_import_resolution(
     source_file_logical: String,
     raw_import_prefix: &str,
     logical_import_prefix: String,
-    resolved: crate::libraries::external_import_providers::provider::ResolvedExternalImport,
+    resolved: crate::builder_surface::external_import_providers::provider::ResolvedExternalImport,
 ) {
     external_import_resolution_table.insert(
         source_file_logical.clone(),
@@ -1176,7 +1176,7 @@ fn source_file_logical_path(
 //  Provider import boundary check
 // -------------------------
 
-/// Enforce that a provider-backed import does not cross a module or source-library boundary.
+/// Enforce that a provider-backed import does not cross a module or source-backed package boundary.
 ///
 /// WHAT: .js files are private implementation details of the module or library that owns them.
 ///       Cross-module or cross-library .js imports bypass the public surface and are rejected.
@@ -1203,7 +1203,7 @@ fn check_provider_import_module_boundary(
 
 /// Determine the boundary "container" of a file for provider import checks.
 ///
-/// WHAT: returns the module root, source library root, or entry root that contains the file.
+/// WHAT: returns the module root, source-backed package root, or entry root that contains the file.
 /// WHY: two files in the same container may freely import each other's .js files.
 fn provider_import_container(
     project_path_resolver: &ProjectPathResolver,
@@ -1214,9 +1214,9 @@ fn provider_import_container(
         return Some(root);
     }
 
-    // Source libraries are the next boundary. Use the resolver's nearest-root policy so nested
-    // libraries do not inherit provider access from an outer registered root.
-    if let Some((_, root)) = project_path_resolver.source_library_for_file(file) {
+    // Source-backed packages are the next boundary. Use the resolver's nearest-root policy so nested
+    // packages do not inherit provider access from an outer registered root.
+    if let Some((_, root)) = project_path_resolver.source_package_for_file(file) {
         return Some(root.to_path_buf());
     }
 

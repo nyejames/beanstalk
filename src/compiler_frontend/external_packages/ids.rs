@@ -25,23 +25,6 @@ pub const COLLECTION_LENGTH_HOST_NAME: &str = "__bs_collection_length";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExternalPackageId(pub u32);
 
-/// Where an external package came from.
-///
-/// WHAT: distinguishes built-in compiler packages, builder runtime packages, and
-/// project-local provider results so diagnostics and backend emission can reason
-/// about the source without parsing paths.
-/// WHY: origin metadata supports general provider frameworks while keeping the model
-/// non-JS-specific.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ExternalPackageOrigin {
-    /// Package registered from built-in compiler core libraries (e.g. `@core/io`).
-    Builtin,
-    /// Package provided by the builder runtime (e.g. builder-owned JS libraries).
-    BuilderRuntime,
-    /// Package derived from a project-local file via an external import provider.
-    ProjectLocalJs,
-}
-
 /// Stable identifier for an external function across all compiler stages and backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalFunctionId {

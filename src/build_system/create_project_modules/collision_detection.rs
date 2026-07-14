@@ -1,6 +1,6 @@
-//! Stage 0 source-library-tree collision detection.
+//! Stage 0 source-backed package-tree collision detection.
 //!
-//! WHAT: scans source-library roots for sibling `.bst` file / folder name collisions and reports
+//! WHAT: scans source-backed package roots for sibling `.bst` file / folder name collisions and reports
 //! them as typed project-structure diagnostics.
 //! WHY: unambiguous import path segments are a prerequisite for correct import resolution. The
 //! collision rule is Stage 0-owned, not HTML-builder-specific.
@@ -8,10 +8,10 @@
 //! Entry-root collisions are owned by `SourceTreeIndex::discover` during the single entry-root
 //! traversal.
 
+use crate::builder_surface::SourcePackageRegistry;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
 
 use std::collections::BTreeSet;
@@ -21,24 +21,24 @@ use std::path::{Path, PathBuf};
 use super::project_structure_diagnostics::{path_id, project_structure_messages};
 
 /// Reject sibling `.bst` file stems and folder names that share the same import name inside
-/// source-library trees.
+/// source-backed package trees.
 ///
-/// WHAT: for every source-library root, collects the set of `.bst` file stems (excluding `.js`
+/// WHAT: for every source-backed package root, collects the set of `.bst` file stems (excluding `.js`
 /// files) and folder names. If any stem collides with a folder name, emits a typed diagnostic.
 /// WHY: Beanstalk imports resolve a path segment to either a `.bst` file or a folder; sharing the
 /// same stem makes the import name ambiguous.
 ///
 /// Entry-root collisions are checked by `SourceTreeIndex::discover` during the single entry-root
-/// traversal. Source-library trees remain separate because registered source-library traversal
+/// traversal. Source-backed package trees remain separate because registered source-backed package traversal
 /// lives outside entry-root indexing.
 ///
 /// The rule applies even when the folder is empty or contains no Beanstalk files.
-pub(super) fn validate_source_library_tree_collisions(
-    source_libraries: &SourceLibraryRegistry,
+pub(super) fn validate_source_package_tree_collisions(
+    source_packages: &SourcePackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    for library in source_libraries.iter() {
-        let crate::libraries::ProvidedSourceRoot::Filesystem(root) = &library.root;
+    for package in source_packages.iter() {
+        let crate::builder_surface::ProvidedSourceRoot::Filesystem(root) = &package.root;
         if root.is_dir() {
             validate_directory_tree_collisions(root, string_table)?;
         }

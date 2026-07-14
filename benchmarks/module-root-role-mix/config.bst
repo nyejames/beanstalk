@@ -2,4 +2,4 @@ project #= "html"
 entry_root #= "."
 dev_folder #= "scratch"
 output_folder #= "generated"
-library_folders #= {"lib"}
+package_folders #= {"lib"}

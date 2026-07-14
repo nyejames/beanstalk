@@ -5,12 +5,13 @@
 //! header-stage data shape needs direct coverage.
 
 use super::*;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_messages::{DiagnosticKind, ImportDiagnosticKind};
 use crate::compiler_frontend::external_packages::{
     ExternalAbiType, ExternalConstantDef, ExternalConstantId, ExternalConstantValue,
-    ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings, ExternalPackageOrigin,
-    ExternalPackageRegistry, ExternalReturnAlias, ExternalSymbolId, ExternalSymbolPath,
-    ExternalTypeDef, ExternalTypeId, external_success_returns,
+    ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings, ExternalPackageRegistry,
+    ExternalReturnAlias, ExternalSymbolId, ExternalSymbolPath, ExternalTypeDef, ExternalTypeId,
+    external_success_returns,
 };
 use crate::compiler_frontend::headers::import_environment::{
     ImportEnvironmentInput, prepare_import_environment,
@@ -20,7 +21,6 @@ use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use rustc_hash::FxHashSet;
 
 fn intern_path(components: &[&str], string_table: &mut StringTable) -> InternedPath {
@@ -73,7 +73,12 @@ fn assert_duplicate_import_surface_member(error: CompilerDiagnostic) {
 fn external_nested_namespace_tree_builds_correctly() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package should register");
 
     registry
@@ -389,7 +394,12 @@ fn module_root_namespace_uses_prepared_root_file_identity() {
 
 fn register_prelude_namespace_test_package(registry: &mut ExternalPackageRegistry) {
     let package_id = registry
-        .register_package("@test/prelude_ns", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/prelude_ns",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry

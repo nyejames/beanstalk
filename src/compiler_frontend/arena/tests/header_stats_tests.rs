@@ -1,11 +1,11 @@
 //! Unit tests for `HeaderStats` aggregation.
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::parse_single_file_headers;
 use crate::compiler_frontend::headers::parse_file_headers::parse_file_headers_tests::prepare_single_file;
 use crate::compiler_frontend::headers::parse_file_headers::parse_headers;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::PathBuf;
 
 #[test]

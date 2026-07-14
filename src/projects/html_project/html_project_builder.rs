@@ -10,11 +10,11 @@ use crate::backends::external_package_validation::{
     BackendTarget, ExternalPackageValidationError, validate_hir_external_package_support,
 };
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
+use crate::builder_surface::{BuilderSurface, SourceFileKind};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{LibrarySet, SourceFileKind};
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::diagnostics::{
     duplicate_html_output_path_messages, tracked_asset_builder_output_conflict_messages,
@@ -42,7 +42,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const HTML_SOURCE_LIBRARY_PREFIX: &str = "html";
+const HTML_SOURCE_PACKAGE_PREFIX: &str = "html";
 
 #[derive(Debug)]
 pub struct HtmlProjectBuilder {
@@ -276,50 +276,53 @@ impl BackendBuilder for HtmlProjectBuilder {
         html_project_style_directives()
     }
 
-    fn libraries(&self) -> LibrarySet {
-        let mut libraries = LibrarySet::with_mandatory_core();
-        libraries.source_libraries.register_filesystem_root(
-            HTML_SOURCE_LIBRARY_PREFIX,
-            LibrarySet::builtin_source_library_root(HTML_SOURCE_LIBRARY_PREFIX),
+    fn frontend_surface(&self) -> BuilderSurface {
+        let mut builder_surface = BuilderSurface::with_mandatory_core();
+        builder_surface.source_packages.register_filesystem_root(
+            HTML_SOURCE_PACKAGE_PREFIX,
+            BuilderSurface::builtin_source_package_root(HTML_SOURCE_PACKAGE_PREFIX),
+            crate::builder_surface::PackageOrigin::Builder,
         );
 
-        libraries.expose_html_core_libraries();
+        builder_surface.expose_html_core_packages();
 
-        let canvas_metadata = register_web_canvas_package(&mut libraries.external_packages);
-        libraries.builder_runtime_packages.push(canvas_metadata);
+        let canvas_metadata = register_web_canvas_package(&mut builder_surface.binding_packages);
+        builder_surface
+            .builder_runtime_packages
+            .push(canvas_metadata);
 
-        Self::register_html_config_keys(&mut libraries);
+        Self::register_html_config_keys(&mut builder_surface);
 
-        libraries.source_file_kinds.register(
+        builder_surface.source_file_kinds.register(
             SourceFileKind::Beandown.extension(),
             SourceFileKind::Beandown,
         );
-        libraries.source_file_kinds.register(
+        builder_surface.source_file_kinds.register(
             SourceFileKind::PlainMarkdown.extension(),
             SourceFileKind::PlainMarkdown,
         );
 
-        libraries
+        builder_surface
             .external_import_providers
             .register(std::sync::Arc::new(JsExternalImportProvider::new()));
 
         if self.include_test_packages {
-            libraries.external_packages = libraries
-                .external_packages
+            builder_surface.binding_packages = builder_surface
+                .binding_packages
                 .with_test_packages_for_integration();
         }
 
-        libraries
+        builder_surface
     }
 }
 
 impl HtmlProjectBuilder {
-    /// Register HTML-backend-specific config keys into the library set's key registry.
+    /// Register HTML-backend-specific config keys into the builder surface's key registry.
     ///
     /// WHY: Stage 0 config loading must know which keys are valid before backend semantic
     /// validation runs. Keeping registration here keeps HTML-specific meaning out of the core.
-    fn register_html_config_keys(libraries: &mut LibrarySet) {
-        let registry = &mut libraries.config_keys;
+    fn register_html_config_keys(builder_surface: &mut BuilderSurface) {
+        let registry = &mut builder_surface.config_keys;
 
         // Routing / site keys
         registry.register_backend_string("origin");

@@ -25,7 +25,7 @@ pub(crate) enum JsValueUse {
     /// Assignment or write target: produces the concrete JS value to store.
     AssignmentValue,
 
-    /// Argument to a Beanstalk (user-defined or source-library) function call.
+    /// Argument to a Beanstalk (user-defined or source-backed package) function call.
     /// Places are passed as binding references; rvalues are wrapped in `__bs_binding(...)`.
     BeanstalkCallArgument,
 

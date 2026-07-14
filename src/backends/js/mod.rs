@@ -36,7 +36,7 @@ use std::collections::{HashMap, HashSet};
 ///
 /// WHAT: determines whether every HIR function is lowered or only those reachable from the
 ///       module entry `start` function.
-/// WHY: HTML page bundles need reachable-only emission to avoid pulling in unused source-library
+/// WHY: HTML page bundles need reachable-only emission to avoid pulling in unused source-backed package
 ///      wrappers that would request unavailable runtime glue or assets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JsFunctionEmissionPolicy {
@@ -45,7 +45,7 @@ pub enum JsFunctionEmissionPolicy {
 
     /// Emit only functions syntactically reachable from the module entry `start` function.
     ///
-    /// WHY: HTML page bundles execute from one entry point, and unreachable source-library
+    /// WHY: HTML page bundles execute from one entry point, and unreachable source-backed package
     /// wrappers must not request runtime glue or assets.
     ReachableFromStart,
 }
@@ -95,7 +95,7 @@ impl JsLoweringConfig {
     /// JS-only HTML page-bundle lowering config.
     ///
     /// WHAT: emits only entry-reachable functions and enables ES module glue generation.
-    /// WHY: HTML page bundles execute from one entry point, so unreachable source-library
+    /// WHY: HTML page bundles execute from one entry point, so unreachable source-backed package
     /// wrappers must not request runtime glue or assets. The supplied external package
     /// registry is stored directly because the HTML builder already owns it.
     pub fn html_page_bundle(

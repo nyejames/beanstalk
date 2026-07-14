@@ -4,6 +4,7 @@
 //! WHY: parser and AST diagnostics tests need a stable frontend setup without depending on HIR
 //!      lowering or borrow-checker helpers.
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
@@ -21,7 +22,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::sync::Arc;
 
@@ -30,8 +30,8 @@ pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     ProjectPathResolver::new(
         cwd.clone(),
         cwd,
-        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
 }

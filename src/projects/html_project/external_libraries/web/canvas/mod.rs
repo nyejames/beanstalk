@@ -5,10 +5,10 @@
 //! WHY: `@web/canvas` is a JS-only built-in library that shares the same parser, registry,
 //!      and emission path as project-local `.js` imports.
 
-use crate::compiler_frontend::external_packages::{ExternalPackageOrigin, ExternalPackageRegistry};
-use crate::libraries::external_import_providers::provider::{
+use crate::builder_surface::external_import_providers::provider::{
     BuilderRuntimePackageMetadata, RuntimeAssetIdentity,
 };
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::projects::html_project::external_js::package_registration::{
     register_parsed_js_library, required_runtime_imports_from_parsed,
 };
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 /// Registers the built-in `@web/canvas` package in the external package registry.
 ///
 /// WHAT: parses the authored `canvas.js` file, registers opaque types and functions with
-///       `ExternalPackageOrigin::BuilderRuntime`, and returns metadata so the build system
+///       `PackageMetadata::binding(PackageOrigin::Builder)`, and returns metadata so the build system
 ///       can emit the JS asset and generated glue through the existing `ModuleExternalImport`
 ///       path.
 /// WHY: built-in JS-backed packages and project-local `.js` imports share the same runtime
@@ -38,7 +38,12 @@ pub fn register_web_canvas_package(
     );
 
     let package_id = registry
-        .register_package("@web/canvas", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@web/canvas",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("builtin package registration should not collide");
 
     register_parsed_js_library(package_id, &parsed, registry)

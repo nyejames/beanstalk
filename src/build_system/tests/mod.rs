@@ -6,6 +6,7 @@ use super::{WriteOptions, write_project_outputs as write_project_outputs_with_ta
 use crate::build_system::build::{
     BackendBuilder, CleanupPolicy, FileKind, ModuleRootActivity, OutputFile, Project, WriteMode,
 };
+use crate::builder_surface::BuilderSurface;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
@@ -14,7 +15,6 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::libraries::LibrarySet;
 use crate::projects::settings::{Config, ProjectConfigError};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -174,8 +174,8 @@ impl BackendBuilder for WarningBuilder {
         Ok(())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -215,8 +215,8 @@ impl BackendBuilder for ValidationTrackingBuilder {
         Ok(())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -250,8 +250,8 @@ impl BackendBuilder for FailingValidationBuilder {
         .into())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -288,8 +288,8 @@ impl BackendBuilder for NoDirectiveBuilder {
         Ok(())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -340,8 +340,8 @@ impl BackendBuilder for MultiModuleDiagnosticBuilder {
         Ok(())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

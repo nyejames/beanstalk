@@ -10,7 +10,7 @@
 //! module-local concerns owned by `runtime_glue`.
 
 use crate::build_system::build::Module;
-use crate::libraries::external_import_providers::provider::RuntimeAssetIdentity;
+use crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 

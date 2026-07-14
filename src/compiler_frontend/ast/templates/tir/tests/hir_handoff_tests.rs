@@ -46,8 +46,8 @@ fn test_project_path_resolver() -> ProjectPathResolver {
     ProjectPathResolver::new(
         cwd.clone(),
         cwd,
-        crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
 }

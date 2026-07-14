@@ -384,11 +384,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         if let Some(library_prefix) = self
             .module_symbols
-            .file_library_membership
+            .file_package_membership
             .get(public_root_file)
             && let Some(entries) = self
                 .module_symbols
-                .source_library_public_exports
+                .source_package_public_exports
                 .get(library_prefix)
             && entries
                 .iter()

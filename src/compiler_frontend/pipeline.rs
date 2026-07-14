@@ -3,6 +3,7 @@
 //! WHAT: wires tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
 //! validation into the stage flow described in the compiler design overview.
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
@@ -32,7 +33,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
-use crate::libraries::SourceFileKind;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

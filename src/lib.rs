@@ -1,4 +1,4 @@
-//! Beanstalk compiler library root.
+//! Beanstalk compiler package root.
 //!
 //! Targeted `#[allow(...)]` attributes are used where needed, each with a justification
 //! comment. Avoid blanket crate-level allowances.
@@ -15,8 +15,8 @@ mod compiler_tests {
 }
 pub mod benchmarking;
 pub mod build_system;
+mod builder_surface;
 mod compiler_frontend;
-mod libraries;
 
 mod backends {
     pub(crate) mod backend_feature_validation;

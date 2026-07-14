@@ -5,6 +5,7 @@
 //! WHY: Phase 4 needs coverage across stage boundaries so refactors cannot silently break the
 //! compiler pipeline while unit tests still pass in isolation.
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -23,7 +24,6 @@ use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TokenizerEntryMode,
 };
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
@@ -71,8 +71,9 @@ impl FrontendProject {
         let resolver = ProjectPathResolver::new(
             canonical_project_root.clone(),
             canonical_entry_root,
-            crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots::empty(),
-            &crate::libraries::SourceFileKindRegistry::default(),
+            crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots::empty(
+            ),
+            &crate::builder_surface::SourceFileKindRegistry::default(),
         )
         .expect("project path resolver should build");
 

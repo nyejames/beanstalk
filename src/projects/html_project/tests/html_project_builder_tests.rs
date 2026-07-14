@@ -5,6 +5,7 @@ use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
 use crate::build_system::build::ModuleExternalImport;
 use crate::build_system::build::ResolvedConstFragment;
 use crate::build_system::build::{FileKind, ModuleRootActivity, Project};
+use crate::builder_surface::external_import_providers::provider::RuntimeAssetIdentity;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidConfigReason};
@@ -14,7 +15,6 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
-use crate::libraries::external_import_providers::provider::RuntimeAssetIdentity;
 use crate::projects::html_project::tests::test_support::{
     RenderedPathUsageInput, collect_output_paths, create_test_module, expect_bytes_output,
     expect_html_output, expect_js_output, rendered_path_usage,
@@ -56,15 +56,15 @@ fn first_invalid_config_reason(messages: &CompilerMessages) -> &InvalidConfigRea
 #[test]
 fn libraries_register_content_source_kinds() {
     let builder = HtmlProjectBuilder::new();
-    let libraries = builder.libraries();
+    let libraries = builder.frontend_surface();
 
     assert_eq!(
         libraries.source_file_kinds.kind_for_extension("bd"),
-        Some(crate::libraries::SourceFileKind::Beandown)
+        Some(crate::builder_surface::SourceFileKind::Beandown)
     );
     assert_eq!(
         libraries.source_file_kinds.kind_for_extension("md"),
-        Some(crate::libraries::SourceFileKind::PlainMarkdown)
+        Some(crate::builder_surface::SourceFileKind::PlainMarkdown)
     );
 
     assert_eq!(libraries.source_file_kinds.kind_for_extension("bst"), None);

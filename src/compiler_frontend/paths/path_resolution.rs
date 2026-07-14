@@ -5,6 +5,7 @@
 //! normalization helpers live in sibling modules so this file can focus on orchestration and
 //! diagnostic boundaries.
 
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
@@ -24,12 +25,11 @@ use crate::compiler_frontend::paths::path_normalization::{
     candidate_import_files_for_source_kinds, canonicalize_best_effort, import_contains_dotdot,
     is_relative_import_path, join_and_normalize_path,
 };
-use crate::compiler_frontend::source_libraries::root_file::{
-    HashRootFileDiscovery, PreparedSourceLibraryRoots,
+use crate::compiler_frontend::source_packages::root_file::{
+    HashRootFileDiscovery, PreparedSourcePackageRoots,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -42,7 +42,7 @@ use std::path::{Path, PathBuf};
 pub(crate) enum ImportRootPolicy {
     /// All import roots are allowed (normal project mode).
     Normal,
-    /// Only source-library roots and external package imports are allowed (config mode).
+    /// Only source-backed package roots and external package imports are allowed (config mode).
     SourceLibrariesAndExternalPackagesOnly,
 }
 
@@ -59,8 +59,8 @@ pub(crate) struct ResolvedImportFile {
 pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
-    /// Canonical source-library roots and their prepared public surfaces from Stage 0.
-    source_library_roots: PreparedSourceLibraryRoots,
+    /// Canonical source-backed package roots and their prepared public surfaces from Stage 0.
+    source_package_roots: PreparedSourcePackageRoots,
     /// Module roots prepared by Stage 0. Resolver construction never discovers them.
     module_roots: ModuleRootTable,
     /// Import root policy enforced during import resolution.
@@ -75,13 +75,13 @@ impl ProjectPathResolver {
     pub(crate) fn new(
         project_root: PathBuf,
         entry_root: PathBuf,
-        source_library_roots: PreparedSourceLibraryRoots,
+        source_package_roots: PreparedSourcePackageRoots,
         source_file_kinds: &SourceFileKindRegistry,
     ) -> Result<Self, CompilerError> {
         Self::new_with_module_roots(
             project_root,
             entry_root,
-            source_library_roots,
+            source_package_roots,
             source_file_kinds,
             ModuleRootTable::empty(),
         )
@@ -93,14 +93,14 @@ impl ProjectPathResolver {
     pub(crate) fn new_with_module_roots(
         project_root: PathBuf,
         entry_root: PathBuf,
-        source_library_roots: PreparedSourceLibraryRoots,
+        source_package_roots: PreparedSourcePackageRoots,
         source_file_kinds: &SourceFileKindRegistry,
         module_roots: ModuleRootTable,
     ) -> Result<Self, CompilerError> {
         Ok(Self {
             project_root,
             entry_root,
-            source_library_roots,
+            source_package_roots,
             module_roots,
             import_root_policy: ImportRootPolicy::Normal,
             source_file_kinds: source_file_kinds.clone(),
@@ -121,22 +121,22 @@ impl ProjectPathResolver {
         &self.entry_root
     }
 
-    /// WHAT: returns the map of source library roots.
+    /// WHAT: returns the map of source-backed package roots.
     #[cfg(test)]
-    pub(crate) fn source_library_roots(&self) -> &std::collections::BTreeMap<String, PathBuf> {
-        self.source_library_roots.roots()
+    pub(crate) fn source_package_roots(&self) -> &std::collections::BTreeMap<String, PathBuf> {
+        self.source_package_roots.roots()
     }
 
-    /// Return the most-specific source library containing a canonical file path.
+    /// Return the most-specific source-backed package containing a canonical file path.
     ///
-    /// WHAT: selects the deepest matching source-library root, then the smallest import prefix
+    /// WHAT: selects the deepest matching source-backed package root, then the smallest import prefix
     ///       when multiple prefixes name the same root.
     /// WHY: logical paths, header membership and provider boundaries must share one deterministic
-    ///      owner when registered source-library roots overlap.
-    pub(crate) fn source_library_for_file(&self, file: &Path) -> Option<(&str, &Path)> {
+    ///      owner when registered source-backed package roots overlap.
+    pub(crate) fn source_package_for_file(&self, file: &Path) -> Option<(&str, &Path)> {
         let mut nearest_library: Option<(&str, &Path)> = None;
 
-        for (prefix, root) in self.source_library_roots.roots() {
+        for (prefix, root) in self.source_package_roots.roots() {
             if !file.starts_with(root) {
                 continue;
             }
@@ -160,11 +160,11 @@ impl ProjectPathResolver {
         nearest_library
     }
 
-    /// Returns each source library's unique hash-root file as its public surface.
-    pub(crate) fn source_library_public_surface_files(
+    /// Returns each source-backed package's unique hash-root file as its public surface.
+    pub(crate) fn source_package_public_surface_files(
         &self,
     ) -> impl Iterator<Item = (&String, &PathBuf)> {
-        self.source_library_roots
+        self.source_package_roots
             .root_files()
             .iter()
             .filter_map(|(prefix, discovery)| match discovery {
@@ -218,9 +218,9 @@ impl ProjectPathResolver {
             return Ok(relative_to_project_root.to_path_buf());
         }
 
-        // Source library files may live outside the project root (builder-provided).
+        // Source-backed package files may live outside the project root (builder-provided).
         // Derive a logical path from the same nearest-root policy used by membership checks.
-        if let Some((prefix, root)) = self.source_library_for_file(canonical_file)
+        if let Some((prefix, root)) = self.source_package_for_file(canonical_file)
             && let Ok(relative_to_library_root) = canonical_file.strip_prefix(root)
         {
             let mut logical = PathBuf::from(prefix);
@@ -287,7 +287,7 @@ impl ProjectPathResolver {
                 }
 
                 if let Some(root_file) =
-                    self.resolve_source_library_public_surface(import_path, string_table)
+                    self.resolve_source_package_public_surface(import_path, string_table)
                 {
                     Ok(ResolvedImportFile {
                         path: root_file,
@@ -317,15 +317,15 @@ impl ProjectPathResolver {
         }
     }
 
-    /// WHAT: checks whether an import path targets a source library and returns its root file.
-    fn resolve_source_library_public_surface(
+    /// WHAT: checks whether an import path targets a source-backed package and returns its root file.
+    fn resolve_source_package_public_surface(
         &self,
         import_path: &InternedPath,
         string_table: &StringTable,
     ) -> Option<PathBuf> {
         let first_component = import_path.as_components().first()?;
         let prefix = string_table.resolve(*first_component);
-        self.source_library_roots
+        self.source_package_roots
             .root_files()
             .get(prefix)
             .and_then(|discovery| match discovery {
@@ -426,7 +426,7 @@ impl ProjectPathResolver {
         if self.import_root_policy == ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly {
             match base_kind {
                 CompileTimePathBase::RelativeToFile
-                    if self.importer_is_inside_source_library(importer_file) => {}
+                    if self.importer_is_inside_source_package(importer_file) => {}
                 CompileTimePathBase::RelativeToFile | CompileTimePathBase::EntryRoot => {
                     let location = SourceLocation::from_path(importer_file, string_table);
                     return Err(ImportPathResolutionError::Diagnostic(Box::new(
@@ -437,13 +437,13 @@ impl ProjectPathResolver {
                         ),
                     )));
                 }
-                CompileTimePathBase::SourceLibraryRoot => {}
+                CompileTimePathBase::SourcePackageRoot => {}
             }
         }
 
-        // Source library roots already include the prefix directory, so skip the first
+        // Source-backed package roots already include the prefix directory, so skip the first
         // component when joining to avoid double-prefixing (e.g. `lib/helper/helper/...`).
-        let normalized = if matches!(base_kind, CompileTimePathBase::SourceLibraryRoot) {
+        let normalized = if matches!(base_kind, CompileTimePathBase::SourcePackageRoot) {
             let components = import_path.as_components();
             let suffix = if components.len() <= 1 {
                 InternedPath::new()
@@ -528,26 +528,26 @@ impl ProjectPathResolver {
         Ok((ct_path, canonical))
     }
 
-    /// WHAT: returns whether the import path starts with a registered source library prefix.
-    /// WHY: source library imports should resolve to the library root, not fall through to entry root.
-    fn matches_source_library_prefix(
+    /// WHAT: returns whether the import path starts with a registered source-backed package prefix.
+    /// WHY: source-backed package imports should resolve to the package root, not fall through to entry root.
+    fn matches_source_package_prefix(
         &self,
         import_path: &InternedPath,
         string_table: &StringTable,
     ) -> Option<PathBuf> {
         let first_component = import_path.as_components().first()?;
         let segment = string_table.resolve(*first_component);
-        self.source_library_roots.roots().get(segment).cloned()
+        self.source_package_roots.roots().get(segment).cloned()
     }
 
-    /// WHAT: checks whether a file already admitted to config parsing belongs to a source library.
-    /// WHY: `config.bst` cannot use relative imports, but builder/core source-library roots often
-    /// re-export support declarations through relative imports inside the library root.
-    fn importer_is_inside_source_library(&self, importer_file: &Path) -> bool {
+    /// WHAT: checks whether a file already admitted to config parsing belongs to a source-backed package.
+    /// WHY: `config.bst` cannot use relative imports, but builder/core source-backed package roots often
+    /// re-export support declarations through relative imports inside the package root.
+    fn importer_is_inside_source_package(&self, importer_file: &Path) -> bool {
         let canonical_importer =
             fs::canonicalize(importer_file).unwrap_or_else(|_| importer_file.to_path_buf());
 
-        self.source_library_roots
+        self.source_package_roots
             .roots()
             .values()
             .any(|library_root| canonical_importer.starts_with(library_root))
@@ -640,8 +640,8 @@ impl ProjectPathResolver {
                 CompileTimePathBase::RelativeToFile,
                 importer_dir.to_path_buf(),
             ))
-        } else if let Some(library_root) = self.matches_source_library_prefix(path, string_table) {
-            Ok((CompileTimePathBase::SourceLibraryRoot, library_root))
+        } else if let Some(library_root) = self.matches_source_package_prefix(path, string_table) {
+            Ok((CompileTimePathBase::SourcePackageRoot, library_root))
         } else {
             Ok((CompileTimePathBase::EntryRoot, self.entry_root.clone()))
         }

@@ -1,5 +1,7 @@
 //! Unit tests for compile-time path resolution.
 
+use crate::builder_surface::PackageOrigin;
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry, SourcePackageRegistry};
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terse::format_terse_diagnostic_with_context,
 };
@@ -13,12 +15,11 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::{
-    HashRootFileDiscovery, PreparedSourceLibraryRoots,
+use crate::compiler_frontend::source_packages::root_file::{
+    HashRootFileDiscovery, PreparedSourcePackageRoots,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use std::fs;
 use std::path::PathBuf;
 
@@ -30,34 +31,36 @@ struct TestHarness {
     _temp_dir: tempfile::TempDir,
 }
 
-fn prepared_source_library_roots(
-    source_libraries: &SourceLibraryRegistry,
-) -> PreparedSourceLibraryRoots {
-    crate::build_system::create_project_modules::source_library_discovery::
-        prepare_source_library_roots(source_libraries)
+fn prepared_source_package_roots(
+    source_packages: &SourcePackageRegistry,
+) -> PreparedSourcePackageRoots {
+    crate::build_system::create_project_modules::source_package_discovery::
+        prepare_source_package_roots(source_packages)
 }
 
 impl TestHarness {
     fn new() -> Self {
-        Self::with_source_libraries(&crate::libraries::SourceLibraryRegistry::default())
+        Self::with_source_packages(&crate::builder_surface::SourcePackageRegistry::default())
     }
 
-    fn with_source_libraries(source_libraries: &crate::libraries::SourceLibraryRegistry) -> Self {
+    fn with_source_packages(
+        source_packages: &crate::builder_surface::SourcePackageRegistry,
+    ) -> Self {
         Self::with_libraries_and_source_file_kinds(
-            source_libraries,
+            source_packages,
             &SourceFileKindRegistry::default(),
         )
     }
 
     fn with_source_file_kinds(source_file_kinds: &SourceFileKindRegistry) -> Self {
         Self::with_libraries_and_source_file_kinds(
-            &crate::libraries::SourceLibraryRegistry::default(),
+            &crate::builder_surface::SourcePackageRegistry::default(),
             source_file_kinds,
         )
     }
 
     fn with_libraries_and_source_file_kinds(
-        source_libraries: &crate::libraries::SourceLibraryRegistry,
+        source_packages: &crate::builder_surface::SourcePackageRegistry,
         source_file_kinds: &SourceFileKindRegistry,
     ) -> Self {
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -77,7 +80,7 @@ impl TestHarness {
         let resolver = ProjectPathResolver::new(
             project_root.clone(),
             entry_root,
-            prepared_source_library_roots(source_libraries),
+            prepared_source_package_roots(source_packages),
             source_file_kinds,
         )
         .expect("resolver creation should succeed");
@@ -371,7 +374,7 @@ fn empty_path_resolves_as_entry_root_public_directory() {
 }
 
 #[test]
-fn source_library_import_resolves_to_library_root() {
+fn source_package_import_resolves_to_library_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -382,14 +385,18 @@ fn source_library_import_resolves_to_library_root() {
     fs::write(library_root.join("utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -401,18 +408,18 @@ fn source_library_import_resolves_to_library_root() {
     let importer = entry_root.join("index.bst");
     let result = resolver
         .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
-        .expect("source library import should resolve");
+        .expect("source-backed package import should resolve");
 
-    assert_eq!(result.0.base, CompileTimePathBase::SourceLibraryRoot);
+    assert_eq!(result.0.base, CompileTimePathBase::SourcePackageRoot);
     assert_eq!(
         result.1,
         fs::canonicalize(library_root.join("utils.bst")).unwrap(),
-        "should resolve to source library root file"
+        "should resolve to source-backed package root file"
     );
 }
 
 #[test]
-fn source_library_folder_import_uses_generic_hash_root_public_surface() {
+fn source_package_folder_import_uses_generic_hash_root_public_surface() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -424,21 +431,25 @@ fn source_library_folder_import_uses_generic_hash_root_public_surface() {
     fs::write(&root_file, b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
     let canonical_root_file = fs::canonicalize(&root_file).unwrap();
     assert_eq!(
         resolver
-            .source_library_public_surface_files()
+            .source_package_public_surface_files()
             .find(|(prefix, _)| prefix.as_str() == "helper")
             .map(|(_, path)| path),
         Some(&canonical_root_file)
@@ -454,13 +465,13 @@ fn source_library_folder_import_uses_generic_hash_root_public_surface() {
             &entry_root.join("index.bst"),
             &mut string_table,
         )
-        .expect("source library folder import should use its generic root");
+        .expect("source-backed package folder import should use its generic root");
 
     assert_eq!(resolved.path, canonical_root_file);
 }
 
 #[test]
-fn source_library_prefix_takes_priority_over_entry_root() {
+fn source_package_prefix_takes_priority_over_entry_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -474,14 +485,18 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     fs::write(entry_root.join("helper/utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -493,9 +508,9 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     let importer = entry_root.join("index.bst");
     let result = resolver
         .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
-        .expect("source library import should resolve");
+        .expect("source-backed package import should resolve");
 
-    assert_eq!(result.0.base, CompileTimePathBase::SourceLibraryRoot);
+    assert_eq!(result.0.base, CompileTimePathBase::SourcePackageRoot);
     assert_eq!(
         result.1,
         fs::canonicalize(library_root.join("utils.bst")).unwrap()
@@ -642,11 +657,11 @@ fn public_surface_fallback_preserves_beandown_folder_ambiguity() {
 
     let mut registry = SourceFileKindRegistry::new();
     registry.register("bd", SourceFileKind::Beandown);
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
+        prepared_source_package_roots(&source_packages),
         &registry,
     )
     .expect("resolver creation should succeed");
@@ -676,7 +691,7 @@ fn public_surface_fallback_preserves_beandown_folder_ambiguity() {
 
 #[cfg(windows)]
 #[test]
-fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path() {
+fn canonicalized_source_package_file_resolves_to_library_prefixed_logical_path() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -688,29 +703,29 @@ fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path()
     fs::write(library_root.join("helpers.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("html", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root("html", library_root.clone(), PackageOrigin::Builder);
 
     let resolver = ProjectPathResolver::new(
         project_root,
         entry_root,
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
-    let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize library root");
+    let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize package root");
     assert_eq!(
-        resolver.source_library_roots().get("html"),
+        resolver.source_package_roots().get("html"),
         Some(&canonical_root)
     );
 
     let canonical_file = fs::canonicalize(library_root.join("helpers.bst"))
-        .expect("should canonicalize source library file");
+        .expect("should canonicalize source-backed package file");
     let mut string_table = StringTable::new();
     let logical_path = resolver
         .logical_path_for_canonical_file(&canonical_file, &mut string_table)
-        .expect("canonical source library file should resolve");
+        .expect("canonical source-backed package file should resolve");
 
     assert_eq!(logical_path, PathBuf::from("html").join("helpers.bst"));
 }
@@ -733,14 +748,18 @@ fn library_scan_root_name_is_not_import_prefix() {
     fs::write(entry_root.join("lib/thing.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -773,14 +792,18 @@ fn library_direct_child_is_import_prefix() {
     fs::write(library_root.join("utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -792,11 +815,11 @@ fn library_direct_child_is_import_prefix() {
     let importer = entry_root.join("index.bst");
     let result = resolver
         .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
-        .expect("source library import should resolve");
+        .expect("source-backed package import should resolve");
 
     assert_eq!(
         result.0.base,
-        CompileTimePathBase::SourceLibraryRoot,
+        CompileTimePathBase::SourcePackageRoot,
         "direct child of scan root must be a valid import prefix"
     );
 }
@@ -812,12 +835,12 @@ fn entry_root_import_fallback_success() {
     fs::write(entry_root.join("pages/about.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -834,12 +857,12 @@ fn entry_root_import_fallback_success() {
     assert_eq!(
         result.0.base,
         CompileTimePathBase::EntryRoot,
-        "non-relative imports without a library prefix must fall back to entry root"
+        "non-relative imports without a package prefix must fall back to entry root"
     );
 }
 
 #[test]
-fn source_library_prefix_wins_consistently() {
+fn source_package_prefix_wins_consistently() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -853,14 +876,18 @@ fn source_library_prefix_wins_consistently() {
     fs::write(entry_root.join("helper/utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -872,12 +899,12 @@ fn source_library_prefix_wins_consistently() {
     let importer = entry_root.join("index.bst");
     let result = resolver
         .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
-        .expect("source library import should resolve");
+        .expect("source-backed package import should resolve");
 
     assert_eq!(
         result.0.base,
-        CompileTimePathBase::SourceLibraryRoot,
-        "source library prefix must consistently win over entry-root collision"
+        CompileTimePathBase::SourcePackageRoot,
+        "source-backed package prefix must consistently win over entry-root collision"
     );
     assert_eq!(
         result.1,
@@ -898,12 +925,12 @@ fn import_dotdot_rejected() {
     fs::create_dir_all(&entry_root).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -935,12 +962,12 @@ fn missing_import_target_is_typed_diagnostic() {
     fs::create_dir_all(&entry_root).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -976,12 +1003,12 @@ fn import_escape_project_root_rejected() {
     fs::create_dir_all(&entry_root).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -1023,14 +1050,18 @@ fn import_escape_library_root_rejected() {
     fs::create_dir_all(&library_root).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    source_libraries.register_filesystem_root("helper", library_root.clone());
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
+    source_packages.register_filesystem_root(
+        "helper",
+        library_root.clone(),
+        PackageOrigin::Builder,
+    );
 
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -1043,7 +1074,7 @@ fn import_escape_library_root_rejected() {
     let importer = entry_root.join("index.bst");
     let err = resolver
         .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
-        .expect_err("import escaping library root should be rejected");
+        .expect_err("import escaping package root should be rejected");
     assert!(matches!(
         import_diagnostic_payload(&err),
         DiagnosticPayload::InvalidImportPath {
@@ -1071,12 +1102,12 @@ fn module_root_public_surface_fallback_resolves_plain_folder_import() {
     fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
     .expect("resolver creation should succeed");
@@ -1113,12 +1144,12 @@ fn disabled_module_root_discovery_does_not_register_plain_folder_public_surfaces
     fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -1155,12 +1186,12 @@ fn plain_folder_import_to_module_root_uses_any_hash_root() {
     fs::write(entry_root.join("helper/#home.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new_with_module_roots(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         prepared_module_root_table(&entry_root.join("helper/#home.bst")),
     )
     .expect("resolver creation should succeed");
@@ -1196,12 +1227,12 @@ fn concrete_file_import_inside_module_root_is_accepted() {
     fs::write(entry_root.join("helper/thing.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -1275,12 +1306,12 @@ fn import_case_sensitive_symbol_mismatch_rejected() {
     fs::write(entry_root.join("pages/about.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
-    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let source_packages = crate::builder_surface::SourcePackageRegistry::new();
     let resolver = ProjectPathResolver::new(
         project_root.clone(),
         entry_root.clone(),
-        prepared_source_library_roots(&source_libraries),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        prepared_source_package_roots(&source_packages),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
     .expect("resolver creation should succeed");
 
@@ -1445,7 +1476,7 @@ fn markdown_and_beandown_same_stem_are_ambiguous() {
     );
 }
 
-fn resolver_with_prepared_source_library_roots(roots: &[(&str, &str)]) -> ProjectPathResolver {
+fn resolver_with_prepared_source_package_roots(roots: &[(&str, &str)]) -> ProjectPathResolver {
     let entries = roots.iter().map(|(prefix, root)| {
         (
             (*prefix).to_owned(),
@@ -1457,55 +1488,55 @@ fn resolver_with_prepared_source_library_roots(roots: &[(&str, &str)]) -> Projec
     ProjectPathResolver::new(
         PathBuf::from("/project"),
         PathBuf::from("/project/src"),
-        PreparedSourceLibraryRoots::from_entries(entries),
+        PreparedSourcePackageRoots::from_entries(entries),
         &SourceFileKindRegistry::default(),
     )
     .expect("resolver should build")
 }
 
 #[test]
-fn source_library_for_file_chooses_the_deepest_matching_root() {
-    let resolver = resolver_with_prepared_source_library_roots(&[
-        ("outer", "/libraries/outer"),
-        ("inner", "/libraries/outer/inner"),
+fn source_package_for_file_chooses_the_deepest_matching_root() {
+    let resolver = resolver_with_prepared_source_package_roots(&[
+        ("outer", "/packages/outer"),
+        ("inner", "/packages/outer/inner"),
     ]);
 
     let selected = resolver
-        .source_library_for_file(std::path::Path::new("/libraries/outer/inner/file.bst"))
-        .expect("nested source-library file should have a boundary");
+        .source_package_for_file(std::path::Path::new("/packages/outer/inner/file.bst"))
+        .expect("nested source-backed package file should have a boundary");
 
     assert_eq!(selected.0, "inner");
-    assert_eq!(selected.1, std::path::Path::new("/libraries/outer/inner"));
+    assert_eq!(selected.1, std::path::Path::new("/packages/outer/inner"));
 }
 
 #[test]
-fn source_library_for_file_breaks_equal_root_ties_by_prefix() {
-    let resolver = resolver_with_prepared_source_library_roots(&[
-        ("zeta", "/libraries/shared"),
-        ("alpha", "/libraries/shared"),
+fn source_package_for_file_breaks_equal_root_ties_by_prefix() {
+    let resolver = resolver_with_prepared_source_package_roots(&[
+        ("zeta", "/packages/shared"),
+        ("alpha", "/packages/shared"),
     ]);
 
     let selected = resolver
-        .source_library_for_file(std::path::Path::new("/libraries/shared/file.bst"))
-        .expect("shared source-library file should have a boundary");
+        .source_package_for_file(std::path::Path::new("/packages/shared/file.bst"))
+        .expect("shared source-backed package file should have a boundary");
 
     assert_eq!(selected.0, "alpha");
 }
 
 #[test]
-fn source_library_logical_paths_use_the_deepest_matching_root() {
-    let resolver = resolver_with_prepared_source_library_roots(&[
-        ("outer", "/libraries/outer"),
-        ("inner", "/libraries/outer/inner"),
+fn source_package_logical_paths_use_the_deepest_matching_root() {
+    let resolver = resolver_with_prepared_source_package_roots(&[
+        ("outer", "/packages/outer"),
+        ("inner", "/packages/outer/inner"),
     ]);
     let mut string_table = StringTable::new();
 
     let logical_path = resolver
         .logical_path_for_canonical_file(
-            std::path::Path::new("/libraries/outer/inner/file.bst"),
+            std::path::Path::new("/packages/outer/inner/file.bst"),
             &mut string_table,
         )
-        .expect("nested source-library file should have a logical path");
+        .expect("nested source-backed package file should have a logical path");
 
     assert_eq!(logical_path, PathBuf::from("inner/file.bst"));
 }

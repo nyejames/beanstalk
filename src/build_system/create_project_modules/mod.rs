@@ -3,8 +3,8 @@
 //! Dispatches to single-file or directory-project flows, then delegates to focused submodules:
 //! - `frontend_orchestration`   — per-module pipeline (tokenization through borrow checking)
 //! - `project_roots`            — config root interpretation and path-resolver setup
-//! - `source_library_discovery` — project-local source-library scanning and prefix-merge checks
-//! - `root_validation`          — source-library generic hash-root preflight
+//! - `source_package_discovery` — project-local source-backed package scanning and prefix-merge checks
+//! - `root_validation`          — source-backed package generic hash-root preflight
 //! - `source_tree_index`        — one directory-project source-tree traversal with collision checks
 //! - `module_inventory`         — project-level module assembly
 //! - `reachable_file_discovery` — BFS traversal over import graphs
@@ -26,8 +26,8 @@ mod project_structure_diagnostics;
 mod reachable_file_discovery;
 pub(crate) mod root_validation;
 pub(crate) mod source_discovery_error;
-pub(crate) mod source_library_discovery;
 pub(crate) mod source_loading;
+pub(crate) mod source_package_discovery;
 mod source_tree_index;
 
 #[cfg(test)]
@@ -49,7 +49,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::{Flag, FrontendBuildProfile};
 
-use crate::libraries::LibrarySet;
+use crate::builder_surface::BuilderSurface;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 // -------------------------
@@ -64,7 +64,7 @@ pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
     style_directives: &StyleDirectiveRegistry,
-    libraries: &mut LibrarySet,
+    builder_surface: &mut BuilderSurface,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     // Frontend counters are command-scoped and gated by `benchmark_counters`.
@@ -87,7 +87,7 @@ pub fn compile_project_frontend(
             config,
             build_profile,
             style_directives,
-            libraries,
+            builder_surface,
             string_table,
         )
     } else if let Some(extension) = config.entry_dir.extension() {
@@ -95,7 +95,7 @@ pub fn compile_project_frontend(
             config,
             build_profile,
             style_directives,
-            libraries,
+            builder_surface,
             extension,
             string_table,
         )

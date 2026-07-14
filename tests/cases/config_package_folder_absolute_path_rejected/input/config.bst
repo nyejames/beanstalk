@@ -1,0 +1,1 @@
+package_folders #= { "/absolute/lib" }

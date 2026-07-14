@@ -1,4 +1,5 @@
 use super::*;
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal::format_payload_guidance,
 };
@@ -13,7 +14,6 @@ use crate::compiler_frontend::style_directives::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_tests::test_support::frontend_test_style_directives;
-use crate::libraries::SourceFileKind;
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
 fn html_project_test_style_directives() -> StyleDirectiveRegistry {

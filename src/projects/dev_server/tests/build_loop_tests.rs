@@ -8,6 +8,7 @@ use crate::build_system::build::{
     self, BackendBuilder, BuildResult, CleanupPolicy, FileKind, OutputFile, Project,
     ProjectBuilder, WriteMode, WriteOptions,
 };
+use crate::builder_surface::BuilderSurface;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType, SourceLocation,
 };
@@ -17,7 +18,6 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_tests::test_support::temp_dir;
-use crate::libraries::LibrarySet;
 use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
@@ -222,8 +222,8 @@ impl BackendBuilder for InvalidOutputWarningBuilder {
         Ok(())
     }
 
-    fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_mandatory_core()
+    fn frontend_surface(&self) -> BuilderSurface {
+        BuilderSurface::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

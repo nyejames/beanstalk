@@ -1,7 +1,7 @@
 //! Tokenization, header parsing, dependency sorting, and AST construction for Stage 0 project
 //! config files.
 //!
-//! WHAT: loads `config.bst` and any reachable builder/core source-library files through the normal
+//! WHAT: loads `config.bst` and any reachable builder/core source-backed package files through the normal
 //! frontend pipeline up to AST, then hands the folded AST off to config validation.
 //! WHY: config uses normal Beanstalk syntax, so reusing tokenizer → headers → dependency sort →
 //! AST keeps Stage 0 aligned with the rest of the language and lets config values benefit from
@@ -9,11 +9,12 @@
 
 use crate::build_system::create_project_modules::extract_source_code;
 use crate::build_system::create_project_modules::import_scanning::extract_import_paths;
-use crate::build_system::create_project_modules::root_validation::validate_source_library_roots;
-use crate::build_system::create_project_modules::source_library_discovery::prepare_source_library_roots;
+use crate::build_system::create_project_modules::root_validation::validate_source_package_roots;
+use crate::build_system::create_project_modules::source_package_discovery::prepare_source_package_roots;
 use crate::build_system::project_config::ProjectConfigParseServices;
 use std::sync::Arc;
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
@@ -31,7 +32,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizerEntryMode};
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
 use std::collections::{BTreeSet, VecDeque};
@@ -90,10 +90,10 @@ pub(super) fn parse_config_file(
         std::fs::canonicalize(config_dir).unwrap_or_else(|_| config_dir.to_path_buf());
 
     let path_resolver_start = crate::timing::start_pipeline_timing();
-    let prepared_source_library_roots =
-        prepare_source_library_roots(&services.libraries.source_libraries);
+    let prepared_source_package_roots =
+        prepare_source_package_roots(&services.frontend_surface.source_packages);
     if let Err(messages) =
-        validate_source_library_roots(&prepared_source_library_roots, string_table)
+        validate_source_package_roots(&prepared_source_package_roots, string_table)
     {
         log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
         log_config_stage_timing("config.parse.total", parse_total_start);
@@ -103,8 +103,8 @@ pub(super) fn parse_config_file(
     let project_path_resolver = match ProjectPathResolver::new(
         canonical_dir.clone(),
         canonical_dir,
-        prepared_source_library_roots,
-        &services.libraries.source_file_kinds,
+        prepared_source_package_roots,
+        &services.frontend_surface.source_file_kinds,
     ) {
         Ok(resolver) => resolver
             .with_import_root_policy(ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly),
@@ -204,7 +204,7 @@ pub(super) fn parse_config_file(
     let headers_start = crate::timing::start_pipeline_timing();
     let bag_result = parse_headers(
         prepared_outputs,
-        &services.libraries.external_packages,
+        &services.frontend_surface.binding_packages,
         &ExternalImportResolutionTable::default(),
         Some(&project_path_resolver),
         string_table,
@@ -270,7 +270,7 @@ pub(super) fn parse_config_file(
     let ast_start = crate::timing::start_pipeline_timing();
     let interned_path = InternedPath::from_path_buf(config_path, string_table);
 
-    let external_package_registry = Arc::new(services.libraries.external_packages.clone());
+    let external_package_registry = Arc::new(services.frontend_surface.binding_packages.clone());
 
     let ast_result = Ast::new(
         AstBuildInput {
@@ -329,7 +329,7 @@ fn log_config_stage_timing(metric: &str, start: crate::timing::PipelineTimingSta
 /// Build the set of source files that config parsing must compile.
 ///
 /// WHAT: starts from the authored `config.bst` and BFS-follows imports into builder/core
-/// source-library files only. External package imports are tracked but do not add files.
+/// source-backed package files only. External package imports are tracked but do not add files.
 /// WHY: config expressions may reference imported library constants, so those files must be
 /// parsed and folded, but project-local files and relative imports are rejected by policy.
 fn build_config_source_set(
@@ -379,8 +379,8 @@ fn build_config_source_set(
         for import_path in &import_paths {
             // Virtual package imports (e.g. @core/math) are allowed and need no file discovery.
             if services
-                .libraries
-                .external_packages
+                .frontend_surface
+                .binding_packages
                 .is_virtual_package_import(import_path, string_table)
             {
                 continue;
@@ -465,7 +465,7 @@ fn prepare_one_config_file(
         token_stream,
         entry_file_path,
         &HeaderParseOptions::default(),
-        &services.libraries.external_packages,
+        &services.frontend_surface.binding_packages,
         string_table,
         0,
         0,

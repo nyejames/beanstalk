@@ -3,6 +3,7 @@
 //! WHAT: combines a diagnostic kind, severity, source labels, primary location, and typed payload.
 //! WHY: frontend stages should emit facts; renderers at the boundary decide final prose.
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, BorrowDiagnosticKind, CommonSyntaxMistakeReason, ConfigDiagnosticKind,
@@ -26,7 +27,6 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
-use crate::libraries::SourceFileKind;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompilerDiagnostic {
     pub kind: DiagnosticKind,

@@ -44,6 +44,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     merge_tir_slot_resolution_overlay_sets,
 };
 
+use crate::builder_surface::SourceFileKind;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -58,7 +59,6 @@ use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::{
     datatypes::environment::TypeEnvironment, type_coercion::compatibility::TypeCompatibilityCache,
 };
-use crate::libraries::SourceFileKind;
 
 const SYNTHETIC_CONTENT_CONSTANT_NAME: &str = "content";
 

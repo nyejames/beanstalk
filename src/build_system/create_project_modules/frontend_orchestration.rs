@@ -8,6 +8,8 @@ use crate::build_system::build::{
     CompiledModuleResult, InputFile, Module, ModuleRootActivity, ResolvedConstFragment,
 };
 
+use crate::builder_surface::external_import_providers::provider::BuilderRuntimePackageMetadata;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::Ast;
@@ -32,8 +34,6 @@ use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTab
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
 };
-use crate::libraries::external_import_providers::provider::BuilderRuntimePackageMetadata;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 
 #[cfg(feature = "detailed_timers")]
 use crate::benchmark_timer_log;

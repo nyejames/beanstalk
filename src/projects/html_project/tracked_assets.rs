@@ -215,7 +215,7 @@ fn derive_emitted_output_path(
     string_table: &StringTable,
 ) -> Result<(PathBuf, HtmlTrackedAssetReferenceKind), CompilerMessages> {
     let emitted_output_path = match usage.base {
-        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::SourcePackageRoot | CompileTimePathBase::EntryRoot => {
             usage.public_path.to_path_buf(string_table)
         }
         CompileTimePathBase::RelativeToFile => {
@@ -242,7 +242,7 @@ fn derive_emitted_output_path(
 
     let reference_kind = match usage.base {
         CompileTimePathBase::RelativeToFile => HtmlTrackedAssetReferenceKind::RelativeToPage,
-        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::SourcePackageRoot | CompileTimePathBase::EntryRoot => {
             HtmlTrackedAssetReferenceKind::SiteRelative
         }
     };

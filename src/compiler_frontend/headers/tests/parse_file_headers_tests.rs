@@ -6,6 +6,7 @@
 //!      dependency edges break everything downstream.
 
 use super::*;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, DiagnosticBag, DiagnosticKind, DiagnosticPayload,
     InvalidChoiceVariantReason, InvalidDeclarationReason, InvalidFunctionSignatureReason,
@@ -27,7 +28,6 @@ use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, Token, TokenKind, TokenizerEntryMode,
 };
 use crate::compiler_frontend::traits::syntax::TraitThisUsage;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]

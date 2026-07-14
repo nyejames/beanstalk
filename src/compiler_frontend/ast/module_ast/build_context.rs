@@ -58,7 +58,7 @@ pub struct AstBuildContext<'a> {
     /// Current build profile (dev/release) affecting optimization and diagnostic levels.
     pub build_profile: FrontendBuildProfile,
 
-    /// Optional project-relative path resolver for source-library and import path resolution.
+    /// Optional project-relative path resolver for source-backed package and import path resolution.
     pub project_path_resolver: Option<ProjectPathResolver>,
 
     /// Formatting rules for rendering interned paths in diagnostics and output.

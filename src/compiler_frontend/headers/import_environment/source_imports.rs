@@ -1,7 +1,7 @@
 //! Source import registration and source receiver auto-imports.
 //!
 //! WHAT: registers imports that resolve to source file declarations (same-module, cross-module,
-//! source library) and auto-imports receiver methods when a nominal receiver type is imported.
+//! source-backed package) and auto-imports receiver methods when a nominal receiver type is imported.
 //! WHY: source imports follow public-export visibility rules that differ from external package imports,
 //! so they deserve their own focused registration path.
 //! MUST NOT: register external package symbols or build namespace records.
@@ -77,7 +77,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
     }
 
-    /// Whether the importer and the target of an import are in the same module or source library.
+    /// Whether the importer and the target of an import are in the same module or source-backed package.
     ///
     /// WHAT: same-module and same-library imports see all authored declarations by default;
     /// cross-module/cross-library imports must go through public surfaces.

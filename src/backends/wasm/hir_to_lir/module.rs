@@ -70,7 +70,7 @@ fn select_functions_for_lowering(
     string_table: &StringTable,
 ) -> Result<WasmFunctionLoweringSelection, CompilerMessages> {
     // WHAT: choose the backend function set before assigning LIR ids.
-    // WHY: HTML-Wasm page bundles must not lower unused source-library wrappers, while the
+    // WHY: HTML-Wasm page bundles must not lower unused source-backed package wrappers, while the
     // generic Wasm backend keeps its existing all-functions default for direct tests.
     match request.function_emission_policy {
         WasmFunctionEmissionPolicy::AllFunctions => Ok(WasmFunctionLoweringSelection {

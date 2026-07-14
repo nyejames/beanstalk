@@ -6,18 +6,17 @@
 //! WHY: project-local `.js` imports and built-in JS-backed packages need a compiler frontend
 //!      surface before AST can resolve calls and types.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
-use crate::compiler_frontend::compiler_messages::compiler_diagnostic::CompilerDiagnostic;
-use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
-use crate::compiler_frontend::external_packages::ExternalPackageOrigin;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::external_import_providers::provider::{
+use crate::builder_surface::external_import_providers::provider::{
     ExternalFileExtension, ExternalImportProvider, ExternalImportProviderContext,
     ExternalImportProviderKind, ExternalImportRequest, ResolvedExternalImport,
     RuntimeAssetIdentity,
 };
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
+use crate::compiler_frontend::compiler_messages::compiler_diagnostic::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::external_js::package_registration::{
     register_parsed_js_library, required_runtime_imports_from_parsed,
 };
@@ -113,7 +112,12 @@ impl ExternalImportProvider for JsExternalImportProvider {
         let package_path = js_provider_package_path(&request.canonical_source_path);
         let package_id = context
             .package_registry
-            .register_package(package_path, ExternalPackageOrigin::ProjectLocalJs)
+            .register_package(
+                package_path,
+                crate::builder_surface::PackageMetadata::binding(
+                    crate::builder_surface::PackageOrigin::ProjectLocal,
+                ),
+            )
             .map_err(|error| CompilerMessages::from_error(error, context.string_table.clone()))?;
 
         let registered = register_parsed_js_library(package_id, &parsed, context.package_registry)

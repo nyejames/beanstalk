@@ -7,10 +7,10 @@
 mod parsing;
 mod validation;
 
+use crate::builder_surface::BuilderSurface;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::LibrarySet;
 use crate::projects::settings::Config;
 
 use std::path::Path;
@@ -22,14 +22,14 @@ use std::path::Path;
 /// Focused frontend services passed into config parsing so `config.bst` can import from core and
 /// builder-provided libraries.
 ///
-/// WHAT: bundles the style directives and the complete library set (external packages, source
-/// libraries, and config keys) that config parsing needs.
-/// WHY: `bootstrap_project_build` already computes `LibrarySet` before config loading; threading
+/// WHAT: bundles the style directives and the complete builder surface (external packages,
+/// source-backed packages, and config keys) that config parsing needs.
+/// WHY: `bootstrap_project_build` already computes `BuilderSurface` before config loading; threading
 /// it through config parsing lets imports resolve against builder/core surfaces instead of an
 /// empty default registry.
 pub(crate) struct ProjectConfigParseServices<'a> {
     pub style_directives: &'a StyleDirectiveRegistry,
-    pub libraries: &'a LibrarySet,
+    pub frontend_surface: &'a BuilderSurface,
 }
 
 // -------------------------
@@ -101,7 +101,7 @@ pub(crate) fn parse_project_config_file(
     if let Err(mut validation_errors) = validation::validate_and_apply_config_ast(
         config,
         &parsed_config,
-        &services.libraries.config_keys,
+        &services.frontend_surface.config_keys,
         string_table,
     ) {
         errors.append(&mut validation_errors);

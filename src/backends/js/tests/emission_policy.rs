@@ -1,7 +1,7 @@
 //! Tests for selecting the HIR function set emitted by the JavaScript backend.
 //!
 //! WHAT: pins the difference between direct JS lowering and HTML page-bundle lowering.
-//! WHY: HTML bundles must not lower unreachable source-library wrappers because lowering external
+//! WHY: HTML bundles must not lower unreachable source-backed package wrappers because lowering external
 //! calls is what requests generated glue and runtime assets.
 
 use super::support::*;

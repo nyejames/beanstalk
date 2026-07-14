@@ -40,7 +40,7 @@ pub(crate) enum WasmFunctionEmissionPolicy {
 
     /// Lower functions syntactically reachable from the requested export roots.
     ///
-    /// WHY: HTML-Wasm page modules are entered through `bst_start`; unused source-library
+    /// WHY: HTML-Wasm page modules are entered through `bst_start`; unused source-backed package
     /// wrappers must not request host imports or unsupported backend lowering.
     ReachableFromExports,
 }

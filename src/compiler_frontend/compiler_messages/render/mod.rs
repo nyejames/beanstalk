@@ -36,8 +36,8 @@ use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, DeferredFeatureReason, DiagnosticPlace, GenericApplicationErrorReason,
     IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidCompileTimePathReason, InvalidConfigReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidImportPathReason, InvalidLibraryFolderReason,
-    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMutableAccessReason,
+    InvalidImportClauseReason, InvalidImportPathReason, InvalidMapLiteralReason,
+    InvalidMapTypeReason, InvalidMutableAccessReason, InvalidPackageFolderReason,
     InvalidPageMetadataReason, InvalidResultOperandReason, InvalidTemplateDirectiveReason,
     NameNamespace, NamespaceTypeValueMisuseKind, PathKind, RangeOperandKind,
     UnsupportedOperatorCategory,
@@ -46,7 +46,7 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::display::display_type;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::source_libraries::root_file::{
+use crate::compiler_frontend::source_packages::root_file::{
     hash_root_file_name_from_import_component, import_component_is_config_file,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;

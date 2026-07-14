@@ -55,7 +55,7 @@ pub enum NamingConvention {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImportPublicSurfaceType {
-    SourceLibrary,
+    SourcePackage,
     ModuleRoot,
 }
 
@@ -103,6 +103,7 @@ pub enum InvalidConfigReason {
     DeprecatedSrcKey,
     ReplacedLibrariesKey,
     ReplacedRootFoldersKey,
+    ReplacedPackageFoldersKey,
     FunctionUnsupported,
     TraitDeclarationUnsupported,
     TraitConformanceUnsupported,
@@ -115,13 +116,13 @@ pub enum InvalidConfigReason {
     UnsupportedScalarValue,
     NotCompileTimeConstant,
     ValueCouldNotFold,
-    UnsupportedLibraryFoldersValue,
-    DuplicateLibraryFolder {
+    UnsupportedPackageFoldersValue,
+    DuplicatePackageFolder {
         folder: StringId,
     },
-    InvalidLibraryFolder {
+    InvalidPackageFolder {
         folder: Option<StringId>,
-        reason: InvalidLibraryFolderReason,
+        reason: InvalidPackageFolderReason,
     },
     EmptyProjectSetting,
     UnknownKey {
@@ -154,30 +155,30 @@ pub enum InvalidConfigReason {
     ConfiguredEntryRootMissing {
         entry_root: StringId,
     },
-    ConfiguredLibraryFolderMissing {
+    ConfiguredPackageFolderMissing {
         folder: StringId,
     },
-    ConfiguredLibraryFolderNotDirectory {
+    ConfiguredPackageFolderNotDirectory {
         folder: StringId,
     },
-    SourceLibraryPrefixCollision {
+    SourcePackagePrefixCollision {
         prefix: StringId,
         first_root: StringId,
         second_root: StringId,
     },
-    SourceLibraryBuilderPrefixCollision {
+    SourcePackageBuilderPrefixCollision {
         prefixes: StringId,
-        library_folders: StringId,
+        package_folders: StringId,
     },
-    EntryRootLibraryPrefixCollision {
+    EntryRootPackagePrefixCollision {
         prefix: StringId,
         entry_folder: StringId,
     },
-    SourceLibraryMissingRoot {
+    SourcePackageMissingRoot {
         prefix: StringId,
         root: StringId,
     },
-    SourceLibraryMultipleRoots {
+    SourcePackageMultipleRoots {
         prefix: StringId,
         root: StringId,
         candidates: Vec<StringId>,
@@ -200,11 +201,11 @@ pub enum InvalidConfigReason {
 impl InvalidConfigReason {
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
-            Self::DuplicateLibraryFolder { folder } => {
+            Self::DuplicatePackageFolder { folder } => {
                 *folder = remap.get(*folder);
             }
 
-            Self::InvalidLibraryFolder { folder, .. } => {
+            Self::InvalidPackageFolder { folder, .. } => {
                 if let Some(folder) = folder {
                     *folder = remap.get(*folder);
                 }
@@ -262,12 +263,12 @@ impl InvalidConfigReason {
                 }
             }
 
-            Self::ConfiguredLibraryFolderMissing { folder }
-            | Self::ConfiguredLibraryFolderNotDirectory { folder } => {
+            Self::ConfiguredPackageFolderMissing { folder }
+            | Self::ConfiguredPackageFolderNotDirectory { folder } => {
                 *folder = remap.get(*folder);
             }
 
-            Self::SourceLibraryPrefixCollision {
+            Self::SourcePackagePrefixCollision {
                 prefix,
                 first_root,
                 second_root,
@@ -277,15 +278,15 @@ impl InvalidConfigReason {
                 *second_root = remap.get(*second_root);
             }
 
-            Self::SourceLibraryBuilderPrefixCollision {
+            Self::SourcePackageBuilderPrefixCollision {
                 prefixes,
-                library_folders,
+                package_folders,
             } => {
                 *prefixes = remap.get(*prefixes);
-                *library_folders = remap.get(*library_folders);
+                *package_folders = remap.get(*package_folders);
             }
 
-            Self::EntryRootLibraryPrefixCollision {
+            Self::EntryRootPackagePrefixCollision {
                 prefix,
                 entry_folder,
             } => {
@@ -293,12 +294,12 @@ impl InvalidConfigReason {
                 *entry_folder = remap.get(*entry_folder);
             }
 
-            Self::SourceLibraryMissingRoot { prefix, root } => {
+            Self::SourcePackageMissingRoot { prefix, root } => {
                 *prefix = remap.get(*prefix);
                 *root = remap.get(*root);
             }
 
-            Self::SourceLibraryMultipleRoots {
+            Self::SourcePackageMultipleRoots {
                 prefix,
                 root,
                 candidates,
@@ -334,6 +335,7 @@ impl InvalidConfigReason {
             | Self::DeprecatedSrcKey
             | Self::ReplacedLibrariesKey
             | Self::ReplacedRootFoldersKey
+            | Self::ReplacedPackageFoldersKey
             | Self::FunctionUnsupported
             | Self::TraitDeclarationUnsupported
             | Self::TraitConformanceUnsupported
@@ -346,7 +348,7 @@ impl InvalidConfigReason {
             | Self::UnsupportedScalarValue
             | Self::NotCompileTimeConstant
             | Self::ValueCouldNotFold
-            | Self::UnsupportedLibraryFoldersValue
+            | Self::UnsupportedPackageFoldersValue
             | Self::EmptyProjectSetting
             | Self::ConfigImportRootViolation => {}
         }
@@ -354,7 +356,7 @@ impl InvalidConfigReason {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum InvalidLibraryFolderReason {
+pub enum InvalidPackageFolderReason {
     Empty,
     AbsolutePath,
     ParentDirectorySegment,
@@ -434,7 +436,7 @@ pub enum InvalidImportClauseReason {
 pub enum InvalidImportPathReason {
     ParentDirectorySegment,
     EscapesProjectRoot,
-    EscapesSourceLibraryRoot,
+    EscapesSourcePackageRoot,
     CaseMismatch {
         provided: StringId,
         expected: StringId,
@@ -451,7 +453,7 @@ impl InvalidImportPathReason {
 
             Self::ParentDirectorySegment
             | Self::EscapesProjectRoot
-            | Self::EscapesSourceLibraryRoot => {}
+            | Self::EscapesSourcePackageRoot => {}
         }
     }
 }

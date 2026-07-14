@@ -26,8 +26,8 @@ pub enum CompileTimePathKind {
 pub enum CompileTimePathBase {
     /// Resolved relative to the importing file (`./` or `../`).
     RelativeToFile,
-    /// First segment matched a source library prefix.
-    SourceLibraryRoot,
+    /// First segment matched a source-backed package prefix.
+    SourcePackageRoot,
     /// Fell through to the configured `entry_root`.
     EntryRoot,
 }

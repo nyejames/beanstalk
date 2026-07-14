@@ -3,7 +3,7 @@
 //! WHAT: turns discovered root entry files into `DiscoveredModule` records containing all
 //! transitively reachable input files.
 //! WHY: module inventory is the Stage 0 bridge between filesystem discovery and parallel
-//! frontend compilation; root setup and source-library validation live in sibling modules.
+//! frontend compilation; root setup and source-backed package validation live in sibling modules.
 
 use crate::build_system::build::InputFile;
 

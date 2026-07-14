@@ -68,7 +68,7 @@ fn detects_modified_file_fingerprints() {
 }
 
 #[test]
-fn directory_scope_watches_config_entry_root_and_library_folders() {
+fn directory_scope_watches_config_entry_root_and_package_folders() {
     let root = temp_dir("directory_scope");
     let output_dir = root.join("dev");
     fs::create_dir_all(root.join("src")).expect("should create src dir");
@@ -77,7 +77,7 @@ fn directory_scope_watches_config_entry_root_and_library_folders() {
 
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
-    config.library_folders = vec![PathBuf::from("assets")];
+    config.package_folders = vec![PathBuf::from("assets")];
 
     let scope = WatchScope::derive(&root, Some(&config), &output_dir);
 
@@ -183,7 +183,7 @@ fn directory_scope_watches_js_files_under_entry_root() {
 }
 
 #[test]
-fn directory_scope_watches_js_files_under_library_folders() {
+fn directory_scope_watches_js_files_under_package_folders() {
     let root = temp_dir("watch_js_library");
     let output_dir = root.join("dev");
     fs::create_dir_all(root.join("src")).expect("should create src dir");
@@ -194,7 +194,7 @@ fn directory_scope_watches_js_files_under_library_folders() {
 
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
-    config.library_folders = vec![PathBuf::from("lib")];
+    config.package_folders = vec![PathBuf::from("lib")];
 
     let scope = WatchScope::derive(&root, Some(&config), &output_dir);
 

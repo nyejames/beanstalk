@@ -47,7 +47,7 @@ impl BackendTarget {
 /// against backend-specific lowering support.
 /// WHY: moving this check before backend lowering lets us report a clear `Rule` error at the
 /// reachable call site instead of a backend-internal `LirTransformation` or `WasmGeneration`
-/// error. Unused source-library wrappers stay type-checked HIR, but they are not executable page
+/// error. Unused source-backed package wrappers stay type-checked HIR, but they are not executable page
 /// code and must not fail backend support validation.
 pub fn validate_hir_external_package_support(
     hir: &HirModule,

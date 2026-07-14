@@ -9,10 +9,9 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::{
     ExternalAbiType, ExternalAccessKind, ExternalConstantDef, ExternalConstantId,
     ExternalConstantValue, ExternalFunctionDef, ExternalFunctionId, ExternalFunctionLowerings,
-    ExternalJsLowering, ExternalPackageOrigin, ExternalPackageRegistry, ExternalParameter,
-    ExternalReturnAlias, ExternalReturnSlot, ExternalSignatureType, ExternalSymbolId,
-    ExternalSymbolPath, ExternalTypeDef, ExternalTypeId, IO_INPUT_EXTERNAL_TYPE_ID,
-    external_success_returns,
+    ExternalJsLowering, ExternalPackageRegistry, ExternalParameter, ExternalReturnAlias,
+    ExternalReturnSlot, ExternalSignatureType, ExternalSymbolId, ExternalSymbolPath,
+    ExternalTypeDef, ExternalTypeId, IO_INPUT_EXTERNAL_TYPE_ID, external_success_returns,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -179,11 +178,21 @@ fn package_origin_recorded_for_builtins() {
     let registry = ExternalPackageRegistry::new();
 
     let io = registry.get_package("@core/io").unwrap();
-    assert_eq!(io.origin, ExternalPackageOrigin::Builtin);
+    assert_eq!(
+        io.metadata,
+        crate::builder_surface::PackageMetadata::binding(
+            crate::builder_surface::PackageOrigin::Core
+        )
+    );
     assert_eq!(io.path, "@core/io");
 
     let collections = registry.get_package("@core/collections").unwrap();
-    assert_eq!(collections.origin, ExternalPackageOrigin::Builtin);
+    assert_eq!(
+        collections.metadata,
+        crate::builder_surface::PackageMetadata::binding(
+            crate::builder_surface::PackageOrigin::Core
+        )
+    );
 }
 
 #[test]
@@ -191,10 +200,20 @@ fn package_origin_recorded_for_integration_test_packages() {
     let registry = ExternalPackageRegistry::new().with_test_packages_for_integration();
 
     let pkg_a = registry.get_package("@test/pkg-a").unwrap();
-    assert_eq!(pkg_a.origin, ExternalPackageOrigin::BuilderRuntime);
+    assert_eq!(
+        pkg_a.metadata,
+        crate::builder_surface::PackageMetadata::binding(
+            crate::builder_surface::PackageOrigin::Builder
+        )
+    );
 
     let pkg_b = registry.get_package("@test/pkg-b").unwrap();
-    assert_eq!(pkg_b.origin, ExternalPackageOrigin::BuilderRuntime);
+    assert_eq!(
+        pkg_b.metadata,
+        crate::builder_surface::PackageMetadata::binding(
+            crate::builder_surface::PackageOrigin::Builder
+        )
+    );
 }
 
 #[test]
@@ -221,10 +240,20 @@ fn package_path_to_id_index_is_consistent() {
 fn package_prefix_lookup_returns_longest_registered_package() {
     let mut registry = ExternalPackageRegistry::new();
     registry
-        .register_package("@test", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("parent test package should register");
     let child_id = registry
-        .register_package("@test/pkg", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/pkg",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("child test package should register");
 
     let mut string_table = StringTable::new();
@@ -241,7 +270,7 @@ fn package_prefix_lookup_returns_longest_registered_package() {
 #[test]
 fn package_prefix_lookup_supports_exact_namespace_imports() {
     let mut registry = ExternalPackageRegistry::new();
-    crate::libraries::core::register_core_math_package(&mut registry);
+    crate::builder_surface::core_packages::register_core_math_package(&mut registry);
 
     let mut string_table = StringTable::new();
     let path = import_path(&["core", "math"], &mut string_table);
@@ -256,7 +285,7 @@ fn package_prefix_lookup_supports_exact_namespace_imports() {
 #[test]
 fn virtual_package_detection_uses_symbol_suffixes() {
     let mut registry = ExternalPackageRegistry::new();
-    crate::libraries::core::register_core_math_package(&mut registry);
+    crate::builder_surface::core_packages::register_core_math_package(&mut registry);
 
     let mut string_table = StringTable::new();
     let package_symbol = import_path(&["core", "math", "sin"], &mut string_table);
@@ -284,7 +313,12 @@ fn empty_void_function(name: &str) -> ExternalFunctionDef {
 fn register_function_at_path_rejects_duplicate_path() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry
@@ -313,7 +347,12 @@ fn register_function_at_path_rejects_duplicate_path() {
 fn same_function_leaf_under_different_namespaces_allowed() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry
@@ -359,7 +398,12 @@ fn same_function_leaf_under_different_namespaces_allowed() {
 fn function_type_collision_at_same_path_rejected() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry
@@ -392,7 +436,12 @@ fn function_type_collision_at_same_path_rejected() {
 fn function_constant_collision_at_same_path_rejected() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry
@@ -425,7 +474,12 @@ fn function_constant_collision_at_same_path_rejected() {
 fn nested_function_path_registers_and_resolves() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     let path = ExternalSymbolPath::from_components(vec![
@@ -473,7 +527,12 @@ fn one_component_external_imports_still_resolve_by_path() {
 fn package_surface_iteration_exposes_one_component_paths_only() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package("@test/path", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/path",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
 
     registry

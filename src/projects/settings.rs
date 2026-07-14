@@ -52,7 +52,7 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 /// - `entry_root`: The root directory for source files (default: "")
 /// - `dev_folder`: Output directory for development builds (default: "dev")
 /// - `output_folder`: Output directory for release builds (default: "release")
-/// - `library_folders`: Top-level folders scanned for project-local source libraries (default: ["lib"])
+/// - `package_folders`: Top-level folders scanned for project-local source-backed packages (default: ["lib"])
 /// - `project_name` or `name`: The project name
 /// - `version`: The project version (default: "0.1.0")
 /// - `author`: The project author
@@ -68,10 +68,10 @@ pub struct Config {
     pub entry_root: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
-    /// Top-level project folders scanned for project-local source libraries.
-    pub library_folders: Vec<PathBuf>,
-    /// Whether `library_folders` was explicitly configured in `config.bst`.
-    pub has_explicit_library_folders: bool,
+    /// Top-level project folders scanned for project-local source-backed packages.
+    pub package_folders: Vec<PathBuf>,
+    /// Whether `package_folders` was explicitly configured in `config.bst`.
+    pub has_explicit_package_folders: bool,
     /// Per-loop expansion limit for compile-time template loops.
     pub template_const_loop_iteration_limit: usize,
     pub version: String,
@@ -92,8 +92,8 @@ impl Config {
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
 
-            library_folders: vec![PathBuf::from("lib")], // Default convention for project-local source libraries
-            has_explicit_library_folders: false,
+            package_folders: vec![PathBuf::from("lib")], // Default convention for project-local source-backed packages
+            has_explicit_package_folders: false,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             project_name: String::new(),
             version: String::from("0.1.0"),
@@ -198,8 +198,8 @@ impl Default for Config {
             entry_root: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
-            library_folders: vec![PathBuf::from("lib")],
-            has_explicit_library_folders: false,
+            package_folders: vec![PathBuf::from("lib")],
+            has_explicit_package_folders: false,
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             project_name: String::from("html_project"),
             version: String::from("0.1.0"),

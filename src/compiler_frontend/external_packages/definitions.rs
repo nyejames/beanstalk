@@ -6,10 +6,7 @@
 use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 
 use super::abi::{ExternalAbiType, ExternalParameter, ExternalReturnAlias, ExternalSignatureType};
-use super::ids::{
-    ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalPackageOrigin,
-    ExternalTypeId,
-};
+use super::ids::{ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalTypeId};
 use super::symbol_path::ExternalSymbolPath;
 use crate::compiler_frontend::datatypes::DataType;
 use std::collections::HashMap;
@@ -210,7 +207,7 @@ pub struct ExternalConstantDef {
 pub struct ExternalPackage {
     pub id: ExternalPackageId,
     pub path: String,
-    pub origin: ExternalPackageOrigin,
+    pub metadata: crate::builder_surface::PackageMetadata,
     /// Path-to-ID surface map for registered functions.
     ///
     /// WHAT: maps the full symbol path inside this package to its stable function ID.
@@ -229,7 +226,7 @@ impl Clone for ExternalPackage {
         Self {
             id: self.id,
             path: self.path.clone(),
-            origin: self.origin,
+            metadata: self.metadata,
             function_ids: self.function_ids.clone(),
             type_ids: self.type_ids.clone(),
             constant_ids: self.constant_ids.clone(),
@@ -241,12 +238,12 @@ impl ExternalPackage {
     pub(crate) fn new(
         id: ExternalPackageId,
         path: impl Into<String>,
-        origin: ExternalPackageOrigin,
+        metadata: crate::builder_surface::PackageMetadata,
     ) -> Self {
         Self {
             id,
             path: path.into(),
-            origin,
+            metadata,
             function_ids: HashMap::new(),
             type_ids: HashMap::new(),
             constant_ids: HashMap::new(),

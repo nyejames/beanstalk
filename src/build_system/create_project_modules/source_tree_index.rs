@@ -1,17 +1,17 @@
 //! Stage 0 source-tree indexing for directory projects.
 //!
 //! WHAT: performs the one deterministic entry-root traversal that prepares module roots, root
-//! entry candidates, sibling import-name collision facts, and entry-root source-library prefix
+//! entry candidates, sibling import-name collision facts, and entry-root source-backed package prefix
 //! collision facts for the rest of the build.
 //! WHY: filesystem discovery belongs to Stage 0. Keeping it here prevents the frontend resolver,
 //! module inventory, and collision validators from repeating the same expensive walk.
 
+use crate::builder_surface::SourcePackageRegistry;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::module_roots::{ModuleRootRecord, ModuleRootTable};
-use crate::compiler_frontend::source_libraries::root_file::file_name_is_hash_root_file;
+use crate::compiler_frontend::source_packages::root_file::file_name_is_hash_root_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 use std::collections::{BTreeSet, VecDeque};
@@ -99,15 +99,15 @@ impl SourceTreeIndex {
     /// Build the index with one deterministic traversal of the configured entry root.
     ///
     /// The traversal also owns entry-root sibling `.bst` file/folder import-name collisions and
-    /// entry-root folder/source-library-prefix collisions, using the same sorted directory
+    /// entry-root folder/source-backed package-prefix collisions, using the same sorted directory
     /// entries it already reads. Skipped directories neither contribute collision facts nor get
-    /// recursively scanned. Source-library-tree collision validation remains separate because
-    /// registered source-library traversal lives outside entry-root indexing.
+    /// recursively scanned. Source-backed package-tree collision validation remains separate because
+    /// registered source-backed package traversal lives outside entry-root indexing.
     pub(super) fn discover(
         entry_root: PathBuf,
         project_root: &Path,
         config: &Config,
-        source_libraries: &SourceLibraryRegistry,
+        source_packages: &SourcePackageRegistry,
         string_table: &mut StringTable,
     ) -> Result<Self, CompilerMessages> {
         let discovery_start = crate::timing::start_pipeline_timing();
@@ -201,14 +201,14 @@ impl SourceTreeIndex {
             }
 
             // On the root pass, reject entry-root folders whose names collide with
-            // source-library import prefixes.
+            // source-backed package import prefixes.
             if directory == entry_root {
                 for folder_name in &importable_folder_names {
-                    if source_libraries.has_prefix(folder_name) {
+                    if source_packages.has_prefix(folder_name) {
                         let colliding_folder = directory.join(folder_name);
                         return Err(project_structure_messages(
                             &colliding_folder,
-                            InvalidConfigReason::EntryRootLibraryPrefixCollision {
+                            InvalidConfigReason::EntryRootPackagePrefixCollision {
                                 prefix: string_table.intern(folder_name),
                                 entry_folder: path_id(&colliding_folder, string_table),
                             },
@@ -277,7 +277,7 @@ impl SourceTreeIndex {
     pub(super) fn bounded_module_roots_for_single_file(
         entry_file: &Path,
         config: &Config,
-        source_libraries: &SourceLibraryRegistry,
+        source_packages: &SourcePackageRegistry,
         string_table: &mut StringTable,
     ) -> Result<ModuleRootTable, CompilerMessages> {
         if !path_is_hash_root_file(entry_file) {
@@ -301,7 +301,7 @@ impl SourceTreeIndex {
             canonical_root.clone(),
             &canonical_root,
             config,
-            source_libraries,
+            source_packages,
             string_table,
         )
         .map(|index| index.module_roots)

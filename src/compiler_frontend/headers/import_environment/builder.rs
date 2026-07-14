@@ -6,20 +6,20 @@
 //!      of import resolution; keeping it separate from the entry-point orchestration
 //!      makes the module structure easier to navigate.
 
+use crate::builder_surface::SourceFileKind;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportPublicSurfaceType};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{
     ModuleSymbols, PublicExportEntry, PublicExportTarget,
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::source_libraries::root_file::{
+use crate::compiler_frontend::source_packages::root_file::{
     import_path_references_config_file, import_path_references_hash_root_file,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::libraries::SourceFileKind;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
@@ -27,8 +27,8 @@ use super::{
     HeaderImportEnvironment, ImportTargetResolutionInput, ModuleBoundaryCheckInput,
     NamespaceRecordSource, NamespaceTargetResolutionInput, PublicExportLookupResult,
     PublicExportResolutionInput, ResolvedImportTarget, SourceImportAccess,
-    SourceLibraryBoundaryCheckInput, VisibleNameBinding, VisibleNameRegistry,
-    check_alias_case_warning, check_module_boundary, check_source_library_boundary,
+    SourcePackageBoundaryCheckInput, VisibleNameBinding, VisibleNameRegistry,
+    check_alias_case_warning, check_module_boundary, check_source_package_boundary,
     has_explicit_bst_extension, resolve_external_package_symbol, resolve_import_target,
     resolve_namespace_target, resolve_public_export_boundary,
 };
@@ -89,7 +89,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Whether two source files share the same non-public import boundary.
     ///
-    /// WHAT: source-library members, same module-root members, and files in the implicit entry
+    /// WHAT: source-backed package members, same module-root members, and files in the implicit entry
     /// module can see each other's ordinary source declarations directly.
     /// WHY: grouped source imports and namespace imports both need the same boundary answer
     /// before deciding whether receiver methods may travel with the imported surface.
@@ -98,12 +98,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         importer_file: &InternedPath,
         target_file: &InternedPath,
     ) -> bool {
-        let importer_library = self
+        let importer_package = self
             .module_symbols
-            .file_library_membership
+            .file_package_membership
             .get(importer_file);
-        let target_library = self.module_symbols.file_library_membership.get(target_file);
-        if importer_library == target_library && importer_library.is_some() {
+        let target_package = self.module_symbols.file_package_membership.get(target_file);
+        if importer_package == target_package && importer_package.is_some() {
             return true;
         }
 
@@ -116,8 +116,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return true;
         }
 
-        let importer_has_explicit_module = importer_library.is_some() || importer_module.is_some();
-        let target_has_explicit_module = target_library.is_some() || target_module.is_some();
+        let importer_has_explicit_module = importer_package.is_some() || importer_module.is_some();
+        let target_has_explicit_module = target_package.is_some() || target_module.is_some();
 
         !importer_has_explicit_module && !target_has_explicit_module
     }
@@ -363,7 +363,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let mut implicit_constants = FxHashMap::default();
         self.remove_beandown_generated_self_constants(file_visibility, source_file);
 
-        // Layer 1: exported constants from the HTML source-library public surface.
+        // Layer 1: exported constants from the HTML source-backed package public surface.
         self.collect_html_public_export_constants(&mut implicit_constants);
 
         // Layer 2: exported constants from the exact same-directory module public surface. Later
@@ -420,7 +420,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) {
         let Some(entries) = self
             .module_symbols
-            .source_library_public_exports
+            .source_package_public_exports
             .get("html")
         else {
             return;
@@ -438,7 +438,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return;
         };
 
-        if let Some(entries) = self.source_library_public_exports_for_file(&root_file) {
+        if let Some(entries) = self.source_package_public_exports_for_file(&root_file) {
             self.collect_constant_exports(entries, implicit_constants, Some(source_file));
         }
 
@@ -554,13 +554,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .map(|parent| parent.to_path_buf(self.string_table))
     }
 
-    fn source_library_public_exports_for_file(
+    fn source_package_public_exports_for_file(
         &self,
         root_file: &InternedPath,
     ) -> Option<&FxHashSet<PublicExportEntry>> {
         let prefix = self
             .module_symbols
-            .source_library_root_files
+            .source_package_root_files
             .iter()
             .find_map(|(prefix, source)| {
                 if source == root_file {
@@ -571,7 +571,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             })?;
 
         self.module_symbols
-            .source_library_public_exports
+            .source_package_public_exports
             .get(prefix)
     }
 
@@ -616,8 +616,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let public_export_input = PublicExportResolutionInput {
             importer_file: source_file,
             header_path: &import.header_path,
-            source_library_public_exports: &self.module_symbols.source_library_public_exports,
-            file_library_membership: &self.module_symbols.file_library_membership,
+            source_package_public_exports: &self.module_symbols.source_package_public_exports,
+            file_package_membership: &self.module_symbols.file_package_membership,
             module_root_public_exports: &self.module_symbols.module_root_public_exports,
             file_module_membership: &self.module_symbols.file_module_membership,
             module_root_boundaries: &self.module_symbols.module_root_boundaries,
@@ -652,8 +652,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 } => {
                     let public_surface_name_id = self.string_table.intern(&public_surface_name);
                     let diagnostic_public_surface_type = match public_surface_type {
-                        super::public_export_resolution::PublicExportSurfaceType::SourceLibrary => {
-                            ImportPublicSurfaceType::SourceLibrary
+                        super::public_export_resolution::PublicExportSurfaceType::SourcePackage => {
+                            ImportPublicSurfaceType::SourcePackage
                         }
                         super::public_export_resolution::PublicExportSurfaceType::ModuleRoot => {
                             ImportPublicSurfaceType::ModuleRoot
@@ -694,13 +694,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     .canonical_source_by_symbol_path
                     .get(&symbol_path)
                 {
-                    check_source_library_boundary(SourceLibraryBoundaryCheckInput {
+                    check_source_package_boundary(SourcePackageBoundaryCheckInput {
                         importer_file: source_file,
                         target_file,
                         requested_path: &import.header_path,
                         location: import.location.clone(),
-                        file_library_membership: &self.module_symbols.file_library_membership,
-                        source_library_root_files: &self.module_symbols.source_library_root_files,
+                        file_package_membership: &self.module_symbols.file_package_membership,
+                        source_package_root_files: &self.module_symbols.source_package_root_files,
                         string_table: self.string_table,
                     })?;
                     check_module_boundary(ModuleBoundaryCheckInput {

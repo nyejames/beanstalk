@@ -7,6 +7,8 @@
 
 use super::merge_stage_messages;
 use crate::build_system::build::InputFile;
+use crate::builder_surface::SourceFileKind;
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::display_messages::format_terse_compiler_messages;
@@ -23,8 +25,6 @@ use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 use crate::compiler_frontend::{FrontendFilePrepareContext, FrontendFilePrepareInput};
-use crate::libraries::SourceFileKind;
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
@@ -225,7 +225,7 @@ fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_string
             let input = FrontendFilePrepareInput {
                 source_code,
                 source_path,
-                source_kind: crate::libraries::SourceFileKind::Beanstalk,
+                source_kind: crate::builder_surface::SourceFileKind::Beanstalk,
                 const_template_offset,
                 runtime_fragment_offset,
             };

@@ -40,13 +40,13 @@ pub use symbol_path::*;
 /// WHAT: calls each package-specific registration helper in order to produce a fully
 /// populated `ExternalPackageRegistry`.
 /// WHY: the registry constructor should read like orchestration, not like a data dump.
-/// Keeping package definitions in `src/libraries/core/` prevents the constructor from
+/// Keeping package definitions in `src/builder_surface/core_packages/` prevents the constructor from
 /// growing into an unmaintainable wall of struct literals and separates library
 /// identity from registry mechanics.
 pub fn build_builtin_registry() -> ExternalPackageRegistry {
     let mut registry = ExternalPackageRegistry::default();
-    crate::libraries::core::register_core_io_package(&mut registry);
-    crate::libraries::core::register_core_collections_package(&mut registry);
-    crate::libraries::core::register_core_prelude(&mut registry);
+    crate::builder_surface::core_packages::register_core_io_package(&mut registry);
+    crate::builder_surface::core_packages::register_core_collections_package(&mut registry);
+    crate::builder_surface::core_packages::register_core_prelude(&mut registry);
     registry
 }

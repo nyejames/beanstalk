@@ -7,18 +7,18 @@
 
 use crate::build_system::project_config::parsing::ParsedConfigFile;
 
+use crate::builder_surface::config_key_registry::{
+    ConfigKeyEntry, ConfigKeyOwner, ConfigValueShape, ProjectConfigKeyRegistry,
+    config_value_shape_name,
+};
 use crate::compiler_frontend::ast::ast_nodes::{Declaration, NodeKind};
 use crate::compiler_frontend::ast::const_values::facts::{AstConstFacts, ConstFactValueKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidConfigReason, InvalidLibraryFolderReason,
+    CompilerDiagnostic, InvalidConfigReason, InvalidPackageFolderReason,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::libraries::config_key_registry::{
-    ConfigKeyEntry, ConfigKeyOwner, ConfigValueShape, ProjectConfigKeyRegistry,
-    config_value_shape_name,
-};
 use crate::projects::settings::{
     Config, IMPLICIT_START_FUNC_NAME, MAX_TEMPLATE_CONST_LOOP_ITERATIONS,
     TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY,
@@ -173,7 +173,7 @@ fn extract_config_declaration(
         .setting_locations
         .insert(key.clone(), location.clone());
 
-    // Deprecated key: `libraries` was renamed to `library_folders`.
+    // Deprecated key: `libraries` was renamed to `package_folders`.
     if key == "libraries" {
         return Err(vec![config_diagnostic(
             Some(string_table.intern(&key)),
@@ -182,11 +182,20 @@ fn extract_config_declaration(
         )]);
     }
 
-    // Replaced key: `root_folders` has been replaced by `library_folders`.
+    // Replaced key: `root_folders` has been replaced by `package_folders`.
     if key == "root_folders" {
         return Err(vec![config_diagnostic(
             Some(string_table.intern(&key)),
             InvalidConfigReason::ReplacedRootFoldersKey,
+            location,
+        )]);
+    }
+
+    // Deprecated key: `library_folders` was renamed to `package_folders`.
+    if key == "library_folders" {
+        return Err(vec![config_diagnostic(
+            Some(string_table.intern(&key)),
+            InvalidConfigReason::ReplacedPackageFoldersKey,
             location,
         )]);
     }
@@ -307,7 +316,7 @@ fn extract_config_value_for_shape(
         ConfigValueShape::StringCollection => {
             extract_string_collection_value(expression, string_table)
                 .map(ValidatedConfigValue::StringCollection)
-                .ok_or(InvalidConfigReason::UnsupportedLibraryFoldersValue)
+                .ok_or(InvalidConfigReason::UnsupportedPackageFoldersValue)
         }
     }
 }
@@ -376,7 +385,7 @@ fn extract_bool_value(expression: &Expression) -> Option<bool> {
 
 /// Extract a string collection value.
 ///
-/// WHY: `library_folders` accepts either a single string literal or a `{ ... }` collection
+/// WHY: `package_folders` accepts either a single string literal or a `{ ... }` collection
 /// of string literals. Each item must be a string-like value, not a bool/int/float/char.
 fn extract_string_collection_value(
     expression: &Expression,
@@ -407,11 +416,11 @@ fn extract_string_collection_value(
 //  Library Folders Application
 // -------------------------
 
-/// Apply validated `library_folders` string collection values to the config.
+/// Apply validated `package_folders` string collection values to the config.
 ///
-/// WHY: path validation for library folders stays separate from broad shape extraction
+/// WHY: path validation for package folders stays separate from broad shape extraction
 /// so folder-specific rules (no absolute paths, no parent-dir segments, etc.) are still enforced.
-fn apply_library_folders(
+fn apply_package_folders(
     config: &mut Config,
     folder_strings: Vec<ValidatedConfigString>,
     location: &SourceLocation,
@@ -422,7 +431,7 @@ fn apply_library_folders(
 
     for folder_string in folder_strings {
         let folder = PathBuf::from(folder_string.value);
-        let validated_folder = validate_library_folder_path(
+        let validated_folder = validate_package_folder_path(
             folder,
             &folder_string.location,
             string_table,
@@ -440,8 +449,8 @@ fn apply_library_folders(
         return Err(errors);
     }
 
-    config.library_folders = folders;
-    config.has_explicit_library_folders = true;
+    config.package_folders = folders;
+    config.has_explicit_package_folders = true;
     Ok(())
 }
 
@@ -474,76 +483,76 @@ fn reject_duplicate_folder_entries(
 
     errors.push(config_diagnostic(
         None,
-        InvalidConfigReason::DuplicateLibraryFolder {
+        InvalidConfigReason::DuplicatePackageFolder {
             folder: duplicate_list,
         },
         location.clone(),
     ));
 }
 
-/// Validate one `library_folders` entry and normalize it to the stored path form.
+/// Validate one `package_folders` entry and normalize it to the stored path form.
 ///
-/// WHY: project-local source library folder discovery should stay project-relative and explicit.
-fn validate_library_folder_path(
-    library_folder: PathBuf,
+/// WHY: project-local source-backed package folder discovery should stay project-relative and explicit.
+fn validate_package_folder_path(
+    package_folder: PathBuf,
     location: &SourceLocation,
     string_table: &mut StringTable,
     errors: &mut Vec<CompilerDiagnostic>,
 ) -> Option<PathBuf> {
-    if library_folder.as_os_str().is_empty() {
+    if package_folder.as_os_str().is_empty() {
         errors.push(config_diagnostic(
             None,
-            InvalidConfigReason::InvalidLibraryFolder {
+            InvalidConfigReason::InvalidPackageFolder {
                 folder: None,
-                reason: InvalidLibraryFolderReason::Empty,
+                reason: InvalidPackageFolderReason::Empty,
             },
             location.clone(),
         ));
         return None;
     }
 
-    let folder_name = library_folder.display().to_string();
+    let folder_name = package_folder.display().to_string();
     let folder_id = string_table.intern(&folder_name);
 
-    if library_folder.is_absolute()
-        || library_folder
+    if package_folder.is_absolute()
+        || package_folder
             .as_os_str()
             .to_string_lossy()
             .starts_with('/')
     {
         errors.push(config_diagnostic(
             None,
-            InvalidConfigReason::InvalidLibraryFolder {
+            InvalidConfigReason::InvalidPackageFolder {
                 folder: Some(folder_id),
-                reason: InvalidLibraryFolderReason::AbsolutePath,
+                reason: InvalidPackageFolderReason::AbsolutePath,
             },
             location.clone(),
         ));
         return None;
     }
 
-    if library_folder
+    if package_folder
         .components()
         .any(|component| component == std::path::Component::ParentDir)
     {
         errors.push(config_diagnostic(
             None,
-            InvalidConfigReason::InvalidLibraryFolder {
+            InvalidConfigReason::InvalidPackageFolder {
                 folder: Some(folder_id),
-                reason: InvalidLibraryFolderReason::ParentDirectorySegment,
+                reason: InvalidPackageFolderReason::ParentDirectorySegment,
             },
             location.clone(),
         ));
         return None;
     }
 
-    let mut components = library_folder.components();
+    let mut components = package_folder.components();
     let Some(first) = components.next() else {
         errors.push(config_diagnostic(
             None,
-            InvalidConfigReason::InvalidLibraryFolder {
+            InvalidConfigReason::InvalidPackageFolder {
                 folder: None,
-                reason: InvalidLibraryFolderReason::Empty,
+                reason: InvalidPackageFolderReason::Empty,
             },
             location.clone(),
         ));
@@ -553,16 +562,16 @@ fn validate_library_folder_path(
     if !matches!(first, std::path::Component::Normal(_)) || components.next().is_some() {
         errors.push(config_diagnostic(
             None,
-            InvalidConfigReason::InvalidLibraryFolder {
+            InvalidConfigReason::InvalidPackageFolder {
                 folder: Some(folder_id),
-                reason: InvalidLibraryFolderReason::NestedPath,
+                reason: InvalidPackageFolderReason::NestedPath,
             },
             location.clone(),
         ));
         return None;
     }
 
-    Some(library_folder)
+    Some(package_folder)
 }
 
 // -------------------------
@@ -591,8 +600,8 @@ fn apply_validated_config_value(
         }
 
         (ConfigKeyOwner::Core, ValidatedConfigValue::StringCollection(values)) => {
-            if key == "library_folders" {
-                apply_library_folders(config, values, location, string_table)
+            if key == "package_folders" {
+                apply_package_folders(config, values, location, string_table)
             } else {
                 // Defensive fallback for future core keys that have not yet grown a typed field.
                 // Unknown user keys cannot reach this branch because the registry check runs first.

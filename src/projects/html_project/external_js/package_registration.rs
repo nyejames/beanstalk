@@ -5,13 +5,13 @@
 //! WHY: avoids duplicating the conversion logic between project-local `.js` imports and
 //!      builder-owned packages such as `@web/canvas`.
 
+use crate::builder_surface::external_import_providers::provider::RequiredRuntimeImport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::{
     ExternalAbiType, ExternalAccessKind, ExternalFunctionLowerings, ExternalFunctionSpec,
     ExternalJsLowering, ExternalPackageId, ExternalPackageRegistry, ExternalParameter,
     ExternalReturnSlot, ExternalSignatureType, ExternalTypeSpec,
 };
-use crate::libraries::external_import_providers::provider::RequiredRuntimeImport;
 use crate::projects::html_project::external_js::parser::parsed_js_library::{
     ParsedJsFunction, ParsedJsLibrary, ParsedSignature,
 };

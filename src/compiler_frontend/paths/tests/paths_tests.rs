@@ -321,13 +321,13 @@ fn parse_file_path_grouped_paths_accept_mixed_quoted_and_unquoted_components() {
 
 #[test]
 fn parse_file_path_stops_before_config_list_comma() {
-    let paths = first_path_token_values("library_folders #= { @lib, @assets }\n");
+    let paths = first_path_token_values("package_folders #= { @lib, @assets }\n");
     assert_eq!(paths, vec!["lib".to_string()]);
 }
 
 #[test]
 fn parse_file_path_stops_before_config_list_closing_brace() {
-    let paths = first_path_token_values("library_folders #= { @assets}\n");
+    let paths = first_path_token_values("package_folders #= { @assets}\n");
     assert_eq!(paths, vec!["assets".to_string()]);
 }
 

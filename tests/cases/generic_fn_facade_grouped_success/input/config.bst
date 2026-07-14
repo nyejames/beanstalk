@@ -1,2 +1,2 @@
 project #= "html"
-library_folders #= {"lib"}
+package_folders #= {"lib"}

@@ -4,10 +4,10 @@
 //! paths and public path values. They do not own import visibility, public-surface policy, or
 //! diagnostic construction.
 
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry};
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathBase;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -149,11 +149,11 @@ pub(crate) fn build_public_path(
         // Relative paths keep their original form as the public path.
         CompileTimePathBase::RelativeToFile => source_path.clone(),
 
-        // Source-library and entry-root paths keep the visible segments. For source-library paths
-        // the first segment is the library prefix, which must be preserved. For entry-root paths,
+        // Source-backed package and entry-root paths keep the visible segments. For source-backed package paths
+        // the first segment is the package prefix, which must be preserved. For entry-root paths,
         // all segments are visible. In both cases the source path already contains the correct
         // visible segments, so we can reuse it directly.
-        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::SourcePackageRoot | CompileTimePathBase::EntryRoot => {
             // Strip leading `.` or `..` defensively; these should not be present for non-relative
             // paths.
             let components = source_path.as_components();

@@ -7,7 +7,6 @@ use super::super::definitions::{
     ExternalConstantDef, ExternalConstantValue, ExternalFunctionDef, ExternalFunctionLowerings,
     ExternalJsLowering, ExternalReturnSlot, ExternalTypeDef, external_success_returns,
 };
-use super::super::ids::ExternalPackageOrigin;
 use super::super::ids::{ExternalConstantId, ExternalFunctionId, ExternalTypeId};
 use super::super::registry::ExternalPackageRegistry;
 use super::super::symbol_path::ExternalSymbolPath;
@@ -16,7 +15,12 @@ use super::super::symbol_path::ExternalSymbolPath;
 /// symbol name for integration-test coverage of package-scoped resolution.
 pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPackageRegistry) {
     let pkg_a_id = registry
-        .register_package("@test/pkg-a", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/pkg-a",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
     registry
         .register_type_in_package(
@@ -116,7 +120,12 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
         .expect("test custom-error fallible function registration should not collide");
 
     let pkg_b_id = registry
-        .register_package("@test/pkg-b", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/pkg-b",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test package registration should not collide");
     registry
         .register_function_in_package(
@@ -156,7 +165,12 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
         .expect("test constant registration should not collide");
 
     let nested_id = registry
-        .register_package("@test/nested", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/nested",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test nested package registration should not collide");
 
     registry
@@ -208,7 +222,9 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
     let string_content_id = registry
         .register_package(
             "@test/string_content",
-            ExternalPackageOrigin::BuilderRuntime,
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
         )
         .expect("test string-content package registration should not collide");
 
@@ -233,7 +249,12 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
         .expect("test string-content function registration should not collide");
 
     let optional_id = registry
-        .register_package("@test/optional", ExternalPackageOrigin::BuilderRuntime)
+        .register_package(
+            "@test/optional",
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Builder,
+            ),
+        )
         .expect("test optional package registration should not collide");
 
     registry

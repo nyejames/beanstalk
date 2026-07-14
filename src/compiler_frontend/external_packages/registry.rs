@@ -11,7 +11,6 @@ use super::definitions::{
     ExternalConstantDef, ExternalFunctionDef, ExternalFunctionSpec, ExternalPackage,
     ExternalTypeDef, ExternalTypeSpec,
 };
-use super::ids::ExternalPackageOrigin;
 use super::ids::{
     ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalSymbolId, ExternalTypeId,
 };
@@ -136,7 +135,7 @@ impl ExternalPackageRegistry {
     pub fn register_package(
         &mut self,
         path: impl Into<String>,
-        origin: ExternalPackageOrigin,
+        metadata: crate::builder_surface::PackageMetadata,
     ) -> Result<ExternalPackageId, CompilerError> {
         let path = path.into();
         if self.package_id_by_path.contains_key(&path) {
@@ -144,7 +143,7 @@ impl ExternalPackageRegistry {
         }
         let id = ExternalPackageId(self.next_package_id);
         self.next_package_id += 1;
-        let package = ExternalPackage::new(id, path.clone(), origin);
+        let package = ExternalPackage::new(id, path.clone(), metadata);
         self.packages.insert(id, package);
         self.package_id_by_path.insert(path, id);
         Ok(id)
@@ -583,9 +582,12 @@ impl ExternalPackageRegistry {
         let test_package_path = "@test/default";
         let package_id = match self.package_id_by_path.get(test_package_path).copied() {
             Some(id) => id,
-            None => {
-                self.register_package(test_package_path, ExternalPackageOrigin::BuilderRuntime)?
-            }
+            None => self.register_package(
+                test_package_path,
+                crate::builder_surface::PackageMetadata::binding(
+                    crate::builder_surface::PackageOrigin::Builder,
+                ),
+            )?,
         };
 
         let path = one_component_symbol_path("function", &function.name)?;
@@ -820,7 +822,7 @@ impl ExternalPackageRegistry {
         string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
     ) -> Option<&'static str> {
         let components = import_path.as_components();
-        for package_path in crate::libraries::core::OPTIONAL_CORE_PACKAGE_PATHS {
+        for package_path in crate::builder_surface::core_packages::OPTIONAL_CORE_PACKAGE_PATHS {
             if self.has_package(package_path) {
                 continue;
             }

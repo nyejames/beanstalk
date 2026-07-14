@@ -34,7 +34,7 @@ impl From<CompilerError> for ImportPathResolutionError {
 }
 
 /// WHAT: rejects import paths that escape their resolved base directory.
-/// WHY: imports must stay within the project root (relative/entry) or library root.
+/// WHY: imports must stay within the project root (relative/entry) or package root.
 ///
 /// NOTE: `string_table` is only used to intern the importer file path for diagnostics.
 pub(crate) fn validate_import_boundary(
@@ -50,8 +50,8 @@ pub(crate) fn validate_import_boundary(
 
     if !canonical_file.starts_with(&canonical_base) {
         let reason = match base_kind {
-            CompileTimePathBase::SourceLibraryRoot => {
-                InvalidImportPathReason::EscapesSourceLibraryRoot
+            CompileTimePathBase::SourcePackageRoot => {
+                InvalidImportPathReason::EscapesSourcePackageRoot
             }
             _ => InvalidImportPathReason::EscapesProjectRoot,
         };
@@ -96,7 +96,7 @@ pub(crate) fn validate_import_case_sensitivity(
         .collect();
 
     let user_components: Vec<String> = match base_kind {
-        CompileTimePathBase::SourceLibraryRoot => import_path
+        CompileTimePathBase::SourcePackageRoot => import_path
             .as_components()
             .iter()
             .skip(1)

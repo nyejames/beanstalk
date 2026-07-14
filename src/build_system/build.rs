@@ -24,11 +24,11 @@ use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDi
 use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 
-use crate::compiler_frontend::external_packages::{ExternalPackageId, ExternalPackageRegistry};
-use crate::libraries::external_import_providers::provider::{
+use crate::builder_surface::external_import_providers::provider::{
     RequiredRuntimeImport, RuntimeAssetIdentity,
 };
-use crate::libraries::{LibrarySet, SourceFileKind};
+use crate::builder_surface::{BuilderSurface, SourceFileKind};
+use crate::compiler_frontend::external_packages::{ExternalPackageId, ExternalPackageRegistry};
 use crate::projects::settings::{Config, ProjectConfigError};
 
 use std::collections::HashSet;
@@ -171,14 +171,14 @@ pub trait BackendBuilder {
     /// tokenization/template parsing.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
-    /// Builder-provided libraries.
+    /// Builder-provided surface.
     ///
-    /// WHAT: returns the complete set of libraries this builder exposes, including
-    /// external platform packages (e.g. `@core/math`) and source library roots
+    /// WHAT: returns the complete builder surface this builder exposes, including
+    /// external platform packages (e.g. `@core/math`) and source-backed package roots
     /// (e.g. `@html`).
-    /// WHY: backends own the runtime and library surface, so they must declare
+    /// WHY: backends own the runtime and package surface, so they must declare
     /// everything the compiler frontend is allowed to see and resolve.
-    fn libraries(&self) -> LibrarySet;
+    fn frontend_surface(&self) -> BuilderSurface;
 }
 
 /// Build-system entrypoint that owns the selected backend implementation.
@@ -199,7 +199,7 @@ pub(crate) struct BuildBootstrap {
     pub(crate) config: Config,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
-    pub(crate) libraries: LibrarySet,
+    pub(crate) frontend_surface: BuilderSurface,
 }
 
 // -------------------------
@@ -342,7 +342,7 @@ pub fn build_project(
         mut config,
         style_directives,
         mut string_table,
-        mut libraries,
+        mut frontend_surface,
     } = match bootstrap_project_build(project_builder, valid_path) {
         Ok(bootstrap) => {
             log_stage_timing("build_project.bootstrap", bootstrap_start);
@@ -360,7 +360,7 @@ pub fn build_project(
         &mut config,
         flags,
         &style_directives,
-        &mut libraries,
+        &mut frontend_surface,
         &mut string_table,
     ) {
         Ok(modules) => {
@@ -441,10 +441,10 @@ pub(crate) fn bootstrap_project_build(
     let _compiler_symbol_ids = preseeded.compiler_symbol_ids;
     log_stage_timing("bootstrap.symbol_preseed", symbol_preseed_start);
 
-    // Compute the builder's library surface once so config loading and frontend compilation
-    // see the same set of allowed config keys, external packages, and source libraries.
+    // Compute the builder's frontend surface once so config loading and frontend compilation
+    // see the same set of allowed config keys, external packages, and source-backed packages.
     let backend_libraries_start = crate::timing::start_pipeline_timing();
-    let libraries = project_builder.backend.libraries();
+    let frontend_surface = project_builder.backend.frontend_surface();
     log_stage_timing("bootstrap.backend_libraries", backend_libraries_start);
 
     let style_directives_start = crate::timing::start_pipeline_timing();
@@ -463,7 +463,7 @@ pub(crate) fn bootstrap_project_build(
     // WHY: Backends and serving code both depend on the same validated config surface.
     let config_services = ProjectConfigParseServices {
         style_directives: &style_directives,
-        libraries: &libraries,
+        frontend_surface: &frontend_surface,
     };
     let load_project_config_start = crate::timing::start_pipeline_timing();
     if let Err(messages) = load_project_config(&mut config, &config_services, &mut string_table) {
@@ -498,7 +498,7 @@ pub(crate) fn bootstrap_project_build(
         config,
         style_directives,
         string_table,
-        libraries,
+        frontend_surface,
     })
 }
 

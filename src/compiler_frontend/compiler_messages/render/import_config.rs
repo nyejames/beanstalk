@@ -30,10 +30,14 @@ pub(crate) fn invalid_config_message(
             "Config key 'src' is deprecated. Use 'entry_root' instead.".to_owned()
         }
         InvalidConfigReason::ReplacedLibrariesKey => {
-            "Config key 'libraries' has been replaced. Use 'library_folders' instead.".to_owned()
+            "Config key 'libraries' has been replaced. Use 'package_folders' instead.".to_owned()
+        }
+        InvalidConfigReason::ReplacedPackageFoldersKey => {
+            "Config key 'library_folders' has been replaced. Use 'package_folders' instead."
+                .to_owned()
         }
         InvalidConfigReason::ReplacedRootFoldersKey => {
-            "Config key 'root_folders' has been replaced. Use 'library_folders' instead."
+            "Config key 'root_folders' has been replaced. Use 'package_folders' instead."
                 .to_owned()
         }
         InvalidConfigReason::ConfigImportRootViolation => {
@@ -81,15 +85,15 @@ pub(crate) fn invalid_config_message(
                 "Config value '{key_label}' could not be fully evaluated at compile time. Config declarations must fold after AST construction and cannot require runtime evaluation."
             )
         }
-        InvalidConfigReason::UnsupportedLibraryFoldersValue => {
-            "Unsupported value in 'library_folders'. Use a string folder name or a collection of string folder names.".to_owned()
+        InvalidConfigReason::UnsupportedPackageFoldersValue => {
+            "Unsupported value in 'package_folders'. Use a string folder name or a collection of string folder names.".to_owned()
         }
-        InvalidConfigReason::DuplicateLibraryFolder { folder } => format!(
-            "Duplicate 'library_folders' entries are not allowed: {}",
+        InvalidConfigReason::DuplicatePackageFolder { folder } => format!(
+            "Duplicate 'package_folders' entries are not allowed: {}",
             string_table.resolve(*folder)
         ),
-        InvalidConfigReason::InvalidLibraryFolder { folder, reason } => {
-            invalid_library_folder_message(*folder, *reason, string_table)
+        InvalidConfigReason::InvalidPackageFolder { folder, reason } => {
+            invalid_package_folder_message(*folder, *reason, string_table)
         }
         InvalidConfigReason::EmptyProjectSetting => {
             format!("Config setting '#{key_label}' cannot be empty.")
@@ -143,46 +147,46 @@ pub(crate) fn invalid_config_message(
             "Configured entry root '{}' does not exist.",
             string_table.resolve(*entry_root),
         ),
-        InvalidConfigReason::ConfiguredLibraryFolderMissing { folder } => format!(
-            "Configured library folder '{}' does not exist.",
+        InvalidConfigReason::ConfiguredPackageFolderMissing { folder } => format!(
+            "Configured package folder '{}' does not exist.",
             string_table.resolve(*folder),
         ),
-        InvalidConfigReason::ConfiguredLibraryFolderNotDirectory { folder } => format!(
-            "Configured library folder '{}' is not a directory.",
+        InvalidConfigReason::ConfiguredPackageFolderNotDirectory { folder } => format!(
+            "Configured package folder '{}' is not a directory.",
             string_table.resolve(*folder),
         ),
-        InvalidConfigReason::SourceLibraryPrefixCollision {
+        InvalidConfigReason::SourcePackagePrefixCollision {
             prefix,
             first_root,
             second_root,
         } => format!(
-            "Configured library folder collision: source library prefix '@{}' is defined by both '{}' and '{}'.",
+            "Configured package folder collision: source-backed package prefix '@{}' is defined by both '{}' and '{}'.",
             string_table.resolve(*prefix),
             string_table.resolve(*first_root),
             string_table.resolve(*second_root),
         ),
-        InvalidConfigReason::SourceLibraryBuilderPrefixCollision {
+        InvalidConfigReason::SourcePackageBuilderPrefixCollision {
             prefixes,
-            library_folders,
+            package_folders,
         } => format!(
-            "Project-local source libraries collide with builder-provided libraries: {}. Rename or remove the conflicting project-local library prefix, or update 'library_folders' (currently: {}).",
+            "Project-local source libraries collide with builder-provided libraries: {}. Rename or remove the conflicting project-local package prefix, or update 'package_folders' (currently: {}).",
             string_table.resolve(*prefixes),
-            string_table.resolve(*library_folders),
+            string_table.resolve(*package_folders),
         ),
-        InvalidConfigReason::EntryRootLibraryPrefixCollision {
+        InvalidConfigReason::EntryRootPackagePrefixCollision {
             prefix,
             entry_folder,
         } => format!(
-            "Entry-root folder '{}' collides with source-library prefix '@{}'. Ambiguous imports are disallowed.",
+            "Entry-root folder '{}' collides with source-backed package prefix '@{}'. Ambiguous imports are disallowed.",
             string_table.resolve(*entry_folder),
             string_table.resolve(*prefix),
         ),
-        InvalidConfigReason::SourceLibraryMissingRoot { prefix, root } => format!(
-            "Source library '@{}' at '{}' is missing a direct-child hash root file. Every source library must contain exactly one non-empty filename matching '#*.bst'.",
+        InvalidConfigReason::SourcePackageMissingRoot { prefix, root } => format!(
+            "Source-backed package '@{}' at '{}' is missing a direct-child hash root file. Every source-backed package must contain exactly one non-empty filename matching '#*.bst'.",
             string_table.resolve(*prefix),
             string_table.resolve(*root),
         ),
-        InvalidConfigReason::SourceLibraryMultipleRoots {
+        InvalidConfigReason::SourcePackageMultipleRoots {
             prefix,
             root,
             candidates,
@@ -193,7 +197,7 @@ pub(crate) fn invalid_config_message(
                 .collect::<Vec<_>>()
                 .join(", ");
             format!(
-                "Source library '@{}' at '{}' has multiple direct-child hash root files: {}. Every source library must contain exactly one non-empty filename matching '#*.bst'.",
+                "Source-backed package '@{}' at '{}' has multiple direct-child hash root files: {}. Every source-backed package must contain exactly one non-empty filename matching '#*.bst'.",
                 string_table.resolve(*prefix),
                 string_table.resolve(*root),
                 candidates,
@@ -231,33 +235,33 @@ pub(crate) fn invalid_config_message(
     }
 }
 
-fn invalid_library_folder_message(
+fn invalid_package_folder_message(
     folder: Option<StringId>,
-    reason: InvalidLibraryFolderReason,
+    reason: InvalidPackageFolderReason,
     string_table: &StringTable,
 ) -> String {
     let folder_name = folder.map(|folder| string_table.resolve(folder).to_owned());
 
     match reason {
-        InvalidLibraryFolderReason::Empty => {
-            "Invalid 'library_folders' entry. Library folders cannot be empty.".to_owned()
+        InvalidPackageFolderReason::Empty => {
+            "Invalid 'package_folders' entry. Library folders cannot be empty.".to_owned()
         }
-        InvalidLibraryFolderReason::AbsolutePath => {
+        InvalidPackageFolderReason::AbsolutePath => {
             let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
             format!(
-                "Invalid 'library_folders' entry '{folder_name}'. Library folders must be relative to the project root."
+                "Invalid 'package_folders' entry '{folder_name}'. Library folders must be relative to the project root."
             )
         }
-        InvalidLibraryFolderReason::ParentDirectorySegment => {
+        InvalidPackageFolderReason::ParentDirectorySegment => {
             let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
             format!(
-                "Invalid 'library_folders' entry '{folder_name}'. Parent-directory segments ('..') are not allowed."
+                "Invalid 'package_folders' entry '{folder_name}'. Parent-directory segments ('..') are not allowed."
             )
         }
-        InvalidLibraryFolderReason::NestedPath => {
+        InvalidPackageFolderReason::NestedPath => {
             let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
             format!(
-                "Invalid 'library_folders' entry '{folder_name}'. Library folders must be a single top-level folder name such as '@lib'."
+                "Invalid 'package_folders' entry '{folder_name}'. Library folders must be a single top-level folder name such as '@lib'."
             )
         }
     }
@@ -277,8 +281,8 @@ pub(crate) fn invalid_import_path_message(
             "Import escapes the project root and is not allowed: '{}'",
             path.to_portable_string(string_table)
         ),
-        InvalidImportPathReason::EscapesSourceLibraryRoot => format!(
-            "Import escapes the source library root and is not allowed: '{}'",
+        InvalidImportPathReason::EscapesSourcePackageRoot => format!(
+            "Import escapes the source-backed package root and is not allowed: '{}'",
             path.to_portable_string(string_table)
         ),
         InvalidImportPathReason::CaseMismatch { provided, expected } => format!(

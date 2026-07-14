@@ -6,6 +6,8 @@
 //! boundaries and avoiding HIR generation, borrow validation, artifact writing, or a duplicate
 //! Markdown/template renderer.
 
+use crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable;
+use crate::builder_surface::{SourceFileKind, SourceFileKindRegistry};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -13,15 +15,13 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
+use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::{
     CompilerFrontend, FrontendBuildProfile, FrontendFilePrepareContext, FrontendFilePrepareInput,
 };
-use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use crate::projects::html_project::beandown::input::{BeandownCompileRequest, BeandownSourceUnit};
 use crate::projects::html_project::beandown::output::{
     BeandownCompileOutput, CompiledBeandownDocument,
@@ -119,7 +119,7 @@ fn new_direct_beandown_frontend(
     let project_path_resolver = ProjectPathResolver::new(
         source_root.clone(),
         source_root,
-        PreparedSourceLibraryRoots::empty(),
+        PreparedSourcePackageRoots::empty(),
         &source_file_kinds,
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;

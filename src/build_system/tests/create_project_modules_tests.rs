@@ -4,24 +4,25 @@ use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::build_system::project_config::{
     ProjectConfigParseServices, load_project_config, parse_project_config_file,
 };
+use crate::builder_surface::PackageOrigin;
+use crate::builder_surface::external_import_providers::provider::{
+    ExternalFileExtension, ExternalImportProvider, ExternalImportProviderContext,
+    ExternalImportProviderKind, ExternalImportRequest, ResolvedExternalImport,
+};
+use crate::builder_surface::external_import_providers::registry::ExternalImportProviderRegistry;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, DiagnosticCategory, DiagnosticPayload,
     InvalidAssignmentTargetReason, InvalidConfigReason, InvalidImportClauseReason,
-    InvalidLibraryFolderReason,
+    InvalidPackageFolderReason,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::source_libraries::root_file::PreparedSourceLibraryRoots;
+use crate::compiler_frontend::source_packages::root_file::PreparedSourcePackageRoots;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
-use crate::libraries::external_import_providers::provider::{
-    ExternalFileExtension, ExternalImportProvider, ExternalImportProviderContext,
-    ExternalImportProviderKind, ExternalImportRequest, ResolvedExternalImport,
-};
-use crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -31,13 +32,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     configured_resolver_with_source_file_kinds(
         config,
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
     )
 }
 
 fn configured_resolver_with_source_file_kinds(
     config: &Config,
-    source_file_kinds: &crate::libraries::SourceFileKindRegistry,
+    source_file_kinds: &crate::builder_surface::SourceFileKindRegistry,
 ) -> ProjectPathResolver {
     // WHAT: rebuilds the same canonical resolver the real project build uses.
     // WHY: module-discovery tests should exercise the exact path rules used in production.
@@ -49,7 +50,7 @@ fn configured_resolver_with_source_file_kinds(
         entry_root.clone(),
         &project_root,
         config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut index_string_table,
     )
     .expect("source tree index should build");
@@ -57,7 +58,7 @@ fn configured_resolver_with_source_file_kinds(
     ProjectPathResolver::new_with_module_roots(
         project_root,
         entry_root,
-        PreparedSourceLibraryRoots::empty(),
+        PreparedSourcePackageRoots::empty(),
         source_file_kinds,
         source_tree_index.module_roots().clone(),
     )
@@ -73,11 +74,11 @@ fn parse_project_config_for_test(
     config_path: &std::path::Path,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<(), CompilerMessages> {
-    let libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    let frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     let mut string_table = StringTable::new();
     let services = ProjectConfigParseServices {
         style_directives,
-        libraries: &libraries,
+        frontend_surface: &frontend_surface,
     };
     parse_project_config_file(config, config_path, &services, &mut string_table)
 }
@@ -87,26 +88,27 @@ fn parse_project_config_for_test_with_html_keys(
     config_path: &std::path::Path,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<(), CompilerMessages> {
-    let libraries =
-        crate::projects::html_project::html_project_builder::HtmlProjectBuilder::new().libraries();
+    let frontend_surface =
+        crate::projects::html_project::html_project_builder::HtmlProjectBuilder::new()
+            .frontend_surface();
     let mut string_table = StringTable::new();
     let services = ProjectConfigParseServices {
         style_directives,
-        libraries: &libraries,
+        frontend_surface: &frontend_surface,
     };
     parse_project_config_file(config, config_path, &services, &mut string_table)
 }
 
-fn parse_project_config_for_test_with_libraries(
+fn parse_project_config_for_test_with_packages(
     config: &mut Config,
     config_path: &std::path::Path,
     style_directives: &StyleDirectiveRegistry,
-    libraries: &crate::libraries::LibrarySet,
+    frontend_surface: &crate::builder_surface::BuilderSurface,
 ) -> Result<(), CompilerMessages> {
     let mut string_table = StringTable::new();
     let services = ProjectConfigParseServices {
         style_directives,
-        libraries,
+        frontend_surface,
     };
     parse_project_config_file(config, config_path, &services, &mut string_table)
 }
@@ -124,16 +126,17 @@ fn discover_modules_for_test(
         entry_root,
         &project_root,
         config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
     let external_import_providers =
-        crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry::empty();
+        crate::builder_surface::external_import_providers::registry::ExternalImportProviderRegistry::empty();
     let mut external_import_cache =
-        crate::libraries::external_import_providers::cache::ExternalImportProviderCache::new();
+        crate::builder_surface::external_import_providers::cache::ExternalImportProviderCache::new(
+        );
     let mut external_import_resolution_table =
-        crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
+        crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
     let mut external_imports = super::reachable_file_discovery::ExternalImportDiscoveryState {
         external_packages: &mut external_packages,
         providers: &external_import_providers,
@@ -164,14 +167,15 @@ fn discover_modules_for_test_with_providers(
         entry_root,
         &project_root,
         config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )?;
     let mut external_packages = ExternalPackageRegistry::new();
     let mut external_import_cache =
-        crate::libraries::external_import_providers::cache::ExternalImportProviderCache::new();
+        crate::builder_surface::external_import_providers::cache::ExternalImportProviderCache::new(
+        );
     let mut external_import_resolution_table =
-        crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
+        crate::builder_surface::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
     let mut external_imports = super::reachable_file_discovery::ExternalImportDiscoveryState {
         external_packages: &mut external_packages,
         providers: external_import_providers,
@@ -291,7 +295,7 @@ fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
         canonical_entry_root.clone(),
         &canonical_root,
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
     .expect("source tree index should build");
@@ -355,7 +359,7 @@ fn source_tree_index_ignores_collision_in_skipped_directories() {
         canonical_entry_root,
         &canonical_root,
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
     .expect("skipped collision-shaped inputs must not trigger collision diagnostics");
@@ -372,7 +376,7 @@ fn source_tree_index_ignores_library_prefix_collision_in_skipped_directory() {
     let entry_root = root.join("src");
     fs::create_dir_all(&entry_root).expect("should create entry root");
 
-    // Fixed-skipped directory whose name matches a source-library prefix.
+    // Fixed-skipped directory whose name matches a source-backed package prefix.
     // Under the skip policy this folder is not importable, so no prefix collision.
     fs::create_dir_all(entry_root.join("target")).expect("should create target folder");
     fs::write(entry_root.join("#home.bst"), "").expect("should write entry root");
@@ -383,10 +387,11 @@ fn source_tree_index_ignores_library_prefix_collision_in_skipped_directory() {
     let canonical_entry_root =
         fs::canonicalize(&entry_root).expect("entry root should canonicalize");
 
-    let mut source_libraries = crate::libraries::SourceLibraryRegistry::default();
-    source_libraries.register_filesystem_root(
+    let mut source_packages = crate::builder_surface::SourcePackageRegistry::default();
+    source_packages.register_filesystem_root(
         "target",
         fs::canonicalize(entry_root.join("target")).unwrap(),
+        PackageOrigin::Builder,
     );
 
     let mut string_table = StringTable::new();
@@ -394,10 +399,10 @@ fn source_tree_index_ignores_library_prefix_collision_in_skipped_directory() {
         canonical_entry_root,
         &canonical_root,
         &config,
-        &source_libraries,
+        &source_packages,
         &mut string_table,
     )
-    .expect("skipped folder matching a library prefix must not trigger prefix collision");
+    .expect("skipped folder matching a package prefix must not trigger prefix collision");
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -421,7 +426,7 @@ fn source_tree_index_detects_collision_in_non_skipped_directory() {
         canonical_entry_root,
         &canonical_root,
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
     .expect_err("non-skipped bst/folder collision should be rejected");
@@ -457,7 +462,7 @@ fn bounded_module_roots_for_single_file_indexes_nested_roots_with_ignored_direct
         super::source_tree_index::SourceTreeIndex::bounded_module_roots_for_single_file(
             &entry_file,
             &config,
-            &crate::libraries::SourceLibraryRegistry::default(),
+            &crate::builder_surface::SourcePackageRegistry::default(),
             &mut string_table,
         )
         .expect("single-file hash root should index its tree without collision errors");
@@ -489,7 +494,7 @@ fn bounded_module_roots_for_single_file_rejects_import_name_collisions() {
     let messages = super::source_tree_index::SourceTreeIndex::bounded_module_roots_for_single_file(
         &entry_file,
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
     .expect_err("single-file hash roots should reject real import-name collisions");
@@ -519,7 +524,7 @@ fn source_tree_index_rejects_duplicate_hash_root_files() {
         canonical_entry_root,
         &canonical_root,
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
         &mut string_table,
     )
     .expect_err("a module directory may contain only one hash root");
@@ -555,8 +560,8 @@ fn project_path_resolver_consumes_source_tree_module_roots() {
     let mut string_table = StringTable::new();
     let setup = super::project_roots::build_project_path_resolver_with_index(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver setup should build from prepared roots");
@@ -622,7 +627,7 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "entry_root #= \"src\"\ndev_folder #= \"dev\"\noutput_folder #= \"release\"\nname #= \"docs\"\nversion #= \"1.2.3\"\nproject #= \"html\"\npage_url_style #= \"trailing_slash\"\nredirect_index_html #= true\nlibrary_folders #= { \"lib\", \"packages\" }\n",
+        "entry_root #= \"src\"\ndev_folder #= \"dev\"\noutput_folder #= \"release\"\nname #= \"docs\"\nversion #= \"1.2.3\"\nproject #= \"html\"\npage_url_style #= \"trailing_slash\"\nredirect_index_html #= true\npackage_folders #= { \"lib\", \"packages\" }\n",
     )
     .expect("should write config");
 
@@ -646,12 +651,12 @@ fn parses_config_constant_declarations() {
         Some(&"true".to_string())
     );
     assert_eq!(
-        config.library_folders,
+        config.package_folders,
         vec![PathBuf::from("lib"), PathBuf::from("packages")]
     );
     assert!(
-        config.has_explicit_library_folders,
-        "library_folders should be marked as explicitly configured"
+        config.has_explicit_package_folders,
+        "package_folders should be marked as explicitly configured"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -669,10 +674,10 @@ fn loads_canonical_config_file_from_project_root() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    let frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     let services = ProjectConfigParseServices {
         style_directives: &style_directives,
-        libraries: &libraries,
+        frontend_surface: &frontend_surface,
     };
     let mut string_table = StringTable::new();
 
@@ -696,7 +701,7 @@ fn rejects_direct_canonical_config_import_paths() {
         );
 
         assert!(
-            crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+            crate::compiler_frontend::source_packages::root_file::import_path_references_config_file(
                 &path,
                 false,
                 &string_table,
@@ -711,7 +716,7 @@ fn rejects_direct_canonical_config_import_paths() {
     nested_source_path.push_str("init_config", &mut string_table);
 
     assert!(
-        !crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+        !crate::compiler_frontend::source_packages::root_file::import_path_references_config_file(
             &nested_source_path,
             false,
             &string_table,
@@ -725,7 +730,7 @@ fn rejects_direct_canonical_config_import_paths() {
     grouped_config_path.push_str("project", &mut string_table);
 
     assert!(
-        crate::compiler_frontend::source_libraries::root_file::import_path_references_config_file(
+        crate::compiler_frontend::source_packages::root_file::import_path_references_config_file(
             &grouped_config_path,
             true,
             &string_table,
@@ -1067,7 +1072,36 @@ fn rejects_provider_backed_js_config_imports() {
 }
 
 #[test]
-fn accepts_config_imported_builder_source_library_constant() {
+fn rejects_legacy_library_folders_config_key() {
+    let root = temp_dir("config_library_folders_rename");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"lib\" }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ReplacedPackageFoldersKey,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_imported_builder_source_package_constant() {
     let root = temp_dir("config_builder_library_constant");
     let library_root = root.join("builder/defaults");
     fs::create_dir_all(&library_root).expect("should create builder library");
@@ -1083,20 +1117,22 @@ fn accepts_config_imported_builder_source_library_constant() {
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_for_test_with_libraries(
+    parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
-    .expect("config should resolve builder source-library constant");
+    .expect("config should resolve builder source-backed package constant");
 
     assert_eq!(config.entry_root, PathBuf::from("src"));
 
@@ -1120,18 +1156,20 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_for_test_with_libraries(
+    parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
     .expect("config should resolve imported constant dependency");
 
@@ -1141,7 +1179,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
 }
 
 #[test]
-fn accepts_config_imported_constant_reexported_from_builder_source_library_file() {
+fn accepts_config_imported_constant_reexported_from_builder_source_package_file() {
     let root = temp_dir("config_builder_library_reexport");
     let library_root = root.join("builder/defaults");
     fs::create_dir_all(&library_root).expect("should create builder library");
@@ -1159,20 +1197,22 @@ fn accepts_config_imported_constant_reexported_from_builder_source_library_file(
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_for_test_with_libraries(
+    parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
-    .expect("config should resolve re-exported builder source-library constant");
+    .expect("config should resolve re-exported builder source-backed package constant");
 
     assert_eq!(config.entry_root, PathBuf::from("src"));
 
@@ -1196,18 +1236,20 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_for_test_with_libraries(
+    parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
     .expect("config should allow imported type declarations as support surface");
 
@@ -1233,18 +1275,20 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test_with_libraries(
+    let messages = parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
     .expect_err("duplicate imported support declarations should fail");
 
@@ -1262,7 +1306,7 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
 }
 
 #[test]
-fn rejects_config_call_to_imported_builder_source_library_function() {
+fn rejects_config_call_to_imported_builder_source_package_function() {
     let root = temp_dir("config_builder_library_function_call");
     let library_root = root.join("builder/defaults");
     fs::create_dir_all(&library_root).expect("should create builder library");
@@ -1278,18 +1322,20 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
     )
     .expect("should write config");
 
-    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
-    libraries
-        .source_libraries
-        .register_filesystem_root("defaults", library_root);
+    let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
+    frontend_surface.source_packages.register_filesystem_root(
+        "defaults",
+        library_root,
+        PackageOrigin::Builder,
+    );
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test_with_libraries(
+    let messages = parse_project_config_for_test_with_packages(
         &mut config,
         &config_path,
         &style_directives,
-        &libraries,
+        &frontend_surface,
     )
     .expect_err("config should reject imported function calls");
 
@@ -1330,14 +1376,14 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
     assert!(
         result.is_err(),
-        "entry-root folder colliding with source-library prefix should fail"
+        "entry-root folder colliding with source-backed package prefix should fail"
     );
     let messages = result.expect_err("checked above");
     let error_text = rendered_first_error(&messages);
@@ -1348,7 +1394,7 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
     assert_has_config_error(&messages);
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::EntryRootLibraryPrefixCollision { .. }
+        InvalidConfigReason::EntryRootPackagePrefixCollision { .. }
     ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -1435,12 +1481,12 @@ fn rejects_legacy_libraries_config_key() {
 }
 
 #[test]
-fn rejects_library_folder_absolute_path_entry() {
-    let root = temp_dir("invalid_library_folders_absolute");
+fn rejects_package_folder_absolute_path_entry() {
+    let root = temp_dir("invalid_package_folders_absolute");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= { \"/absolute/lib\" }\n")
+    fs::write(&config_path, "package_folders #= { \"/absolute/lib\" }\n")
         .expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -1453,8 +1499,8 @@ fn rejects_library_folder_absolute_path_entry() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidLibraryFolder {
-                    reason: InvalidLibraryFolderReason::AbsolutePath,
+                reason: InvalidConfigReason::InvalidPackageFolder {
+                    reason: InvalidPackageFolderReason::AbsolutePath,
                     ..
                 },
                 ..
@@ -1468,12 +1514,12 @@ fn rejects_library_folder_absolute_path_entry() {
 }
 
 #[test]
-fn rejects_library_folder_parent_directory_entry() {
-    let root = temp_dir("invalid_library_folders_dotdot");
+fn rejects_package_folder_parent_directory_entry() {
+    let root = temp_dir("invalid_package_folders_dotdot");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= { \"../lib\" }\n").expect("should write config");
+    fs::write(&config_path, "package_folders #= { \"../lib\" }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -1485,8 +1531,8 @@ fn rejects_library_folder_parent_directory_entry() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidLibraryFolder {
-                    reason: InvalidLibraryFolderReason::ParentDirectorySegment,
+                reason: InvalidConfigReason::InvalidPackageFolder {
+                    reason: InvalidPackageFolderReason::ParentDirectorySegment,
                     ..
                 },
                 ..
@@ -1500,12 +1546,12 @@ fn rejects_library_folder_parent_directory_entry() {
 }
 
 #[test]
-fn rejects_duplicate_library_folder_entries() {
-    let root = temp_dir("duplicate_library_folders");
+fn rejects_duplicate_package_folder_entries() {
+    let root = temp_dir("duplicate_package_folders");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= { \"lib\", \"lib\" }\n")
+    fs::write(&config_path, "package_folders #= { \"lib\", \"lib\" }\n")
         .expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -1518,7 +1564,7 @@ fn rejects_duplicate_library_folder_entries() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::DuplicateLibraryFolder { .. },
+                reason: InvalidConfigReason::DuplicatePackageFolder { .. },
                 ..
             }
         ),
@@ -1530,12 +1576,12 @@ fn rejects_duplicate_library_folder_entries() {
 }
 
 #[test]
-fn rejects_nested_library_folder_entry() {
-    let root = temp_dir("invalid_library_folders_nested");
+fn rejects_nested_package_folder_entry() {
+    let root = temp_dir("invalid_package_folders_nested");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= { \"lib/helpers\" }\n")
+    fs::write(&config_path, "package_folders #= { \"lib/helpers\" }\n")
         .expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -1548,8 +1594,8 @@ fn rejects_nested_library_folder_entry() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::InvalidLibraryFolder {
-                    reason: InvalidLibraryFolderReason::NestedPath,
+                reason: InvalidConfigReason::InvalidPackageFolder {
+                    reason: InvalidPackageFolderReason::NestedPath,
                     ..
                 },
                 ..
@@ -1563,7 +1609,7 @@ fn rejects_nested_library_folder_entry() {
 }
 
 #[test]
-fn missing_default_library_folder_is_ignored() {
+fn missing_default_package_folder_is_ignored() {
     let root = temp_dir("missing_default_lib_ignored");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -1579,22 +1625,22 @@ fn missing_default_library_folder_is_ignored() {
     .expect("config should parse");
 
     assert!(
-        !config.has_explicit_library_folders,
-        "default library folders should not be marked explicit"
+        !config.has_explicit_package_folders,
+        "default package folders should not be marked explicit"
     );
 
     let mut string_table = StringTable::new();
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build even when default /lib is missing");
 
     assert!(
-        resolver.source_library_roots().is_empty(),
-        "no source libraries should be discovered when default /lib is missing"
+        resolver.source_package_roots().is_empty(),
+        "no source-backed packages should be discovered when default /lib is missing"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -2432,12 +2478,12 @@ fn rejects_backend_string_key_with_bool_value() {
 }
 
 #[test]
-fn rejects_library_folders_with_bool_value() {
-    let root = temp_dir("config_library_folders_bool_rejected");
+fn rejects_package_folders_with_bool_value() {
+    let root = temp_dir("config_package_folders_bool_rejected");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= true\n").expect("should write config");
+    fs::write(&config_path, "package_folders #= true\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2449,7 +2495,7 @@ fn rejects_library_folders_with_bool_value() {
         matches!(
             &diagnostic.payload,
             DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::UnsupportedLibraryFoldersValue,
+                reason: InvalidConfigReason::UnsupportedPackageFoldersValue,
                 ..
             }
         ),
@@ -2461,12 +2507,12 @@ fn rejects_library_folders_with_bool_value() {
 }
 
 #[test]
-fn rejects_library_folders_with_mixed_collection() {
-    let root = temp_dir("config_library_folders_mixed_rejected");
+fn rejects_package_folders_with_mixed_collection() {
+    let root = temp_dir("config_package_folders_mixed_rejected");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= { \"lib\", 1 }\n").expect("should write config");
+    fs::write(&config_path, "package_folders #= { \"lib\", 1 }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
@@ -2484,20 +2530,20 @@ fn rejects_library_folders_with_mixed_collection() {
 }
 
 #[test]
-fn accepts_library_folders_single_string() {
-    let root = temp_dir("config_library_folders_single_string");
+fn accepts_package_folders_single_string() {
+    let root = temp_dir("config_package_folders_single_string");
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "library_folders #= \"lib\"\n").expect("should write config");
+    fs::write(&config_path, "package_folders #= \"lib\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
     parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect("single-string library_folders should parse");
+        .expect("single-string package_folders should parse");
 
-    assert_eq!(config.library_folders, vec![PathBuf::from("lib")]);
-    assert!(config.has_explicit_library_folders);
+    assert_eq!(config.package_folders, vec![PathBuf::from("lib")]);
+    assert!(config.has_explicit_package_folders);
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -2640,7 +2686,7 @@ fn detects_duplicate_top_level_config_constants() {
 }
 
 #[test]
-fn project_local_lib_directory_is_discovered_as_source_library_root() {
+fn project_local_lib_directory_is_discovered_as_source_package_root() {
     let root = temp_dir("project_local_lib");
     fs::create_dir_all(&root).expect("should create root dir");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
@@ -2654,8 +2700,8 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     let mut string_table = StringTable::new();
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build");
@@ -2668,7 +2714,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     let importer = root.join("src/#page.bst");
     let resolved = resolver
         .resolve_import_to_source_file(&path, &importer, &mut string_table)
-        .expect("should resolve source library import")
+        .expect("should resolve source-backed package import")
         .path;
 
     assert_eq!(
@@ -2693,13 +2739,17 @@ fn library_prefix_collision_with_builder_library_rejected() {
     let config = Config::new(root.clone());
     let mut string_table = StringTable::new();
 
-    let mut builder_libraries = crate::libraries::SourceLibraryRegistry::new();
-    builder_libraries.register_filesystem_root("html", root.join("builder/html"));
+    let mut builder_frontend_surface = crate::builder_surface::SourcePackageRegistry::new();
+    builder_frontend_surface.register_filesystem_root(
+        "html",
+        root.join("builder/html"),
+        PackageOrigin::Builder,
+    );
 
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &builder_libraries,
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &builder_frontend_surface,
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2716,15 +2766,15 @@ fn library_prefix_collision_with_builder_library_rejected() {
     assert_has_config_error(&messages);
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::SourceLibraryBuilderPrefixCollision { .. }
+        InvalidConfigReason::SourcePackageBuilderPrefixCollision { .. }
     ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
 
 #[test]
-fn configured_library_folder_is_discovered_as_source_library_root() {
-    let root = temp_dir("project_local_custom_library_folder");
+fn configured_package_folder_is_discovered_as_source_package_root() {
+    let root = temp_dir("project_local_custom_package_folder");
     fs::create_dir_all(&root).expect("should create root dir");
     fs::create_dir_all(root.join("packages/helper")).expect("should create packages/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
@@ -2733,7 +2783,7 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     fs::write(root.join("packages/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
     fs::write(
         root.join("config.bst"),
-        "library_folders #= { \"packages\" }\n",
+        "package_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
 
@@ -2749,8 +2799,8 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     let mut string_table = StringTable::new();
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build");
@@ -2762,26 +2812,26 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     let importer = root.join("src/#page.bst");
     let resolved = resolver
         .resolve_import_to_source_file(&path, &importer, &mut string_table)
-        .expect("should resolve source library import")
+        .expect("should resolve source-backed package import")
         .path;
 
     assert_eq!(
         resolved,
         fs::canonicalize(root.join("packages/helper/utils.bst")).unwrap(),
-        "should resolve to configured library folder"
+        "should resolve to configured package folder"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
 
 #[test]
-fn missing_explicit_library_folder_is_error() {
-    let root = temp_dir("missing_explicit_library_folder");
+fn missing_explicit_package_folder_is_error() {
+    let root = temp_dir("missing_explicit_package_folder");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(
         root.join("config.bst"),
-        "library_folders #= { \"packages\" }\n",
+        "package_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
 
@@ -2797,39 +2847,39 @@ fn missing_explicit_library_folder_is_error() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
     assert!(
         result.is_err(),
-        "missing explicitly configured library folder should fail"
+        "missing explicitly configured package folder should fail"
     );
     let messages = result.expect_err("checked above");
     let error_text = rendered_first_error(&messages);
     assert!(
-        error_text.contains("Configured library folder 'packages' does not exist"),
+        error_text.contains("Configured package folder 'packages' does not exist"),
         "unexpected error message: {error_text}"
     );
     assert_has_config_error(&messages);
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::ConfiguredLibraryFolderMissing { .. }
+        InvalidConfigReason::ConfiguredPackageFolderMissing { .. }
     ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
 
 #[test]
-fn explicit_library_folder_must_be_directory() {
-    let root = temp_dir("library_folder_not_directory");
+fn explicit_package_folder_must_be_directory() {
+    let root = temp_dir("package_folder_not_directory");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("packages"), "").expect("should write file in place of folder");
     fs::write(
         root.join("config.bst"),
-        "library_folders #= { \"packages\" }\n",
+        "package_folders #= { \"packages\" }\n",
     )
     .expect("should write config");
 
@@ -2845,23 +2895,23 @@ fn explicit_library_folder_must_be_directory() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
     let messages = result.expect_err("library scan root file should fail");
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::ConfiguredLibraryFolderNotDirectory { .. }
+        InvalidConfigReason::ConfiguredPackageFolderNotDirectory { .. }
     ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
 
 #[test]
-fn source_library_requires_one_generic_hash_root() {
-    let root = temp_dir("source_library_missing_root");
+fn source_package_requires_one_generic_hash_root() {
+    let root = temp_dir("source_package_missing_root");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -2879,15 +2929,15 @@ fn source_library_requires_one_generic_hash_root() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
-    let messages = result.expect_err("source library without a hash root should fail");
+    let messages = result.expect_err("source-backed package without a hash root should fail");
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::SourceLibraryMissingRoot { .. }
+        InvalidConfigReason::SourcePackageMissingRoot { .. }
     ));
     let error_text = rendered_first_error(&messages);
     assert!(error_text.contains("#*.bst"));
@@ -2896,8 +2946,8 @@ fn source_library_requires_one_generic_hash_root() {
 }
 
 #[test]
-fn source_library_accepts_cosmetic_hash_root_name() {
-    let root = temp_dir("source_library_cosmetic_root");
+fn source_package_accepts_cosmetic_hash_root_name() {
+    let root = temp_dir("source_package_cosmetic_root");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -2919,11 +2969,11 @@ fn source_library_accepts_cosmetic_hash_root_name() {
     let mut string_table = StringTable::new();
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
-    .expect("cosmetic source-library root should pass Stage 0 preflight");
+    .expect("cosmetic source-backed package root should pass Stage 0 preflight");
 
     let mut path = crate::compiler_frontend::symbols::interned_path::InternedPath::new();
     path.push_str("helper", &mut string_table);
@@ -2934,7 +2984,7 @@ fn source_library_accepts_cosmetic_hash_root_name() {
             &importer,
             &mut string_table,
         )
-        .expect("source-library folder import should resolve through the root pipeline");
+        .expect("source-backed package folder import should resolve through the root pipeline");
 
     assert_eq!(
         resolved.path,
@@ -2945,8 +2995,8 @@ fn source_library_accepts_cosmetic_hash_root_name() {
 }
 
 #[test]
-fn source_library_rejects_multiple_generic_hash_roots() {
-    let root = temp_dir("source_library_multiple_roots");
+fn source_package_rejects_multiple_generic_hash_roots() {
+    let root = temp_dir("source_package_multiple_roots");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -2966,15 +3016,15 @@ fn source_library_rejects_multiple_generic_hash_roots() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
-    let messages = result.expect_err("multiple source-library roots should fail preflight");
+    let messages = result.expect_err("multiple source-backed package roots should fail preflight");
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::SourceLibraryMultipleRoots { .. }
+        InvalidConfigReason::SourcePackageMultipleRoots { .. }
     ));
     let error_text = rendered_first_error(&messages);
     assert!(error_text.contains("#first.bst"));
@@ -2994,7 +3044,7 @@ fn library_prefix_collision_across_scan_roots_rejected() {
     fs::write(root.join("vendor/helper/#mod.bst"), "bar #= 2\n").expect("should write root");
     fs::write(
         root.join("config.bst"),
-        "library_folders #= { \"lib\", \"vendor\" }\n",
+        "package_folders #= { \"lib\", \"vendor\" }\n",
     )
     .expect("should write config");
 
@@ -3010,25 +3060,25 @@ fn library_prefix_collision_across_scan_roots_rejected() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
     assert!(
         result.is_err(),
-        "same source-library prefix discovered from two configured folders should fail"
+        "same source-backed package prefix discovered from two configured folders should fail"
     );
     let messages = result.expect_err("checked above");
     let error_text = rendered_first_error(&messages);
     assert!(
-        error_text.contains("Configured library folder collision"),
+        error_text.contains("Configured package folder collision"),
         "unexpected error message: {error_text}"
     );
     assert_has_config_error(&messages);
     assert!(matches!(
         first_invalid_config_reason(&messages),
-        InvalidConfigReason::SourceLibraryPrefixCollision { .. }
+        InvalidConfigReason::SourcePackagePrefixCollision { .. }
     ));
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3084,8 +3134,8 @@ fn rejects_bst_file_and_folder_collision_in_same_directory() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -3122,8 +3172,8 @@ fn allows_same_stem_in_different_directories() {
     let mut string_table = StringTable::new();
     super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("same stem in different directories should be allowed");
@@ -3151,8 +3201,8 @@ fn rejects_collision_with_empty_folder() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -3190,8 +3240,8 @@ fn js_file_with_same_stem_as_folder_does_not_trigger_collision() {
     let mut string_table = StringTable::new();
     super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect(".js file with same stem as folder should not trigger collision");
@@ -3200,8 +3250,8 @@ fn js_file_with_same_stem_as_folder_does_not_trigger_collision() {
 }
 
 #[test]
-fn rejects_bst_file_and_folder_collision_in_source_library() {
-    let root = temp_dir("source_library_bst_folder_collision");
+fn rejects_bst_file_and_folder_collision_in_source_package() {
+    let root = temp_dir("source_package_bst_folder_collision");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper/ui")).expect("should create lib/helper/ui");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
@@ -3210,7 +3260,7 @@ fn rejects_bst_file_and_folder_collision_in_source_library() {
         .expect("should write colliding library file");
     fs::write(
         root.join("config.bst"),
-        "entry_root #= \"src\"\nlibrary_folders #= { \"lib\" }\n",
+        "entry_root #= \"src\"\npackage_folders #= { \"lib\" }\n",
     )
     .expect("should write config");
 
@@ -3226,14 +3276,14 @@ fn rejects_bst_file_and_folder_collision_in_source_library() {
     let mut string_table = StringTable::new();
     let result = super::project_roots::build_project_path_resolver(
         &config,
-        &crate::libraries::SourceLibraryRegistry::default(),
-        &crate::libraries::SourceFileKindRegistry::default(),
+        &crate::builder_surface::SourcePackageRegistry::default(),
+        &crate::builder_surface::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
     assert!(
         result.is_err(),
-        "source library ui.bst + ui/ collision should be rejected"
+        "source-backed package ui.bst + ui/ collision should be rejected"
     );
     let messages = result.expect_err("checked above");
     assert_has_config_error(&messages);
@@ -3427,8 +3477,8 @@ fn direct_beandown_extension_import_reports_bst_import_0024() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
@@ -3475,8 +3525,8 @@ fn beandown_files_are_reachable_without_import_scanning() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3497,7 +3547,7 @@ fn beandown_files_are_reachable_without_import_scanning() {
         .expect("intro.bd should be in discovered inputs");
     assert_eq!(
         beandown_input.source_kind,
-        crate::libraries::SourceFileKind::Beandown
+        crate::builder_surface::SourceFileKind::Beandown
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3529,8 +3579,8 @@ fn reachable_beandown_queues_same_directory_root_file() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3552,7 +3602,7 @@ fn reachable_beandown_queues_same_directory_root_file() {
         .expect("intro.bd should be in discovered inputs");
     assert_eq!(
         beandown_input.source_kind,
-        crate::libraries::SourceFileKind::Beandown
+        crate::builder_surface::SourceFileKind::Beandown
     );
 
     let root_input = modules[0]
@@ -3562,7 +3612,7 @@ fn reachable_beandown_queues_same_directory_root_file() {
         .expect("#docs.bst should be in discovered inputs");
     assert_eq!(
         root_input.source_kind,
-        crate::libraries::SourceFileKind::Beanstalk
+        crate::builder_surface::SourceFileKind::Beanstalk
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3592,8 +3642,8 @@ fn unimported_beandown_file_under_entry_root_is_ignored() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3606,7 +3656,7 @@ fn unimported_beandown_file_under_entry_root_is_ignored() {
     );
     assert_eq!(
         modules[0].input_files[0].source_kind,
-        crate::libraries::SourceFileKind::Beanstalk
+        crate::builder_surface::SourceFileKind::Beanstalk
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3694,9 +3744,9 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
-    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3717,7 +3767,7 @@ fn reachable_file_discovery_markdown_files_are_reachable_without_import_scanning
         .expect("intro.md should be in discovered inputs");
     assert_eq!(
         markdown_input.source_kind,
-        crate::libraries::SourceFileKind::PlainMarkdown
+        crate::builder_surface::SourceFileKind::PlainMarkdown
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3749,9 +3799,9 @@ fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file()
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
-    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3773,7 +3823,7 @@ fn reachable_file_discovery_markdown_does_not_queue_unrelated_module_root_file()
         .expect("intro.md should be in discovered inputs");
     assert_eq!(
         markdown_input.source_kind,
-        crate::libraries::SourceFileKind::PlainMarkdown
+        crate::builder_surface::SourceFileKind::PlainMarkdown
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3803,9 +3853,9 @@ fn reachable_file_discovery_unimported_markdown_file_is_ignored() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
-    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -3818,7 +3868,7 @@ fn reachable_file_discovery_unimported_markdown_file_is_ignored() {
     );
     assert_eq!(
         modules[0].input_files[0].source_kind,
-        crate::libraries::SourceFileKind::Beanstalk
+        crate::builder_surface::SourceFileKind::Beanstalk
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3848,8 +3898,8 @@ fn reachable_file_discovery_direct_markdown_extension_import_reports_bst_import_
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
@@ -3997,9 +4047,9 @@ fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
     )
     .expect("config should parse");
 
-    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
-    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
-    source_file_kinds.register("md", crate::libraries::SourceFileKind::PlainMarkdown);
+    let mut source_file_kinds = crate::builder_surface::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::builder_surface::SourceFileKind::Beandown);
+    source_file_kinds.register("md", crate::builder_surface::SourceFileKind::PlainMarkdown);
     let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
 
     let modules = discover_modules_for_test(&config, &resolver, &style_directives)
@@ -4020,12 +4070,12 @@ fn stage0_loads_asset_sources_and_preserves_deterministic_input_order() {
     assert_eq!(input_names, vec!["#page.bst", "intro.bd", "notes.md"]);
     assert_eq!(
         input_files[1].source_kind,
-        crate::libraries::SourceFileKind::Beandown
+        crate::builder_surface::SourceFileKind::Beandown
     );
     assert_eq!(input_files[1].source_code, "beandown body\n");
     assert_eq!(
         input_files[2].source_kind,
-        crate::libraries::SourceFileKind::PlainMarkdown
+        crate::builder_surface::SourceFileKind::PlainMarkdown
     );
     assert_eq!(input_files[2].source_code, "# Markdown body\n");
 
@@ -4048,7 +4098,7 @@ fn stage0_parallel_missing_source_loading_preserves_input_order() {
 
     let input_files = super::reachable_file_discovery::load_missing_source_paths_for_test(
         source_paths,
-        crate::libraries::SourceFileKind::PlainMarkdown,
+        crate::builder_surface::SourceFileKind::PlainMarkdown,
         &mut string_table,
     )
     .expect("parallel missing source loading should pass");
@@ -4074,7 +4124,7 @@ fn stage0_parallel_missing_source_loading_preserves_input_order() {
         assert_eq!(input_file.source_code, format!("# Asset {index}\n"));
         assert_eq!(
             input_file.source_kind,
-            crate::libraries::SourceFileKind::PlainMarkdown
+            crate::builder_surface::SourceFileKind::PlainMarkdown
         );
     }
 
@@ -4090,7 +4140,7 @@ fn stage0_missing_source_load_preserves_file_error_shape() {
 
     let messages = super::reachable_file_discovery::load_missing_source_path_for_test(
         missing_source.clone(),
-        crate::libraries::SourceFileKind::PlainMarkdown,
+        crate::builder_surface::SourceFileKind::PlainMarkdown,
         &mut string_table,
     )
     .expect_err("missing source read should fail");
