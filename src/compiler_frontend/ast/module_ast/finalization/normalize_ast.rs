@@ -63,6 +63,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase,
     TemplateTirReference, TirExpressionOverlay, TirTemplateClassification, TirView,
     classify_effective_tir_view_template, collect_effective_tir_expression_overlay_payloads,
+    finalized_tir_view_for_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -605,7 +606,7 @@ fn normalize_expression_templates_with_context(
                     .into());
                 }
 
-                runtime_template_expression_replacement(
+                materialize_runtime_template_handoff_for_hir(
                     template,
                     context,
                     &final_classification,
@@ -767,88 +768,6 @@ enum NormalizedTemplateExpression {
         OwnedRuntimeSlotApplicationHandoff,
         Option<ReactiveTemplateMetadata>,
     ),
-}
-
-fn runtime_template_expression_replacement(
-    template: &mut Template,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-    classification: &TirTemplateClassification,
-    reactive_template: Option<ReactiveTemplateMetadata>,
-) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    if let Some(replacement) = try_materialize_runtime_handoff_from_final_effective_template_view(
-        template,
-        context,
-        reactive_template.clone(),
-    )? {
-        return Ok(Some(replacement));
-    }
-
-    materialize_runtime_template_handoff_for_hir(
-        template,
-        context,
-        classification,
-        reactive_template,
-    )
-}
-
-fn try_materialize_runtime_handoff_from_final_effective_template_view(
-    template: &Template,
-    context: &mut TemplateNormalizationContext<'_, '_>,
-    reactive_template: Option<ReactiveTemplateMetadata>,
-) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let reference = &template.tir_reference;
-
-    if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
-        return Ok(None);
-    }
-
-    if !template_reference_matches_current_store(reference, context) {
-        return Ok(None);
-    }
-
-    let Some(registry) = context.template_ir_registry.as_ref().map(Rc::clone) else {
-        return Ok(None);
-    };
-    let registry = registry.borrow();
-    let view = TirView::with_minimum_phase(
-        &registry,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
-    )?;
-
-    let overlay_set = view.overlay_set()?;
-    if overlay_set.slot_resolution.is_some() || overlay_set.wrapper_context.is_some() {
-        return Ok(None);
-    }
-
-    let store = context.template_ir_store.borrow();
-    if let Some(handoff) = store.owned_runtime_slot_handoff_for_tir_view(&view)? {
-        return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
-            handoff,
-            reactive_template,
-        )));
-    }
-
-    let mut fold_context = make_fold_context(
-        context.source_file_scope,
-        context.path_format_config,
-        context.project_path_resolver,
-        context.string_table,
-        context.template_const_loop_iteration_limit,
-        context.template_ir_registry.as_ref().map(Rc::clone),
-    );
-    let Some(handoff) = store
-        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(NormalizedTemplateExpression::RuntimeTemplate(
-        handoff,
-        reactive_template,
-    )))
 }
 
 fn reactive_template_metadata_from_current_store(
@@ -1152,22 +1071,6 @@ fn materialize_runtime_template_handoff_for_hir(
     classification: &TirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let reference = template.tir_reference.clone();
-    if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
-        return Err(CompilerError::compiler_error(format!(
-            "Runtime template HIR handoff requires Finalized TIR, but root {} is at phase {}.",
-            reference.root, reference.phase
-        ))
-        .into());
-    }
-    if !template_reference_matches_current_store(&reference, context) {
-        return Err(CompilerError::compiler_error(format!(
-            "Runtime template HIR handoff requires root {} to belong to the module TIR store.",
-            reference.root
-        ))
-        .into());
-    }
-
     let registry_rc = context
         .template_ir_registry
         .as_ref()
@@ -1178,13 +1081,8 @@ fn materialize_runtime_template_handoff_for_hir(
             )
         })?;
     let registry = registry_rc.borrow();
-    let view = TirView::with_minimum_phase(
-        &registry,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Finalized,
-        reference.overlay_set_id,
-    )?;
+    let store = context.template_ir_store.borrow();
+    let view = finalized_tir_view_for_template(template, &store, &registry)?;
 
     // Const-foldable templates and helper artifacts are lowered by AST folding,
     // not by the HIR runtime-template path.
@@ -1210,7 +1108,6 @@ fn materialize_runtime_template_handoff_for_hir(
         .into());
     }
 
-    let store = context.template_ir_store.borrow();
     if let Some(handoff) = store.owned_runtime_slot_handoff_for_tir_view(&view)? {
         increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
         return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
@@ -1233,11 +1130,6 @@ fn materialize_runtime_template_handoff_for_hir(
             &mut fold_context,
         )?
     };
-    let handoff = handoff.ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Runtime template finalized in TIR without a runtime template handoff.",
-        )
-    })?;
 
     increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
     Ok(Some(NormalizedTemplateExpression::RuntimeTemplate(

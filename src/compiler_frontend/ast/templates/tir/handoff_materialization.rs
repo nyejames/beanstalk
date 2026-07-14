@@ -50,15 +50,21 @@ use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counte
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 impl TemplateIrStore {
-    /// This entry point is exercised by tests and by the fold-context variant;
-    /// production finalization uses the fold-context variant directly.
+    /// Test-only entry point that materializes a runtime template directly by ID.
+    ///
+    /// WHAT: creates a materializer without a fold context or registry and
+    ///       delegates to the inner required handoff owner.
+    /// WHY: production finalization always goes through the view-backed fold
+    ///      context variant. This entry point exists only for focused tests that
+    ///      need to exercise materialization without constructing a full view.
     #[cfg(test)]
     pub(crate) fn owned_runtime_template_handoff_for_template(
         &self,
         id: TemplateIrId,
-    ) -> Result<Option<OwnedRuntimeTemplateHandoff>, CompilerError> {
+    ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
         let mut materializer = RuntimeHandoffMaterializer::new(self);
         materializer.owned_runtime_template_handoff_for_template(id)
     }
@@ -75,9 +81,7 @@ impl TemplateIrStore {
         &self,
         view: &TirView<'_>,
     ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
-        let Some(template_id) = self.same_store_template_id_for_view(view)? else {
-            return Ok(None);
-        };
+        let template_id = self.same_store_template_id_for_view(view)?;
 
         let mut materializer = RuntimeHandoffMaterializer::new_with_registry_and_overlay(
             self,
@@ -93,10 +97,8 @@ impl TemplateIrStore {
         &self,
         view: &TirView<'_>,
         fold_context: &mut TemplateFoldContext<'_>,
-    ) -> Result<Option<OwnedRuntimeTemplateHandoff>, CompilerError> {
-        let Some(template_id) = self.same_store_template_id_for_view(view)? else {
-            return Ok(None);
-        };
+    ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
+        let template_id = self.same_store_template_id_for_view(view)?;
 
         let mut materializer =
             RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
@@ -107,9 +109,20 @@ impl TemplateIrStore {
     fn same_store_template_id_for_view(
         &self,
         view: &TirView<'_>,
-    ) -> Result<Option<TemplateIrId>, CompilerError> {
+    ) -> Result<TemplateIrId, CompilerError> {
         if view.root_ref().store_id != self.store_id() {
-            return Ok(None);
+            return Err(CompilerError::compiler_error(
+                "TIR HIR handoff view materialization view store does not match the supplied store.",
+            ));
+        }
+
+        let view_store = view.store()?;
+        let view_store_owner = view_store.owner();
+        let supplied_store_owner = self.owner();
+        if !Arc::ptr_eq(&view_store_owner, &supplied_store_owner) {
+            return Err(CompilerError::compiler_error(
+                "TIR HIR handoff view materialization registered store does not match the supplied store.",
+            ));
         }
 
         let template_id = view.root_ref().template_id;
@@ -129,7 +142,7 @@ impl TemplateIrStore {
             ));
         }
 
-        Ok(Some(template_id))
+        Ok(template_id)
     }
 }
 
@@ -225,9 +238,8 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &mut self,
         id: TemplateIrId,
     ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
-        let Some(template) = self.store.get_template(id) else {
-            return Ok(None);
-        };
+        let template = self.get_template(id)?;
+        let root = template.root;
         let Some(slot_plan_id) = template.runtime_slot_plan else {
             return Ok(None);
         };
@@ -235,7 +247,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         self.with_template_on_stack(
             TemplateRef::new(self.store.store_id(), id),
             |materializer| {
-                materializer.materialize_runtime_slot_application(template, slot_plan_id)
+                materializer.materialize_runtime_slot_application_by_parts(root, slot_plan_id)
             },
         )
         .map(Some)
@@ -244,14 +256,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     fn owned_runtime_template_handoff_for_template(
         &mut self,
         id: TemplateIrId,
-    ) -> Result<Option<OwnedRuntimeTemplateHandoff>, CompilerError> {
-        let Some(_template) = self.store.get_template(id) else {
-            return Ok(None);
-        };
-
-        // `materialize_template` already pushes the template onto the recursion
-        // stack so child-template cycles are detected there.
-        self.materialize_template(id, None).map(Some)
+    ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
+        // `materialize_template` already validates the template exists and
+        // pushes it onto the recursion stack so child-template cycles are
+        // detected there.
+        self.materialize_template(id, None)
     }
 
     fn materialize_template(
@@ -281,14 +290,6 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 Ok(OwnedRuntimeTemplateHandoff { body, location })
             },
         )
-    }
-
-    fn materialize_runtime_slot_application(
-        &mut self,
-        template: &TemplateIr,
-        slot_plan_id: TemplateSlotPlanId,
-    ) -> Result<OwnedRuntimeSlotApplicationHandoff, CompilerError> {
-        self.materialize_runtime_slot_application_by_parts(template.root, slot_plan_id)
     }
 
     fn materialize_runtime_slot_application_by_parts(

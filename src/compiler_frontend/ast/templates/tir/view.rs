@@ -135,12 +135,13 @@ impl fmt::Display for TemplateTirPhase {
 
 /// Resolves the required finalized registry-backed `TirView` for a `Template`.
 ///
-/// WHAT: the single authority used by final type-boundary validation and debug
-///       TypeId validation. It requires the template's `tir_reference` to be at
-///       least `Finalized`, to belong to the exact direct module store owner,
-///       and to resolve its root and overlay set through `TirView`. Every
-///       missing authority condition is an explicit internal `CompilerError`;
-///       no caller may downgrade to a raw same-store path.
+/// WHAT: the single authority used by AST-to-HIR handoff, final type-boundary
+///       validation and debug TypeId validation. It requires the template's
+///       `tir_reference` to be at least `Finalized`, to belong to the exact
+///       direct module store owner and to resolve its root and overlay set
+///       through `TirView`. Every missing authority condition is an explicit
+///       internal `CompilerError`. No caller may downgrade to a raw same-store
+///       path.
 /// WHY: after normalization every template that reaches the AST-to-HIR boundary
 ///      owns a Finalized registry-backed identity. A missing phase, owner,
 ///      store, root or overlay is a compiler bug, not permission to reconstruct
@@ -157,7 +158,7 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Err(CompilerError::compiler_error(format!(
-            "finalized_tir_view_for_template: template TIR reference is at phase {:?}, final type-boundary validation requires Finalized",
+            "finalized_tir_view_for_template: template TIR reference is at phase {:?}, final AST boundary consumers require Finalized",
             reference.phase
         )));
     }

@@ -645,7 +645,7 @@ fn view_native_fold_safety_accepts_wrapper_context_with_if_child_emits_mode() {
 fn handoff_fixture_result(
     fixture: &WrapperContextFixture,
     string_table: &mut StringTable,
-) -> Result<Option<OwnedRuntimeTemplateHandoff>, CompilerError> {
+) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
     let resolver = test_project_path_resolver();
     let path_format = PathStringFormatConfig::default();
     let source_scope = InternedPath::new();
@@ -680,9 +680,7 @@ fn handoff_fixture(
     fixture: &WrapperContextFixture,
     string_table: &mut StringTable,
 ) -> OwnedRuntimeTemplateHandoff {
-    handoff_fixture_result(fixture, string_table)
-        .expect("handoff should succeed")
-        .expect("handoff should be present")
+    handoff_fixture_result(fixture, string_table).expect("handoff should succeed")
 }
 
 fn assert_text_node(node: &OwnedRuntimeTemplateNode, expected: &str, string_table: &StringTable) {

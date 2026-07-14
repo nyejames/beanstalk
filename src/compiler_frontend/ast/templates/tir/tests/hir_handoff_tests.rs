@@ -221,8 +221,7 @@ fn owned_runtime_template_handoff_resolves_slot_resolution_overlay() {
     let handoff = store_handle
         .borrow()
         .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-        .expect("handoff materialization should succeed")
-        .expect("runtime template should expose a handoff");
+        .expect("handoff materialization should succeed");
 
     let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
         template, ..
@@ -300,8 +299,7 @@ fn owned_runtime_template_handoff_missing_slot_resolution_renders_slot_placehold
     let handoff = store_handle
         .borrow()
         .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-        .expect("handoff materialization should succeed")
-        .expect("runtime template should expose a handoff");
+        .expect("handoff materialization should succeed");
 
     assert!(
         matches!(
@@ -477,11 +475,7 @@ fn materialize_parent_handoff_result(
     store_handle
         .borrow()
         .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
-        .map(|handoff| {
-            handoff
-                .expect("runtime template should expose a handoff")
-                .body
-        })
+        .map(|handoff| handoff.body)
 }
 
 /// Convenience wrapper for success-path tests that expect materialization to
@@ -810,5 +804,122 @@ fn qualified_cross_store_child_cycle_rejected() {
     assert_eq!(
         error.msg,
         "TIR HIR handoff materialization found a recursive child template."
+    );
+}
+
+// -------------------------
+//  Strict Store Boundaries
+// -------------------------
+
+/// A view whose root store ID differs from the materializing store must be
+/// rejected as a `CompilerError`, not silently skipped as `Ok(None)`.
+#[test]
+fn view_backed_handoff_rejects_wrong_direct_store() {
+    let mut string_table = StringTable::new();
+    let fixture = CrossStoreFixture::new();
+
+    let store_a_template_id = {
+        let mut store_a = fixture
+            .registry
+            .store_mut(fixture.store_a_id)
+            .expect("store A should be mutable");
+        push_text_template(&mut store_a, &mut string_table, "a")
+    };
+
+    let registry = Rc::new(RefCell::new(fixture.registry));
+    let store_b_handle = registry
+        .borrow()
+        .store_handle(fixture.store_b_id)
+        .expect("store B handle should exist");
+
+    let registry_borrow = registry.borrow();
+    let view = TirView::with_minimum_phase(
+        &registry_borrow,
+        TemplateRef::new(fixture.store_a_id, store_a_template_id),
+        TemplateTirPhase::Finalized,
+        TemplateTirPhase::Finalized,
+        TemplateOverlaySetId::empty(),
+    )
+    .expect("test view should be valid");
+
+    let fold_context_inputs = TestFoldContextInputs::new();
+    let mut fold_context = fold_context_inputs.context(&mut string_table, Rc::clone(&registry));
+
+    let error = store_b_handle
+        .borrow()
+        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
+        .expect_err("wrong-store view should produce a CompilerError");
+
+    assert_eq!(
+        error.msg,
+        "TIR HIR handoff view materialization view store does not match the supplied store."
+    );
+}
+
+/// A same-ID foreign-store collision with matching local template and root IDs
+/// must still be rejected through exact store ownership.
+#[test]
+fn view_backed_handoff_rejects_same_id_foreign_store_collision() {
+    let mut string_table = StringTable::new();
+
+    // Independent registries can allocate identical store, template and node
+    // IDs. The logical owner token must distinguish their actual stores.
+    let mut registry_a = TemplateIrRegistry::new();
+    let store_a_id = registry_a.allocate_store();
+    registry_a.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_a_template_id = {
+        let mut store_a = registry_a
+            .store_mut(store_a_id)
+            .expect("store A should be mutable");
+        push_text_template(&mut store_a, &mut string_table, "a")
+    };
+
+    let mut registry_b = TemplateIrRegistry::new();
+    let store_b_id = registry_b.allocate_store();
+    let store_b_template_id = {
+        let mut store_b = registry_b
+            .store_mut(store_b_id)
+            .expect("store B should be mutable");
+        push_text_template(&mut store_b, &mut string_table, "b")
+    };
+
+    assert_eq!(
+        store_a_id, store_b_id,
+        "test setup: both stores should share the same store ID index"
+    );
+    assert_eq!(
+        store_a_template_id, store_b_template_id,
+        "test setup: both stores should share the same template ID index"
+    );
+
+    let registry_a_rc = Rc::new(RefCell::new(registry_a));
+    let registry_b_rc = Rc::new(RefCell::new(registry_b));
+    let store_b_handle = registry_b_rc
+        .borrow()
+        .store_handle(store_b_id)
+        .expect("store B handle should exist");
+
+    let registry_a_borrow = registry_a_rc.borrow();
+    let view = TirView::with_minimum_phase(
+        &registry_a_borrow,
+        TemplateRef::new(store_a_id, store_a_template_id),
+        TemplateTirPhase::Finalized,
+        TemplateTirPhase::Finalized,
+        TemplateOverlaySetId::empty(),
+    )
+    .expect("test view should be valid");
+
+    let fold_context_inputs = TestFoldContextInputs::new();
+    let mut fold_context =
+        fold_context_inputs.context(&mut string_table, Rc::clone(&registry_a_rc));
+
+    let error = store_b_handle
+        .borrow()
+        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
+        .expect_err("same-ID foreign-store collision should produce a CompilerError");
+
+    assert_eq!(
+        error.msg,
+        "TIR HIR handoff view materialization registered store does not match the supplied store."
     );
 }
