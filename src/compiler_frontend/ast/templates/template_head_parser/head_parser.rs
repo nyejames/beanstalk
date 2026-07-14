@@ -137,7 +137,7 @@ fn expression_contains_runtime_slot_handoff(
     expression: &Expression,
     context: &ScopeContext,
 ) -> bool {
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let mut visited_templates = HashSet::new();
     expression_contains_runtime_slot_handoff_in_registry(
         expression,

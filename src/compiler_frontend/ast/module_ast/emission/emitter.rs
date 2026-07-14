@@ -231,11 +231,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             Vec::<TypeId>::new(),
             input.scope_frame_capacity,
         )
-        .with_template_ir_registry(
-            Rc::clone(&self.context.template_ir_registry),
-            self.context.template_ir_store_id,
-            Rc::clone(&self.context.template_ir_store),
-        )
+        .with_registered_template_ir_store(self.context.registered_template_ir_store.clone())
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_file_visibility(input.visibility)
@@ -1112,7 +1108,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         // wrapper and expression overlays stay aligned with the following fold.
         let template_const_kind = classify_template_from_effective_tir(
             &template,
-            &context.template_ir_registry,
+            context.registered_template_ir_store.registry(),
             string_table,
         )
         .map_err(|error| self.template_error_messages(error, string_table))?;

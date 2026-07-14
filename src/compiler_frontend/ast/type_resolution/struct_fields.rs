@@ -7,7 +7,9 @@ use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expres
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
+use crate::compiler_frontend::ast::templates::tir::{
+    RegisteredTemplateIrStore, TemplateIrRegistry, TemplateIrStore,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
@@ -311,7 +313,6 @@ fn inline_visible_constant_references_impl(
 
             let mut current_type = ExpectedType::Known(expression.type_id);
 
-            let template_ir_store_id = template_ir_store.borrow().store_id();
             let mut evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
@@ -320,10 +321,11 @@ fn inline_visible_constant_references_impl(
                 Vec::new(),
                 0,
             )
-            .with_template_ir_registry(
-                Rc::clone(template_ir_registry),
-                template_ir_store_id,
-                Rc::clone(template_ir_store),
+            .with_registered_template_ir_store(
+                RegisteredTemplateIrStore::from_registry_and_store(
+                    Rc::clone(template_ir_registry),
+                    Rc::clone(template_ir_store),
+                )?,
             );
 
             if let Some(visible) = visible_declaration_ids {

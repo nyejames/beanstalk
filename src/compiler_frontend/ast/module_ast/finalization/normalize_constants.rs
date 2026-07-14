@@ -128,7 +128,11 @@ impl AstFinalizer<'_, '_> {
             ExpressionKind::Template(template) => {
                 validate_const_required_template_control_flow(
                     template,
-                    &self.context.template_ir_registry.borrow(),
+                    &self
+                        .context
+                        .registered_template_ir_store
+                        .registry()
+                        .borrow(),
                     string_table,
                 )
                 .map_err(|diagnostic| {
@@ -145,8 +149,10 @@ impl AstFinalizer<'_, '_> {
                         template_const_loop_iteration_limit: self
                             .context
                             .template_const_loop_iteration_limit,
-                        template_ir_store: &self.context.template_ir_store,
-                        template_ir_registry: Rc::clone(&self.context.template_ir_registry),
+                        template_ir_store: self.context.registered_template_ir_store.store(),
+                        template_ir_registry: Rc::clone(
+                            self.context.registered_template_ir_store.registry(),
+                        ),
                     },
                 )?;
 
@@ -238,7 +244,11 @@ impl AstFinalizer<'_, '_> {
             ExpressionKind::Template(template) => {
                 let template_kind = effective_template_kind_from_registry(
                     template,
-                    &self.context.template_ir_registry.borrow(),
+                    &self
+                        .context
+                        .registered_template_ir_store
+                        .registry()
+                        .borrow(),
                 )?;
                 if !matches!(template_kind, TemplateType::SlotInsert(_)) {
                     return Ok(false);
@@ -246,7 +256,7 @@ impl AstFinalizer<'_, '_> {
 
                 let template_const_kind = classify_template_from_effective_tir(
                     template,
-                    &self.context.template_ir_registry,
+                    self.context.registered_template_ir_store.registry(),
                     string_table,
                 )?;
                 matches!(

@@ -12,23 +12,21 @@
 
 use super::*;
 
+#[cfg(test)]
+use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 impl ScopeContext {
     /// Install the registry-owned primary TIR store for this scope tree.
     ///
-    /// WHAT: replaces the context's default registry, store ID, and store handle with the
-    ///       module-level registry and primary store from `AstPhaseContext`.
+    /// WHAT: replaces the context's default registered store with the module-level
+    ///       `RegisteredTemplateIrStore` from `AstPhaseContext`.
     /// WHY: production AST phases allocate one capacity-sized primary store through the
     ///      registry; child scope contexts must share the same registry owner and store
     ///      identity so store-qualified refs resolve consistently.
-    pub(crate) fn with_template_ir_registry(
+    pub(crate) fn with_registered_template_ir_store(
         mut self,
-        registry: Rc<RefCell<TemplateIrRegistry>>,
-        store_id: TemplateStoreId,
-        store: Rc<RefCell<TemplateIrStore>>,
+        registered_store: RegisteredTemplateIrStore,
     ) -> ScopeContext {
-        self.template_ir_registry = registry;
-        self.template_ir_store_id = store_id;
-        self.template_ir_store = store;
+        self.registered_template_ir_store = registered_store;
         self
     }
 
@@ -38,19 +36,17 @@ impl ScopeContext {
     ///       context never carries a store handle without a matching registry owner.
     /// WHY: tests and isolated contexts construct a store directly and then need a
     ///      registry-backed identity so the context does not drift into two unrelated
-    ///      ownership paths. Production callers should prefer `with_template_ir_registry`
-    ///      to share the module-level registry.
+    ///      ownership paths. Production callers should prefer
+    ///      `with_registered_template_ir_store` to share the module-level registry.
     #[cfg(test)]
     pub(crate) fn with_template_ir_store(
         mut self,
         store: Rc<RefCell<TemplateIrStore>>,
     ) -> ScopeContext {
-        let mut registry = TemplateIrRegistry::new();
-        let store_id = registry.adopt_store(Rc::clone(&store));
-
-        self.template_ir_registry = Rc::new(RefCell::new(registry));
-        self.template_ir_store_id = store_id;
-        self.template_ir_store = store;
+        self.registered_template_ir_store = RegisteredTemplateIrStore::adopt_into(
+            Rc::new(RefCell::new(TemplateIrRegistry::new())),
+            store,
+        );
         self
     }
 
@@ -60,7 +56,7 @@ impl ScopeContext {
     /// language or HIR-facing API.
     #[cfg(test)]
     pub(crate) fn template_ir_store(&self) -> Rc<RefCell<TemplateIrStore>> {
-        Rc::clone(&self.template_ir_store)
+        Rc::clone(self.registered_template_ir_store.store())
     }
 
     // --------------------------

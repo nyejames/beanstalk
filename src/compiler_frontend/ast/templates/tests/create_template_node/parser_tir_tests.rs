@@ -881,7 +881,7 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
         .expect("parent with nested reactive child should parse");
     let store = context.template_ir_store();
     let store = store.borrow();
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let mut metadata = ReactiveTemplateMetadata::template_backed();
 
     merge_reactive_template_metadata_with_store_and_registry(
@@ -1213,7 +1213,8 @@ fn build_template_with_direct_tir_root(
         (store.store_id(), Arc::clone(&store.owner()))
     };
     let overlay_set_id = context
-        .template_ir_registry
+        .registered_template_ir_store
+        .registry()
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
     Template {
@@ -1270,7 +1271,7 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         store
             .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
@@ -1356,7 +1357,7 @@ fn reactive_body_segment_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         store
             .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
@@ -1461,7 +1462,7 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
 
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         store
             .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
@@ -2282,7 +2283,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let context = runtime_template_context(&token_stream.src_path, &mut string_table);
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("runtime template should parse");
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let tir_kind = store
         .get_template(template.tir_reference.root.template_id)
         .expect("TIR entry should exist")

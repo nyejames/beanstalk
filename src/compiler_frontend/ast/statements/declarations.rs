@@ -95,7 +95,7 @@ fn initializer_is_compile_time_constant(
         .const_value_kind_with_template_classifier(&mut |template| {
             classify_template_from_effective_tir(
                 template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 string_table,
             )
         })
@@ -499,9 +499,11 @@ pub fn resolve_declaration_syntax(
                 )?);
             }
 
-            if let Err(bag) =
-                validate_struct_default_values(&params, &context.template_ir_registry, string_table)
-            {
+            if let Err(bag) = validate_struct_default_values(
+                &params,
+                context.registered_template_ir_store.registry(),
+                string_table,
+            ) {
                 let diagnostics = bag.into_diagnostics();
                 if let Some(first) = diagnostics.into_iter().next() {
                     return Err(Box::new(first));

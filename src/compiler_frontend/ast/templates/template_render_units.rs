@@ -49,7 +49,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         return Ok(());
     }
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let store_owner = store.owner();
     if !Arc::ptr_eq(&reference.store_owner, &store_owner) {
         return Ok(());
@@ -67,7 +67,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     drop(store);
 
     let formatter_result = {
-        let registry = context.template_ir_registry.borrow();
+        let registry = context.registered_template_ir_store.registry().borrow();
         let root_ref = reference.root;
         let view = TirView::new(
             &registry,
@@ -80,7 +80,7 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         run_tir_formatter_with_warnings(&view, style, context, string_table)?
     };
 
-    let mut store = context.template_ir_store.borrow_mut();
+    let mut store = context.registered_template_ir_store.store().borrow_mut();
     let formatted_template_id = store.push_template(TemplateIr::new(
         formatter_result.root,
         original_template.style,
@@ -90,7 +90,10 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     ));
 
     *tir_reference = TemplateTirReference {
-        root: TemplateRef::new(context.template_ir_store_id, formatted_template_id),
+        root: TemplateRef::new(
+            context.registered_template_ir_store.store_id(),
+            formatted_template_id,
+        ),
         store_owner,
         phase: TemplateTirPhase::Formatted,
         overlay_set_id: reference.overlay_set_id,
@@ -140,7 +143,7 @@ fn prepare_branch_body_tir_root(
     // shared head-prefix atoms, so reusing them avoids rebuilding TIR from
     // the formatted TIR root.
     let head_prefix_nodes = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         head_prefix_tir_nodes(&store, root_children)
     };
 
@@ -154,8 +157,8 @@ fn prepare_branch_body_tir_root(
     // formatter mutates the registry-owned store through `TirView`.
     let body_root = format_tir_body_root(body_root, style, context, string_table)?;
 
-    let mut store = context.template_ir_store.borrow_mut();
-    let registry = context.template_ir_registry.borrow();
+    let mut store = context.registered_template_ir_store.store().borrow_mut();
+    let registry = context.registered_template_ir_store.registry().borrow();
 
     let body_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
@@ -276,11 +279,11 @@ fn prepare_loop_body_tir_root(
     // authority mutates the registry-owned store through `TirView`.
     let body_root = format_tir_body_root(body_root, style, context, string_table)?;
 
-    let mut store = context.template_ir_store.borrow_mut();
+    let mut store = context.registered_template_ir_store.store().borrow_mut();
     let body_root =
         trim_whitespace_before_loop_control_boundary(body_root, &mut store, string_table);
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let body_root = apply_inherited_child_wrappers_to_body_root(
         body_root,
         child_wrappers,
@@ -366,7 +369,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     // body node IDs in the TIR store; render-unit preparation reads and
     // updates them directly.
     let control_flow_node_id = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         construction_context
             .builder()
             .control_flow_node_id(&store)
@@ -378,7 +381,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     };
 
     let kind = {
-        let store = context.template_ir_store.borrow();
+        let store = context.registered_template_ir_store.store().borrow();
         let node = store.get_node(control_flow_node_id).ok_or_else(|| {
             CompilerError::compiler_error(
                 "Control-flow node disappeared from the TIR store during render-unit preparation.",
@@ -517,8 +520,8 @@ fn prepare_loop_render_units(
     // head-prefix nodes instead of rebuilding from content atoms.
     let root_children = construction_context.builder().root_children().to_vec();
 
-    let mut template_ir_store = context.template_ir_store.borrow_mut();
-    let registry = context.template_ir_registry.borrow();
+    let mut template_ir_store = context.registered_template_ir_store.store().borrow_mut();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let aggregate_wrapper = prepare_loop_aggregate_wrapper(
         &root_children,
         string_table,

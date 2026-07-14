@@ -318,8 +318,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 SignatureTypeFallbackPolicy::StrictCapacity,
                 false,
             )?;
-            let template_ir_registry = Rc::clone(&self.context.template_ir_registry);
-            let template_ir_store = Rc::clone(&self.context.template_ir_store);
+            let template_ir_registry =
+                Rc::clone(self.context.registered_template_ir_store.registry());
+            let template_ir_store = Rc::clone(self.context.registered_template_ir_store.store());
             let mut type_resolution_context = self.type_resolution_context_for_with_traits(
                 &visibility,
                 generic_parameter_scope.as_ref(),
@@ -1015,9 +1016,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     template_const_loop_iteration_limit: self
                         .context
                         .template_const_loop_iteration_limit,
-                    template_ir_registry: Rc::clone(&self.context.template_ir_registry),
-                    template_ir_store_id: self.context.template_ir_store_id,
-                    template_ir_store: Rc::clone(&self.context.template_ir_store),
+                    registered_template_ir_store: self.context.registered_template_ir_store.clone(),
                     build_profile: self.context.build_profile,
                     warnings: &mut self.warnings,
                     rendered_path_usages: self.rendered_path_usages.clone(),
@@ -1169,11 +1168,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             vec![],
             0,
         )
-        .with_template_ir_registry(
-            Rc::clone(&self.context.template_ir_registry),
-            self.context.template_ir_store_id,
-            Rc::clone(&self.context.template_ir_store),
-        )
+        .with_registered_template_ir_store(self.context.registered_template_ir_store.clone())
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_project_path_resolver(self.context.project_path_resolver.clone())

@@ -6,7 +6,7 @@ use super::super::refs::{
     TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateStringDomainId,
     TemplateWrapperReference, TemplateWrapperSetRef,
 };
-use super::super::registry::TemplateIrRegistry;
+use super::super::registry::{RegisteredTemplateIrStore, TemplateIrRegistry};
 use super::super::store::{TemplateIrStore, TemplateStoreState, TemplateWrapperSet};
 use super::super::summary::TemplateIrSummary;
 use super::super::view::TemplateTirPhase;
@@ -344,6 +344,22 @@ fn store_handle_returns_same_store() {
 fn store_handle_returns_none_for_missing_store() {
     let registry = TemplateIrRegistry::new();
     assert!(registry.store_handle(TemplateStoreId::new(99)).is_none());
+}
+
+#[test]
+fn registered_store_rejects_same_id_handle_from_another_registry() {
+    let mut registry = TemplateIrRegistry::new();
+    let registered_store_id = registry.allocate_store();
+    let registry = Rc::new(RefCell::new(registry));
+
+    let mut foreign_registry = TemplateIrRegistry::new();
+    let foreign_store_id = foreign_registry.allocate_store();
+    let foreign_store = foreign_registry
+        .store_handle(foreign_store_id)
+        .expect("foreign store should exist");
+
+    assert_eq!(registered_store_id, foreign_store_id);
+    assert!(RegisteredTemplateIrStore::from_registry_and_store(registry, foreign_store).is_err());
 }
 
 #[test]

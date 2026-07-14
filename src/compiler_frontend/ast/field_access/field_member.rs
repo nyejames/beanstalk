@@ -306,7 +306,7 @@ pub(super) fn parse_field_member_access_typed(
     let receiver_is_const_record = receiver_node.expression_is_const_record_value()?;
     let field = {
         let template_ir_registry = if scope_context.kind.is_constant_context() {
-            Some(&scope_context.template_ir_registry)
+            Some(scope_context.registered_template_ir_store.registry())
         } else {
             None
         };

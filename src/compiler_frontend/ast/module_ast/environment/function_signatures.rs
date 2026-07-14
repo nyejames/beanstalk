@@ -143,10 +143,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     vec![],
                     0,
                 )
-                .with_template_ir_registry(
-                    Rc::clone(&self.context.template_ir_registry),
-                    self.context.template_ir_store_id,
-                    Rc::clone(&self.context.template_ir_store),
+                .with_registered_template_ir_store(
+                    self.context.registered_template_ir_store.clone(),
                 )
                 .with_style_directives(self.context.style_directives)
                 .with_build_profile(self.context.build_profile)

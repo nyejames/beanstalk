@@ -199,7 +199,7 @@ pub(super) fn parse_struct_constructor_expression(
                     .const_value_kind_with_template_classifier(&mut |template| {
                         classify_template_from_effective_tir(
                             template,
-                            &context.template_ir_registry,
+                            context.registered_template_ir_store.registry(),
                             string_table,
                         )
                     })?

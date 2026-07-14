@@ -6,8 +6,6 @@
 //! WHY: Separates body token consumption from head parsing and composition,
 //! keeping each parsing phase focused and testable.
 
-use std::rc::Rc;
-
 use crate::ast_log;
 use crate::compiler_frontend::ast::statements::if_headers::{ParsedIfHeader, parse_if_header};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -802,9 +800,7 @@ fn tir_only_body_construction_context(
     context: &ScopeContext,
 ) -> TemplateConstructionContext {
     TemplateConstructionContext::new(
-        Rc::clone(&context.template_ir_store),
-        context.template_ir_store_id,
-        Rc::clone(&context.template_ir_registry),
+        context.registered_template_ir_store.clone(),
         location.to_owned(),
     )
 }

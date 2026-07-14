@@ -123,8 +123,10 @@ impl AstFinalizer<'_, '_> {
                     .context
                     .template_const_loop_iteration_limit,
                 string_table,
-                template_ir_store: Rc::clone(&self.context.template_ir_store),
-                template_ir_registry: Some(Rc::clone(&self.context.template_ir_registry)),
+                template_ir_store: Rc::clone(self.context.registered_template_ir_store.store()),
+                template_ir_registry: Some(Rc::clone(
+                    self.context.registered_template_ir_store.registry(),
+                )),
             };
             normalize_ast_node_templates(node, &mut normalization_context)?;
         }

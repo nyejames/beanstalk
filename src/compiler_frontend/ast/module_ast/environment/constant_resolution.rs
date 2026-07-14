@@ -11,9 +11,7 @@ use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationT
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, TemplateStoreId,
-};
+use crate::compiler_frontend::ast::templates::tir::RegisteredTemplateIrStore;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
@@ -59,9 +57,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
     pub template_const_loop_iteration_limit: usize,
-    pub template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
-    pub template_ir_store_id: TemplateStoreId,
-    pub template_ir_store: Rc<RefCell<TemplateIrStore>>,
+    pub registered_template_ir_store: RegisteredTemplateIrStore,
     pub build_profile: FrontendBuildProfile,
     pub warnings: &'a mut Vec<CompilerDiagnostic>,
     pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
@@ -90,9 +86,7 @@ pub(crate) fn parse_constant_header_declaration(
         project_path_resolver,
         path_format_config,
         template_const_loop_iteration_limit,
-        template_ir_registry,
-        template_ir_store_id,
-        template_ir_store,
+        registered_template_ir_store,
         build_profile,
         warnings,
         rendered_path_usages,
@@ -128,11 +122,7 @@ pub(crate) fn parse_constant_header_declaration(
         vec![],
         0,
     )
-    .with_template_ir_registry(
-        template_ir_registry,
-        template_ir_store_id,
-        template_ir_store,
-    )
+    .with_registered_template_ir_store(registered_template_ir_store)
     .with_style_directives(style_directives)
     .with_build_profile(build_profile)
     .with_project_path_resolver(project_path_resolver)
@@ -177,7 +167,7 @@ pub(crate) fn parse_constant_header_declaration(
         .const_value_kind_with_template_classifier(&mut |template| {
             classify_template_from_effective_tir(
                 template,
-                &scope_context.template_ir_registry,
+                scope_context.registered_template_ir_store.registry(),
                 string_table,
             )
         })

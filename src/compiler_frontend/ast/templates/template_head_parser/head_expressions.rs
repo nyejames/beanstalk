@@ -190,7 +190,7 @@ pub(super) fn push_template_head_expression(
             .const_value_kind_with_template_classifier(&mut |template| {
                 classify_template_from_effective_tir(
                     template,
-                    &target.context.template_ir_registry,
+                    target.context.registered_template_ir_store.registry(),
                     string_table,
                 )
             })

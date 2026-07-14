@@ -222,7 +222,7 @@ pub(crate) use wrapper_sets::wrapper_reference_for_template;
 pub(crate) use refs::TemplateStringDomainId;
 
 // Module-local TIR registry: owns all stores and validates cross-store references.
-pub(crate) use registry::TemplateIrRegistry;
+pub(crate) use registry::{RegisteredTemplateIrStore, TemplateIrRegistry};
 
 // Final overlay set and expression-overlay types consumed by production
 // template creation and finalization.

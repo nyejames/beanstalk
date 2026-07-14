@@ -1,5 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::templates::tir::RegisteredTemplateIrStore;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTemplateDirectiveReason,
 };
@@ -304,14 +305,10 @@ fn builder_registered_handler_directive_rejects_foreign_runtime_template_argumen
     }];
 
     let directive_store_id = argument_context
-        .template_ir_registry
+        .registered_template_ir_store
+        .registry()
         .borrow_mut()
         .allocate_store();
-    let directive_store = argument_context
-        .template_ir_registry
-        .borrow()
-        .store_handle(directive_store_id)
-        .expect("directive store should exist");
     assert_ne!(argument_reference.root.store_id, directive_store_id);
 
     let mut token_stream = template_tokens_from_source_with_directives(
@@ -331,10 +328,12 @@ fn builder_registered_handler_directive_rejects_foreign_runtime_template_argumen
         &token_stream.src_path,
         &registry,
     )
-    .with_template_ir_registry(
-        Rc::clone(&argument_context.template_ir_registry),
-        directive_store_id,
-        directive_store,
+    .with_registered_template_ir_store(
+        RegisteredTemplateIrStore::from_registry_and_store_id(
+            Rc::clone(argument_context.registered_template_ir_store.registry()),
+            directive_store_id,
+        )
+        .expect("directive test store should be registered"),
     );
 
     let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)

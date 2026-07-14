@@ -180,7 +180,7 @@ impl ScopeContext {
                     .const_value_kind_with_template_classifier(&mut |template| {
                         classify_template_from_effective_tir(
                             template,
-                            &self.template_ir_registry,
+                            self.registered_template_ir_store.registry(),
                             string_table,
                         )
                     })?

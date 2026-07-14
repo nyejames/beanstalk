@@ -28,8 +28,16 @@ impl AstFinalizer<'_, '_> {
         // Borrow the module-scoped TIR store mutably so annotation can update
         // same-store finalized body roots directly. Later normalization then
         // observes the same annotated expressions instead of stale body content.
-        let mut store = self.context.template_ir_store.borrow_mut();
-        let mut registry = self.context.template_ir_registry.borrow_mut();
+        let mut store = self
+            .context
+            .registered_template_ir_store
+            .store()
+            .borrow_mut();
+        let mut registry = self
+            .context
+            .registered_template_ir_store
+            .registry()
+            .borrow_mut();
         propagate_reactive_template_metadata_in_ast(ast, &mut store, &mut registry);
     }
 }

@@ -447,10 +447,10 @@ pub(in crate::compiler_frontend::ast::templates) fn format_tir_body_root(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<TemplateIrNodeId, TemplateError> {
-    let store_id = context.template_ir_store_id;
+    let store_id = context.registered_template_ir_store.store_id();
 
     let temp_template_id = {
-        let mut store = context.template_ir_store.borrow_mut();
+        let mut store = context.registered_template_ir_store.store().borrow_mut();
         let location = store
             .get_node(body_root)
             .map(|node| node.location.clone())
@@ -466,11 +466,11 @@ pub(in crate::compiler_frontend::ast::templates) fn format_tir_body_root(
     };
 
     let empty_overlay_set_id = {
-        let mut registry = context.template_ir_registry.borrow_mut();
+        let mut registry = context.registered_template_ir_store.registry().borrow_mut();
         registry.allocate_overlay_set(TemplateOverlaySet::empty())
     };
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let temp_ref = TemplateRef::new(store_id, temp_template_id);
     let view = TirView::new(
         &registry,

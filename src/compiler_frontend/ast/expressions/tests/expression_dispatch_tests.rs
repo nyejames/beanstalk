@@ -16,8 +16,9 @@ use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
-    TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    RegisteredTemplateIrStore, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore,
+    TemplateIrSummary, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
@@ -334,7 +335,10 @@ fn constant_identifier_uses_foreign_effective_tir() {
         vec![],
         0,
     )
-    .with_template_ir_registry(registry, primary_store_id, primary_store);
+    .with_registered_template_ir_store(
+        RegisteredTemplateIrStore::from_registry_and_store_id(registry, primary_store_id)
+            .expect("primary test store should be registered"),
+    );
     context.set_local_declarations(vec![Declaration {
         id: InternedPath::from_components(vec![constant_name]),
         value: Expression::template(template, ValueMode::ImmutableOwned),

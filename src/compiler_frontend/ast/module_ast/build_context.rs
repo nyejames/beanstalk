@@ -15,16 +15,16 @@
 //!
 //! ## TIR registry ownership
 //!
-//! `AstPhaseContext` owns the module-local `TemplateIrRegistry` that allocates and tracks
-//! every `TemplateIrStore` used during AST template construction. The registry allocates a
-//! capacity-sized primary store; the context carries a shared `Rc<RefCell<TemplateIrStore>>`
-//! handle to that primary store so existing direct-store consumers continue working while
-//! later phases migrate to registry-qualified refs.
+//! `AstPhaseContext` owns the module-local TIR registry through a
+//! `RegisteredTemplateIrStore` that couples the registry, the store-level ID, and the
+//! matching direct store handle. The registry allocates a capacity-sized primary store;
+//! the coupled value lets all parser contexts share one registered-store identity without
+//! assembling the three components independently.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, TemplateStoreId,
+    RegisteredTemplateIrStore, TemplateIrRegistry,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -87,29 +87,16 @@ pub(crate) struct AstPhaseContext<'a> {
     pub(crate) template_const_loop_iteration_limit: usize,
     pub(crate) capacity_estimate: FrontendArenaCapacityEstimate,
 
-    /// Module-local TIR registry that owns every `TemplateIrStore` for this AST phase.
+    /// Registered TIR store: couples the module-local registry, store ID and direct store
+    /// handle for this AST phase.
     ///
-    /// WHAT: allocates stores, tracks freeze state, and validates cross-store references.
-    /// WHY: the final TIR system allows multiple stores per module; the registry keeps
-    ///      store identity explicit and centralizes cross-store invariants.
-    pub(crate) template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
-
-    /// Registry-level ID of the primary store that parser contexts share.
-    ///
-    /// WHAT: identifies the capacity-sized store allocated by the registry for this
-    ///       module's primary template parsing.
-    /// WHY: child scope constructors pass the store ID alongside the store handle so the
-    ///      registry can resolve store-qualified refs without pointer comparisons.
-    pub(crate) template_ir_store_id: TemplateStoreId,
-
-    /// AST-local template IR store shared by all parser contexts in this module phase.
-    ///
-    /// WHAT: a shared handle to the registry-owned primary store. Existing direct-store
-    ///       consumers keep using this handle; later phases migrate to registry-qualified
-    ///       refs via `template_ir_registry` + `template_ir_store_id`.
-    /// WHY: `TemplateIrId` values are store-local, so root and nested template parses must
-    ///      share the same owner until B7 makes TIR authoritative.
-    pub(crate) template_ir_store: Rc<RefCell<TemplateIrStore>>,
+    /// WHAT: allocates the capacity-sized primary store through the registry and couples
+    ///       it with the store ID and direct handle so child scope contexts share one
+    ///       registered-store value.
+    /// WHY: the final TIR system allows multiple stores per module; the coupled value
+    ///      keeps store identity explicit and prevents callers from assigning a store
+    ///      handle that does not match the registry entry.
+    pub(crate) registered_template_ir_store: RegisteredTemplateIrStore,
 }
 
 impl<'a> AstPhaseContext<'a> {
@@ -132,11 +119,9 @@ impl<'a> AstPhaseContext<'a> {
             capacity_estimate,
         } = context;
 
-        let mut registry = TemplateIrRegistry::new();
-        let template_ir_store_id = registry.allocate_primary_store_with_capacity(capacity_estimate);
-        let template_ir_store = registry
-            .store_handle(template_ir_store_id)
-            .expect("primary store should exist immediately after allocation");
+        let registry = Rc::new(RefCell::new(TemplateIrRegistry::new()));
+        let registered_template_ir_store =
+            RegisteredTemplateIrStore::allocate_primary_with_capacity(registry, capacity_estimate);
 
         (
             Self {
@@ -148,9 +133,7 @@ impl<'a> AstPhaseContext<'a> {
                 path_format_config,
                 template_const_loop_iteration_limit,
                 capacity_estimate,
-                template_ir_registry: Rc::new(RefCell::new(registry)),
-                template_ir_store_id,
-                template_ir_store,
+                registered_template_ir_store,
             },
             string_table,
         )

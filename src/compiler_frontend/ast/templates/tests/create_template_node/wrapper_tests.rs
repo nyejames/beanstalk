@@ -129,7 +129,7 @@ fn child_wrapper_composition_marks_template_tir_reference_composed() {
         "composed reference must carry the same-store owner"
     );
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(reference.overlay_set_id)
         .expect("composed reference overlay set should resolve in the registry");

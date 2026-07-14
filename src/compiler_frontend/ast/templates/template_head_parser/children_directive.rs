@@ -9,8 +9,6 @@
 //! - `$children(..)` has directive-specific compile-time behavior that should stay
 //!   isolated from generic style-handler logic.
 
-use std::rc::Rc;
-
 use super::directive_args::parse_required_parenthesized_expression;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
@@ -78,7 +76,7 @@ pub(super) fn parse_children_style_directive(
         .const_value_kind_with_template_classifier(&mut |template| {
             classify_template_from_effective_tir(
                 template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 string_table,
             )
         })
@@ -115,8 +113,8 @@ pub(super) fn parse_children_style_directive(
                 )));
             }
 
-            let current_store = context.template_ir_store.borrow();
-            let registry = context.template_ir_registry.borrow();
+            let current_store = context.registered_template_ir_store.store().borrow();
+            let registry = context.registered_template_ir_store.registry().borrow();
             wrapper_reference_for_template(&child_template, &current_store, &registry).ok_or_else(
                 || {
                     TemplateError::from(CompilerError::compiler_error(
@@ -159,9 +157,7 @@ fn normalize_string_child_wrapper_reference(
     string_table: &StringTable,
 ) -> Result<TemplateWrapperReference, TemplateError> {
     let mut construction_context = TemplateConstructionContext::new(
-        Rc::clone(&context.template_ir_store),
-        context.template_ir_store_id,
-        Rc::clone(&context.template_ir_registry),
+        context.registered_template_ir_store.clone(),
         argument_location.clone(),
     );
     construction_context.record_text(

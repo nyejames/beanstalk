@@ -347,7 +347,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             &self.resolved_function_signatures_by_path,
             &self.nominal_type_ids_by_path,
             &self.type_environment,
-            &self.context.template_ir_registry,
+            self.context.registered_template_ir_store.registry(),
             string_table,
         )
         .map_err(|error| {

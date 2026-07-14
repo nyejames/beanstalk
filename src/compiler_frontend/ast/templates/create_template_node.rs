@@ -61,7 +61,6 @@ use crate::compiler_frontend::{
     datatypes::environment::TypeEnvironment, type_coercion::compatibility::TypeCompatibilityCache,
 };
 use crate::libraries::SourceFileKind;
-use std::rc::Rc;
 
 const SYNTHETIC_CONTENT_CONSTANT_NAME: &str = "content";
 
@@ -127,7 +126,7 @@ impl Template {
         {
             validate_const_required_template_control_flow(
                 &template,
-                &context.template_ir_registry.borrow(),
+                &context.registered_template_ir_store.registry().borrow(),
                 string_table,
             )?;
         }
@@ -201,9 +200,7 @@ impl Template {
         // remains the sole location owner so style/directive errors still point
         // at the template even if parsing later advances deeply.
         let mut construction_context = TemplateConstructionContext::new(
-            Rc::clone(&context.template_ir_store),
-            context.template_ir_store_id,
-            Rc::clone(&context.template_ir_registry),
+            context.registered_template_ir_store.clone(),
             token_stream.current_location(),
         );
 
@@ -318,7 +315,7 @@ impl Template {
             // registry-level calls so the registry can access the same store
             // through its internal `RefCell` without a borrow conflict.
 
-            let store_id = context.template_ir_store_id;
+            let store_id = context.registered_template_ir_store.store_id();
             let template_id = tir_reference.root.template_id;
 
             // --- Phase 1: head-chain composition ---
@@ -326,7 +323,7 @@ impl Template {
             add_ast_counter(AstCounter::TemplateTirHeadChainCompositionCalls, 1);
 
             let original_root = {
-                let store = context.template_ir_store.borrow();
+                let store = context.registered_template_ir_store.store().borrow();
                 store
                     .get_template(template_id)
                     .map(|t| t.root)
@@ -342,7 +339,7 @@ impl Template {
             // released so the registry can access the same store through its
             // internal `RefCell`.
             let composed = compose_tir_head_chain_with_overlays(
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 store_id,
                 template_id,
                 string_table,
@@ -365,7 +362,7 @@ impl Template {
                 let overlay_set_id = if let Some(slot_overlay_set_id) = composed.slot_overlay_set_id
                 {
                     merge_tir_slot_resolution_overlay_sets(
-                        &mut context.template_ir_registry.borrow_mut(),
+                        &mut context.registered_template_ir_store.registry().borrow_mut(),
                         previous_overlay_set_id,
                         slot_overlay_set_id,
                     )?
@@ -373,7 +370,8 @@ impl Template {
                     previous_overlay_set_id
                 };
 
-                let mut template_ir_store = context.template_ir_store.borrow_mut();
+                let mut template_ir_store =
+                    context.registered_template_ir_store.store().borrow_mut();
                 let original_template = template_ir_store
                     .get_template(template_id)
                     .cloned()
@@ -431,7 +429,7 @@ impl Template {
         // inserts consumed, or a formatted linear root. Classification reads
         // that authoritative reference without a separate TIR allocation.
         let template_classification = {
-            let mut template_ir_store = context.template_ir_store.borrow_mut();
+            let mut template_ir_store = context.registered_template_ir_store.store().borrow_mut();
             let template_id = tir_reference.root.template_id;
             classify_materialized_current_tir_template(
                 &mut template_ir_store,
@@ -468,8 +466,8 @@ impl Template {
             control_flow_validation,
             TemplateControlFlowValidationMode::RuntimeCapable
         ) {
-            let registry = context.template_ir_registry.borrow();
-            let template_ir_store = context.template_ir_store.borrow();
+            let registry = context.registered_template_ir_store.registry().borrow();
+            let template_ir_store = context.registered_template_ir_store.store().borrow();
 
             if template_contains_control_flow(
                 &template,
@@ -517,7 +515,7 @@ impl Template {
         // copies are initialized once here; later refresh goes through the
         // single synchronization owner.
         let template_id = template.tir_reference.root.template_id;
-        let mut template_ir_store = context.template_ir_store.borrow_mut();
+        let mut template_ir_store = context.registered_template_ir_store.store().borrow_mut();
         if !template_ir_store.set_template_kind(template_id, template.kind.to_owned()) {
             return Err(Box::new(
                 TemplateError::from(CompilerError::compiler_error(
@@ -606,8 +604,8 @@ fn attach_wrapper_context_overlay_to_template(
     let template_id = tir_reference.root.template_id;
 
     let wrapper_overlay_id = {
-        let mut store = context.template_ir_store.borrow_mut();
-        let mut registry = context.template_ir_registry.borrow_mut();
+        let mut store = context.registered_template_ir_store.store().borrow_mut();
+        let mut registry = context.registered_template_ir_store.registry().borrow_mut();
         build_wrapper_context_overlay_for_template(
             &mut store,
             template_id,
@@ -620,7 +618,7 @@ fn attach_wrapper_context_overlay_to_template(
         return;
     };
 
-    let mut registry = context.template_ir_registry.borrow_mut();
+    let mut registry = context.registered_template_ir_store.registry().borrow_mut();
     let current_overlay_set_id = tir_reference.overlay_set_id;
 
     let wrapper_only_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {

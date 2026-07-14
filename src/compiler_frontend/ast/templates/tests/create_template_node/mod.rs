@@ -167,7 +167,7 @@ fn fold_template_in_context(
 
 fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
     let reference = &template.tir_reference;
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let view = TirView::new(
         &registry,
         reference.root,

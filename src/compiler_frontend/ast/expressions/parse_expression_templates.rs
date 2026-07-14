@@ -50,7 +50,10 @@ pub(super) fn parse_template_expression(
     .map_err(ExpressionParseError::from)?;
 
     let template_kind = {
-        let registry = template_context.template_ir_registry.borrow();
+        let registry = template_context
+            .registered_template_ir_store
+            .registry()
+            .borrow();
         template.tir_kind_via_registry(&registry).ok_or_else(|| {
             CompilerError::compiler_error(
                 "Parsed template kind was missing from its registry-backed TIR store.",
@@ -76,7 +79,7 @@ pub(super) fn parse_template_expression(
             // slot, wrapper and expression overlays match the following fold.
             let classification = classify_template_effective_tir(
                 &template,
-                &template_context.template_ir_registry,
+                template_context.registered_template_ir_store.registry(),
                 string_table,
             )?;
             let const_value_kind = if classification.has_unresolved_slots {

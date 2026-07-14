@@ -19,10 +19,10 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
     TemplateHeadParseRequest, parse_template_head,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, SlotOccurrenceId, TemplateConstructionContext, TemplateIrBranch,
-    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
-    TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateRef,
-    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
+    ExpressionSiteId, RegisteredTemplateIrStore, SlotOccurrenceId, TemplateConstructionContext,
+    TemplateIrBranch, TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
+    TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
+    TemplateRef, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
     TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -122,7 +122,7 @@ fn parsed_template_tir_reference_carries_registry_empty_overlay_set() {
         .expect("template source should parse");
     let reference = &template.tir_reference;
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(reference.overlay_set_id)
         .expect("parsed reference overlay set should resolve in the registry");
@@ -312,7 +312,7 @@ fn template_option_capture_binding_is_not_visible_in_else_branch() {
 fn source_authored_template_range_loop_suffix_reaches_ast() {
     let (template, context, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let template_id = template.tir_reference.root.template_id;
     assert!(
         store
@@ -1085,11 +1085,7 @@ fn template_if_composition_applies_shared_head_prefix_to_each_branch() {
         &mut string_table,
     );
     let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_template_ir_registry(
-            Rc::clone(&card_context.template_ir_registry),
-            card_context.template_ir_store_id,
-            Rc::clone(&card_context.template_ir_store),
-        );
+        .with_registered_template_ir_store(card_context.registered_template_ir_store.clone());
 
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
@@ -1177,7 +1173,7 @@ fn parent_children_wrappers_attach_conditionally_to_control_flow_child() {
     // The control-flow child is TIR-owned: the parent's TIR root contains it as
     // a ChildTemplate node, and the $children wrapper is attached via wrapper-
     // context overlays rather than as an external content-mirror wrapper.
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     assert!(
         tir_root_has_control_flow_child(&template, &store),
         "TIR root should contain the control-flow child template"
@@ -1194,7 +1190,7 @@ fn fresh_control_flow_child_skips_parent_children_wrapper() {
         ]",
     );
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     assert!(
         tir_root_has_control_flow_child(&template, &store),
         "TIR root should contain the $fresh control-flow child template"
@@ -1260,7 +1256,7 @@ fn runtime_template_loop_with_continue_inside_parent_parses() {
         ]",
     );
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     assert!(
         tir_root_has_control_flow_child(&template, &store),
         "outer template TIR root should contain the nested loop"
@@ -1319,11 +1315,7 @@ fn runtime_template_loop_with_continue_as_slot_fill_parses() {
         &scope,
         &frontend_test_style_directives(),
     )
-    .with_template_ir_registry(
-        Rc::clone(&shell_context.template_ir_registry),
-        shell_context.template_ir_store_id,
-        Rc::clone(&shell_context.template_ir_store),
-    );
+    .with_registered_template_ir_store(shell_context.registered_template_ir_store.clone());
 
     Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("slot-fill loop should parse");
@@ -1509,9 +1501,7 @@ fn const_required_template_if_false_without_else_skips_shared_head_output() {
     // Production scopes in one module share one TIR registry and store. Keep
     // the declaration fixture on that topology so the wrapper reference stays
     // resolvable without compatibility reconstruction.
-    context.template_ir_store = Rc::clone(&card_context.template_ir_store);
-    context.template_ir_store_id = card_context.template_ir_store_id;
-    context.template_ir_registry = Rc::clone(&card_context.template_ir_registry);
+    context.registered_template_ir_store = card_context.registered_template_ir_store.clone();
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
             .expect("const-required template if should parse");
@@ -1552,7 +1542,7 @@ fn const_required_template_range_loop_folds_iteration_bindings() {
         assert_eq!(
             classify_template_from_effective_tir(
                 &template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 &string_table,
             )
             .expect("const classification should succeed"),
@@ -1577,7 +1567,7 @@ fn const_required_template_range_loop_folds_expressions_with_iteration_bindings(
         assert_eq!(
             classify_template_from_effective_tir(
                 &template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 &string_table,
             )
             .expect("const classification should succeed"),
@@ -1604,7 +1594,7 @@ fn const_required_template_loop_allows_nested_if_to_use_iteration_binding() {
         assert_eq!(
             classify_template_from_effective_tir(
                 &template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 &string_table,
             )
             .expect("const classification should succeed"),
@@ -1633,7 +1623,7 @@ fn const_required_template_loop_allows_nested_if_condition_to_use_iteration_bind
         assert_eq!(
             classify_template_from_effective_tir(
                 &template,
-                &context.template_ir_registry,
+                context.registered_template_ir_store.registry(),
                 &string_table,
             )
             .expect("const classification should succeed"),
@@ -1713,11 +1703,7 @@ fn const_required_template_zero_iteration_loop_skips_shared_head_output() {
         &mut string_table,
     );
     let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_template_ir_registry(
-            Rc::clone(&card_context.template_ir_registry),
-            card_context.template_ir_store_id,
-            Rc::clone(&card_context.template_ir_store),
-        );
+        .with_registered_template_ir_store(card_context.registered_template_ir_store.clone());
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
             .expect("const-required zero loop should parse");
@@ -1751,11 +1737,7 @@ fn const_required_template_loop_wraps_aggregate_once() {
         &mut string_table,
     );
     let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_template_ir_registry(
-            Rc::clone(&card_context.template_ir_registry),
-            card_context.template_ir_store_id,
-            Rc::clone(&card_context.template_ir_store),
-        );
+        .with_registered_template_ir_store(card_context.registered_template_ir_store.clone());
     let template =
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
             .expect("const-required loop should parse");
@@ -1927,7 +1909,7 @@ fn const_required_template_if_validates_from_body_tir_roots() {
         ]",
     );
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     validate_const_required_template_control_flow(&template, &registry, &string_table)
         .expect("const-required branch validation should use same-store TIR body roots");
 }
@@ -1940,7 +1922,7 @@ fn const_required_template_loop_validates_from_body_tir_root() {
         ]",
     );
 
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     validate_const_required_template_control_flow(&template, &registry, &string_table)
         .expect("const-required loop validation should use same-store TIR body roots");
 }
@@ -2019,7 +2001,7 @@ fn const_required_template_option_capture_present_folds_then_branch() {
     );
 
     {
-        let registry = context.template_ir_registry.borrow();
+        let registry = context.registered_template_ir_store.registry().borrow();
         validate_const_required_template_control_flow(&template, &registry, &string_table)
             .expect("present const option capture should validate");
     }
@@ -2057,7 +2039,7 @@ fn const_required_template_option_capture_absent_folds_else_branch() {
     );
 
     {
-        let registry = context.template_ir_registry.borrow();
+        let registry = context.registered_template_ir_store.registry().borrow();
         validate_const_required_template_control_flow(&template, &registry, &string_table)
             .expect("absent const option capture should validate");
     }
@@ -2115,7 +2097,7 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
     let option_string_type_id = type_environment.intern_option(string_type_id);
     let mut template_ir_registry = TemplateIrRegistry::new();
     let primary_store_id = template_ir_registry.allocate_store();
-    let primary_store = template_ir_registry
+    let _primary_store = template_ir_registry
         .store_handle(primary_store_id)
         .expect("test registry should own its primary store");
     let foreign_store = Rc::new(RefCell::new(TemplateIrStore::new()));
@@ -2163,10 +2145,12 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
         ),
     };
     let context = constant_template_context(&token_stream.src_path, &[declaration])
-        .with_template_ir_registry(
-            Rc::new(RefCell::new(template_ir_registry)),
-            primary_store_id,
-            primary_store,
+        .with_registered_template_ir_store(
+            RegisteredTemplateIrStore::from_registry_and_store_id(
+                Rc::new(RefCell::new(template_ir_registry)),
+                primary_store_id,
+            )
+            .expect("primary test store should be registered"),
         );
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
@@ -2414,7 +2398,8 @@ fn const_required_option_capture_template_with_direct_tir(
     };
 
     let overlay_set_id = context
-        .template_ir_registry
+        .registered_template_ir_store
+        .registry()
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
 
@@ -2466,9 +2451,7 @@ fn parse_control_flow_template_after_body_parse(
     let mut build_state = TemplateBuildState::new();
 
     let mut construction_context = TemplateConstructionContext::new(
-        Rc::clone(&context.template_ir_store),
-        context.template_ir_store_id,
-        Rc::clone(&context.template_ir_registry),
+        context.registered_template_ir_store.clone(),
         token_stream.current_location(),
     );
 
@@ -2578,9 +2561,7 @@ fn parse_runtime_template_without_validation(
     let mut build_state = TemplateBuildState::new();
 
     let mut construction_context = TemplateConstructionContext::new(
-        Rc::clone(&context.template_ir_store),
-        context.template_ir_store_id,
-        Rc::clone(&context.template_ir_registry),
+        context.registered_template_ir_store.clone(),
         token_stream.current_location(),
     );
 
@@ -2663,7 +2644,7 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
         ]",
     );
 
-    let mut registry = context.template_ir_registry.borrow_mut();
+    let mut registry = context.registered_template_ir_store.registry().borrow_mut();
     let site_id = find_first_branch_selector_site_id(&template, &registry)
         .expect("parsed const-required branch should have a selector site");
 
@@ -2695,7 +2676,7 @@ fn const_required_template_if_validates_branch_condition_through_tir_view_overla
     );
 
     drop(registry);
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
         .expect_err("TirView overlay should make the branch condition non-const");
 
@@ -2714,7 +2695,7 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
         ]",
     );
 
-    let mut registry = context.template_ir_registry.borrow_mut();
+    let mut registry = context.registered_template_ir_store.registry().borrow_mut();
     let site_id = find_first_loop_header_site_id(&template, &registry)
         .expect("parsed const-required conditional loop should have a header site");
 
@@ -2740,7 +2721,7 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
     );
 
     drop(registry);
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
         .expect_err("TirView overlay should turn the conditional loop into const true");
 
@@ -2756,8 +2737,8 @@ fn runtime_template_if_rejects_unresolved_slot_through_tir_view() {
     let (template, context, _string_table) =
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
-    let registry = context.template_ir_registry.borrow();
-    let store = context.template_ir_store.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let expected_location = find_first_branch_location(&template, &registry)
         .expect("runtime branch should have a stable source location");
 
@@ -2779,8 +2760,8 @@ fn runtime_template_if_rejects_unresolved_insert_through_tir_view() {
         "[if true:\n            [$insert(\"style\"): color: red;]\n        ]",
     );
 
-    let registry = context.template_ir_registry.borrow();
-    let store = context.template_ir_store.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let expected_location = find_first_branch_location(&template, &registry)
         .expect("runtime branch should have a stable source location");
 
@@ -2801,7 +2782,7 @@ fn runtime_template_if_allows_resolved_slot_through_tir_view_overlay() {
     let (mut template, context, _string_table) =
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
-    let mut registry = context.template_ir_registry.borrow_mut();
+    let mut registry = context.registered_template_ir_store.registry().borrow_mut();
     let (occurrence_id, key) = find_first_slot_occurrence_id(&template, &registry)
         .expect("parsed runtime branch body should contain a slot occurrence");
 
@@ -2813,8 +2794,8 @@ fn runtime_template_if_allows_resolved_slot_through_tir_view_overlay() {
     );
 
     drop(registry);
-    let registry = context.template_ir_registry.borrow();
-    let store = context.template_ir_store.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     validate_runtime_template_control_flow_slot_artifacts(&template, &registry, &store, None)
         .expect("resolved slot overlay should suppress the unresolved-slot artifact");
 }
@@ -2995,7 +2976,7 @@ fn body_node_static_text(
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> String {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let mut rendered = String::new();
     collect_static_tir_fragments(body_node, &store, string_table, &mut rendered);
     rendered
@@ -3070,7 +3051,7 @@ fn body_node_contains_unresolved_slots(
     body_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> bool {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     tir_subtree_contains_slot(body_node, &store)
 }
 
@@ -3126,7 +3107,7 @@ fn body_node_loop_control_signal_count(
     body_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> usize {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     count_tir_loop_control_signals(body_node, &store)
 }
 
@@ -3225,7 +3206,7 @@ fn assert_invalid_template_structure(
 }
 
 fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let template_id = template.tir_reference.root.template_id;
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
@@ -3241,7 +3222,7 @@ fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> Temp
 }
 
 fn expect_loop_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let template_id = template.tir_reference.root.template_id;
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
@@ -3268,7 +3249,7 @@ fn branch_body_node(
     index: usize,
     context: &ScopeContext,
 ) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store
         .get_node(branch_chain_node)
         .expect("branch chain node should exist");
@@ -3285,7 +3266,7 @@ fn fallback_body_node(
     branch_chain_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store
         .get_node(branch_chain_node)
         .expect("branch chain node should exist");
@@ -3299,7 +3280,7 @@ fn fallback_body_node(
 }
 
 fn loop_body_node(loop_node: TemplateIrNodeId, context: &ScopeContext) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store.get_node(loop_node).expect("loop node should exist");
     let TemplateIrNodeKind::Loop { body, .. } = &node.kind else {
         panic!("expected Loop node");
@@ -3308,7 +3289,7 @@ fn loop_body_node(loop_node: TemplateIrNodeId, context: &ScopeContext) -> Templa
 }
 
 fn branch_count(branch_chain_node: TemplateIrNodeId, context: &ScopeContext) -> usize {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store
         .get_node(branch_chain_node)
         .expect("branch chain node should exist");
@@ -3322,7 +3303,7 @@ fn loop_aggregate_wrapper_node(
     loop_node: TemplateIrNodeId,
     context: &ScopeContext,
 ) -> TemplateIrNodeId {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store.get_node(loop_node).expect("loop node should exist");
     let TemplateIrNodeKind::Loop {
         aggregate_wrapper, ..
@@ -3337,7 +3318,7 @@ fn loop_aggregate_wrapper_node(
 }
 
 fn loop_header(loop_node: TemplateIrNodeId, context: &ScopeContext) -> TemplateLoopHeader {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store.get_node(loop_node).expect("loop node should exist");
     let TemplateIrNodeKind::Loop { header, .. } = &node.kind else {
         panic!("expected Loop node");
@@ -3350,7 +3331,7 @@ fn branch_selector(
     index: usize,
     context: &ScopeContext,
 ) -> TemplateBranchSelector {
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let node = store
         .get_node(branch_chain_node)
         .expect("branch chain node should exist");

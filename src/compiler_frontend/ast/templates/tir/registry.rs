@@ -607,3 +607,167 @@ impl Default for TemplateIrRegistry {
         Self::new()
     }
 }
+
+// -------------------------
+//  Registered store handle
+// -------------------------
+
+/// Couples the module-local TIR registry, a registry-level store ID, and the exact
+/// `Rc<RefCell<TemplateIrStore>>` registered at that ID.
+///
+/// WHAT: wraps the three values that production carriers
+///       (`AstPhaseContext`, `ScopeContext`, `ConstantHeaderParseContext`,
+///       `TemplateConstructionContext`) previously stored as independent
+///       fields. The coupling is established once during construction and the
+///       fields are private, so callers cannot assign a store handle that does
+///       not match the registry entry at the given ID.
+///
+/// WHY: the final TIR system lets multiple stores coexist in one module
+///      registry. Store-qualified identity, cross-store validation, and parser
+///      writes all depend on the direct store handle matching the registry
+///      entry. Storing the three values independently allowed callers to
+///      reassign one without the others, breaking the invariant silently.
+#[derive(Clone)]
+pub(crate) struct RegisteredTemplateIrStore {
+    registry: Rc<RefCell<TemplateIrRegistry>>,
+    store_id: TemplateStoreId,
+    store: Rc<RefCell<TemplateIrStore>>,
+}
+
+impl RegisteredTemplateIrStore {
+    /// Allocate a new store in the registry and couple the result.
+    ///
+    /// WHAT: calls `allocate_store` on the registry and retrieves the matching
+    ///       store handle through a checked lookup.
+    /// WHY: establishes the registry-store relationship by allocation so the
+    ///      handle is guaranteed to match the registry entry.
+    pub(crate) fn allocate_in(registry: Rc<RefCell<TemplateIrRegistry>>) -> Self {
+        let store_id = registry.borrow_mut().allocate_store();
+        Self::from_registry_and_store_id(registry, store_id)
+            .expect("newly allocated TIR store should remain registered")
+    }
+
+    /// Allocate a capacity-sized primary store in the registry and couple it.
+    ///
+    /// WHAT: calls `allocate_primary_store_with_capacity` on the registry and
+    ///       retrieves the matching store handle through a checked lookup.
+    /// WHY: `AstPhaseContext::from_build_context` needs a capacity-sized
+    ///      primary store; coupling it here prevents the caller from
+    ///      assembling the components independently.
+    pub(crate) fn allocate_primary_with_capacity(
+        registry: Rc<RefCell<TemplateIrRegistry>>,
+        estimate: FrontendArenaCapacityEstimate,
+    ) -> Self {
+        let store_id = registry
+            .borrow_mut()
+            .allocate_primary_store_with_capacity(estimate);
+        Self::from_registry_and_store_id(registry, store_id)
+            .expect("newly allocated primary TIR store should remain registered")
+    }
+
+    /// Adopt a caller-allocated store into the registry and couple the result.
+    ///
+    /// WHAT: registers the given store handle through `adopt_store` and couples
+    ///       the returned store ID with the same handle.
+    /// WHY: tests and isolated contexts construct a store directly and then
+    ///      need a registry-backed identity; adoption establishes the
+    ///      relationship without a separate lookup.
+    #[cfg(test)]
+    pub(crate) fn adopt_into(
+        registry: Rc<RefCell<TemplateIrRegistry>>,
+        store: Rc<RefCell<TemplateIrStore>>,
+    ) -> Self {
+        let store_id = registry.borrow_mut().adopt_store(Rc::clone(&store));
+        Self {
+            registry,
+            store_id,
+            store,
+        }
+    }
+
+    /// Construct from an existing registry and store ID via a checked lookup.
+    ///
+    /// WHAT: retrieves the store handle from the registry at `store_id`,
+    ///       proving the handle matches the registry entry.
+    /// WHY: callers that already hold a registry and store ID (for example,
+    ///      test fixtures that allocate a store before wrapping the registry in
+    ///      `Rc<RefCell>`) must establish the coupling through a checked lookup
+    ///      rather than assembling the components independently.
+    pub(crate) fn from_registry_and_store_id(
+        registry: Rc<RefCell<TemplateIrRegistry>>,
+        store_id: TemplateStoreId,
+    ) -> Result<Self, CompilerError> {
+        let store = registry.borrow().store_handle(store_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Registered TIR store context referenced missing store {}",
+                store_id
+            ))
+        })?;
+
+        Ok(Self {
+            registry,
+            store_id,
+            store,
+        })
+    }
+
+    /// Couple an existing registry and direct store handle after proving the
+    /// handle is the registry entry at its stamped store ID.
+    ///
+    /// WHAT: reads the handle's store ID, resolves that ID through the registry,
+    ///       and rejects a different handle even when its numeric ID collides.
+    /// WHY: callers that already carry both values must preserve the exact
+    ///      association instead of silently substituting a same-ID store from a
+    ///      different registry.
+    pub(crate) fn from_registry_and_store(
+        registry: Rc<RefCell<TemplateIrRegistry>>,
+        store: Rc<RefCell<TemplateIrStore>>,
+    ) -> Result<Self, CompilerError> {
+        let store_id = store.borrow().store_id();
+        let registered_store = registry.borrow().store_handle(store_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Registered TIR store context referenced missing store {}",
+                store_id
+            ))
+        })?;
+
+        if !Rc::ptr_eq(&registered_store, &store) {
+            return Err(CompilerError::compiler_error(format!(
+                "Registered TIR store context received a foreign handle for store {}",
+                store_id
+            )));
+        }
+
+        Ok(Self {
+            registry,
+            store_id,
+            store,
+        })
+    }
+
+    /// Returns a reference to the shared module-local registry.
+    ///
+    /// WHAT: callers that need registry-level operations (overlay allocation,
+    ///       cross-store validation, freeze state) borrow the registry through
+    ///       this handle.
+    pub(crate) fn registry(&self) -> &Rc<RefCell<TemplateIrRegistry>> {
+        &self.registry
+    }
+
+    /// Returns the registry-level store ID.
+    ///
+    /// WHAT: store-qualified identity for `TemplateTirReference` construction
+    ///       and cross-store reference validation.
+    pub(crate) fn store_id(&self) -> TemplateStoreId {
+        self.store_id
+    }
+
+    /// Returns a reference to the direct shared store handle.
+    ///
+    /// WHAT: parser recording methods borrow the store through this handle for
+    ///       direct mutable access without routing through the registry on
+    ///       every write.
+    pub(crate) fn store(&self) -> &Rc<RefCell<TemplateIrStore>> {
+        &self.store
+    }
+}

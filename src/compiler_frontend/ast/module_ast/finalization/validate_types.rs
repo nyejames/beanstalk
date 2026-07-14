@@ -75,8 +75,12 @@ impl AstFinalizer<'_, '_> {
         module_constants: &[Declaration],
         _string_table: &StringTable,
     ) -> Result<(), CompilerError> {
-        let template_ir_store = self.context.template_ir_store.borrow();
-        let template_ir_registry = self.context.template_ir_registry.borrow();
+        let template_ir_store = self.context.registered_template_ir_store.store().borrow();
+        let template_ir_registry = self
+            .context
+            .registered_template_ir_store
+            .registry()
+            .borrow();
         let context = TypeValidationContext {
             type_environment: &self.environment.type_environment,
             template_ir_store: &template_ir_store,

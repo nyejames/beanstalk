@@ -41,7 +41,7 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, TemplateStoreId, TirFoldCache,
+    RegisteredTemplateIrStore, TemplateIrRegistry, TirFoldCache,
 };
 use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -163,28 +163,13 @@ pub struct ScopeContext {
     //      index-based parent chains.
     pub(crate) arena: Rc<RefCell<ScopeArena>>,
 
-    /// Module-local TIR registry shared by all scope contexts in this module AST build.
+    /// Registered TIR store shared by all scope contexts in this module AST build.
     ///
-    /// WHAT: owns every `TemplateIrStore` for the module, allocates stores, tracks freeze
-    ///       state, and validates cross-store references.
-    /// WHY: the final TIR system allows multiple stores per module; the registry keeps
-    ///      store identity explicit so child scope constructors pass the same owner.
-    pub(crate) template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
-
-    /// Registry-level ID of the primary TIR store shared by this scope tree.
-    ///
-    /// WHAT: identifies which store in `template_ir_registry` the `template_ir_store`
-    ///       handle refers to.
-    /// WHY: lets the registry resolve store-qualified refs without pointer comparisons.
-    pub(crate) template_ir_store_id: TemplateStoreId,
-
-    /// AST-local TIR store shared by template parsing contexts for this module AST build.
-    ///
-    /// WHAT: a shared handle to the registry-owned primary store. Parser-emitted template
-    ///       nodes are written here; existing direct-store consumers keep using this handle.
-    /// WHY: `TemplateIrId`s are meaningful only inside their originating store, so nested
-    ///      template emission needs one owner that all cloned/child parser contexts share.
-    pub(crate) template_ir_store: Rc<RefCell<TemplateIrStore>>,
+    /// WHAT: couples the module-local TIR registry, the registry-level store ID, and the
+    ///       direct `Rc<RefCell<TemplateIrStore>>` handle for the primary store.
+    /// WHY: child scope constructors clone one value instead of three independent fields,
+    ///      so store-qualified identity stays coherent without pointer comparisons.
+    pub(crate) registered_template_ir_store: RegisteredTemplateIrStore,
 
     // Stable ID of the frame that owns this scope layer's local declarations.
     //
@@ -252,9 +237,7 @@ impl Clone for ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
-            template_ir_registry: Rc::clone(&self.template_ir_registry),
-            template_ir_store_id: self.template_ir_store_id,
-            template_ir_store: Rc::clone(&self.template_ir_store),
+            registered_template_ir_store: self.registered_template_ir_store.clone(),
             current_frame_id: new_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -449,20 +432,16 @@ impl ScopeContext {
         let root_frame_id = arena.borrow_mut().alloc_root_frame_with_capacity(0);
         record_scope_frame_depth(0);
 
-        let mut registry = TemplateIrRegistry::new();
-        let template_ir_store_id = registry.allocate_store();
-        let template_ir_store = registry
-            .store_handle(template_ir_store_id)
-            .expect("primary store should exist immediately after allocation");
+        let registered_template_ir_store = RegisteredTemplateIrStore::allocate_in(Rc::new(
+            RefCell::new(TemplateIrRegistry::new()),
+        ));
 
         ScopeContext {
             kind,
             scope,
             shared,
             arena,
-            template_ir_registry: Rc::new(RefCell::new(registry)),
-            template_ir_store_id,
-            template_ir_store,
+            registered_template_ir_store,
             current_frame_id: root_frame_id,
             unavailable_assignment_targets: FxHashSet::default(),
             pending_catch_assignment_targets: FxHashSet::default(),
@@ -520,9 +499,7 @@ impl ScopeContext {
             scope,
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
-            template_ir_registry: Rc::clone(&self.template_ir_registry),
-            template_ir_store_id: self.template_ir_store_id,
-            template_ir_store: Rc::clone(&self.template_ir_store),
+            registered_template_ir_store: self.registered_template_ir_store.clone(),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -567,9 +544,7 @@ impl ScopeContext {
             scope: self.scope.append(function_name),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
-            template_ir_registry: Rc::clone(&self.template_ir_registry),
-            template_ir_store_id: self.template_ir_store_id,
-            template_ir_store: Rc::clone(&self.template_ir_store),
+            registered_template_ir_store: self.registered_template_ir_store.clone(),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -604,9 +579,7 @@ impl ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
-            template_ir_registry: Rc::clone(&self.template_ir_registry),
-            template_ir_store_id: self.template_ir_store_id,
-            template_ir_store: Rc::clone(&self.template_ir_store),
+            registered_template_ir_store: self.registered_template_ir_store.clone(),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -646,9 +619,7 @@ impl ScopeContext {
             scope: self.scope.clone(),
             shared: Rc::clone(&self.shared),
             arena: Rc::clone(&self.arena),
-            template_ir_registry: Rc::clone(&self.template_ir_registry),
-            template_ir_store_id: self.template_ir_store_id,
-            template_ir_store: Rc::clone(&self.template_ir_store),
+            registered_template_ir_store: self.registered_template_ir_store.clone(),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
@@ -684,9 +655,7 @@ impl ScopeContext {
             scope,
             shared: Rc::clone(&parent.shared),
             arena: Rc::clone(&parent.arena),
-            template_ir_registry: Rc::clone(&parent.template_ir_registry),
-            template_ir_store_id: parent.template_ir_store_id,
-            template_ir_store: Rc::clone(&parent.template_ir_store),
+            registered_template_ir_store: parent.registered_template_ir_store.clone(),
             current_frame_id: child_frame_id,
             unavailable_assignment_targets: parent.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: parent.pending_catch_assignment_targets.clone(),

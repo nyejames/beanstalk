@@ -2,6 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::tir::RegisteredTemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::TemplateIrNodeKind;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTemplateDirectiveReason,
@@ -38,7 +39,7 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
     assert!(effective_style.skip_parent_child_wrappers);
 
     // No $children directive means no wrapper-context overlay is attached.
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -60,7 +61,7 @@ fn children_directive_attaches_wrapper_context_to_direct_child() {
 
     // The $children directive attaches a wrapper-context overlay carrying
     // one inherited wrapper set for the direct child occurrence.
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -99,22 +100,19 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
     }];
 
     let directive_store_id = wrapper_context
-        .template_ir_registry
+        .registered_template_ir_store
+        .registry()
         .borrow_mut()
         .allocate_store();
-    let directive_store = wrapper_context
-        .template_ir_registry
-        .borrow()
-        .store_handle(directive_store_id)
-        .expect("directive store should exist");
-
     let mut token_stream =
         template_tokens_from_source("[$children(wrapper): [: child]]", &mut string_table);
     let context = constant_template_context(&token_stream.src_path, &declarations)
-        .with_template_ir_registry(
-            Rc::clone(&wrapper_context.template_ir_registry),
-            directive_store_id,
-            directive_store,
+        .with_registered_template_ir_store(
+            RegisteredTemplateIrStore::from_registry_and_store_id(
+                Rc::clone(wrapper_context.registered_template_ir_store.registry()),
+                directive_store_id,
+            )
+            .expect("directive test store should be registered"),
         );
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -123,7 +121,7 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
     // The wrapper reference is stored in the wrapper-context overlay
     // attached to the template's TIR reference. Resolve it through the
     // overlay set and the store wrapper-set side table.
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -138,7 +136,7 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
         .inherited_wrapper_set
         .expect("child occurrence should carry an inherited wrapper set");
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let wrapper_set = store
         .get_wrapper_set(wrapper_set_ref.wrapper_set_id)
         .expect("wrapper set should exist in the store");
@@ -149,7 +147,10 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
 
     assert!(reference.phase.is_at_least(TemplateTirPhase::Composed));
     assert_eq!(reference.root, wrapper_reference.root);
-    assert_ne!(reference.root.store_id, context.template_ir_store_id);
+    assert_ne!(
+        reference.root.store_id,
+        context.registered_template_ir_store.store_id()
+    );
 }
 
 #[test]
@@ -184,7 +185,7 @@ fn children_directive_accepts_const_string_reference() {
         .expect("children directive should accept const-folded references");
 
     // Resolve the wrapper reference through the TIR overlay system.
-    let registry = context.template_ir_registry.borrow();
+    let registry = context.registered_template_ir_store.registry().borrow();
     let overlay_set = registry
         .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
@@ -199,7 +200,7 @@ fn children_directive_accepts_const_string_reference() {
         .inherited_wrapper_set
         .expect("child occurrence should carry an inherited wrapper set");
 
-    let store = context.template_ir_store.borrow();
+    let store = context.registered_template_ir_store.store().borrow();
     let wrapper_set = store
         .get_wrapper_set(wrapper_set_ref.wrapper_set_id)
         .expect("wrapper set should exist in the store");
