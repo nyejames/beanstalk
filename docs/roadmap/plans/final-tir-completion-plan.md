@@ -21,19 +21,19 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B5 - require one final HIR handoff materialization path
-LAST_ACCEPTED_COMMIT: `4036f93a9` (`refactor: propagate const TIR view failures`)
+CURRENT_SLICE: Phase 3B6 - propagate folded-child handoff view failures
+LAST_ACCEPTED_COMMIT: `95b9298f4` (`refactor: require final TIR handoff authority`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 3B5 patch ready to commit, 19 commits ahead and 2 behind `origin/main`
+WORKTREE: `main`, clean, 20 commits ahead and 2 behind `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- AST normalization now has one required Finalized effective-view path for runtime HIR handoff.
-- View-backed handoff validates exact direct and registered store ownership, including matching local IDs from different registries.
-- Missing templates are required errors. Only an existing finalized template without a runtime slot plan retains optional slot-handoff absence.
+- `materialize_folded_child_text` still returns `Option` and converts child `TirView` and fold failures through `.ok()?`.
+- A malformed child overlay can therefore skip the fold shortcut and structurally materialize text without ever reading the invalid overlay.
+- View-backed fold-context materialization also permits a missing registry, while test-only direct materialization legitimately has no view or registry.
 ACCEPTANCE_CRITERIA:
-- Delete the duplicate permissive normalization path and use the required final HIR handoff path exclusively.
-- Require exact same-store view identity and existing template/root authority for view-backed handoff materialization.
-- Convert ordinary runtime-template handoff materialization to a required result while preserving optional slot-plan absence.
+- Require a registry for view-backed fold-context handoff materialization.
+- Propagate malformed child root, phase and overlay authority as `CompilerError` instead of treating the shortcut as unavailable.
+- Preserve genuine shortcut-unavailable states and ordinary non-const fold diagnostics as structural runtime handoff fallback.
 - Add focused hidden-invariant coverage without changing user-visible output or diagnostics.
 VALIDATION_STATE:
 - Phase 3B4 `just validate`: passed cross-target Clippy, 3323 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
@@ -43,10 +43,10 @@ VALIDATION_STATE:
 - Phase 3B5 `just validate`: passed cross-target Clippy, 3325 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: Ollama implementation worker and fresh post-correction Ollama final review complete
-NEXT_WORKER_ORDER: none for this accepted slice
+DELEGATION_DECISION: Ollama implementation worker, then a separate fresh Ollama read-only final review before commit
+NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean Ollama availability blocker
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3B5, reload the plan and delegate the next remaining Phase 3B failure-propagation owner
+NEXT_RESUME_ACTION: delegate Phase 3B6 through the reviewed Ollama wrapper
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 

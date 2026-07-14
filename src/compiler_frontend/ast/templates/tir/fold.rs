@@ -699,18 +699,17 @@ fn fold_template_reference(
 
         if let Some(registry) = registry {
             let registry_borrow = registry.borrow();
-            if let Ok(child_view) = TirView::with_minimum_phase(
+            let child_view = TirView::with_minimum_phase(
                 &registry_borrow,
                 reference.root,
                 reference.phase,
                 TemplateTirPhase::Composed,
                 reference.overlay_set_id,
-            ) {
-                return fold_tir_view(&child_view, store, fold_context);
-            }
+            )?;
+            return fold_tir_view(&child_view, store, fold_context);
         }
 
-        if owned_reference.is_some() && reference.overlay_set_id != TemplateOverlaySetId::empty() {
+        if reference.overlay_set_id != TemplateOverlaySetId::empty() {
             return Err(CompilerError::compiler_error(format!(
                 "TIR fold: nested template {} has an overlay but no registry view is available.",
                 reference.root

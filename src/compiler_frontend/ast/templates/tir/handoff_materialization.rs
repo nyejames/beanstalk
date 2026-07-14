@@ -10,6 +10,7 @@
 //! consumes directly.
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotContributionSource, OwnedRuntimeSlotSite,
     OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeSlotSiteRenderPlan, OwnedRuntimeTemplateBody,
@@ -80,12 +81,14 @@ impl TemplateIrStore {
     pub(crate) fn owned_runtime_slot_handoff_for_tir_view(
         &self,
         view: &TirView<'_>,
+        registry: Rc<RefCell<TemplateIrRegistry>>,
     ) -> Result<Option<OwnedRuntimeSlotApplicationHandoff>, CompilerError> {
         let template_id = self.same_store_template_id_for_view(view)?;
+        Self::validate_registry_for_view(view, &registry)?;
 
         let mut materializer = RuntimeHandoffMaterializer::new_with_registry_and_overlay(
             self,
-            None,
+            registry,
             view.overlay_set_id(),
         );
         materializer.owned_runtime_slot_handoff_for_template(template_id)
@@ -99,11 +102,35 @@ impl TemplateIrStore {
         fold_context: &mut TemplateFoldContext<'_>,
     ) -> Result<OwnedRuntimeTemplateHandoff, CompilerError> {
         let template_id = self.same_store_template_id_for_view(view)?;
+        let registry = fold_context
+            .template_ir_registry
+            .as_ref()
+            .map(Rc::clone)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "TIR HIR handoff view-backed fold-context materialization requires a registry, but the fold context has none.",
+                )
+            })?;
+        Self::validate_registry_for_view(view, &registry)?;
 
         let mut materializer =
-            RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context);
+            RuntimeHandoffMaterializer::new_with_fold_context(self, fold_context, registry);
         materializer.overlay_set_stack.push(view.overlay_set_id());
         materializer.owned_runtime_template_handoff_for_template(template_id)
+    }
+
+    fn validate_registry_for_view(
+        view: &TirView<'_>,
+        registry: &Rc<RefCell<TemplateIrRegistry>>,
+    ) -> Result<(), CompilerError> {
+        let registry = registry.borrow();
+        if !std::ptr::eq(view.registry_ref(), &*registry) {
+            return Err(CompilerError::compiler_error(
+                "TIR HIR handoff materialization registry does not own the supplied view.",
+            ));
+        }
+
+        Ok(())
     }
 
     fn same_store_template_id_for_view(
@@ -181,10 +208,11 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     fn new_with_fold_context(
         store: &'store TemplateIrStore,
         fold_context: &'context mut TemplateFoldContext<'fold>,
+        registry: Rc<RefCell<TemplateIrRegistry>>,
     ) -> Self {
         Self {
             store,
-            registry: fold_context.template_ir_registry.as_ref().map(Rc::clone),
+            registry: Some(registry),
             fold_context: Some(fold_context),
             overlay_set_stack: Vec::new(),
             template_stack: Vec::new(),
@@ -194,12 +222,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
     fn new_with_registry_and_overlay(
         store: &'store TemplateIrStore,
-        registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+        registry: Rc<RefCell<TemplateIrRegistry>>,
         overlay_set_id: TemplateOverlaySetId,
     ) -> Self {
         Self {
             store,
-            registry,
+            registry: Some(registry),
             fold_context: None,
             overlay_set_stack: vec![overlay_set_id],
             template_stack: Vec::new(),
@@ -224,9 +252,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         foreign_store: &'foreign TemplateIrStore,
         overlay_set_id: TemplateOverlaySetId,
     ) -> RuntimeHandoffMaterializer<'foreign, 'static, 'static> {
+        let registry = self.registry.as_ref().map(Rc::clone);
         RuntimeHandoffMaterializer {
             store: foreign_store,
-            registry: self.registry.as_ref().map(Rc::clone),
+            registry,
             fold_context: None,
             overlay_set_stack: vec![overlay_set_id],
             template_stack: self.template_stack.clone(),
@@ -619,8 +648,13 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &self,
         site_id: ExpressionSiteId,
     ) -> Result<Option<Expression>, CompilerError> {
-        let Some(registry_rc) = self.registry.as_ref() else {
+        if self.overlay_set_stack.is_empty() {
             return Ok(None);
+        }
+        let Some(registry_rc) = self.registry.as_ref() else {
+            return Err(CompilerError::compiler_error(
+                "HIR handoff materialization has an active overlay stack but no registry for expression resolution.",
+            ));
         };
 
         let registry = registry_rc.borrow();
@@ -634,8 +668,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     ///
     /// WHAT: looks up the current body-root overlay set in the registry and
     ///       returns a clone of the wrapper context for `occurrence_id` if one
-    ///       exists. Falls back to `None` when there is no overlay set, no
-    ///       wrapper-context overlay, or no registry.
+    ///       exists. Returns `None` when there is no overlay set or no
+    ///       wrapper-context overlay. An active overlay without a registry is
+    ///       an internal error.
     /// WHY: this mirrors `effective_expression_for_site` for the wrapper-context
     ///      dimension so child-template handoff can apply inherited `$children(..)`
     ///      wrappers and `$fresh` suppression without mutating the structural root.
@@ -647,7 +682,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             return Ok(None);
         };
         let Some(registry_rc) = self.registry.as_ref() else {
-            return Ok(None);
+            return Err(CompilerError::compiler_error(
+                "HIR handoff materialization has an active overlay stack but no registry for wrapper-context resolution.",
+            ));
         };
 
         let registry = registry_rc.borrow();
@@ -678,8 +715,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     ///
     /// WHAT: looks up the current body-root overlay set in the registry and
     ///       returns a clone of the `TirSlotResolution` for `occurrence_id` if one
-    ///       exists. Falls back to `None` when there is no overlay set, no
-    ///       slot-resolution overlay, or no registry.
+    ///       exists. Returns `None` when there is no overlay set or no
+    ///       slot-resolution overlay. An active overlay without a registry is
+    ///       an internal error.
     /// WHY: this mirrors `effective_expression_for_site` and
     ///      `effective_wrapper_context_for_occurrence` for the slot-resolution
     ///      dimension so handoff materialization can render resolved slot fills
@@ -693,7 +731,9 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             return Ok(None);
         };
         let Some(registry_rc) = self.registry.as_ref() else {
-            return Ok(None);
+            return Err(CompilerError::compiler_error(
+                "HIR handoff materialization has an active overlay stack but no registry for slot-resolution lookup.",
+            ));
         };
 
         let registry = registry_rc.borrow();
@@ -816,7 +856,7 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // children as owned `Text` nodes before any structural materialization.
         // Folding uses the current store's string table and fold context, so
         // it only applies when the child lives in the same store.
-        if let Some(text_node) = self.materialize_folded_child_text(reference, location) {
+        if let Some(text_node) = self.materialize_folded_child_text(reference, location)? {
             return Ok(text_node);
         }
 
@@ -841,10 +881,21 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // resolution, and wrapper context lookups during materialization
         // read through the child's overlay context rather than the parent's.
         // Without this, child templates with expression or slot overlays
-        // would materialize from stale structural payloads.
-        self.overlay_set_stack.push(reference.overlay_set_id);
+        // would materialize from stale structural payloads. The direct test
+        // entry point may omit a registry only for the canonical empty overlay.
+        let has_registry = self.registry.is_some();
+        if !has_registry && reference.overlay_set_id != TemplateOverlaySetId::empty() {
+            return Err(CompilerError::compiler_error(
+                "HIR handoff materialization requires a registry for a child template with an overlay.",
+            ));
+        }
+        if has_registry {
+            self.overlay_set_stack.push(reference.overlay_set_id);
+        }
         let handoff = self.materialize_template(template_id, active_slot_plan);
-        self.overlay_set_stack.pop();
+        if has_registry {
+            self.overlay_set_stack.pop();
+        }
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),
@@ -1260,45 +1311,79 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         &mut self,
         reference: &TemplateTirChildReference,
         location: &SourceLocation,
-    ) -> Option<OwnedRuntimeTemplateNode> {
+    ) -> Result<Option<OwnedRuntimeTemplateNode>, CompilerError> {
+        // Child below Composed: the fold shortcut requires a composed child
+        // root, so younger children fall through to structural handoff.
         if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-            return None;
+            return Ok(None);
         }
 
-        reference.template_id_in_store(self.store.store_id())?;
+        // Foreign-store child: the shortcut folds through the current store's
+        // string table, so foreign children fall through to owning-store
+        // materialization.
+        if reference
+            .template_id_in_store(self.store.store_id())
+            .is_none()
+        {
+            return Ok(None);
+        }
 
-        let fold_context = self.fold_context.as_deref_mut()?;
+        // No fold context: the direct-by-ID and slot-handoff paths have no
+        // fold context, so the text shortcut is unavailable.
+        let Some(fold_context) = self.fold_context.as_deref_mut() else {
+            return Ok(None);
+        };
+
+        // Active bindings: a child under loop or branch bindings cannot be
+        // const-folded.
         if !fold_context.bindings.is_empty() {
-            return None;
+            return Ok(None);
         }
 
-        let registry = fold_context.template_ir_registry.as_ref().map(Rc::clone)?;
+        // The view-backed fold-context materializer requires a registry for
+        // child-view construction. A missing registry is an internal
+        // invariant violation, not a shortcut-unavailable state.
+        let Some(registry) = fold_context.template_ir_registry.as_ref().map(Rc::clone) else {
+            return Err(CompilerError::compiler_error(
+                "TIR HIR handoff folded-child text shortcut requires a registry, but the fold context has none.",
+            ));
+        };
         let registry_borrow = registry.borrow();
+
+        // Propagate child root, phase and overlay-set authority failures.
+        // A malformed child overlay must not silently fall through to
+        // structural materialization.
         let child_view = TirView::with_minimum_phase(
             &registry_borrow,
             reference.root,
             reference.phase,
             TemplateTirPhase::Composed,
             reference.overlay_set_id,
-        )
-        .ok()?;
+        )?;
 
+        // Unsafe fold shape: non-linear or overlay-bearing shapes that the
+        // const-fold shortcut cannot handle fall through to structural handoff.
         if !tir_view_is_empty_overlay_linear_fold_safe(&child_view, self.store) {
-            return None;
+            return Ok(None);
         }
 
-        let emission = fold_tir_view(&child_view, self.store, fold_context).ok()?;
-        let TemplateEmission::Output(text) = emission else {
-            return None;
-        };
-
-        let byte_len = fold_context.string_table.resolve(text).len() as u32;
-        Some(OwnedRuntimeTemplateNode::Text {
-            text,
-            byte_len,
-            reactive_subscription: None,
-            location: location.to_owned(),
-        })
+        // Speculative folding currently reports both source rejection and
+        // ordinary runtime-expression ineligibility through `TemplateError`.
+        // Neither invalidates the structural handoff path. Required view
+        // authority failures have already propagated above.
+        match fold_tir_view(&child_view, self.store, fold_context) {
+            Ok(TemplateEmission::Output(text)) => {
+                let byte_len = fold_context.string_table.resolve(text).len() as u32;
+                Ok(Some(OwnedRuntimeTemplateNode::Text {
+                    text,
+                    byte_len,
+                    reactive_subscription: None,
+                    location: location.to_owned(),
+                }))
+            }
+            Ok(_) => Ok(None),
+            Err(TemplateError::Infrastructure(_)) | Err(TemplateError::Diagnostic(_)) => Ok(None),
+        }
     }
 }
 

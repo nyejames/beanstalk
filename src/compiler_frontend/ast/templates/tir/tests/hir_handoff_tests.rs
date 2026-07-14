@@ -83,6 +83,24 @@ impl TestFoldContextInputs {
             fold_cache: TirFoldCache::new(),
         }
     }
+
+    /// Creates a fold context with no registry, for testing the view-backed
+    /// missing-registry invariant.
+    fn context_without_registry<'a>(
+        &'a self,
+        string_table: &'a mut StringTable,
+    ) -> TemplateFoldContext<'a> {
+        TemplateFoldContext {
+            string_table,
+            project_path_resolver: &self.resolver,
+            path_format_config: &self.path_format,
+            source_file_scope: &self.source_scope,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_registry: None,
+            bindings: vec![],
+            fold_cache: TirFoldCache::new(),
+        }
+    }
 }
 
 /// Pushes a literal text node into the store and returns its ID.
@@ -921,5 +939,113 @@ fn view_backed_handoff_rejects_same_id_foreign_store_collision() {
     assert_eq!(
         error.msg,
         "TIR HIR handoff view materialization registered store does not match the supplied store."
+    );
+}
+
+/// A child template reference with an overlay set that does not exist in the
+/// registry must propagate the view construction failure as a `CompilerError`
+/// instead of silently falling through to structural materialization.
+#[test]
+fn malformed_child_overlay_set_propagates_view_failure() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let valid_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+
+        let child_text = text_node_id(&mut store, &mut string_table, "child text");
+        let child_template_id = finish_text_template(&mut store, child_text);
+
+        // Use an unallocated overlay set ID so child-view construction fails.
+        let invalid_overlay_set_id = TemplateOverlaySetId::new(99);
+        let child_node = child_template_node_id(
+            &mut store,
+            child_reference(store_id, child_template_id, invalid_overlay_set_id),
+        );
+        finish_text_template(&mut store, child_node)
+    };
+
+    let registry = Rc::new(RefCell::new(registry));
+    let store_handle = registry
+        .borrow()
+        .store_handle(store_id)
+        .expect("registry store handle should exist");
+
+    let registry_borrow = registry.borrow();
+    let store_borrow = store_handle.borrow();
+    let view = TirView::with_minimum_phase(
+        &registry_borrow,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Finalized,
+        TemplateTirPhase::Finalized,
+        valid_overlay_set_id,
+    )
+    .expect("test view should be valid");
+    drop(store_borrow);
+
+    let fold_context_inputs = TestFoldContextInputs::new();
+    let mut fold_context = fold_context_inputs.context(&mut string_table, Rc::clone(&registry));
+
+    let error = store_handle
+        .borrow()
+        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
+        .expect_err("malformed child overlay should produce a CompilerError");
+
+    assert!(
+        error.msg.contains("overlay set"),
+        "expected error about missing overlay set, got: {}",
+        error.msg
+    );
+}
+
+/// A view-backed fold-context materializer must reject a fold context with no
+/// registry as an internal `CompilerError`.
+#[test]
+fn view_backed_fold_context_without_registry_fails() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        push_text_template(&mut store, &mut string_table, "text")
+    };
+
+    let registry = Rc::new(RefCell::new(registry));
+    let store_handle = registry
+        .borrow()
+        .store_handle(store_id)
+        .expect("registry store handle should exist");
+
+    let registry_borrow = registry.borrow();
+    let store_borrow = store_handle.borrow();
+    let view = TirView::with_minimum_phase(
+        &registry_borrow,
+        TemplateRef::new(store_id, template_id),
+        TemplateTirPhase::Finalized,
+        TemplateTirPhase::Finalized,
+        overlay_set_id,
+    )
+    .expect("test view should be valid");
+    drop(store_borrow);
+
+    let fold_context_inputs = TestFoldContextInputs::new();
+    let mut fold_context = fold_context_inputs.context_without_registry(&mut string_table);
+
+    let error = store_handle
+        .borrow()
+        .owned_runtime_template_handoff_for_tir_view_with_fold_context(&view, &mut fold_context)
+        .expect_err("missing registry should produce a CompilerError");
+
+    assert_eq!(
+        error.msg,
+        "TIR HIR handoff view-backed fold-context materialization requires a registry, but the fold context has none."
     );
 }

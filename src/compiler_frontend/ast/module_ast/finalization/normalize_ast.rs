@@ -1108,7 +1108,9 @@ fn materialize_runtime_template_handoff_for_hir(
         .into());
     }
 
-    if let Some(handoff) = store.owned_runtime_slot_handoff_for_tir_view(&view)? {
+    if let Some(handoff) =
+        store.owned_runtime_slot_handoff_for_tir_view(&view, Rc::clone(&registry_rc))?
+    {
         increment_ast_counter(AstCounter::RuntimeTemplateHandoffsMaterialized);
         return Ok(Some(NormalizedTemplateExpression::RuntimeSlotApplication(
             handoff,
