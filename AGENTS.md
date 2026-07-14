@@ -64,6 +64,8 @@ The progress matrix answers what works today. It does not override accepted arch
 - Do not move shared logic into a broad utility module unless the behavior is genuinely shared and the owner remains clear.
 - Do not claim work was validated by commands that were not run.
 
+When creating temporary files for testing snippets of code or creating temporary artifacts that will be cleaned up before a commit, use the `/tmp` folder.
+
 ## Required workflow
 
 Every non-trivial implementation plan must end with the Final audit below.
