@@ -64,7 +64,6 @@ pub struct Template {
     ///      distinguishes equal registry-local store IDs from different registries.
     pub(crate) tir_reference: TemplateTirReference,
 
-    pub id: String,
     pub location: SourceLocation,
 }
 
@@ -75,8 +74,6 @@ impl Clone for Template {
             // `tir_reference` contains an `Arc`-backed store owner, so a normal
             // `clone()` is the explicit, cheap reference-count increment.
             tir_reference: self.tir_reference.clone(),
-
-            id: self.id.to_owned(),
             location: self.location.to_owned(),
         }
     }

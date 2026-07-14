@@ -74,7 +74,6 @@ fn finalized_template_with_expression_overlay(
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     }
 }

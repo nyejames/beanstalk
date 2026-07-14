@@ -291,7 +291,6 @@ fn formatted_doc_template_with_direct_tir(
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         },
-        id: String::new(),
         location,
     };
 

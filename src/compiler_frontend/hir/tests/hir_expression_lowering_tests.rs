@@ -105,7 +105,6 @@ fn standalone_test_template() -> (Template, TemplateIrRegistry) {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     };
     (template, registry)

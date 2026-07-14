@@ -366,7 +366,6 @@ fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReferen
     Template {
         kind: TemplateType::String,
         tir_reference,
-        id: String::new(),
         location: SourceLocation::default(),
     }
 }
@@ -492,7 +491,6 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
-        id: String::new(),
         location: SourceLocation::default(),
     };
 

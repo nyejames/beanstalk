@@ -461,7 +461,6 @@ impl Template {
         let template = Template {
             kind: build_state.kind,
             tir_reference,
-            id: build_state.id,
             location: construction_context.location().to_owned(),
         };
 

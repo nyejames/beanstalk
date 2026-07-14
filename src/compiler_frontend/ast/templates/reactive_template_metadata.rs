@@ -1087,7 +1087,6 @@ mod tests {
         Template {
             kind,
             tir_reference: reference,
-            id: String::new(),
             location,
         }
     }

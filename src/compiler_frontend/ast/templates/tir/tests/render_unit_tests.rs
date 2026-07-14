@@ -49,7 +49,6 @@ fn template_with_reference(
     Template {
         kind,
         tir_reference: reference,
-        id: String::new(),
         location,
     }
 }
@@ -79,7 +78,6 @@ fn standalone_test_template() -> (Template, TemplateIrRegistry) {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     };
     (template, registry)
@@ -166,7 +164,6 @@ fn wrapper_template_with_reference(
             phase,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     }
 }

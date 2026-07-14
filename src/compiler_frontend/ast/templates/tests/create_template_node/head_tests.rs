@@ -2152,7 +2152,6 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     };
 
@@ -2427,7 +2426,6 @@ fn const_required_option_capture_template_with_direct_tir(
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     }
 }
@@ -2514,7 +2512,6 @@ fn parse_control_flow_template_after_body_parse(
     let template = Template {
         kind: build_state.kind,
         tir_reference,
-        id: build_state.id,
         location: construction_context.location().to_owned(),
     };
 
@@ -2629,7 +2626,6 @@ fn parse_runtime_template_without_validation(
     let template = Template {
         kind: build_state.kind,
         tir_reference,
-        id: build_state.id,
         location: construction_context.location().to_owned(),
     };
 

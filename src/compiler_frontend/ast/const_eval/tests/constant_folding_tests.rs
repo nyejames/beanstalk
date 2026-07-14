@@ -987,7 +987,6 @@ fn slot_handler_template(
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
-        id: String::new(),
         location,
     }
 }

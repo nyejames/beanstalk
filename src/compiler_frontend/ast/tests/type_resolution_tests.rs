@@ -522,7 +522,6 @@ fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Templ
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
-        id: String::new(),
         location,
     }
 }

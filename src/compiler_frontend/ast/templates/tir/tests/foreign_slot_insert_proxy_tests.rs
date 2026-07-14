@@ -97,7 +97,6 @@ fn foreign_slot_insert_template(
             phase,
             overlay_set_id,
         },
-        id: String::new(),
         location: empty_location(),
     }
 }

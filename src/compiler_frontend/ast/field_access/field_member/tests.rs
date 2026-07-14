@@ -48,7 +48,6 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
-        id: String::new(),
         location,
     }
 }

@@ -323,7 +323,6 @@ fn constant_identifier_uses_foreign_effective_tir() {
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
-        id: String::new(),
         location: location.clone(),
     };
 

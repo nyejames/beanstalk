@@ -157,7 +157,6 @@ fn foreign_parent_template(
             phase,
             overlay_set_id,
         },
-        id: String::new(),
         location: empty_location(),
     }
 }

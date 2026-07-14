@@ -95,7 +95,6 @@ fn template_with_seeded_reference(store: &mut TemplateIrStore) -> Template {
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
-        id: String::new(),
         location: SourceLocation::default(),
     }
 }
@@ -291,7 +290,6 @@ fn view_const_evaluation_follows_foreign_embedded_template_overlay() {
             phase: TemplateTirPhase::Finalized,
             overlay_set_id: child_overlay_set_id,
         },
-        id: String::new(),
         location: SourceLocation::default(),
     };
 

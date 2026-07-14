@@ -53,7 +53,6 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// Head compatibility, item parsing and directive dispatch propagate through
 /// one owner into the already boxed template-construction boundary.
 type TemplateHeadResult<T> = Result<T, Box<CompilerDiagnostic>>;
-use crate::projects::settings::BS_VAR_PREFIX;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -255,8 +254,6 @@ pub fn parse_template_head(
         control_flow_validation,
         string_table,
     } = request;
-
-    build_state.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     // Each meaningful head item must be separated with a comma before another
     // item can start. Naming the state keeps suffix and body-boundary handling

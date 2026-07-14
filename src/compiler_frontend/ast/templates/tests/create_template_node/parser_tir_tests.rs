@@ -1225,7 +1225,6 @@ fn build_template_with_direct_tir_root(
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
-        id: String::new(),
     }
 }
 

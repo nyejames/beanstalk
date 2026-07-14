@@ -567,7 +567,6 @@ fn build_resolved_slot_template_registry() -> (Template, Rc<RefCell<TemplateIrRe
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },
-        id: String::new(),
         location,
     };
 

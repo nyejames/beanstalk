@@ -16,7 +16,6 @@ pub const COMP_PAGE_KEYWORD: &str = "#page";
 pub const GLOBAL_PAGE_KEYWORD: &str = "#global";
 pub const INDEX_PAGE_NAME: &str = "index.html";
 pub const CONFIG_FILE_NAME: &str = "config.bst";
-pub const BS_VAR_PREFIX: &str = "bst_";
 
 /// Special reserved names for functions and variables created by the compiler
 pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";

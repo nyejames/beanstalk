@@ -74,7 +74,6 @@ fn template_clone_preserves_tir_reference() {
     let original = Template {
         kind: crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction,
         tir_reference: make_reference(TemplateIrId::new(5), &store),
-        id: String::new(),
         location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
     };
 
@@ -110,7 +109,6 @@ fn template_kind_lookup_rejects_same_numeric_store_id_from_another_registry() {
     let template = Template {
         kind: TemplateType::StringFunction,
         tir_reference: make_reference(correct_template_id, &correct_handle.borrow()),
-        id: String::new(),
         location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
     };
 

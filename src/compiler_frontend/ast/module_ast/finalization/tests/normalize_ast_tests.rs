@@ -61,7 +61,6 @@ fn template_with_reference(
     Template {
         kind,
         tir_reference: reference,
-        id: String::new(),
         location,
     }
 }

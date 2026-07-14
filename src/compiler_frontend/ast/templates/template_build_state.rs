@@ -1,8 +1,8 @@
 //! Parser-local mutable build state for template construction.
 //!
 //! WHAT: `TemplateBuildState` is the mutable parser accumulator for template
-//! head/body metadata — `kind`, `style`, direct-child wrapper refs, and
-//! parser-local `id` — while a template is being parsed.
+//! head/body metadata — `kind`, `style`, and direct-child wrapper refs — while
+//! a template is being parsed.
 //!
 //! WHY: `Template` is the durable AST value. The mutable parser accumulator is
 //! shorter-lived: it exists only while syntax is being parsed, render units are
@@ -19,9 +19,8 @@ use crate::compiler_frontend::ast::templates::tir::{
 
 /// Parser-local mutable state accumulated during template head and body parsing.
 ///
-/// WHAT: carries `kind`, mutable `style`, direct-child wrapper refs and the
-///       parser-local `id` that head and body parsing need to share without
-///       threading `&mut Template`.
+/// WHAT: carries `kind`, mutable `style`, and direct-child wrapper refs that
+///       head and body parsing need to share without threading `&mut Template`.
 /// WHY: the durable `Template` is constructed once after authoritative TIR
 ///      identity exists; this build state is the single mutable owner during
 ///      parsing and render-unit preparation.
@@ -29,7 +28,6 @@ pub(crate) struct TemplateBuildState {
     pub(crate) kind: TemplateType,
     pub(crate) style: Style,
     pub(crate) child_wrappers: Vec<TemplateWrapperReference>,
-    pub(crate) id: String,
 }
 
 impl TemplateBuildState {
@@ -39,7 +37,6 @@ impl TemplateBuildState {
             kind: TemplateType::StringFunction,
             style: Style::default(),
             child_wrappers: vec![],
-            id: String::new(),
         }
     }
 
