@@ -1,7 +1,8 @@
 //! Unit tests for the source-backed package registry.
 
+use crate::builder_surface::package_metadata::PackageBacking;
 use crate::builder_surface::{
-    PackageBacking, PackageMetadata, PackageOrigin, ProvidedSourceRoot, SourcePackageRegistry,
+    PackageMetadata, PackageOrigin, ProvidedSourceRoot, SourcePackageRegistry,
 };
 
 #[test]

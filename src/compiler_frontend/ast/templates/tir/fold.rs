@@ -699,14 +699,23 @@ fn fold_template_reference(
 
         if let Some(registry) = registry {
             let registry_borrow = registry.borrow();
-            let child_view = TirView::with_minimum_phase(
-                &registry_borrow,
-                reference.root,
-                reference.phase,
-                TemplateTirPhase::Composed,
-                reference.overlay_set_id,
-            )?;
-            return fold_tir_view(&child_view, store, fold_context);
+
+            // A child below Composed is a genuine shortcut-unavailable state, not
+            // an authority failure: production composition paths record child
+            // references at Parsed phase before the parent advances. Fall through
+            // to the non-view fold path so the child folds from its structural
+            // root. Only overlay-set resolution failures (a malformed overlay)
+            // propagate as authority errors for Composed-or-later children.
+            if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+                let child_view = TirView::with_minimum_phase(
+                    &registry_borrow,
+                    reference.root,
+                    reference.phase,
+                    TemplateTirPhase::Composed,
+                    reference.overlay_set_id,
+                )?;
+                return fold_tir_view(&child_view, store, fold_context);
+            }
         }
 
         if reference.overlay_set_id != TemplateOverlaySetId::empty() {
@@ -736,6 +745,16 @@ fn fold_template_reference(
                 reference.root.store_id
             ))
         })?;
+
+    // Same Parsed-phase fallthrough as the same-store path: cross-store children
+    // may also be recorded at Parsed phase during composition. Only
+    // Composed-or-later children require a view-backed fold, and only those
+    // propagate overlay-set resolution failures as authority errors.
+    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        let child_store = child_store_handle.borrow();
+        return fold_tir_template(&child_store, reference.root.template_id, fold_context);
+    }
+
     let child_view = TirView::with_minimum_phase(
         &registry_borrow,
         reference.root,

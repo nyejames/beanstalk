@@ -5,7 +5,7 @@
 //! WHY: separates builder surface definition from frontend parsing and backend
 //! lowering so each stage has one clear responsibility.
 
-pub mod builder_surface;
+pub mod definition;
 pub mod config_key_registry;
 pub mod core_packages;
 pub mod external_import_providers;
@@ -13,8 +13,8 @@ pub mod package_metadata;
 pub mod source_file_kind_registry;
 pub mod source_package_registry;
 
-pub use builder_surface::BuilderSurface;
-pub use package_metadata::{PackageBacking, PackageMetadata, PackageOrigin};
+pub use definition::BuilderSurface;
+pub use package_metadata::{PackageMetadata, PackageOrigin};
 pub use source_file_kind_registry::{SourceFileKind, SourceFileKindRegistry};
 pub use source_package_registry::{ProvidedSourceRoot, SourcePackageRegistry};
 

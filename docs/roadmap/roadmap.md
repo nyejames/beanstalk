@@ -8,8 +8,9 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [TIR Finalisation plan](docs/roadmap/plans/final-tir-completion-plan.md)
+- [Updating Package Terminology and docs](docs/roadmap/plans/package-terminology-docs-monolith-sync-plan.md)
 - [Some cleanup](docs/roadmap/plans/codebase-integrity-cleanup-plan.md)
+- [TIR Finalisation plan](docs/roadmap/plans/final-tir-completion-plan.md)
 - [Diagnostics Improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
 - [Config Blocks replacing top level project builder keys](docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md)
 - [New Number type for precise numerical values](docs/roadmap/plans/number_type_numeric_plan.md)

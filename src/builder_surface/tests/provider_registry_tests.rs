@@ -4,7 +4,7 @@
 //!       registered and discovered, the registry clones correctly, and cache keys behave
 //!       as expected.
 
-use crate::builder_surface::builder_surface::BuilderSurface;
+use crate::builder_surface::BuilderSurface;
 use crate::builder_surface::external_import_providers::cache::{
     ExternalImportCacheKey, ExternalImportProviderCache,
 };

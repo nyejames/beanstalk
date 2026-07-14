@@ -21,32 +21,33 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B6 - propagate folded-child handoff view failures
-LAST_ACCEPTED_COMMIT: `95b9298f4` (`refactor: require final TIR handoff authority`)
+CURRENT_SLICE: Phase 3B6 - propagate folded-child handoff view failures (corrected)
+LAST_ACCEPTED_COMMIT: `671035c94` (`TIR: 3B6 (not reviewed fully yet)`)
 BRANCH: `main`
-WORKTREE: `main`, clean, 20 commits ahead and 2 behind `origin/main`
+WORKTREE: `main`, corrected 3B6 regression plus pre-existing Clippy blockers from package naming migration
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- `materialize_folded_child_text` still returns `Option` and converts child `TirView` and fold failures through `.ok()?`.
-- A malformed child overlay can therefore skip the fold shortcut and structurally materialize text without ever reading the invalid overlay.
-- View-backed fold-context materialization also permits a missing registry, while test-only direct materialization legitimately has no view or registry.
+- The original 3B6 commit propagated `TirView::with_minimum_phase` phase errors for `Parsed`-phase child references, breaking the docs build and all folding of `Parsed`-phase children.
+- `Parsed`-phase child references are a genuine shortcut-unavailable state, not an authority failure: production composition paths (`schema.rs`, `child_wrappers.rs`, `head_chain.rs`, `subtree_copy.rs`, `render_unit.rs`) record children at `Parsed` before the parent advances.
+- The correction restores the `Parsed`-phase fallthrough to the non-view `fold_tir_template` path for both same-store and cross-store children while keeping the 3B6 authority-propagation improvements for `Composed`-or-later children.
+- The `materialize_folded_child_text` handoff path was already correct (early return for `Parsed`-phase) and needed no change.
+- Pre-existing Clippy blockers from the package naming migration (`module_inception` and unused `PackageBacking` import) were fixed to unblock `just validate`.
 ACCEPTANCE_CRITERIA:
-- Require a registry for view-backed fold-context handoff materialization.
-- Propagate malformed child root, phase and overlay authority as `CompilerError` instead of treating the shortcut as unavailable.
+- Require a registry for view-backed fold-context handoff materialization (preserved from 3B6).
+- Propagate malformed overlay-set authority failures as `CompilerError` for `Composed`-or-later children (preserved from 3B6).
+- Preserve the `Parsed`-phase shortcut-unavailable fallthrough for both same-store and cross-store child references (restored by correction).
 - Preserve genuine shortcut-unavailable states and ordinary non-const fold diagnostics as structural runtime handoff fallback.
 - Add focused hidden-invariant coverage without changing user-visible output or diagnostics.
 VALIDATION_STATE:
-- Phase 3B4 `just validate`: passed cross-target Clippy, 3323 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
-- Ollama implementation: passed 11 handoff tests, 18 normalization tests and all-target warnings-as-errors Clippy
-- Parent correction: added exact registered-store owner validation, reused the shared finalized-view authority and closed the latent missing-template slot fallback; passed 11 handoff tests, 13 wrapper-context tests, 18 normalization tests and all-target warnings-as-errors Clippy
-- First fresh Ollama review found the latent missing-template slot fallback. A second fresh exact-diff Ollama review after correction found no actionable issues
 - Phase 3B5 `just validate`: passed cross-target Clippy, 3325 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower
+- Original 3B6 commit: broke docs build by propagating `Parsed`-phase as an authority failure
+- Corrected 3B6 `just validate`: passed cross-target Clippy, 3331 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: Ollama implementation worker, then a separate fresh Ollama read-only final review before commit
-NEXT_WORKER_ORDER: Ollama, then Codex CLI only after a clean Ollama availability blocker
+DELEGATION_DECISION: corrected in place by parent after 3B6 regression broke docs build
+NEXT_WORKER_ORDER: none for this corrected slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: delegate Phase 3B6 through the reviewed Ollama wrapper
+NEXT_RESUME_ACTION: review the correction, then mark Phase 3B6 checkpoint and continue to Slice 3C
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -384,7 +385,7 @@ Phase 3A2 checkpoint: nested expression and effective-view predicate traversal n
 - [x] Do not fall back to a previous body root after a preparation error.
 - [x] Move wrapper-context overlay collection out of `create_template_node.rs` into the existing TIR wrapper/overlay owner.
 - [x] Make that traversal registry-aware and reuse existing wrapper-set canonicalization.
-- [ ] Propagate missing-node, missing-store, and overlay-compose failures as internal errors; do not silently return or ignore `Err`.
+- [x] Propagate missing-node, missing-store, and overlay-compose failures as internal errors; do not silently return or ignore `Err`.
 - [ ] Remove local recursive walkers that duplicate `tir/slot_composition`, `tir/render_unit`, or `TirView`.
 
 Phase 3B1 checkpoint: wrapper-context construction now belongs to the TIR wrapper-set owner. The pass resolves same-store and foreign child metadata without re-entering the current store, validates exact root and overlay authority before allocation, reuses one canonical inherited wrapper set and reports missing authority or composition failures instead of silently skipping them.
@@ -396,6 +397,8 @@ Phase 3B3 checkpoint: final type and debug TypeId validation require one Finaliz
 Phase 3B4 checkpoint: const-required control-flow validation propagates missing effective authority through the compiler-error diagnostic lane. Runtime and const traversal share an exact root, phase and overlay active-cycle key, and recursive overlay coverage protects distinct effective identities.
 
 Phase 3B5 checkpoint: AST normalization now has one required Finalized effective-view HIR handoff path. Ordinary runtime handoffs and missing template/store authority are required results, exact registered-store ownership rejects matching local IDs from foreign registries and only genuine runtime slot-plan absence remains optional.
+
+Phase 3B6 checkpoint: view-backed fold-context handoff materialization requires a registry and validates registry-view ownership. The folded-child text shortcut propagates malformed overlay-set authority failures for `Composed`-or-later children while preserving the `Parsed`-phase shortcut-unavailable fallthrough for both same-store and cross-store child references. The `materialize_folded_child_text` handoff path preserves genuine shortcut-unavailable states as structural runtime handoff fallback. A pre-existing `module_inception` Clippy blocker from the package naming migration was fixed by renaming `builder_surface::builder_surface` to `builder_surface::definition`.
 
 #### Slice 3C — Consolidate TIR summary construction
 
