@@ -1059,13 +1059,6 @@ impl<'a> HirBuilder<'a> {
                     (handoff, true)
                 }
             },
-
-            RuntimeTemplateAppendCandidate::LegacyTemplateMissingHandoff => {
-                return_hir_transformation_error!(
-                    "Nested runtime template expression reached HIR without an AST-owned runtime-template handoff.",
-                    self.hir_error_location(&expression.location)
-                );
-            }
         };
 
         match &handoff.body {
@@ -1465,17 +1458,12 @@ enum RuntimeTemplateAppendCandidate<'a> {
     TemplateHandoff {
         handoff: &'a OwnedRuntimeTemplateHandoff,
     },
-    LegacyTemplateMissingHandoff,
 }
 
 fn runtime_template_append_candidate_for_expression(
     expression: &Expression,
 ) -> Option<RuntimeTemplateAppendCandidate<'_>> {
     match &expression.kind {
-        ExpressionKind::Template(_) => {
-            Some(RuntimeTemplateAppendCandidate::LegacyTemplateMissingHandoff)
-        }
-
         ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => {
             Some(RuntimeTemplateAppendCandidate::SlotApplication(handoff))
         }
@@ -1511,7 +1499,6 @@ fn expression_contains_runtime_slot_application(expression: &Expression) -> bool
     let handoff = match candidate {
         RuntimeTemplateAppendCandidate::SlotApplication(_) => return true,
         RuntimeTemplateAppendCandidate::TemplateHandoff { handoff, .. } => handoff,
-        RuntimeTemplateAppendCandidate::LegacyTemplateMissingHandoff => return false,
     };
 
     match &handoff.body {

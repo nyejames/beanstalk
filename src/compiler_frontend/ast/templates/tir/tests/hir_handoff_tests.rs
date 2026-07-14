@@ -2,9 +2,8 @@
 //!
 //! WHAT: checks that B5's owned runtime slot handoff can be materialized from
 //! TIR without exposing store/node/slot-plan IDs.
-//! WHY: HIR migration needs an AST-prepared shape that preserves routed
-//! source order, wrapper site order, repeated slot replay, and child-template
-//! boundaries before lowering moves off the legacy runtime slot plan.
+//! WHY: the owned runtime slot handoff preserves routed source order, wrapper
+//! site order, repeated slot replay, and child-template boundaries for HIR.
 
 use super::super::ids::{ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId};
 use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder};

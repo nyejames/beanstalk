@@ -517,8 +517,14 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            ExpressionKind::Template(template) => {
-                self.lower_runtime_template_expression(template.as_ref(), &expr.location)
+            ExpressionKind::Template(_) => {
+                // INVARIANT: AST finalization replaces every runtime template with an
+                // owned handoff payload before HIR. A raw `ExpressionKind::Template`
+                // reaching this dispatcher means AST failed to finish its job.
+                return_hir_transformation_error!(
+                    "Raw template reached HIR runtime-template lowering after AST finalization.",
+                    self.hir_error_location(&expr.location)
+                )
             }
 
             ExpressionKind::RuntimeTemplateHandoff(handoff) => self

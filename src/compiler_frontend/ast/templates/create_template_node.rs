@@ -401,7 +401,7 @@ impl Template {
                     // Head-chain composition consumes the already formatted
                     // body root only when Phase 8 installed one earlier in
                     // this constructor flow. Otherwise this remains a
-                    // Composed root for the later formatter cutover.
+                    // Composed root pending formatter preparation.
                     phase,
                     overlay_set_id,
                 };

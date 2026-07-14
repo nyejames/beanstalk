@@ -13,7 +13,6 @@
 //! - `aggregate`: shared aggregate wrapping after a loop or child emitted output.
 //! - `slot_application`: AST-planned runtime slots lowered through slot accumulators.
 
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
     OwnedRuntimeTemplateNode,
@@ -34,23 +33,10 @@ mod render_append;
 mod slot_application;
 
 impl<'a> HirBuilder<'a> {
-    // WHAT: Lowers runtime template expressions into inline CFG appends.
-    // WHY: AST must already have folded any compile-time template value before HIR sees it.
-    pub(crate) fn lower_runtime_template_expression(
-        &mut self,
-        _template: &Template,
-        location: &SourceLocation,
-    ) -> Result<LoweredExpression, CompilerError> {
-        return_hir_transformation_error!(
-            "Raw template reached HIR runtime-template lowering after AST finalization.",
-            self.hir_error_location(location)
-        );
-    }
-
     // WHAT: Dispatches a runtime template that has already been materialized
     // into the neutral AST-owned handoff shape.
-    // WHY: ordinary runtime templates now cross the AST/HIR boundary as owned
-    // TIR-derived data rather than legacy template-planning state.
+    // WHY: runtime templates cross the AST/HIR boundary as owned TIR-derived
+    // handoff payloads after AST finalization replaces raw template expressions.
     pub(crate) fn lower_runtime_template_expression_from_owned_handoff(
         &mut self,
         handoff: &OwnedRuntimeTemplateHandoff,
@@ -79,9 +65,9 @@ impl<'a> HirBuilder<'a> {
 
     // WHAT: Lowers a runtime slot application after AST has already routed the
     // wrapper, contribution sources, and slot-site render plan into owned data.
-    // WHY: this is the direct HIR entry point for the final expression variant;
-    // it keeps slot lowering on the same accumulator path as the legacy
-    // owned runtime-slot expression variant without exposing TIR identities.
+    // WHY: this is the direct HIR entry point for the final expression variant.
+    // It keeps slot lowering on the same accumulator path as the owned runtime
+    // template handoff without exposing TIR identities.
     pub(crate) fn lower_runtime_slot_application_expression_from_owned_handoff(
         &mut self,
         handoff: &OwnedRuntimeSlotApplicationHandoff,

@@ -21,41 +21,29 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D6 acceptance - consolidate the registered TIR store context
-LAST_ACCEPTED_COMMIT: `67c07e587` (`refactor: remove template TIR forwarding methods`)
+CURRENT_SLICE: Phase 2E - remove the HIR raw-template shim
+LAST_ACCEPTED_COMMIT: `f3f2efe20` (`refactor: consolidate registered TIR store context`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 2D6 patch ready to commit
+WORKTREE: `main`, reviewed and validated Phase 2E patch ready to commit, 12 commits ahead of `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- `Template.control_flow`, duplicate branch/fallback/loop carriers and `TemplateTirBodyReference` are deleted. Parser and render-unit preparation update the exact owning TIR control-flow node.
-- Reactive metadata and runtime handoff read selectors, headers, bodies and aggregate wrappers from the finalized TIR root.
-- Removing the last durable remap root exposed an unreachable AST/TIR string-ID remap graph. Its test-only APIs and representation fixtures are deleted while header, diagnostic, parsed-type, type-environment and HIR remap boundaries remain.
-- The durable `Template` no longer duplicates TIR-owned style or child-wrapper state and its TIR reference is required. `TemplateTirPhase` now owns composed and formatted lifecycle state without summary booleans.
-- `AstPhaseContext`, `ScopeContext`, `ConstantHeaderParseContext` and `TemplateConstructionContext` repeat one registry + store ID + direct store handle invariant.
+- AST finalization replaces surviving runtime templates with neutral owned handoff variants before HIR.
+- HIR rejects an impossible raw `ExpressionKind::Template` directly in its dispatcher and imports no `Template` type.
+- Runtime lowering accepts only the two owned handoff variants. The nested append path falls through to the same dispatcher invariant for an impossible raw template.
 ACCEPTANCE_CRITERIA:
-- introduce one narrow TIR-owned registered-store value that couples registry identity, store ID and the matching direct store handle
-- construct or adopt the value only through APIs that prove the handle matches the registry entry
-- thread that value through the four production carriers instead of three independently mutable fields
-- retain direct store borrows for parser writes and remove the construction context's repeated debug pointer assertion
-- update focused fixtures without adding compatibility fields, broad utilities or a registry lookup on every parser write
+- all Phase 2E and Phase 2 acceptance checks are satisfied
 VALIDATION_STATE:
-- Phase 2D2 `just validate` passed before commit `13e9bf969`: cross-target Clippy, 3298 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 16 faster and 0 slower.
-- Phase 2D3 removal attempt passed the worker's 3298 library tests and Clippy only because missing foreign-store kind lookups silently skipped validation.
-- Parent focused template suite after making missing authority explicit failed 2 of 791 tests. Both failures prove real cross-store head paths lack registry access to the foreign store, so removal does not meet the plan threshold.
-- Retention correction passes the focused template suite (792 tests), AST finalization suite (35 tests), const-values suite (17 tests) and string-coercion suite (11 tests).
-- The separate Ollama read-only review found no blocker. `just validate` passes cross-target Clippy, 3300 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 2 faster and 0 slower.
-- Phase 2D4 implementation worker passed 3300 library tests and warnings-as-errors Clippy. The separate Ollama read-only review found no issue.
-- Phase 2D4 `just validate` passes cross-target Clippy, 3300 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 16 faster and 0 slower.
-- Phase 2D5 implementation worker passed 792 focused template tests and warnings-as-errors Clippy. The separate Ollama read-only review found no issue.
-- Phase 2D5 `just validate` passes cross-target Clippy, 3300 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 16 faster and 0 slower.
-- Phase 2D6 implementation worker passed 3300 library tests and warnings-as-errors Clippy. Parent corrections passed 3300 library tests and the separate Ollama read-only review found no issue.
-- Phase 2D6 `just validate` passes cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
+- Phase 2D6 `just validate`: passed before commit `f3f2efe20`; cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- Ollama implementation: passed 217 focused HIR tests and all-target warnings-as-errors Clippy
+- Parent correction: passed 217 focused HIR tests, the HIR/backend `Template` import hard grep and `git diff --check`
+- Separate fresh Ollama read-only review: complete with no actionable finding
+- Phase 2E `just validate`: passed cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: Ollama implementation and separate read-only final review complete
+DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only review complete
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2D6, reload the plan and remove the HIR raw-template shim
+NEXT_RESUME_ACTION: commit Phase 2E, reload the plan and delegate Phase 3A
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -350,18 +338,20 @@ Phase 2D6 checkpoint: `RegisteredTemplateIrStore` now couples the registry, regi
 
 #### Slice 2E — Remove the HIR raw-template shim
 
-- [ ] Delete HIR’s `Template` import and `lower_runtime_template_expression(&Template, ...)` invariant shim.
-- [ ] Keep raw `ExpressionKind::Template` rejection at the AST/HIR normalization boundary or in the HIR dispatcher without a Template-specific lowering API.
-- [ ] Update stale “cutover” and “legacy” comments on runtime handoff variants.
-- [ ] Confirm HIR lowers owned runtime handoffs only.
+- [x] Delete HIR's `Template` import and `lower_runtime_template_expression(&Template, ...)` invariant shim.
+- [x] Keep raw `ExpressionKind::Template` rejection at the AST/HIR normalization boundary or in the HIR dispatcher without a Template-specific lowering API.
+- [x] Update stale "cutover" and "legacy" comments on runtime handoff variants.
+- [x] Confirm HIR lowers owned runtime handoffs only.
+
+Phase 2E checkpoint: raw templates now fail directly at the HIR expression dispatcher. HIR imports no `Template` type and runtime lowering accepts only neutral owned template or slot-application handoffs. A narrow malformed-expression fixture preserves dispatcher and module-constant invariant coverage without placing TIR construction under HIR.
 
 #### Phase 2 acceptance
 
-- [ ] Durable `Template` has no content, control-flow, style, wrapper, or parser-state fields.
-- [ ] TIR phase is the only composed/formatted/finalized status.
-- [ ] HIR imports no `Template` type.
-- [ ] Parser diagnostics and all template integration outputs are unchanged.
-- [ ] `just validate` and `just bench-check` pass.
+- [x] Durable `Template` has no content, control-flow, style, wrapper, or parser-state fields.
+- [x] TIR phase is the only composed/formatted/finalized status.
+- [x] HIR imports no `Template` type.
+- [x] Parser diagnostics and all template integration outputs are unchanged.
+- [x] `just validate` and `just bench-check` pass.
 
 ---
 

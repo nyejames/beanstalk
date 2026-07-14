@@ -94,7 +94,7 @@ pub(crate) enum OwnedRuntimeTemplateNode {
     /// `AggregateOutput` as the child-output splice point.
     /// WHY: this is the neutral AST/HIR boundary shape for
     /// `TirWrapperApplicationMode::IfChildEmits`. HIR gets owned nodes only,
-    /// not TIR overlay IDs or legacy `Template` wrapper fields.
+    /// not TIR overlay IDs or AST template handles.
     ConditionalWrapper {
         child: Box<OwnedRuntimeTemplateNode>,
         wrapper: Box<OwnedRuntimeTemplateNode>,
@@ -129,7 +129,7 @@ pub(crate) enum OwnedRuntimeTemplateNode {
     ///
     /// WHAT: mirrors a structural slot placeholder for wrapper-shaped templates
     /// that are used as ordinary runtime values. HIR rendering skips the
-    /// placeholder and produces no output, matching the legacy render-plan
+    /// placeholder and produces no output, matching the owned-handoff
     /// slot pass-through behavior.
     /// WHY: unresolved slot placeholders are not renderable chunks, but they
     /// are a valid structural no-output shape once wrapper composition has
