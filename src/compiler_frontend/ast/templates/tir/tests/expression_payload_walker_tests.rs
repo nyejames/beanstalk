@@ -10,7 +10,7 @@ use super::super::builder::TemplateIrBuilder;
 use super::super::expression_payload_walker::{
     TirExpressionPayloadMutator, collect_effective_tir_expression_overlay_payloads,
     collect_tir_expression_overlay_payloads, mutate_finalized_tir_body_root_expression_payloads,
-    walk_tir_view_expression_payloads,
+    walk_expression_payloads_with_nested_tir_views, walk_tir_view_expression_payloads,
 };
 use super::super::ids::{ExpressionSiteId, TemplateIrId, TemplateIrNodeId};
 use super::super::node::{
@@ -18,6 +18,7 @@ use super::super::node::{
     TemplateLoopHeaderExpressionSites,
 };
 use super::super::overlays::TirExpressionOverlay;
+use super::super::parser_builder_state::TemplateTirReference;
 use super::super::refs::TemplateRef;
 use super::super::registry::TemplateIrRegistry;
 use super::super::slot_plan::{
@@ -31,8 +32,10 @@ use super::super::{
     TemplateOverlaySet, TemplateOverlaySetId, TemplateTirChildReference, TemplateTirPhase,
 };
 use crate::compiler_frontend::ast::ast_nodes::{LoopBindings, RangeEndKind, RangeLoopSpec};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::{
+    ExpressionRpn, ExpressionRpnItem,
+};
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
@@ -42,7 +45,10 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::template_slots::{
     RuntimeSlotContributionSourceId, RuntimeSlotSiteId,
 };
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -1009,5 +1015,276 @@ fn view_walker_reads_loop_header_overlay() {
             .iter()
             .any(|e| matches!(e.kind, ExpressionKind::Int(2))),
         "structural range step should not be visited"
+    );
+}
+
+//  --------------------------
+//  Nested expression-and-TIR-view walker
+//  --------------------------
+
+/// Constructs a `TemplateTirReference` for a same-store template at Finalized phase.
+fn finalized_tir_reference(
+    store: &TemplateIrStore,
+    template_id: TemplateIrId,
+    overlay_set_id: TemplateOverlaySetId,
+) -> TemplateTirReference {
+    TemplateTirReference {
+        root: TemplateRef::new(store.store_id(), template_id),
+        store_owner: store.owner(),
+        phase: TemplateTirPhase::Finalized,
+        overlay_set_id,
+    }
+}
+
+/// Constructs a `Template` value carrying only the durable TIR reference.
+fn template_with_reference(reference: TemplateTirReference) -> Template {
+    Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: reference,
+        location: empty_location(),
+    }
+}
+
+/// Wraps a `Template` in a string-typed `ExpressionKind::Template` expression.
+fn template_expression(template: Template) -> Expression {
+    Expression::new(
+        ExpressionKind::Template(Box::new(template)),
+        empty_location(),
+        builtin_type_ids::STRING,
+        DataType::StringSlice,
+        ValueMode::ImmutableOwned,
+    )
+}
+
+/// Wraps an operand in a single-operand `ExpressionKind::Runtime` RPN expression.
+fn runtime_expression(operand: Expression) -> Expression {
+    Expression::new(
+        ExpressionKind::Runtime(ExpressionRpn {
+            items: vec![ExpressionRpnItem::Operand(operand)],
+        }),
+        empty_location(),
+        builtin_type_ids::INT,
+        DataType::Int,
+        ValueMode::ImmutableOwned,
+    )
+}
+
+/// Wraps a value in a `Coerced` expression with a placeholder target type.
+fn coerced_expression(value: Expression) -> Expression {
+    Expression::new(
+        ExpressionKind::Coerced {
+            value: Box::new(value),
+            to_type: builtin_type_ids::STRING,
+        },
+        empty_location(),
+        builtin_type_ids::STRING,
+        DataType::StringSlice,
+        ValueMode::ImmutableOwned,
+    )
+}
+
+/// Collects all expression payloads visited by the nested-expression walker.
+fn collect_nested_expression_payloads(
+    expression: &Expression,
+    registry: &TemplateIrRegistry,
+) -> Result<Vec<Expression>, CompilerError> {
+    let mut payloads = Vec::new();
+    let result =
+        walk_expression_payloads_with_nested_tir_views(expression, registry, &mut |payload| {
+            payloads.push(payload.clone());
+            Ok(())
+        });
+    result.map(|()| payloads)
+}
+
+#[test]
+fn nested_walker_enters_template_expression_tir_view() {
+    let mut registry = TemplateIrRegistry::new();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_id = registry.allocate_store();
+
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let root = dynamic_node(&mut store, 42);
+        push_template(&mut store, root)
+    };
+
+    let reference = {
+        let store = registry.store(store_id).expect("store should exist");
+        finalized_tir_reference(&store, template_id, empty_overlay_set_id)
+    };
+    let template = template_with_reference(reference);
+    let expression = template_expression(template);
+
+    let payloads =
+        collect_nested_expression_payloads(&expression, &registry).expect("walk should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert!(
+        matches!(payloads[0].kind, ExpressionKind::Int(42)),
+        "TIR dynamic expression inside the template should be visited"
+    );
+}
+
+#[test]
+fn nested_walker_inspects_runtime_and_coerced_operands() {
+    let mut registry = TemplateIrRegistry::new();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_id = registry.allocate_store();
+
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let root = dynamic_node(&mut store, 99);
+        push_template(&mut store, root)
+    };
+
+    let reference = {
+        let store = registry.store(store_id).expect("store should exist");
+        finalized_tir_reference(&store, template_id, empty_overlay_set_id)
+    };
+    let template = template_with_reference(reference);
+    let template_expr = template_expression(template);
+
+    // Wrap the template expression in Coerced, then in Runtime, so the walker
+    // must descend through both wrappers to reach the template-valued TIR view.
+    let coerced = coerced_expression(template_expr);
+    let expression = runtime_expression(coerced);
+
+    let payloads =
+        collect_nested_expression_payloads(&expression, &registry).expect("walk should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert!(
+        matches!(payloads[0].kind, ExpressionKind::Int(99)),
+        "TIR dynamic expression behind Coerced and Runtime should be visited"
+    );
+}
+
+#[test]
+fn nested_walker_fails_on_store_owner_mismatch() {
+    let mut registry = TemplateIrRegistry::new();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_id = registry.allocate_store();
+    let other_store_id = registry.allocate_store();
+
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let root = dynamic_node(&mut store, 1);
+        push_template(&mut store, root)
+    };
+
+    // Build a reference whose root points at store_id but whose store_owner
+    // token belongs to a different store. The walker must reject this.
+    let mismatched_reference = {
+        let other_store = registry
+            .store(other_store_id)
+            .expect("other store should exist");
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: other_store.owner(),
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: empty_overlay_set_id,
+        }
+    };
+
+    let template = template_with_reference(mismatched_reference);
+    let expression = template_expression(template);
+
+    let result = collect_nested_expression_payloads(&expression, &registry);
+
+    assert!(
+        result.is_err(),
+        "store-owner mismatch should produce a conservative error"
+    );
+}
+
+#[test]
+fn nested_walker_shares_visited_set_between_tir_child_and_expression_template() {
+    let mut registry = TemplateIrRegistry::new();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_id = registry.allocate_store();
+
+    // Child template B has one dynamic expression (value 42).
+    let child_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let child_root = dynamic_node(&mut store, 42);
+        push_template(&mut store, child_root)
+    };
+
+    let child_template_for_expr = {
+        let store = registry.store(store_id).expect("store should exist");
+        let reference = finalized_tir_reference(&store, child_template_id, empty_overlay_set_id);
+        template_with_reference(reference)
+    };
+
+    // Parent template A has a sequence with:
+    //   1. a ChildTemplate TIR node referencing B
+    //   2. a DynamicExpression whose payload is ExpressionKind::Template(B)
+    // Both reference the same effective identity. The shared visited set
+    // ensures B is walked only once.
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+
+        let occurrence_id = store.next_child_template_occurrence_id();
+        let child_ref = TemplateTirChildReference::new(
+            TemplateRef::new(store_id, child_template_id),
+            TemplateTirPhase::Finalized,
+            empty_overlay_set_id,
+        );
+        let child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: child_ref,
+                occurrence_id,
+            },
+            empty_location(),
+        ));
+
+        let site_id = store.next_expression_site_id();
+        let expr_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(template_expression(child_template_for_expr)),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id,
+            },
+            empty_location(),
+        ));
+
+        let parent_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![child_node, expr_node],
+            },
+            empty_location(),
+        ));
+        push_template(&mut store, parent_root)
+    };
+
+    let parent_template = {
+        let store = registry.store(store_id).expect("store should exist");
+        let reference = finalized_tir_reference(&store, parent_template_id, empty_overlay_set_id);
+        template_with_reference(reference)
+    };
+    let expression = template_expression(parent_template);
+
+    let payloads =
+        collect_nested_expression_payloads(&expression, &registry).expect("walk should succeed");
+
+    let int_42_count = payloads
+        .iter()
+        .filter(|e| matches!(e.kind, ExpressionKind::Int(42)))
+        .count();
+    assert_eq!(
+        int_42_count, 1,
+        "shared visited set should visit child B only once across TIR child and expression template paths"
     );
 }

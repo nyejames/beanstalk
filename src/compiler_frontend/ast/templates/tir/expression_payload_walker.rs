@@ -2,17 +2,22 @@
 //!
 //! WHAT: provides read-only traversals over every expression payload reachable
 //!       from same-store TIR roots and from a finalized `TirView`, plus the
-//!       effective overlay collector used by AST finalization.
+//!       effective overlay collector used by AST finalization and the nested
+//!       expression-and-TIR-view walker used by the head parser.
 //! WHY: final type-boundary validation and debug TypeId validation both need to
 //!      inspect the same expression-bearing TIR nodes; centralizing the walks in
 //!      TIR keeps the traversal authoritative and removes near-duplicate local
 //!      helpers from AST finalization. The `TirView` walk reads effective
 //!      expression overlays for dynamic-expression splices, branch selectors,
-//!      and loop headers.
+//!      and loop headers. The nested-expression walker additionally recurses
+//!      into `ExpressionKind` internals and re-enters TIR views for
+//!      template-valued expressions, sharing one visited set across both paths.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
@@ -28,7 +33,7 @@ use crate::compiler_frontend::ast::templates::tir::{
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrRegistry, TemplateNodeRef, TemplateOverlaySetId, TemplateRef, TemplateStoreId,
-    TemplateTirPhase,
+    TemplateTirPhase, TemplateTirReference,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
@@ -110,15 +115,166 @@ pub(crate) fn walk_tir_view_expression_payloads(
     view: &TirView<'_>,
     visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
 ) -> Result<(), CompilerError> {
+    let mut visited_templates = HashSet::new();
+    walk_tir_view_expression_payloads_with_visited(view, visitor, &mut visited_templates)
+}
+
+/// Walks every expression payload reachable from `view`, sharing `visited_templates`.
+///
+/// WHAT: same structural coverage as [`walk_tir_view_expression_payloads`], but
+///       accepts an external visited set so callers that also enter TIR views
+///       through nested `ExpressionKind` paths can share one cycle-prevention
+///       set keyed by `(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)`.
+/// WHY: the nested-expression walker needs a single visited set across both
+///      TIR-view child-template references and `ExpressionKind::Template`
+///      re-entries; extracting this entry point avoids duplicating the
+///      view-walk logic while keeping the standalone API unchanged for
+///      type-boundary and debug-TypeId validation.
+fn walk_tir_view_expression_payloads_with_visited(
+    view: &TirView<'_>,
+    visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
+    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
+) -> Result<(), CompilerError> {
+    let identity = (view.root_ref(), view.phase(), view.overlay_set_id());
+    if !visited_templates.insert(identity) {
+        return Ok(());
+    }
+
     let root_node_id = {
         let root_template = view.root_template()?;
         root_template.root
     };
     let root_node_ref = TemplateNodeRef::new(view.root_ref().store_id, root_node_id);
-    let mut visited_templates = HashSet::new();
-    visited_templates.insert((view.root_ref(), view.phase(), view.overlay_set_id()));
 
-    walk_tir_view_expression_payload_node(view, root_node_ref, visitor, &mut visited_templates)
+    walk_tir_view_expression_payload_node(view, root_node_ref, visitor, visited_templates)
+}
+
+/// Walks every expression payload reachable from `expression`, including nested
+/// `ExpressionKind` internals and template-valued TIR views, using one shared
+/// visited set keyed by `(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)`.
+///
+/// WHAT: starts from an AST expression, recursively inspects `ExpressionKind`
+///       internals (`Runtime` operands, `Coerced` values), and enters the
+///       effective TIR view for each `ExpressionKind::Template` encountered.
+///       TIR view expression payloads are likewise inspected for nested
+///       template-valued expressions. One visited set prevents infinite
+///       recursion across both expression-kind and TIR-view paths. The visitor
+///       receives every expression that is not a `Template`, `Runtime`, or
+///       `Coerced` wrapper, including `RuntimeSlotApplicationHandoff` payloads.
+/// WHY: centralizes the registry-aware predicate traversal so the head parser
+///      does not duplicate `ExpressionKind` recursion or maintain its own
+///      effective-template visited set.
+pub(crate) fn walk_expression_payloads_with_nested_tir_views(
+    expression: &Expression,
+    registry: &TemplateIrRegistry,
+    visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
+) -> Result<(), CompilerError> {
+    let mut visited_templates = HashSet::new();
+    let mut pending_template_views: Vec<TemplateTirReference> = Vec::new();
+
+    inspect_nested_expression_kind(expression, visitor, &mut pending_template_views)?;
+
+    drain_pending_template_views(
+        registry,
+        visitor,
+        &mut visited_templates,
+        &mut pending_template_views,
+    )
+}
+
+/// Processes each template reference discovered in nested expression kinds.
+///
+/// WHAT: for each pending `TemplateTirReference`, checks the shared visited
+///       set, validates the store and owner, creates a `TirView`, and walks
+///       its expression payloads while collecting further nested template
+///       references.
+/// WHY: using a worklist instead of immediate re-entry avoids borrow conflicts
+///      between the TIR view walker (which holds `&mut visited_templates`) and
+///      the nested-expression inspector (which needs to push new pending
+///      references). Traversal order is not part of this predicate-oriented
+///      API, while coverage and one-set cycle semantics match the original
+///      head-parser recursion.
+fn drain_pending_template_views(
+    registry: &TemplateIrRegistry,
+    visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
+    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
+    pending_template_views: &mut Vec<TemplateTirReference>,
+) -> Result<(), CompilerError> {
+    while let Some(reference) = pending_template_views.pop() {
+        let identity = (reference.root, reference.phase, reference.overlay_set_id);
+        if visited_templates.contains(&identity) {
+            continue;
+        }
+
+        let store = registry.store(reference.root.store_id).ok_or_else(|| {
+            CompilerError::compiler_error(
+                "TIR nested expression walk could not borrow the store for a template-valued expression.",
+            )
+        })?;
+        if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
+            return Err(CompilerError::compiler_error(
+                "TIR nested expression walk found a template-valued expression with a store-owner mismatch.",
+            ));
+        }
+        drop(store);
+
+        let view = TirView::new(
+            registry,
+            reference.root,
+            reference.phase,
+            reference.overlay_set_id,
+        )?;
+
+        let mut expression_visitor = |expression: &Expression| {
+            inspect_nested_expression_kind(expression, visitor, pending_template_views)
+        };
+        walk_tir_view_expression_payloads_with_visited(
+            &view,
+            &mut expression_visitor,
+            visited_templates,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Recursively inspects `ExpressionKind` internals, collecting template
+/// references and calling `visitor` for all other expression kinds.
+///
+/// WHAT: descends into `Runtime` operands and `Coerced` values, pushes
+///       `ExpressionKind::Template` references to the pending list, and passes
+///       every other kind (including `RuntimeSlotApplicationHandoff`) to the
+///       visitor. Does not access the visited set; cycle prevention is handled
+///       by the caller when draining pending references.
+/// WHY: matches the `ExpressionKind` recursion previously duplicated in the
+///      head parser so the central walker owns both TIR structural traversal
+///      and nested expression inspection.
+fn inspect_nested_expression_kind(
+    expression: &Expression,
+    visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
+    pending_template_views: &mut Vec<TemplateTirReference>,
+) -> Result<(), CompilerError> {
+    match &expression.kind {
+        ExpressionKind::Template(template) => {
+            pending_template_views.push(template.tir_reference.clone());
+            Ok(())
+        }
+
+        ExpressionKind::Runtime(rpn) => {
+            for item in &rpn.items {
+                if let ExpressionRpnItem::Operand(operand) = item {
+                    inspect_nested_expression_kind(operand, visitor, pending_template_views)?;
+                }
+            }
+            Ok(())
+        }
+
+        ExpressionKind::Coerced { value, .. } => {
+            inspect_nested_expression_kind(value, visitor, pending_template_views)
+        }
+
+        _ => visitor(expression),
+    }
 }
 
 fn walk_tir_view_expression_payload_node(

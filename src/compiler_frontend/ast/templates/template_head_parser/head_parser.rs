@@ -28,10 +28,8 @@ use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuil
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBodyParseMode, TemplateControlFlowValidationMode,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateConstructionContext, TemplateIrRegistry, TemplateOverlaySetId, TemplateRef,
-    TemplateTirPhase, TirView, walk_tir_view_expression_payloads,
+    TemplateConstructionContext, walk_expression_payloads_with_nested_tir_views,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 
@@ -53,8 +51,6 @@ use crate::compiler_frontend::value_mode::ValueMode;
 /// Head compatibility, item parsing and directive dispatch propagate through
 /// one owner into the already boxed template-construction boundary.
 type TemplateHeadResult<T> = Result<T, Box<CompilerDiagnostic>>;
-use std::collections::HashSet;
-use std::sync::Arc;
 
 /// Result of parsing a template head.
 pub(crate) struct ParsedTemplateHead {
@@ -138,96 +134,18 @@ fn expression_contains_runtime_slot_handoff(
     context: &ScopeContext,
 ) -> bool {
     let registry = context.registered_template_ir_store.registry().borrow();
-    let mut visited_templates = HashSet::new();
-    expression_contains_runtime_slot_handoff_in_registry(
-        expression,
-        &registry,
-        &mut visited_templates,
-    )
-}
-
-fn expression_contains_runtime_slot_handoff_in_registry(
-    expression: &Expression,
-    registry: &TemplateIrRegistry,
-    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
-) -> bool {
-    match &expression.kind {
-        ExpressionKind::RuntimeSlotApplicationHandoff(_) => true,
-
-        ExpressionKind::Template(template) => {
-            template_tir_contains_runtime_slot_handoff(template, registry, visited_templates)
-        }
-
-        ExpressionKind::Runtime(rpn) => rpn.items.iter().any(|item| match item {
-            crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem::Operand(
-                operand,
-            ) => expression_contains_runtime_slot_handoff_in_registry(
-                operand,
-                registry,
-                visited_templates,
-            ),
-            crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem::Operator {
-                ..
-            } => false,
-        }),
-
-        ExpressionKind::Coerced { value, .. } => {
-            expression_contains_runtime_slot_handoff_in_registry(
-                value,
-                registry,
-                visited_templates,
-            )
-        }
-
-        _ => false,
-    }
-}
-
-/// Reads runtime-slot handoff payloads from the template's effective TIR view.
-///
-/// WHAT: walks dynamic-expression, branch-selector and loop-header payloads,
-/// including template-valued dynamic head expressions in another registered
-/// store.
-/// WHY: head-only runtime template references must stay value reads. Inlining
-/// one as a wrapper receiver would discard its composition-owned runtime slot
-/// plan, and compatibility content is no longer an authority for that check.
-fn template_tir_contains_runtime_slot_handoff(
-    template: &Template,
-    registry: &TemplateIrRegistry,
-    visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
-) -> bool {
-    let reference = &template.tir_reference;
-    let effective_identity = (reference.root, reference.phase, reference.overlay_set_id);
-    if !visited_templates.insert(effective_identity) {
-        return false;
-    }
-
-    let Some(store) = registry.store(reference.root.store_id) else {
-        return true;
-    };
-    if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-        return true;
-    }
-    drop(store);
-
-    let Ok(view) = TirView::new(
-        registry,
-        reference.root,
-        reference.phase,
-        reference.overlay_set_id,
-    ) else {
-        return true;
-    };
 
     let mut contains_runtime_slot_handoff = false;
-    let walk_result = walk_tir_view_expression_payloads(&view, &mut |expression| {
-        contains_runtime_slot_handoff |= expression_contains_runtime_slot_handoff_in_registry(
-            expression,
-            registry,
-            visited_templates,
-        );
-        Ok(())
-    });
+    let walk_result =
+        walk_expression_payloads_with_nested_tir_views(expression, &registry, &mut |payload| {
+            if matches!(
+                payload.kind,
+                ExpressionKind::RuntimeSlotApplicationHandoff(_)
+            ) {
+                contains_runtime_slot_handoff = true;
+            }
+            Ok(())
+        });
 
     walk_result.is_err() || contains_runtime_slot_handoff
 }

@@ -192,7 +192,7 @@ pub(crate) use expression_payload_walker::walk_tir_view_expression_payloads;
 // Mutation is retained only for focused TIR walker tests.
 pub(crate) use expression_payload_walker::{
     TirExpressionPayloadVisitor, collect_effective_tir_expression_overlay_payloads,
-    walk_tir_expression_payloads,
+    walk_expression_payloads_with_nested_tir_views, walk_tir_expression_payloads,
 };
 
 // Store and node types are re-exported so HIR handoff construction and later

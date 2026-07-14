@@ -21,29 +21,33 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3A1 - consolidate classification on effective `TirView`
-LAST_ACCEPTED_COMMIT: `e039b7547` (`refactor: remove raw template HIR shim`)
+CURRENT_SLICE: Phase 3A2 - consolidate registry-aware expression-payload traversal
+LAST_ACCEPTED_COMMIT: `bc2576a9c` (`refactor: consolidate TIR view classification`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 3A1 patch ready to commit, 13 commits ahead of `origin/main`
+WORKTREE: `main`, reviewed and validated Phase 3A2 patch ready to commit, 14 commits ahead of `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- `classify_effective_tir_view_template` is the sole full-template production classifier and consumes exact root, phase and overlay identity.
-- The result is `TirTemplateClassification`; raw current/materialized and test-only empty-overlay entry points plus their dead private helpers are deleted.
-- Effective slot policy distinguishes structural unresolved slots from resolved slot sources. A focused test protects the Finalized requirement for expression overlays.
+- `walk_expression_payloads_with_nested_tir_views` now owns nested `ExpressionKind` and effective-view inspection with one exact root, phase and overlay visited set.
+- Template-head runtime-slot detection delegates to that owner and retains conservative failure behavior without local recursion or identity state.
+- AST normalization's site-keyed clone collector and reactive annotation's environment-aware collector remain separate because their semantics do not match the predicate walker.
 ACCEPTANCE_CRITERIA:
-- Phase 3A1 classifier API, ownership, identity and focused test checks are satisfied
+- Phase 3A2 traversal ownership, exact identity, conservative failure behavior and focused invariant checks are satisfied
 VALIDATION_STATE:
 - Phase 2E `just validate`: passed before commit `e039b7547`; cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 - Ollama implementation: passed 3299 unit tests, 20 classification tests, 791 template tests, 35 AST finalization tests and all-target warnings-as-errors Clippy
 - Parent correction: passed 20 classification tests and 791 template tests
 - Separate fresh Ollama final review after the phase-guard test: complete with no actionable finding
 - Phase 3A1 `just validate`: passed cross-target Clippy, 3299 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower
+- Ollama implementation: passed 23 walker tests, 19 template-head tests, 35 finalization tests, 796 template tests and all-target warnings-as-errors Clippy before parent correction
+- Parent correction: passed 22 walker tests, 19 template-head tests, 35 finalization tests, 795 template tests and all-target warnings-as-errors Clippy
+- Separate fresh Ollama final review: complete with no actionable findings; 22 walker tests, 920 template-filtered tests, 35 finalization tests, native Clippy and `git diff --check` passed
+- Phase 3A2 `just validate`: passed cross-target Clippy, 3303 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only final review complete
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3A1, reload the plan and delegate Phase 3A2
+NEXT_RESUME_ACTION: commit Phase 3A2, reload the plan and delegate the first bounded Phase 3B slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -367,10 +371,12 @@ Use existing final systems consistently, delete duplicate walkers/state, and mak
 - [x] Rename `MaterializedTirTemplateClassification` to `TirTemplateClassification`.
 - [x] Replace `classify_materialized_current_tir_template` and other “current/materialized/fresh” entry points with one effective-view classifier.
 - [x] Keep raw store recursion private to the view/classification owner only where required.
-- [ ] Reuse the existing registry-aware expression-payload walker for nested template/expression inspection; delete ad hoc recursion in head parsing, finalization, and helper filters when semantics match.
-- [ ] Preserve exact root + phase + overlay cycle identity.
+- [x] Reuse the existing registry-aware expression-payload walker for nested template/expression inspection; delete ad hoc recursion in head parsing, finalization, and helper filters when semantics match.
+- [x] Preserve exact root + phase + overlay cycle identity.
 
 Phase 3A1 checkpoint: full-template classification now has one effective-view entry and one neutral result type. Create-template classification carries the authoritative reference identity, effective slot policy distinguishes resolved sources from uncovered slots, standalone structural predicates retain their narrow owners and expression overlays have a focused Finalized-phase invariant test.
+
+Phase 3A2 checkpoint: nested expression and effective-view predicate traversal now has one TIR owner and one exact root, phase and overlay visited set. Template-head runtime-slot detection delegates to it with conservative failures, while normalization's site-keyed collection and reactive annotation's environment-aware traversal remain separate because they carry distinct state and mutation policy.
 
 #### Slice 3B — Make render-unit and overlay failures explicit
 
