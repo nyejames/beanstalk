@@ -176,14 +176,9 @@ fn classify_registry_view_template(
     )
     .expect("test view should resolve");
 
-    classify_empty_overlay_tir_view_template(
-        &template_kind,
-        &view,
-        &mut store_snapshot,
-        string_table,
-    )
-    .expect("view classification should succeed")
-    .const_value_kind
+    classify_empty_overlay_tir_view_template(&view, &mut store_snapshot, string_table)
+        .expect("view classification should succeed")
+        .const_value_kind
 }
 
 // -------------------------
@@ -405,13 +400,9 @@ fn materialized_classification_rejects_reactive_text() {
         )
     };
 
-    let classification = classify_materialized_current_tir_template(
-        &TemplateType::String,
-        &mut store,
-        template_id,
-        &string_table,
-    )
-    .expect("reactive text classification should succeed");
+    let classification =
+        classify_materialized_current_tir_template(&mut store, template_id, &string_table)
+            .expect("reactive text classification should succeed");
 
     assert!(!classification.shape_const_evaluable);
     assert_eq!(
@@ -574,12 +565,8 @@ fn tir_view_classification_rejects_non_empty_overlay_set() {
     )
     .expect("test view should resolve");
 
-    let result = classify_empty_overlay_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &mut store_snapshot,
-        &string_table,
-    );
+    let result =
+        classify_empty_overlay_tir_view_template(&view, &mut store_snapshot, &string_table);
 
     assert!(
         result.is_err(),
@@ -656,13 +643,9 @@ fn finalized_tir_view_classification_uses_effective_dynamic_expression_overlay()
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("finalized effective view classification should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("finalized effective view classification should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -727,13 +710,9 @@ fn finalized_tir_view_classification_accepts_slot_resolution_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("classification with a slot-resolution overlay should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("classification with a slot-resolution overlay should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -797,13 +776,9 @@ fn composed_tir_view_classification_accepts_slot_resolution_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("classification with a Composed slot-resolution overlay should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("classification with a Composed slot-resolution overlay should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -908,13 +883,9 @@ fn finalized_tir_view_classification_with_resolved_slot_returns_wrapper_template
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("classification with resolved slot overlay should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("classification with resolved slot overlay should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -982,13 +953,9 @@ fn finalized_tir_view_classification_accepts_wrapper_context_overlay() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("wrapper-context overlays should not prevent classification");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("wrapper-context overlays should not prevent classification");
 
     assert_eq!(
         classification.const_value_kind,
@@ -1045,13 +1012,9 @@ fn effective_view_classification_unresolved_slot_with_no_overlay_returns_rendera
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("effective view classification should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("effective view classification should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -1118,13 +1081,9 @@ fn effective_view_classification_unresolved_slot_with_empty_overlay_returns_rend
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("effective view classification should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("effective view classification should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -1226,13 +1185,9 @@ fn effective_view_classification_resolved_slot_returns_wrapper_template() {
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("classification with resolved slot overlay should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("classification with resolved slot overlay should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -1323,13 +1278,9 @@ fn effective_view_classification_partially_resolved_slots_returns_wrapper_templa
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("classification with partially resolved slots should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("classification with partially resolved slots should succeed");
 
     assert_eq!(
         classification.const_value_kind,
@@ -1392,13 +1343,9 @@ fn effective_view_classification_two_unresolved_slots_returns_renderable_string(
     )
     .expect("test view should resolve");
 
-    let classification = classify_effective_tir_view_template(
-        &TemplateType::String,
-        &view,
-        &store_snapshot,
-        &string_table,
-    )
-    .expect("effective view classification should succeed");
+    let classification =
+        classify_effective_tir_view_template(&view, &store_snapshot, &string_table)
+            .expect("effective view classification should succeed");
 
     assert_eq!(
         classification.const_value_kind,

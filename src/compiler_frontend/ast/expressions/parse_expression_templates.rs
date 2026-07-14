@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::const_values::resolver::classify_template_eff
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -48,7 +49,16 @@ pub(super) fn parse_template_expression(
     }
     .map_err(ExpressionParseError::from)?;
 
-    match template.kind {
+    let template_kind = {
+        let registry = template_context.template_ir_registry.borrow();
+        template.tir_kind_via_registry(&registry).ok_or_else(|| {
+            CompilerError::compiler_error(
+                "Parsed template kind was missing from its registry-backed TIR store.",
+            )
+        })?
+    };
+
+    match template_kind {
         TemplateType::StringFunction => {
             // In a constant context, return as Template rather than erroring immediately.
             // WHY: constant dependency ordering resolves referenced constants before parsing;

@@ -135,12 +135,11 @@ pub(crate) fn tir_subtree_contains_slot_insertions(
 ///      handoff construction from one authoritative tree. Reusing that tree
 ///      keeps every decision on the same TIR identity.
 pub(crate) fn classify_materialized_current_tir_template(
-    template_kind: &TemplateType,
     store: &mut TemplateIrStore,
     template_id: TemplateIrId,
     string_table: &StringTable,
 ) -> Result<MaterializedTirTemplateClassification, TemplateError> {
-    let root = fresh_tir_root(store, template_id)?;
+    let (root, template_kind) = fresh_tir_root_and_kind(store, template_id)?;
 
     let shape_const_evaluable =
         tir_template_is_const_evaluable_value(store, template_id, string_table);
@@ -148,7 +147,7 @@ pub(crate) fn classify_materialized_current_tir_template(
     let has_slot_insertions = tir_tree_has_slot_insert_children(store, root, &mut HashSet::new());
 
     let const_value_kind = classify_materialized_current_tir_const_value(
-        template_kind,
+        &template_kind,
         store,
         root,
         shape_const_evaluable,
@@ -175,7 +174,6 @@ pub(crate) fn classify_materialized_current_tir_template(
 ///      effective classification remains deferred.
 #[cfg(test)]
 pub(crate) fn classify_empty_overlay_tir_view_template(
-    template_kind: &TemplateType,
     view: &TirView<'_>,
     store: &mut TemplateIrStore,
     string_table: &StringTable,
@@ -204,11 +202,11 @@ pub(crate) fn classify_empty_overlay_tir_view_template(
         ))));
     }
 
-    // Read the root node from the store directly (see
+    // Read the root node and authoritative kind from the store directly (see
     // classify_effective_tir_view_template for rationale).
-    let store_root = store
+    let (store_root, template_kind) = store
         .get_template(view.root_ref().template_id)
-        .map(|template| template.root)
+        .map(|template| (template.root, template.kind.clone()))
         .ok_or_else(|| {
             TemplateError::from(CompilerError::compiler_error(format!(
                 "classify_empty_overlay_tir_view_template: root {} is missing from supplied store",
@@ -223,7 +221,7 @@ pub(crate) fn classify_empty_overlay_tir_view_template(
         tir_tree_has_slot_insert_children(store, store_root, &mut HashSet::new());
 
     let const_value_kind = classify_materialized_current_tir_const_value(
-        template_kind,
+        &template_kind,
         store,
         store_root,
         shape_const_evaluable,
@@ -255,7 +253,6 @@ pub(crate) fn classify_empty_overlay_tir_view_template(
 ///      because inherited wrappers wrap child-template emissions without
 ///      affecting the parent template's own const-value shape.
 pub(crate) fn classify_effective_tir_view_template(
-    template_kind: &TemplateType,
     view: &TirView<'_>,
     store: &TemplateIrStore,
     string_table: &StringTable,
@@ -287,13 +284,13 @@ pub(crate) fn classify_effective_tir_view_template(
         ))));
     }
 
-    // Read the root from the caller-provided store instead of borrowing it again
-    // through the registry. Effective classification stays read-only so callers
-    // can retain the active fold borrow while classifying a nested template from
-    // that same registry store.
-    let store_root = store
+    // Read the root and authoritative kind from the caller-provided store
+    // instead of borrowing it again through the registry. Effective
+    // classification stays read-only so callers can retain the active fold
+    // borrow while classifying a nested template from that same registry store.
+    let (store_root, template_kind) = store
         .get_template(view.root_ref().template_id)
-        .map(|template| template.root)
+        .map(|template| (template.root, template.kind.clone()))
         .ok_or_else(|| {
             TemplateError::from(CompilerError::compiler_error(format!(
                 "classify_effective_tir_view_template: root {} is missing from supplied store",
@@ -319,7 +316,7 @@ pub(crate) fn classify_effective_tir_view_template(
     };
 
     let const_value_kind = classify_materialized_current_tir_const_value(
-        template_kind,
+        &template_kind,
         store,
         store_root,
         shape_const_evaluable,
@@ -333,6 +330,33 @@ pub(crate) fn classify_effective_tir_view_template(
         has_unresolved_slots,
         has_slot_insertions,
     })
+}
+
+/// Refreshes a template kind from a TIR classification result.
+///
+/// WHAT: updates the generic `String` / `StringFunction` classification while
+///       preserving semantic markers (`SlotInsert`, `SlotDefinition`, `Comment`)
+///       that must not be overwritten by generic cleanup.
+/// WHY: `TemplateIr.kind` is the authoritative post-construction kind owner.
+///      The parser-local build state uses the same rule before the durable
+///      cache exists, while later refreshes go through the template's single
+///      synchronization method.
+pub(crate) fn refresh_kind_from_classification(
+    kind: &mut TemplateType,
+    classification: &MaterializedTirTemplateClassification,
+) {
+    if matches!(
+        *kind,
+        TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_) | TemplateType::Comment(_)
+    ) {
+        return;
+    }
+
+    *kind = if classification.shape_const_evaluable && !classification.has_slot_insertions {
+        TemplateType::String
+    } else {
+        TemplateType::StringFunction
+    };
 }
 
 fn classify_materialized_current_tir_const_value(
@@ -430,13 +454,19 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
 /// WHY: the finalized TIR id just pushed this entry, so the lookup is a proven
 ///      internal invariant. The error path exists only to keep the API
 ///      panic-free per the style guide.
-fn fresh_tir_root(
+/// Returns both the root node ID and the authoritative kind for a freshly built
+/// TIR template.
+///
+/// WHAT: single lookup that avoids a second store borrow for the kind.
+/// WHY: classification now reads the kind from the store instead of a durable
+///      copy, so the root and kind are fetched together.
+fn fresh_tir_root_and_kind(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
-) -> Result<TemplateIrNodeId, TemplateError> {
+) -> Result<(TemplateIrNodeId, TemplateType), TemplateError> {
     store
         .get_template(template_id)
-        .map(|tir_template| tir_template.root)
+        .map(|tir_template| (tir_template.root, tir_template.kind.clone()))
         .ok_or_else(|| {
             TemplateError::from(CompilerError::compiler_error(
                 "Freshly built TIR template ID not found in store; internal invariant violation.",
@@ -626,8 +656,8 @@ fn tir_view_visit_child_template(
 ///
 /// WHAT: walks `ChildTemplate` nodes (and `InsertContribution` nodes for
 ///       robustness) and inspects the referenced template's `kind` field to
-///       detect escaped `$insert(...)` helpers. This matches the
-///       `template.kind == SlotInsert(_)` check performed on child templates.
+///       detect escaped `$insert(...)` helpers. `TemplateIr.kind` is the sole
+///       post-construction owner of this semantic marker.
 /// WHY: materialized trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
 fn tir_tree_has_slot_insert_children(

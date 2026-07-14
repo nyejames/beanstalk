@@ -101,18 +101,23 @@ pub(super) fn handle_template_value_in_template_head(
     construction_context: &mut TemplateConstructionContext,
     location: &SourceLocation,
 ) -> HeadExpressionResult<()> {
-    if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
+    // The durable kind cache is the only kind source available at this parser
+    // boundary: the template value may cross from a foreign TIR store whose
+    // registry is not resolvable from the receiving context.
+    let template_kind = &value.kind;
+
+    if context.kind.is_constant_context() && matches!(template_kind, TemplateType::StringFunction) {
         return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeTemplateInConst,
             location.to_owned(),
         )));
     }
 
-    if matches!(value.kind, TemplateType::Comment(_)) {
+    if matches!(template_kind, TemplateType::Comment(_)) {
         return Ok(());
     }
 
-    if matches!(value.kind, TemplateType::SlotDefinition(_)) {
+    if matches!(template_kind, TemplateType::SlotDefinition(_)) {
         return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::SlotInHead,
             location.to_owned(),
@@ -134,7 +139,7 @@ pub(super) fn handle_template_value_in_template_head(
         // template output. Recording them as `InsertContribution` nodes lets
         // TIR-native slot routing bucket them by the helper's target slot key
         // rather than treating them as loose fill content.
-        if matches!(value.kind, TemplateType::SlotInsert(_)) {
+        if matches!(template_kind, TemplateType::SlotInsert(_)) {
             construction_context
                 .record_insert_contribution(child_reference.root.template_id, location.to_owned());
         } else {

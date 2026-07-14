@@ -14,6 +14,7 @@
 use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::tir::{
     MaterializedTirTemplateClassification, TemplateWrapperReference,
+    refresh_kind_from_classification,
 };
 
 /// Parser-local mutable state accumulated during template head and body parsing.
@@ -48,19 +49,6 @@ impl TemplateBuildState {
         &mut self,
         classification: &MaterializedTirTemplateClassification,
     ) {
-        if matches!(
-            self.kind,
-            TemplateType::SlotInsert(_)
-                | TemplateType::SlotDefinition(_)
-                | TemplateType::Comment(_)
-        ) {
-            return;
-        }
-
-        self.kind = if classification.shape_const_evaluable && !classification.has_slot_insertions {
-            TemplateType::String
-        } else {
-            TemplateType::StringFunction
-        };
+        refresh_kind_from_classification(&mut self.kind, classification);
     }
 }

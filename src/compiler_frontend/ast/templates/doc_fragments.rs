@@ -51,7 +51,10 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
         let mut retained = Vec::with_capacity(body.len());
 
         for statement in std::mem::take(body) {
-            if let Some(comment_template) = as_top_level_template_comment_declaration(&statement) {
+            if let Some(comment_template) = as_top_level_template_comment_declaration(
+                &statement,
+                context.template_ir_registry.as_ref(),
+            ) {
                 collect_doc_fragments(comment_template, &mut fragments, &mut context)?;
                 continue;
             }
@@ -91,10 +94,17 @@ struct DocFragmentCollectionContext<'a, 'strings> {
 //  Internal Helpers
 // -------------------------
 
-fn as_top_level_template_comment_declaration(node: &AstNode) -> Option<&Template> {
-    // WHAT: match PushStartRuntimeFragment nodes containing Comment templates.
-    // WHY: the old VariableDeclaration(#template) protocol is gone; doc comment templates
-    //      in the entry start body are now PushStartRuntimeFragment nodes.
+/// Matches a top-level `PushStartRuntimeFragment` node containing a comment
+/// template.
+///
+/// WHAT: reads the authoritative TIR kind when the registry can resolve the
+///       template, then falls back to the durable boundary cache.
+/// WHY: top-level templates may cross from a foreign TIR store while older
+///      extraction callers do not provide a registry.
+fn as_top_level_template_comment_declaration<'a>(
+    node: &'a AstNode,
+    registry: Option<&Rc<RefCell<TemplateIrRegistry>>>,
+) -> Option<&'a Template> {
     let NodeKind::PushStartRuntimeFragment(expression) = &node.kind else {
         return None;
     };
@@ -103,7 +113,9 @@ fn as_top_level_template_comment_declaration(node: &AstNode) -> Option<&Template
         return None;
     };
 
-    matches!(template.kind, TemplateType::Comment(_)).then_some(template.as_ref())
+    let template_kind = template_kind_at_doc_fragment_boundary(template, registry);
+
+    matches!(template_kind, TemplateType::Comment(_)).then_some(template.as_ref())
 }
 
 /// Extracts one top-level `$doc` fragment.
@@ -112,8 +124,11 @@ fn collect_doc_fragments(
     fragments: &mut Vec<AstDocFragment>,
     context: &mut DocFragmentCollectionContext<'_, '_>,
 ) -> Result<(), TemplateError> {
+    let template_kind =
+        template_kind_at_doc_fragment_boundary(template, context.template_ir_registry.as_ref());
+
     if matches!(
-        template.kind,
+        template_kind,
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ) {
         let mut fold_context = TemplateFoldContext {
@@ -136,4 +151,15 @@ fn collect_doc_fragments(
     }
 
     Ok(())
+}
+
+/// Reads a doc-fragment template's kind from TIR when that authority is
+/// reachable, otherwise uses the durable cross-store cache.
+fn template_kind_at_doc_fragment_boundary(
+    template: &Template,
+    registry: Option<&Rc<RefCell<TemplateIrRegistry>>>,
+) -> TemplateType {
+    registry
+        .and_then(|registry| template.tir_kind_via_registry(&registry.borrow()))
+        .unwrap_or_else(|| template.kind.clone())
 }

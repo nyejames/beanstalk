@@ -424,5 +424,5 @@ pub(crate) fn classify_template_effective_tir(
         reference.overlay_set_id,
     )?;
     let store = store_handle.borrow();
-    classify_effective_tir_view_template(&template.kind, &view, &store, string_table)
+    classify_effective_tir_view_template(&view, &store, string_table)
 }

@@ -591,7 +591,10 @@ fn normalize_expression_templates_with_context(
                 // templates. Reject only when this expression's final value itself is a
                 // standalone helper artifact after composition.
                 if helper_artifact_policy == HelperArtifactPolicy::RejectFinalHelperValue
-                    && is_illegal_final_template_helper_value(template, template_const_kind)
+                    && is_illegal_final_template_helper_value(
+                        effective_template_kind(template, context)?,
+                        template_const_kind,
+                    )
                 {
                     return Err(CompilerDiagnostic::invalid_template_structure(
                         InvalidTemplateStructureReason::HelperOutsideWrapperSlot,
@@ -942,19 +945,19 @@ fn classify_final_effective_template_view(
     )?;
 
     let mut store = context.template_ir_store.borrow_mut();
+
+    // The authoritative kind lives in `TemplateIr.kind`. The first classification
+    // may refresh the generic String/StringFunction classification; the single
+    // synchronization owner writes both `TemplateIr.kind` and the durable
+    // `Template.kind` cache so they cannot drift.
     let initial_classification =
-        classify_effective_tir_view_template(&template.kind, &view, &store, context.string_table)?;
-    template.refresh_kind_from_tir_classification(&initial_classification);
+        classify_effective_tir_view_template(&view, &store, context.string_table)?;
 
-    if !store.set_template_kind(reference.root.template_id, template.kind.clone()) {
-        return Err(CompilerError::compiler_error(
-            "Template final TIR was missing during HIR normalization.",
-        )
-        .into());
-    }
+    template
+        .synchronize_kind_from_classification(&mut store, &initial_classification)
+        .map_err(TemplateNormalizationError::from)?;
 
-    classify_effective_tir_view_template(&template.kind, &view, &store, context.string_table)
-        .map_err(Into::into)
+    classify_effective_tir_view_template(&view, &store, context.string_table).map_err(Into::into)
 }
 
 fn expression_reactive_template_metadata_from_store(
@@ -1311,9 +1314,36 @@ mod normalize_ast_tests;
 /// WHAT: `$insert(...)` helpers and `SlotInsert` template types are only valid
 /// during wrapper composition; they must not survive as standalone values.
 fn is_illegal_final_template_helper_value(
-    template: &Template,
+    template_kind: TemplateType,
     const_kind: TemplateConstValueKind,
 ) -> bool {
-    matches!(template.kind, TemplateType::SlotInsert(_))
+    matches!(template_kind, TemplateType::SlotInsert(_))
         || matches!(const_kind, TemplateConstValueKind::SlotInsertHelper)
+}
+
+/// Reads the authoritative template kind from the owning TIR store entry.
+///
+/// WHAT: resolves the template's TIR reference through the module registry and
+///       returns `TemplateIr.kind`.
+/// WHY: `TemplateIr.kind` is the sole post-construction kind owner.
+fn effective_template_kind(
+    template: &Template,
+    context: &TemplateNormalizationContext<'_, '_>,
+) -> Result<TemplateType, TemplateNormalizationError> {
+    let registry = context
+        .template_ir_registry
+        .as_ref()
+        .map(Rc::clone)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(
+                "AST finalization kind read requires the module TIR registry.",
+            )
+        })?;
+    let registry = registry.borrow();
+    template.tir_kind_via_registry(&registry).ok_or_else(|| {
+        CompilerError::compiler_error(
+            "AST finalization template kind was not found in its registry-backed TIR store.",
+        )
+        .into()
+    })
 }

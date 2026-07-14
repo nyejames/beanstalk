@@ -77,6 +77,9 @@ pub(super) fn parse_identifier_or_call(
     if let Some(binding) = context.get_reference(&identifier) {
         // Template slot inserts are only legal inside template bodies, constant
         // initializers, or constant headers.
+        // The binding value may reference a template from a foreign TIR store
+        // whose registry is not available here, so the durable cache is the
+        // only kind source at this parser boundary.
         if let ExpressionKind::Template(template_value) = &binding.value.kind
             && matches!(template_value.kind, TemplateType::SlotInsert(_))
             && !matches!(

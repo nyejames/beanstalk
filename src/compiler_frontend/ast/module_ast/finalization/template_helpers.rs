@@ -104,13 +104,8 @@ fn fold_registry_backed_template_to_string(
     // empty output at their structural position.
     let template_const_kind = {
         let store = fold_inputs.template_ir_store.borrow();
-        classify_effective_tir_view_template(
-            &template.kind,
-            &view,
-            &store,
-            fold_inputs.string_table,
-        )?
-        .const_value_kind
+        classify_effective_tir_view_template(&view, &store, fold_inputs.string_table)?
+            .const_value_kind
     };
 
     match template_const_kind {

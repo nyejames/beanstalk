@@ -7,14 +7,16 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::templates::reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateConstValueKind,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary,
-    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    MaterializedTirTemplateClassification, TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind,
+    TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::datatypes::datatype::DataType;
@@ -2261,17 +2263,74 @@ fn raw_directive_records_formatted_tir_phase() {
 }
 
 #[test]
-fn parser_tir_template_kind_matches_final_template_kind() {
+fn durable_kind_cache_matches_tir_kind_after_construction() {
     let mut string_table = StringTable::new();
-    let (template, store) = parse_template("[\"head\": body]", &mut string_table);
+
+    let (template, store) = parse_template(r#"["head": body]"#, &mut string_table);
     let store = store.borrow();
-
-    assert_eq!(template.kind, TemplateType::String);
-
-    let parent_template = store
+    let tir_kind = store
         .get_template(template.tir_template_id())
-        .expect("parent parser TIR template should exist");
-    assert_eq!(parent_template.kind, template.kind);
+        .expect("TIR entry should exist")
+        .kind
+        .clone();
+    assert_eq!(template.kind, TemplateType::String);
+    assert_eq!(
+        template.kind, tir_kind,
+        "durable cache must match TIR kind after construction"
+    );
+
+    let mut token_stream = template_tokens_from_source("[value: body]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("runtime template should parse");
+    let store = context.template_ir_store.borrow();
+    let tir_kind = store
+        .get_template(template.tir_template_id())
+        .expect("TIR entry should exist")
+        .kind
+        .clone();
+    assert_eq!(template.kind, TemplateType::StringFunction);
+    assert_eq!(
+        template.kind, tir_kind,
+        "durable cache must match TIR kind after construction"
+    );
+
+    let (template, store) = parse_template("[$doc: doc body]", &mut string_table);
+    let store = store.borrow();
+    let tir_kind = store
+        .get_template(template.tir_template_id())
+        .expect("TIR entry should exist")
+        .kind
+        .clone();
+    assert_eq!(
+        template.kind, tir_kind,
+        "durable cache must match TIR kind for semantic markers after construction"
+    );
+}
+
+#[test]
+fn durable_kind_synchronization_updates_tir_and_cache_together() {
+    let mut string_table = StringTable::new();
+    let (mut template, store) = parse_template(r#"["head": body]"#, &mut string_table);
+    let classification = MaterializedTirTemplateClassification {
+        const_value_kind: TemplateConstValueKind::RenderableString,
+        shape_const_evaluable: false,
+        has_unresolved_slots: false,
+        has_slot_insertions: false,
+    };
+
+    template
+        .synchronize_kind_from_classification(&mut store.borrow_mut(), &classification)
+        .expect("kind synchronization should update the owning store");
+
+    let store = store.borrow();
+    let tir_kind = store
+        .get_template(template.tir_template_id())
+        .expect("TIR entry should exist")
+        .kind
+        .clone();
+    assert_eq!(template.kind, TemplateType::StringFunction);
+    assert_eq!(template.kind, tir_kind);
 }
 
 #[test]

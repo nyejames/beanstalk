@@ -434,7 +434,6 @@ impl Template {
             let mut template_ir_store = context.template_ir_store.borrow_mut();
             let template_id = tir_reference.root.template_id;
             classify_materialized_current_tir_template(
-                &build_state.kind,
                 &mut template_ir_store,
                 template_id,
                 string_table,
@@ -457,7 +456,8 @@ impl Template {
         }
 
         // Construct the durable `Template` now that authoritative TIR identity
-        // and classified kind exist. The build state fields are moved into it.
+        // exists. The classified kind is initialized once on both the durable
+        // cache and the authoritative TIR entry below.
         let template = Template {
             kind: build_state.kind,
             tir_reference,
@@ -514,10 +514,19 @@ impl Template {
 
         // Align the final TIR entry's kind with the classification result.
         // `finish()` was called with a provisional kind before composition; this
-        // ensures the authoritative TIR entry carries the classified kind.
+        // ensures the authoritative TIR entry carries the classified kind. Both
+        // copies are initialized once here; later refresh goes through the
+        // single synchronization owner.
         let template_id = template.tir_template_id();
         let mut template_ir_store = context.template_ir_store.borrow_mut();
-        template_ir_store.set_template_kind(template_id, template.kind.to_owned());
+        if !template_ir_store.set_template_kind(template_id, template.kind.to_owned()) {
+            return Err(Box::new(
+                TemplateError::from(CompilerError::compiler_error(
+                    "Constructed template kind could not be initialized in its TIR store.",
+                ))
+                .into_diagnostic(),
+            ));
+        }
 
         increment_frontend_counter(FrontendCounter::TemplateCount);
         match control_flow_validation {

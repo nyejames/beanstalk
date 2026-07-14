@@ -12,6 +12,7 @@ use super::super::overlays::TemplateOverlaySetId;
 use super::super::registry::TemplateIrRegistry;
 use super::super::store::TemplateIrStore;
 use super::super::{TemplateRef, TemplateTirReference};
+use crate::compiler_frontend::ast::templates::template::{SlotKey, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 
 use std::sync::Arc;
@@ -82,4 +83,59 @@ fn template_clone_preserves_tir_reference() {
     let cloned_reference = &cloned.tir_reference;
     assert_eq!(cloned_reference.root.template_id, TemplateIrId::new(5));
     assert!(Arc::ptr_eq(&cloned_reference.store_owner, &store.owner()));
+}
+
+#[test]
+fn template_kind_lookup_rejects_same_numeric_store_id_from_another_registry() {
+    let mut correct_registry = TemplateIrRegistry::new();
+    let mut wrong_registry = TemplateIrRegistry::new();
+    let correct_store_id = correct_registry.allocate_store();
+    let wrong_store_id = wrong_registry.allocate_store();
+
+    assert_eq!(correct_store_id, wrong_store_id);
+
+    let correct_handle = correct_registry
+        .store_handle(correct_store_id)
+        .expect("correct registry store should exist");
+    let correct_template_id = push_template_with_kind(
+        &mut correct_handle.borrow_mut(),
+        TemplateType::SlotDefinition(SlotKey::Default),
+    );
+
+    let wrong_handle = wrong_registry
+        .store_handle(wrong_store_id)
+        .expect("wrong registry store should exist");
+    push_template_with_kind(&mut wrong_handle.borrow_mut(), TemplateType::String);
+
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: make_reference(correct_template_id, &correct_handle.borrow()),
+        id: String::new(),
+        location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
+    };
+
+    assert!(matches!(
+        template.tir_kind_via_registry(&correct_registry),
+        Some(TemplateType::SlotDefinition(_))
+    ));
+    assert_eq!(template.tir_kind_via_registry(&wrong_registry), None);
+}
+
+fn push_template_with_kind(store: &mut TemplateIrStore, kind: TemplateType) -> TemplateIrId {
+    use super::super::node::{TemplateIr, TemplateIrNode, TemplateIrNodeKind};
+    use super::super::summary::TemplateIrSummary;
+
+    let location = crate::compiler_frontend::tokenizer::tokens::SourceLocation::default();
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence { children: vec![] },
+        location.clone(),
+    ));
+
+    store.push_template(TemplateIr::new(
+        root,
+        crate::compiler_frontend::ast::templates::template::Style::default(),
+        kind,
+        TemplateIrSummary::default(),
+        location,
+    ))
 }

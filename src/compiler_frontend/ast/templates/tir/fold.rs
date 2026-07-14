@@ -28,6 +28,7 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     resolve_fold_bindings_in_expression, selected_option_capture_payload,
     template_emission_from_output_and_signal,
 };
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCacheKey;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, TemplateIrId, TemplateIrNodeId, TemplateWrapperSetId,
@@ -579,7 +580,9 @@ fn fold_tir_dynamic_expression(
                 .into());
             };
 
-            reject_slot_insert_template(&template.kind)?;
+            let template_kind = nested_template_kind(template, store, fold_context)?;
+            reject_slot_insert_template(&template_kind)?;
+
             let reference = &template.tir_reference;
             let child_reference = TemplateTirChildReference::new(
                 reference.root,
@@ -605,6 +608,37 @@ fn fold_tir_dynamic_expression(
         )
         .into()),
     }
+}
+
+/// Reads a nested AST template's kind from its authoritative TIR entry.
+///
+/// Same-store folds work without a registry. Cross-store folds require the
+/// registry, matching the structural reference fold path below. Missing kind
+/// authority is an internal error rather than a signal to render the template.
+fn nested_template_kind(
+    template: &Template,
+    store: &TemplateIrStore,
+    fold_context: &TemplateFoldContext<'_>,
+) -> Result<TemplateType, TemplateError> {
+    if let Some(kind) = template.tir_kind_from_store(store) {
+        return Ok(kind);
+    }
+
+    let registry = fold_context.template_ir_registry.as_ref().ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "TIR fold: nested template {} requires its registry to resolve the authoritative kind.",
+            template.tir_reference.root
+        ))
+    })?;
+    let registry = registry.borrow();
+
+    template.tir_kind_via_registry(&registry).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "TIR fold: nested template kind for {} was not found in its registry-backed store.",
+            template.tir_reference.root
+        ))
+        .into()
+    })
 }
 
 /// Folds a store-qualified child-template reference against its owning store.

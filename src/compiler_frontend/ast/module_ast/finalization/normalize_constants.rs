@@ -35,6 +35,8 @@ use crate::compiler_frontend::ast::const_values::resolver::classify_template_fro
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
+use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
@@ -234,7 +236,11 @@ impl AstFinalizer<'_, '_> {
     ) -> Result<bool, TemplateNormalizationError> {
         let contains_helper = match &expression.kind {
             ExpressionKind::Template(template) => {
-                if !matches!(template.kind, TemplateType::SlotInsert(_)) {
+                let template_kind = effective_template_kind_from_registry(
+                    template,
+                    &self.context.template_ir_registry.borrow(),
+                )?;
+                if !matches!(template_kind, TemplateType::SlotInsert(_)) {
                     return Ok(false);
                 }
 
@@ -291,4 +297,21 @@ impl AstFinalizer<'_, '_> {
 
         Ok(contains_helper)
     }
+}
+
+/// Reads the authoritative template kind from the owning TIR store entry.
+///
+/// WHAT: resolves the template's TIR reference through the module registry and
+///       returns `TemplateIr.kind`.
+/// WHY: `TemplateIr.kind` is the sole post-construction kind owner.
+fn effective_template_kind_from_registry(
+    template: &Template,
+    registry: &TemplateIrRegistry,
+) -> Result<TemplateType, TemplateNormalizationError> {
+    template.tir_kind_via_registry(registry).ok_or_else(|| {
+        CompilerError::compiler_error(
+            "Constant normalization template kind was not found in its registry-backed TIR store.",
+        )
+        .into()
+    })
 }

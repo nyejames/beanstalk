@@ -21,10 +21,10 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D2 accepted - next is Phase 2D3 durable Template.kind audit
-LAST_ACCEPTED_COMMIT: `246a730f1` (`refactor: derive template formatting from TIR phase`)
+CURRENT_SLICE: Phase 2D3 acceptance - retain durable `Template.kind` cache
+LAST_ACCEPTED_COMMIT: `13e9bf969` (`refactor: define TIR store identity boundary`)
 BRANCH: `main`
-WORKTREE: `main`; accepted Phase 2D2 source, tests and this plan update are pending the checkpoint commit
+WORKTREE: `main`, reviewed and validated Phase 2D3 patch ready to commit
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - `Template.control_flow`, duplicate branch/fallback/loop carriers and `TemplateTirBodyReference` are deleted. Parser and render-unit preparation update the exact owning TIR control-flow node.
@@ -32,21 +32,23 @@ RELEVANT_CONTEXT_NOW:
 - Removing the last durable remap root exposed an unreachable AST/TIR string-ID remap graph. Its test-only APIs and representation fixtures are deleted while header, diagnostic, parsed-type, type-environment and HIR remap boundaries remain.
 - The durable `Template` no longer duplicates TIR-owned style or child-wrapper state and its TIR reference is required. `TemplateTirPhase` now owns composed and formatted lifecycle state without summary booleans.
 ACCEPTANCE_CRITERIA:
-- audit every durable `Template.kind` read/write against registry-backed `TemplateIr.kind`
-- remove it if all callers can use the authoritative TIR entry without borrow or stage-boundary regressions
-- otherwise retain it as one documented cached marker with a single write owner and a focused consistency invariant
+- retain `Template.kind` because cross-store template-head paths can lack access to the foreign registry during parsing
+- keep `TemplateIr.kind` authoritative wherever the owning store or registry is available
+- document the durable field as a boundary cache, centralize synchronization and add a focused consistency invariant
 - keep ID, convenience and registry/store-triple consolidation out of the kind sub-slice
 VALIDATION_STATE:
-- Phase 2D2 worker validation passed: 3298 library tests, warnings-as-errors Clippy and focused cross-store/store/reference suites. The removed test owned the deleted test-only snapshot helper.
-- Separate read-only Ollama final review found no blocker and verified cross-registry numeric-ID collision safety, logical-origin wording and every production owner-check family.
-- Phase 2D2 `just validate` passed: cross-target Clippy, 3298 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 16 faster and 0 slower.
+- Phase 2D2 `just validate` passed before commit `13e9bf969`: cross-target Clippy, 3298 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 16 faster and 0 slower.
+- Phase 2D3 removal attempt passed the worker's 3298 library tests and Clippy only because missing foreign-store kind lookups silently skipped validation.
+- Parent focused template suite after making missing authority explicit failed 2 of 791 tests. Both failures prove real cross-store head paths lack registry access to the foreign store, so removal does not meet the plan threshold.
+- Retention correction passes the focused template suite (792 tests), AST finalization suite (35 tests), const-values suite (17 tests) and string-coercion suite (11 tests).
+- The separate Ollama read-only review found no blocker. `just validate` passes cross-target Clippy, 3300 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 2 faster and 0 slower.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
-- `Template.kind` may remain only if the next audit proves it carries a necessary cached marker across direct-store borrow boundaries.
-DELEGATION_DECISION: Ollama implementation worker for Phase 2D3 after this checkpoint - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
-NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
+- none. The failed removal test established that the cached marker is required until the later registry-boundary audit can make every foreign store resolvable.
+DELEGATION_DECISION: Ollama implementation correction and separate read-only final review complete
+NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D2, refresh the accepted hash and delegate bounded Phase 2D3 kind audit
+NEXT_RESUME_ACTION: commit Phase 2D3, reload the plan and delegate the `Template.id` audit
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -316,9 +318,9 @@ Phase 2C checkpoint: mutable style and wrapper references now end with parser-lo
 - [x] Audit `store_owner` after detached tests are gone:
   - [x] retain it because registry-local store IDs can collide and direct-store consumers cannot always re-borrow the registry
   - [x] remove the obsolete detached-snapshot helper/test and keep one focused cross-registry collision invariant
-- [ ] Audit `Template.kind`:
-  - [ ] move helper markers into TIR if all callers already hold a view
-  - [ ] otherwise keep it as a documented cached marker with one write owner and a validation check against `TemplateIr.kind`
+- [x] Audit `Template.kind`:
+  - [x] confirm it cannot move fully into TIR because foreign parser/head and store-less coercion boundaries do not always hold the originating registry
+  - [x] keep it as a documented cached marker with one synchronization owner and focused consistency checks against `TemplateIr.kind`
 - [ ] Audit `Template.id`; remove it if it is debug-only and derivable from existing identity.
 - [ ] Remove obsolete convenience methods such as `tir_template_id`, `tir_root_node_id`, or `tir_store_owner` when direct reference access is clearer.
 - [ ] Audit the repeated registry + store handle + store-ID triple. Consolidate it only if one registered-store context removes identity duplication and debug assertions without forcing every parser write through registry lookup.
@@ -330,6 +332,8 @@ Phase 2D1b1 checkpoint: `TemplateTirPhase` is the sole composed-lifecycle author
 Phase 2D1b2 checkpoint: formatter lifecycle is derived from effective style plus reference phase, not shape summary. Child-template formatting uses the child's exact phase and overlay. Bare local insert IDs rely on the verified invariant that formatter-bearing helpers are formatted before recording; default-style foreign proxies preserve the existing whitespace path.
 
 Phase 2D2 checkpoint: the logical store-origin token remains required. Registry-local store IDs can collide across module registries, while several production consumers hold a direct store borrow and must reject a foreign local ID without re-borrowing the registry. The unused detached-snapshot helper/test are deleted and one two-registry collision test owns the invariant.
+
+Phase 2D3 checkpoint: `Template.kind` remains a narrow boundary cache because proven foreign parser/head paths can lack the originating registry. `TemplateIr.kind` is authoritative wherever a store, registry or view exists, one synchronization method updates TIR before the cache and focused tests protect construction consistency plus cross-registry identity.
 
 #### Slice 2E — Remove the HIR raw-template shim
 

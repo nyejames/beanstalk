@@ -38,6 +38,8 @@ pub(crate) fn fold_expression_kind_to_string(
         ExpressionKind::Bool(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Char(value) => Some(FoldedStringPiece::Char(*value)),
         ExpressionKind::Template(template) => {
+            // This store-less coercion boundary uses the durable kind cache.
+            // Classification always preserves the semantic Comment marker.
             if matches!(template.kind, TemplateType::Comment(_)) {
                 Some(FoldedStringPiece::Skip)
             } else {

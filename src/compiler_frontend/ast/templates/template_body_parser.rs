@@ -37,6 +37,7 @@ use crate::compiler_frontend::ast::templates::tir::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
@@ -585,7 +586,21 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             parse_options,
         )?;
 
-        match &child_template.kind {
+        // The child was just constructed in this context's store. Read its
+        // authoritative kind before mutating the construction context again.
+        let child_kind = {
+            let store = construction_context.store();
+            child_template.tir_kind_from_store(&store).ok_or_else(|| {
+                Box::new(
+                    TemplateError::from(CompilerError::compiler_error(
+                        "Nested template kind was missing from the parser's owning TIR store.",
+                    ))
+                    .into_diagnostic(),
+                )
+            })?
+        };
+
+        match &child_kind {
             TemplateType::SlotInsert(_) => {
                 record_parser_tir_insert_contribution(construction_context, &child_template);
             }
@@ -609,7 +624,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             return Ok(());
         }
 
-        match &child_template.kind {
+        match &child_kind {
             TemplateType::Comment(_) => {
                 return Ok(());
             }

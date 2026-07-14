@@ -275,7 +275,14 @@ fn convert_head_node_for_aggregate_wrapper(
                         foreign_reference.overlay_set_id,
                     );
 
-                    if matches!(child_template.kind, TemplateType::SlotInsert(_)) {
+                    // Prefer the authoritative foreign TIR entry. The durable
+                    // cache remains the boundary fallback when that store cannot
+                    // be resolved through the receiving registry.
+                    let child_kind = child_template
+                        .tir_kind_via_registry(registry)
+                        .unwrap_or_else(|| child_template.kind.clone());
+
+                    if matches!(child_kind, TemplateType::SlotInsert(_)) {
                         summary.insert_contribution_count += 1;
                         summary.has_insert_contributions = true;
                         summary.is_const_evaluable_shape = false;
@@ -284,7 +291,7 @@ fn convert_head_node_for_aggregate_wrapper(
                             store,
                             registry,
                             &reference,
-                            &child_template.kind,
+                            &child_kind,
                             &expression.location,
                         )?;
                         return Ok(store.push_node(TemplateIrNode::new(
@@ -324,7 +331,15 @@ fn convert_head_node_for_aggregate_wrapper(
                     child_reference.overlay_set_id,
                 );
 
-                if matches!(child_template.kind, TemplateType::SlotInsert(_)) {
+                let child_kind = child_template
+                    .tir_kind_from_store(store)
+                    .ok_or_else(|| {
+                        TemplateError::from(CompilerError::compiler_error(
+                            "TIR render-unit same-store child template kind was not found in its TIR store.",
+                        ))
+                    })?;
+
+                if matches!(child_kind, TemplateType::SlotInsert(_)) {
                     summary.insert_contribution_count += 1;
                     summary.has_insert_contributions = true;
                     summary.is_const_evaluable_shape = false;

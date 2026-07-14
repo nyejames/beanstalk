@@ -98,8 +98,9 @@ pub(super) fn parse_children_style_directive(
     // carries only the exact store-qualified wrapper reference.
     let wrapper_reference = match directive_argument.kind {
         ExpressionKind::Template(child_template) => {
-            // These template kinds are not valid child containers even though
-            // they are valid template expressions.
+            // The durable kind cache is the only kind source at this parser
+            // boundary: the child template may cross from a foreign TIR store
+            // whose registry is not resolvable from the receiving context.
             if matches!(
                 child_template.kind,
                 TemplateType::StringFunction
