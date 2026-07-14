@@ -96,14 +96,6 @@ pub(crate) struct TemplateIrSummary {
     ///      template still carries unresolved slot-insertion helpers.
     pub(crate) has_insert_contributions: bool,
 
-    /// True if this TIR still represents a formatter-bearing surface.
-    ///
-    /// Post-render parser-TIR sync may mirror already-formatted content while
-    /// preserving the template style for later consumers. In that case the
-    /// formatter is not pending for folding, so this flag stays false even when
-    /// `TemplateIr::style.formatter` is set.
-    pub(crate) has_formatter: bool,
-
     /// True if the template contains `BranchChain`, `Loop`, or `LoopControl` nodes.
     pub(crate) has_control_flow: bool,
 
@@ -138,7 +130,6 @@ impl TemplateIrSummary {
             max_depth: 0,
             has_slots: false,
             has_insert_contributions: false,
-            has_formatter: false,
             has_control_flow: false,
             has_reactivity: false,
             is_const_evaluable_shape: true,

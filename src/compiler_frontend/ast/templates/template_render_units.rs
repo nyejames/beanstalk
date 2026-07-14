@@ -80,15 +80,12 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
         run_tir_formatter_with_warnings(&view, style, context, string_table)?
     };
 
-    let mut summary = original_template.summary;
-    summary.has_formatter = false;
-
     let mut store = context.template_ir_store.borrow_mut();
     let formatted_template_id = store.push_template(TemplateIr::new(
         formatter_result.root,
         original_template.style,
         original_template.kind,
-        summary,
+        original_template.summary,
         original_template.location,
     ));
 

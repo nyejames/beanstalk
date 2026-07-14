@@ -21,32 +21,32 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D1b1 accepted - next is Phase 2D1b2 formatter-pending-state audit
-LAST_ACCEPTED_COMMIT: `3d36ea4fc` (`refactor: require template TIR references`)
+CURRENT_SLICE: Phase 2D1b2 accepted - next is Phase 2D2 store-owner identity audit
+LAST_ACCEPTED_COMMIT: `c9eb83e76` (`refactor: derive template composition from TIR phase`)
 BRANCH: `main`
-WORKTREE: `main`; accepted Phase 2D1b1 source, tests and this plan update are pending the checkpoint commit
+WORKTREE: `main`; accepted Phase 2D1b2 source, tests and this plan update are pending the checkpoint commit
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - `Template.control_flow`, duplicate branch/fallback/loop carriers and `TemplateTirBodyReference` are deleted. Parser and render-unit preparation update the exact owning TIR control-flow node.
 - Reactive metadata and runtime handoff read selectors, headers, bodies and aggregate wrappers from the finalized TIR root.
 - Removing the last durable remap root exposed an unreachable AST/TIR string-ID remap graph. Its test-only APIs and representation fixtures are deleted while header, diagnostic, parsed-type, type-environment and HIR remap boundaries remain.
-- The durable `Template` no longer duplicates TIR-owned style or child-wrapper state and its TIR reference is required. `TemplateTirPhase` is now the sole composed-lifecycle authority.
+- The durable `Template` no longer duplicates TIR-owned style or child-wrapper state and its TIR reference is required. `TemplateTirPhase` now owns composed and formatted lifecycle state without summary booleans.
 ACCEPTANCE_CRITERIA:
-- audit every `TemplateIrSummary::has_formatter` read/write against effective style plus reference/child phase
-- remove the formatter-pending bit only if no distinct structural fact remains across nested child refs and insert contributions
-- preserve one formatter execution, foreign-store identity, overlay context and exact phase transitions
-- keep store-owner, kind, ID and broader convenience audits out of the formatter sub-slice
+- audit every production and retained-test `TemplateTirReference::store_owner` use against registry-qualified root identity
+- retain the owner token only if numeric store IDs plus the active registry cannot prevent wrong-store instance reuse
+- remove token plumbing and obsolete ownership fixtures if the registry is the complete proof
+- keep kind, ID, convenience and registry/store-triple consolidation out of the store-owner sub-slice
 VALIDATION_STATE:
-- Phase 2D1b1 worker validation passed: all 3299 library tests, warnings-as-errors Clippy and zero `is_composed` hits.
-- Separate read-only Ollama final review found no blocker and confirmed every deleted read/write has an exact phase replacement.
-- Phase 2D1b1 `just validate` passed: cross-target Clippy, 3299 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 13 faster and 0 slower.
+- Phase 2D1b2 worker validation passed: all 3299 library tests, 1756 integration cases, warnings-as-errors Clippy, `bench-check` 28/28 and zero `has_formatter` hits.
+- Separate read-only Ollama final review found no blocker and verified same-store, control-flow, foreign-proxy and subtree-copy insert paths.
+- Phase 2D1b2 `just validate` passed: cross-target Clippy, 3299 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: Ollama implementation worker for Phase 2D1b2 after this checkpoint - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
+DELEGATION_DECISION: Ollama implementation worker for Phase 2D2 after this checkpoint - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D1b1, refresh the accepted hash and delegate bounded Phase 2D1b2 formatter-state audit
+NEXT_RESUME_ACTION: commit accepted Phase 2D1b2, refresh the accepted hash and delegate bounded Phase 2D2 store-owner audit
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -311,7 +311,7 @@ Phase 2C checkpoint: mutable style and wrapper references now end with parser-lo
 
 - [x] Make `Template.tir_reference` non-optional.
 - [x] Delete `TemplateTirReference::is_composed`; use `phase.is_at_least(Composed)`.
-- [ ] Delete `TemplateIrSummary::has_formatter` if it is only pending-lifecycle state; derive pending formatting from effective style + reference phase.
+- [x] Delete `TemplateIrSummary::has_formatter` if it is only pending-lifecycle state; derive pending formatting from effective style + reference phase.
 - [x] Replace optional/missing-reference branches with explicit construction invariants.
 - [ ] Audit `store_owner` after detached tests are gone:
   - [ ] retain it only if production can otherwise resolve the wrong registry/store instance
@@ -326,6 +326,8 @@ Phase 2C checkpoint: mutable style and wrapper references now end with parser-lo
 Phase 2D1a checkpoint: durable templates always carry authoritative TIR identity. Missing-reference production branches, empty handles and detached no-authority fixtures are deleted, while phase, registry and store-mismatch outcomes remain explicit.
 
 Phase 2D1b1 checkpoint: `TemplateTirPhase` is the sole composed-lifecycle authority. Head-chain and wrapper-overlay composition advance Parsed roots without downgrading later phases, formatted-root installation stays Formatted and slot-insert diagnostics use the same Composed-or-later contract.
+
+Phase 2D1b2 checkpoint: formatter lifecycle is derived from effective style plus reference phase, not shape summary. Child-template formatting uses the child's exact phase and overlay. Bare local insert IDs rely on the verified invariant that formatter-bearing helpers are formatted before recording; default-style foreign proxies preserve the existing whitespace path.
 
 #### Slice 2E — Remove the HIR raw-template shim
 

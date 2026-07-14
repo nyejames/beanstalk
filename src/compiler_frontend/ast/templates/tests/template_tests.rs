@@ -230,13 +230,12 @@ fn formatted_doc_template_with_direct_tir(
         ..Style::default()
     };
 
-    // WHAT: record the body-text shape and pending formatter so the parsed
-    //       TIR template carries honest summary facts for the formatter pass.
+    // WHAT: record the body-text shape so the parsed TIR template carries
+    //       honest summary facts for the formatter pass.
     let parsed_summary = TemplateIrSummary {
         text_node_count: 1,
         text_byte_count: text.len(),
         estimated_output_bytes: text.len(),
-        has_formatter: true,
         ..TemplateIrSummary::default()
     };
 
@@ -276,18 +275,11 @@ fn formatted_doc_template_with_direct_tir(
     let formatter_result =
         format_tir_template(&view, &style, string_table).expect("TIR formatter should succeed");
 
-    // WHAT: the formatted root already reflects markdown output, so its summary
-    //       clears the pending-formatter flag to prevent re-formatting.
-    let formatted_summary = TemplateIrSummary {
-        has_formatter: false,
-        ..parsed_summary
-    };
-
     let formatted_template_id = store_handle.borrow_mut().push_template(TemplateIr::new(
         formatter_result.root,
         style.clone(),
         TemplateType::Comment(CommentDirectiveKind::Doc),
-        formatted_summary,
+        parsed_summary,
         location.clone(),
     ));
 

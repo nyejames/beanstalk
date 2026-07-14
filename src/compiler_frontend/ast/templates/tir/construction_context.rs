@@ -330,8 +330,7 @@ impl TemplateConstructionContext {
 
         let template_id = {
             let mut store = self.store.borrow_mut();
-            self.builder
-                .finish(&mut store, style, kind, phase, location)
+            self.builder.finish(&mut store, style, kind, location)
         };
 
         // Allocate the canonical empty overlay set through the registry so the

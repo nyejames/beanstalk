@@ -28,10 +28,11 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::tir::ids::TemplateIrNodeId;
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNode, TemplateIrNodeKind};
+use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirChildReference,
 };
-use crate::compiler_frontend::ast::templates::tir::view::TirView;
+use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -148,7 +149,13 @@ fn format_child_templates_in_subtree(
 
     match &node.kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } if visited.insert(reference.root) => {
-            format_referenced_child_template(view, reference.root, string_table)?;
+            format_referenced_child_template(
+                view,
+                reference.root,
+                reference.phase,
+                reference.overlay_set_id,
+                string_table,
+            )?;
         }
 
         TemplateIrNodeKind::Sequence { children } => {
@@ -188,7 +195,18 @@ fn format_child_templates_in_subtree(
             if visited.insert(TemplateRef::new(node_ref.store_id, *template)) =>
         {
             let child_ref = TemplateRef::new(node_ref.store_id, *template);
-            format_referenced_child_template(view, child_ref, string_table)?;
+            // InsertContribution nodes reference SlotInsert templates that are
+            // always at Formatted phase: create_template_node formats every
+            // same-store linear template before the parser records the insert
+            // contribution. Using Formatted prevents re-formatting an already
+            // formatted root.
+            format_referenced_child_template(
+                view,
+                child_ref,
+                TemplateTirPhase::Formatted,
+                view.overlay_set_id(),
+                string_table,
+            )?;
         }
 
         _ => {}
@@ -197,8 +215,8 @@ fn format_child_templates_in_subtree(
     Ok(())
 }
 
-/// Formats a single child/insert template referenced by ID and updates its root
-/// in the store.
+/// Formats a single child/insert template referenced by ID and updates its
+/// root in the store.
 ///
 /// WHAT: looks up the referenced template, formats it with its own style, and
 ///       writes the formatted root back into the store.
@@ -207,30 +225,27 @@ fn format_child_templates_in_subtree(
 fn format_referenced_child_template(
     view: &TirView<'_>,
     template_ref: TemplateRef,
+    phase: TemplateTirPhase,
+    overlay_set_id: TemplateOverlaySetId,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let child_view = TirView::new(
-        view.registry_ref(),
-        template_ref,
-        view.phase(),
-        view.overlay_set_id(),
-    )
-    .map_err(|error| compiler_error_messages(error, string_table))?;
+    let child_view = view
+        .child_view(template_ref, phase, overlay_set_id)
+        .map_err(|error| compiler_error_messages(error, string_table))?;
 
-    let (style, already_formatted) = {
+    let style = {
         let template = child_view
             .root_template()
             .map_err(|error| compiler_error_messages(error, string_table))?;
-        (
-            template.style.clone(),
-            template.style.formatter.is_some() && !template.summary.has_formatter,
-        )
+        template.style.clone()
     };
 
-    // A child template that already has a formatted root (summary.has_formatter
-    // is false) must not be re-formatted by the parent formatter. Re-formatting
-    // would double-escape output such as markdown paragraphs. Child templates
-    // that still carry a pending formatter summary are formatted normally.
+    // A child template whose reference phase has already reached Formatted
+    // carries a formatted root and must not be re-formatted. Re-formatting
+    // would double-escape output such as markdown paragraphs.
+    let already_formatted =
+        style.formatter.is_some() && phase.is_at_least(TemplateTirPhase::Formatted);
+
     if already_formatted {
         return Ok(());
     }

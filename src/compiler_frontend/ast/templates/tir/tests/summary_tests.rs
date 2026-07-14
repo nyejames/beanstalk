@@ -15,7 +15,6 @@ fn empty_summary_has_zero_counts_and_false_flags() {
     assert_eq!(summary.max_depth, 0);
     assert!(!summary.has_slots);
     assert!(!summary.has_insert_contributions);
-    assert!(!summary.has_formatter);
     assert!(!summary.has_control_flow);
     assert!(!summary.has_reactivity);
     assert!(summary.is_const_evaluable_shape);

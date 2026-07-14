@@ -170,7 +170,6 @@ impl CurrentStateMaterializationSummary {
         self.summary.max_depth = self.summary.max_depth.max(scratch.max_depth);
         self.summary.has_slots |= scratch.has_slots;
         self.summary.has_insert_contributions |= scratch.has_insert_contributions;
-        self.summary.has_formatter |= scratch.has_formatter;
         self.summary.has_control_flow |= scratch.has_control_flow;
         self.summary.has_reactivity |= scratch.has_reactivity;
         self.summary.is_const_evaluable_shape = false;

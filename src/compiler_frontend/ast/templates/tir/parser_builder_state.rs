@@ -466,19 +466,10 @@ impl TemplateParserIrBuilderState {
         store: &mut TemplateIrStore,
         style: Style,
         kind: TemplateType,
-        phase: TemplateTirPhase,
         location: SourceLocation,
     ) -> TemplateIrId {
         if let Some(template_id) = self.template_id {
             return template_id;
-        }
-
-        // Control-flow owner roots passed at `Formatted` phase already carry
-        // prepared body content, so the owner summary must not represent a
-        // formatter-pending surface. Linear templates and unprepared control-flow
-        // roots start at `Parsed` and set `has_formatter` from the style.
-        if style.formatter.is_some() && !phase.is_at_least(TemplateTirPhase::Formatted) {
-            self.summary.has_formatter = true;
         }
 
         self.summary.head_node_count = self.head_node_count;

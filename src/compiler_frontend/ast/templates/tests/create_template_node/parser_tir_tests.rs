@@ -986,14 +986,6 @@ fn formatter_inline_code_preserves_span_for_authored_body_head_insert_anchor() {
         "explicit formatter inline-code bodies should install a Formatted TIR root"
     );
 
-    let parent_template = store
-        .get_template(template.tir_template_id())
-        .expect("parent parser TIR template should exist");
-    assert!(
-        !parent_template.summary.has_formatter,
-        "installed formatted TIR output should clear pending formatter state"
-    );
-
     let children = tir_root_child_ids(&template, &store);
     let child_template_position = children.iter().position(|child_id| {
         matches!(
@@ -1555,14 +1547,6 @@ fn raw_directive_preserves_whitespace_and_advances_through_formatter_adapter() {
         "$raw linear bodies advance through the formatter adapter even though no formatter runs"
     );
 
-    let parent_template = store
-        .get_template(template.tir_template_id())
-        .expect("parent parser TIR template should exist");
-    assert!(
-        !parent_template.summary.has_formatter,
-        "$raw must not leave a pending formatter summary"
-    );
-
     let children = tir_root_child_ids(&template, &store);
     assert_eq!(
         children.len(),
@@ -1691,24 +1675,16 @@ fn nested_child_with_own_formatter_is_formatted_independently() {
 }
 
 #[test]
-fn formatted_tir_reference_clears_formatter_summary_for_simple_template() {
+fn formatted_tir_reference_installs_formatted_output_for_simple_template() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md: body]", &mut string_table);
     let store = store.borrow();
     let tir_reference = &template.tir_reference;
 
-    let parent_template = store
-        .get_template(template.tir_template_id())
-        .expect("parent parser TIR template should exist");
-
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
         "linear render-unit preparation should install formatter output as a formatted TIR reference"
-    );
-    assert!(
-        !parent_template.summary.has_formatter,
-        "formatted TIR output must not keep a pending formatter summary"
     );
     assert_eq!(
         parser_tir_texts(&template, &store, &string_table),
@@ -1734,10 +1710,6 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
         .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
-    assert!(
-        !parent_template.summary.has_formatter,
-        "installed formatted TIR output should clear pending formatter state"
-    );
 
     let children = tir_root_child_ids(&template, &store);
     assert_eq!(
@@ -2033,10 +2005,6 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
         parent_template.summary.has_control_flow,
         "owner parser TIR must record control-flow presence"
     );
-    assert!(
-        !parent_template.summary.has_formatter,
-        "after all bodies are refreshed the owner summary must not record formatter-pending state"
-    );
 
     let branch_chain = match parser_tir_control_flow_root_kind(&template, &store) {
         TemplateIrNodeKind::BranchChain { branches, fallback } => (branches, fallback),
@@ -2067,7 +2035,6 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
         .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
-    assert!(!parent_template.summary.has_formatter);
 
     let branch_chain = match parser_tir_control_flow_root_kind(&template, &store) {
         TemplateIrNodeKind::BranchChain { branches, fallback } => (branches, fallback),
@@ -2123,7 +2090,6 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
         .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
-    assert!(!parent_template.summary.has_formatter);
 
     let (header, body, aggregate_wrapper) =
         match parser_tir_control_flow_root_kind(&template, &store) {
