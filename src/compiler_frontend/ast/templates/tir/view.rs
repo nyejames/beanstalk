@@ -133,59 +133,69 @@ impl fmt::Display for TemplateTirPhase {
 //  Finalized TirView Resolution
 // -------------------------
 
-/// Attempt result when resolving a finalized registry-backed `TirView` for a
-/// `Template`.
+/// Resolves the required finalized registry-backed `TirView` for a `Template`.
 ///
-/// WHAT: distinguishes the three outcomes that validation consumers need:
-///       a usable view, an unsupported root that should use raw same-store TIR
-///       roots, and a malformed finalized registry/view
-///       identity that indicates a compiler bug.
-/// WHY: keeps the view-path decision local and conservative; malformed
-///      registry/view identity is an internal invariant and must not become a
-///      user-facing diagnostic or silently downgrade to an alternate path.
-pub(crate) enum FinalizedTirViewAttempt<'a> {
-    Available(TirView<'a>),
-    Unavailable,
-    Invalid(CompilerError),
-}
-
-/// Returns a finalized same-store `TirView` for `template` when it owns a
-/// registry-resolvable TIR reference.
-///
-/// WHAT: validates that the template's `tir_reference` is at least
-///       `Finalized`, belongs to the current module store, and resolves
-///       through the registry. Unsupported roots are reported as
-///       `Unavailable` so callers can keep their existing alternate path.
-///       Malformed finalized view identity is returned as `Invalid(CompilerError)`.
-/// WHY: final type-boundary validation and debug TypeId validation both need
-///      the same conservative view-path decision; centralizing it in the view
-///      module prevents duplicate local helpers in AST finalization.
+/// WHAT: the single authority used by final type-boundary validation and debug
+///       TypeId validation. It requires the template's `tir_reference` to be at
+///       least `Finalized`, to belong to the exact direct module store owner,
+///       and to resolve its root and overlay set through `TirView`. Every
+///       missing authority condition is an explicit internal `CompilerError`;
+///       no caller may downgrade to a raw same-store path.
+/// WHY: after normalization every template that reaches the AST-to-HIR boundary
+///      owns a Finalized registry-backed identity. A missing phase, owner,
+///      store, root or overlay is a compiler bug, not permission to reconstruct
+///      template meaning from raw stores. Centralizing the required resolution
+///      keeps the authority boundary in one place and removes duplicate local
+///      fallback helpers from AST finalization.
 pub(crate) fn finalized_tir_view_for_template<'a>(
     template: &Template,
     store: &TemplateIrStore,
     registry: &'a TemplateIrRegistry,
-) -> FinalizedTirViewAttempt<'a> {
+) -> Result<TirView<'a>, CompilerError> {
     let reference = &template.tir_reference;
+    let store_owner = store.owner();
+
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
-        return FinalizedTirViewAttempt::Unavailable;
+        return Err(CompilerError::compiler_error(format!(
+            "finalized_tir_view_for_template: template TIR reference is at phase {:?}, final type-boundary validation requires Finalized",
+            reference.phase
+        )));
     }
-    if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-        return FinalizedTirViewAttempt::Unavailable;
+    if !Arc::ptr_eq(&reference.store_owner, &store_owner) {
+        return Err(CompilerError::compiler_error(
+            "finalized_tir_view_for_template: template TIR reference store owner does not match the module store owner",
+        ));
     }
     if reference.root.store_id != store.store_id() {
-        return FinalizedTirViewAttempt::Unavailable;
+        return Err(CompilerError::compiler_error(format!(
+            "finalized_tir_view_for_template: template TIR reference store id {} does not match the module store id {}",
+            reference.root.store_id,
+            store.store_id()
+        )));
     }
 
-    match TirView::with_minimum_phase(
+    let registered_store = registry.store(reference.root.store_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "finalized_tir_view_for_template: module store {} is not registered",
+            reference.root.store_id
+        ))
+    })?;
+    let registered_store_owner = registered_store.owner();
+    if !Arc::ptr_eq(&registered_store_owner, &store_owner) {
+        return Err(CompilerError::compiler_error(format!(
+            "finalized_tir_view_for_template: registry store {} does not match the direct module store owner",
+            reference.root.store_id
+        )));
+    }
+    drop(registered_store);
+
+    TirView::with_minimum_phase(
         registry,
         reference.root,
         reference.phase,
         TemplateTirPhase::Finalized,
         reference.overlay_set_id,
-    ) {
-        Ok(view) => FinalizedTirViewAttempt::Available(view),
-        Err(error) => FinalizedTirViewAttempt::Invalid(error),
-    }
+    )
 }
 
 // -------------------------

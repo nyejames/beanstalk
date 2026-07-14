@@ -1288,3 +1288,102 @@ fn nested_walker_shares_visited_set_between_tir_child_and_expression_template() 
         "shared visited set should visit child B only once across TIR child and expression template paths"
     );
 }
+
+/// Insert contributions recurse through a child `TirView` that inherits the
+/// parent phase and overlay set, so an expression overlay keyed by the insert
+/// template's site is read through the effective view rather than the raw
+/// structural payload.
+#[test]
+fn view_walker_reads_insert_contribution_effective_overlay() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+
+    let (parent_template_id, insert_site_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+
+        let insert_root = dynamic_node(&mut store, 1);
+        let insert_template_id = push_template(&mut store, insert_root);
+        let insert_site_id = dynamic_expression_site_id(&store, insert_root);
+
+        let parent_root = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_insert_contribution_node(insert_template_id, empty_location())
+        };
+        let parent_template_id = push_template(&mut store, parent_root);
+        (parent_template_id, insert_site_id)
+    };
+
+    let overlay_set_id = {
+        let overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+            overrides: vec![(insert_site_id, Box::new(expression(42)))],
+        });
+        registry.allocate_overlay_set(TemplateOverlaySet {
+            expression_overrides: Some(overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        })
+    };
+
+    let view = TirView::with_minimum_phase(
+        &registry,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Finalized,
+        TemplateTirPhase::Finalized,
+        overlay_set_id,
+    )
+    .expect("parent view should construct");
+
+    let payloads = collect_view_expression_payloads(&view).expect("walk should succeed");
+
+    assert_eq!(payloads.len(), 1);
+    assert!(
+        matches!(payloads[0].kind, ExpressionKind::Int(42)),
+        "insert contribution should recurse through a child view and read the inherited overlay override, not the structural payload"
+    );
+}
+
+/// A missing insert contribution template is reported as an explicit internal
+/// error instead of silently skipped, because insert contributions now recurse
+/// through a required child `TirView`.
+#[test]
+fn view_walker_reports_missing_insert_contribution_template() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let parent_root = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_insert_contribution_node(TemplateIrId::new(99), empty_location())
+        };
+        push_template(&mut store, parent_root)
+    };
+
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Finalized,
+        overlay_set_id,
+    )
+    .expect("parent view should construct");
+
+    let error = collect_view_expression_payloads(&view)
+        .expect_err("a missing insert contribution template must fail explicitly");
+
+    assert!(
+        error.msg.contains("root_template"),
+        "error must come from the required insert view root resolution: {}",
+        error.msg,
+    );
+    assert!(
+        error.msg.contains("missing"),
+        "error must report the missing insert template: {}",
+        error.msg
+    );
+}

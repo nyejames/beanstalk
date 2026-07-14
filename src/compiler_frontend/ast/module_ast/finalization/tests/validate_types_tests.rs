@@ -338,3 +338,127 @@ fn finalized_tir_view_loop_header_payload_validates_effective_overlay_expression
     );
     assert!(error.msg.contains("9999"));
 }
+
+/// A template reaching type-boundary validation without a Finalized TIR phase
+/// must be rejected explicitly. There is no raw same-store downgrade after
+/// normalization, so a Composed (or earlier) reference is an internal invariant.
+#[test]
+fn non_finalized_template_reaching_type_validation_is_rejected() {
+    let mut string_table = StringTable::new();
+    let type_environment = TypeEnvironment::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+
+    let text = string_table.intern("body");
+    let structural_expression =
+        Expression::string_slice(text, location_at(1, 1), ValueMode::ImmutableOwned);
+
+    let template_id = {
+        let mut store = template_ir_store.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let dynamic_node_id = builder.push_dynamic_expression_node(
+            structural_expression,
+            TemplateSegmentOrigin::Body,
+            None,
+            location_at(1, 1),
+        );
+        builder.finish_template(
+            dynamic_node_id,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let store_owner = template_ir_store.borrow().owner();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        location: SourceLocation::default(),
+    };
+
+    let store_borrow = template_ir_store.borrow();
+    let context = TypeValidationContext {
+        type_environment: &type_environment,
+        template_ir_store: &store_borrow,
+        template_ir_registry: &registry,
+    };
+
+    let error = validate_template_expression_payloads(&template, &context)
+        .expect_err("a non-Finalized template must not downgrade to a raw same-store walk");
+
+    assert!(
+        matches!(error.error_type, ErrorType::Compiler),
+        "missing Finalized authority must be an internal compiler invariant",
+    );
+    assert!(
+        error.msg.contains("Finalized"),
+        "error must name the required Finalized phase: {}",
+        error.msg,
+    );
+}
+
+/// A registry store ID is not sufficient authority on its own because IDs are
+/// local to each registry. Final validation must also prove that the registry
+/// entry and direct module store have the same logical owner.
+#[test]
+fn same_id_foreign_store_reaching_type_validation_is_rejected() {
+    let type_environment = TypeEnvironment::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+
+    let template_id = {
+        let mut registered_store = registry
+            .store_mut(store_id)
+            .expect("registered store should be mutable");
+        let mut builder = TemplateIrBuilder::new(&mut registered_store);
+        let root = builder.push_sequence_node(Vec::new(), SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        )
+    };
+
+    let mut foreign_store = TemplateIrStore::new();
+    foreign_store.set_store_id(store_id);
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: foreign_store.owner(),
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id,
+        },
+        location: SourceLocation::default(),
+    };
+    let context = TypeValidationContext {
+        type_environment: &type_environment,
+        template_ir_store: &foreign_store,
+        template_ir_registry: &registry,
+    };
+
+    let error = validate_template_expression_payloads(&template, &context)
+        .expect_err("a same-ID foreign direct store must not resolve through the registry");
+
+    assert!(matches!(error.error_type, ErrorType::Compiler));
+    assert!(
+        error
+            .msg
+            .contains("does not match the direct module store owner"),
+        "error should identify the mismatched registry-store authority: {}",
+        error.msg
+    );
+}

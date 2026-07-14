@@ -1,26 +1,27 @@
 //! TIR expression-payload walkers.
 //!
-//! WHAT: provides read-only traversals over every expression payload reachable
-//!       from same-store TIR roots and from a finalized `TirView`, plus the
-//!       effective overlay collector used by AST finalization and the nested
-//!       expression-and-TIR-view walker used by the head parser.
+//! WHAT: provides read-only effective-view traversals over every expression
+//!       payload reachable from a finalized `TirView`, plus the effective overlay
+//!       collector used by AST finalization and the nested expression-and-TIR-view
+//!       walker used by the head parser.
 //! WHY: final type-boundary validation and debug TypeId validation both need to
 //!      inspect the same expression-bearing TIR nodes; centralizing the walks in
 //!      TIR keeps the traversal authoritative and removes near-duplicate local
 //!      helpers from AST finalization. The `TirView` walk reads effective
-//!      expression overlays for dynamic-expression splices, branch selectors,
-//!      and loop headers. The nested-expression walker additionally recurses
-//!      into `ExpressionKind` internals and re-enters TIR views for
-//!      template-valued expressions, sharing one visited set across both paths.
+//!      expression overlays for dynamic-expression splices, branch selectors
+//!      and loop headers, and recurses into child-template and
+//!      insert-contribution views through one shared visited set. The
+//!      nested-expression walker additionally recurses into `ExpressionKind`
+//!      internals and re-enters TIR views for template-valued expressions.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
-use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchSelector, TemplateLoopHeader,
-};
+#[cfg(test)]
+use crate::compiler_frontend::ast::templates::template_control_flow::TemplateBranchSelector;
+use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopHeader;
 use crate::compiler_frontend::ast::templates::tir::ids::ExpressionSiteId;
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIrNodeKind, TemplateLoopHeaderExpressionSites,
@@ -29,28 +30,13 @@ use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotSiteRe
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::TirView;
 use crate::compiler_frontend::ast::templates::tir::{
-    SameStoreTirRoots, TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
+    TemplateIrId, TemplateIrNodeId, TemplateSlotPlanId,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateNodeRef, TemplateOverlaySetId, TemplateRef, TemplateStoreId,
-    TemplateTirPhase, TemplateTirReference,
+    TemplateIrRegistry, TemplateNodeRef, TemplateOverlaySetId, TemplateRef, TemplateTirPhase,
+    TemplateTirReference,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-
-/// Visitor for expression payloads discovered during a TIR walk.
-///
-/// WHAT: implementors receive every dynamic-expression payload and every
-///       selector/header expression reached from the starting roots. The walker
-///       handles all structural recursion (sequences, branches, loops, wrappers,
-///       child templates, insert contributions) so visitors only decide what to
-///       do with each expression.
-pub(crate) trait TirExpressionPayloadVisitor {
-    /// Error type returned when a visitor decides a payload is invalid.
-    type Error;
-
-    /// Called once for each expression payload reachable from the roots.
-    fn visit_expression_payload(&mut self, expression: &Expression) -> Result<(), Self::Error>;
-}
 
 /// Mutator for expression payloads discovered during a strict TIR walk.
 ///
@@ -68,46 +54,18 @@ pub(crate) trait TirExpressionPayloadMutator {
     ) -> Result<(), CompilerError>;
 }
 
-/// Walks every expression payload reachable from `roots` in same-store TIR.
-///
-/// WHAT: recursively traverses sequences, branch chains, loops, aggregate
-///       wrappers, child templates, and insert contributions; calls the visitor
-///       for every dynamic expression and every branch/loop-header expression.
-///       A visited set keyed by `TemplateIrId` prevents infinite recursion
-///       through child-template and insert-contribution references.
-/// WHY: centralizes the read-only TIR expression-payload traversal shared by
-///      final type-boundary validation and debug TypeId validation.
-pub(crate) fn walk_tir_expression_payloads<V>(
-    store: &TemplateIrStore,
-    roots: &SameStoreTirRoots,
-    visitor: &mut V,
-) -> Result<(), V::Error>
-where
-    V: TirExpressionPayloadVisitor,
-{
-    let mut visited_templates = HashSet::new();
-    if let Some(seed_template_id) = roots.seed_template_id {
-        visited_templates.insert(seed_template_id);
-    }
-
-    for root in &roots.roots {
-        walk_tir_node_expression_payloads(store, *root, visitor, &mut visited_templates)?;
-    }
-
-    Ok(())
-}
-
 /// Walks every expression payload reachable from `view`, reading effective
 /// expression overlays for dynamic-expression nodes, branch selectors, and
 /// loop headers.
 ///
 /// WHAT: recursively traverses the structural root of `view` and its
-///       store-qualified child-template descendants. Dynamic-expression splices,
-///       branch selectors, and loop-header expressions prefer the override
-///       expression provided by each effective view, falling back to the stored
-///       structural expression. Insert-contribution references delegate to the
-///       raw same-store walker because they do not carry an effective view
-///       identity.
+///       store-qualified child-template and insert-contribution descendants.
+///       Dynamic-expression splices, branch selectors and loop-header
+///       expressions prefer the override expression provided by each effective
+///       view, falling back to the stored structural expression. Insert
+///       contributions recurse through a child `TirView` that inherits the
+///       parent phase and overlay set, so every reachable payload is read
+///       through the same effective-view authority.
 /// WHY: centralizes the view-based expression-payload traversal used by debug
 ///      TypeId validation and final type-boundary validation without
 ///      duplicating overlay-resolution logic in finalization.
@@ -398,17 +356,27 @@ fn walk_tir_view_expression_payload_node(
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
             drop(node);
-            let effective_identity = (
-                TemplateRef::new(store_id, template_id),
-                view.phase(),
-                view.overlay_set_id(),
-            );
+            let insert_root = TemplateRef::new(store_id, template_id);
+            let effective_identity = (insert_root, view.phase(), view.overlay_set_id());
             if visited_templates.insert(effective_identity) {
-                walk_raw_store_expression_payloads(
-                    view.registry_ref(),
-                    store_id,
-                    template_id,
+                // Insert contributions inherit the parent phase and overlay set,
+                // so they recurse through a child `TirView` instead of a raw
+                // same-store walk. A missing insert template or overlay set is an
+                // explicit internal error from `child_view` / `root_template`.
+                let insert_view =
+                    view.child_view(insert_root, view.phase(), view.overlay_set_id())?;
+                let insert_root_node_id = {
+                    let insert_root_template = insert_view.root_template()?;
+                    insert_root_template.root
+                };
+                let insert_root_node_ref =
+                    TemplateNodeRef::new(insert_view.root_ref().store_id, insert_root_node_id);
+
+                walk_tir_view_expression_payload_node(
+                    &insert_view,
+                    insert_root_node_ref,
                     visitor,
+                    visited_templates,
                 )?;
             }
         }
@@ -500,53 +468,6 @@ fn visit_loop_header_effective_expressions(
     Ok(())
 }
 
-/// Delegates a nested same-store template root to the raw store walker.
-///
-/// WHAT: borrows the registry-owned store for `store_id`, looks up
-///       `template_id`, and walks its root through the existing raw
-///       `walk_tir_expression_payloads` traversal.
-/// WHY: the `TirView` walker keeps nested-shape fallback conservative by
-///      reusing the proven raw-store path for child templates and insert
-///      contributions that do not carry a usable view identity.
-fn walk_raw_store_expression_payloads(
-    registry: &TemplateIrRegistry,
-    store_id: TemplateStoreId,
-    template_id: TemplateIrId,
-    visitor: &mut impl FnMut(&Expression) -> Result<(), CompilerError>,
-) -> Result<(), CompilerError> {
-    let store = registry.store(store_id).ok_or_else(|| {
-        CompilerError::compiler_error(
-            "TIR view walker could not borrow the store for a raw fallback walk.",
-        )
-    })?;
-
-    let Some(template_ir) = store.get_template(template_id) else {
-        return Ok(());
-    };
-
-    let roots = SameStoreTirRoots {
-        roots: vec![template_ir.root],
-        seed_template_id: Some(template_id),
-    };
-    let mut adapter = TirExpressionPayloadVisitorAdapter { visitor };
-    walk_tir_expression_payloads(&store, &roots, &mut adapter)
-}
-
-struct TirExpressionPayloadVisitorAdapter<'a, F> {
-    visitor: &'a mut F,
-}
-
-impl<F> TirExpressionPayloadVisitor for TirExpressionPayloadVisitorAdapter<'_, F>
-where
-    F: FnMut(&Expression) -> Result<(), CompilerError>,
-{
-    type Error = CompilerError;
-
-    fn visit_expression_payload(&mut self, expression: &Expression) -> Result<(), Self::Error> {
-        (self.visitor)(expression)
-    }
-}
-
 /// Mutates every expression payload reachable from one finalized body root.
 ///
 /// WHAT: starts from a `TemplateIrNodeId`, mutates dynamic-expression payloads,
@@ -609,93 +530,6 @@ pub(crate) fn collect_effective_tir_expression_overlay_payloads(
         ExpressionOverlayPayloadCollector::new_effective(store, registry, root_overlay_set_id)?;
     collector.collect_template(template_id)?;
     Ok(collector.into_payloads())
-}
-
-/// Recursively visits expression payloads reachable from one TIR node.
-fn walk_tir_node_expression_payloads<V>(
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    visitor: &mut V,
-    visited_templates: &mut HashSet<TemplateIrId>,
-) -> Result<(), V::Error>
-where
-    V: TirExpressionPayloadVisitor,
-{
-    let Some(node) = store.get_node(node_id) else {
-        return Ok(());
-    };
-
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
-            for child in children {
-                walk_tir_node_expression_payloads(store, *child, visitor, visited_templates)?;
-            }
-        }
-
-        TemplateIrNodeKind::DynamicExpression { expression, .. } => {
-            visitor.visit_expression_payload(expression)?;
-        }
-
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                visit_branch_selector_expression(&branch.selector, visitor)?;
-                walk_tir_node_expression_payloads(store, branch.body, visitor, visited_templates)?;
-            }
-
-            if let Some(fallback_id) = fallback {
-                walk_tir_node_expression_payloads(store, *fallback_id, visitor, visited_templates)?;
-            }
-        }
-
-        TemplateIrNodeKind::Loop {
-            header,
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            visit_loop_header_expressions(header, visitor)?;
-            walk_tir_node_expression_payloads(store, *body, visitor, visited_templates)?;
-
-            if let Some(wrapper_id) = aggregate_wrapper {
-                walk_tir_node_expression_payloads(store, *wrapper_id, visitor, visited_templates)?;
-            }
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id())
-                && visited_templates.insert(template_id)
-                && let Some(template_ir) = store.get_template(template_id)
-            {
-                walk_tir_node_expression_payloads(
-                    store,
-                    template_ir.root,
-                    visitor,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            if visited_templates.insert(*template)
-                && let Some(template_ir) = store.get_template(*template)
-            {
-                walk_tir_node_expression_payloads(
-                    store,
-                    template_ir.root,
-                    visitor,
-                    visited_templates,
-                )?;
-            }
-        }
-
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. }
-        | TemplateIrNodeKind::RuntimeSlotSite { .. } => {}
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -1324,51 +1158,6 @@ fn runtime_slot_plan_roots(
     }
 
     Ok((contribution_roots, site_render_roots))
-}
-
-/// Visits the expression payload inside one branch selector.
-fn visit_branch_selector_expression<V>(
-    selector: &TemplateBranchSelector,
-    visitor: &mut V,
-) -> Result<(), V::Error>
-where
-    V: TirExpressionPayloadVisitor,
-{
-    match selector {
-        TemplateBranchSelector::Bool(condition) => visitor.visit_expression_payload(condition),
-
-        TemplateBranchSelector::OptionPresentCapture { scrutinee, .. } => {
-            visitor.visit_expression_payload(scrutinee)
-        }
-    }
-}
-
-/// Visits every expression payload referenced by a loop header.
-fn visit_loop_header_expressions<V>(
-    header: &TemplateLoopHeader,
-    visitor: &mut V,
-) -> Result<(), V::Error>
-where
-    V: TirExpressionPayloadVisitor,
-{
-    match header {
-        TemplateLoopHeader::Conditional { condition } => {
-            visitor.visit_expression_payload(condition)
-        }
-
-        TemplateLoopHeader::Range { range, .. } => {
-            visitor.visit_expression_payload(&range.start)?;
-            visitor.visit_expression_payload(&range.end)?;
-            if let Some(step) = &range.step {
-                visitor.visit_expression_payload(step)?;
-            }
-            Ok(())
-        }
-
-        TemplateLoopHeader::Collection { iterable, .. } => {
-            visitor.visit_expression_payload(iterable)
-        }
-    }
 }
 
 #[cfg(test)]

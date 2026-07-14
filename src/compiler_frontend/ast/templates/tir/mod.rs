@@ -69,9 +69,6 @@
 //! Only `mod.rs` controls what is re-exported. Submodules keep their internals
 //! `pub(crate)` and `mod.rs` selects a narrow API surface.
 
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use std::sync::Arc;
-
 // -------------------------
 //  Submodules
 // -------------------------
@@ -183,15 +180,16 @@ pub(crate) use ids::{
 #[cfg(test)]
 pub(crate) use ids::SlotOccurrenceId;
 
-// Read-only expression-payload walker shared by final type-boundary validation
-// and debug TypeId validation. The walker is TIR-authoritative and removes the
-// duplicated local traversal helpers from AST finalization.
+// Read-only effective-view expression-payload walker shared by final
+// type-boundary validation and debug TypeId validation. The walker is
+// TIR-authoritative and removes the duplicated local traversal helpers from
+// AST finalization.
 pub(crate) use expression_payload_walker::walk_tir_view_expression_payloads;
 // Expression-payload overlay APIs consumed by production AST finalization.
 // Mutation is retained only for focused TIR walker tests.
 pub(crate) use expression_payload_walker::{
-    TirExpressionPayloadVisitor, collect_effective_tir_expression_overlay_payloads,
-    walk_expression_payloads_with_nested_tir_views, walk_tir_expression_payloads,
+    collect_effective_tir_expression_overlay_payloads,
+    walk_expression_payloads_with_nested_tir_views,
 };
 
 // Store and node types are re-exported so HIR handoff construction and later
@@ -251,7 +249,7 @@ pub(crate) use slot_composition::{
 };
 
 // Parser builder state: the in-progress parser TIR accumulator.
-pub(crate) use parser_builder_state::{TemplateParserIrBuilderState, TemplateTirReference};
+pub(crate) use parser_builder_state::TemplateTirReference;
 
 // Parser-local construction context: owns the in-progress builder state while
 // a template is being parsed and shaped, keeping parse-time accumulator state
@@ -309,58 +307,4 @@ pub(crate) use slot_plan::{
 };
 
 // Central read API over registry-owned template roots and overlay sets.
-pub(crate) use view::{
-    FinalizedTirViewAttempt, TemplateTirPhase, TirView, finalized_tir_view_for_template,
-};
-
-// -------------------------
-//  Same-store TIR root resolution
-// -------------------------
-
-/// Current same-store TIR roots for a `Template`.
-///
-/// WHAT: carries the root node IDs that callers should walk, plus the
-///       finalized `TemplateIrId` to seed visited-template recursion when one
-///       exists.
-/// WHY: validation and debug walkers need both the starting nodes and a way
-///      to avoid re-walking the seed template when recursing through
-///      `ChildTemplate`/`InsertContribution` references.
-pub(crate) struct SameStoreTirRoots {
-    pub(crate) roots: Vec<TemplateIrNodeId>,
-    pub(crate) seed_template_id: Option<TemplateIrId>,
-}
-
-/// WHAT: returns the authoritative template root when `template.tir_reference`
-///       belongs to `store`, or the in-progress parser builder children passed
-///       via `builder` while parsing is still in progress. A cross-store TIR
-///       proof yields `None`.
-/// WHY: centralizes the store-owner proof for finished TIR references and
-///      active parser construction contexts so every validation/debug walker
-///      uses the same current TIR authority.
-pub(crate) fn current_same_store_tir_roots_for_template(
-    template: &Template,
-    store: &TemplateIrStore,
-    builder: Option<&TemplateParserIrBuilderState>,
-) -> Option<SameStoreTirRoots> {
-    let store_owner = store.owner();
-
-    let reference = &template.tir_reference;
-    if Arc::ptr_eq(&reference.store_owner, &store_owner) {
-        let root = store.get_template(reference.root.template_id)?.root;
-        return Some(SameStoreTirRoots {
-            roots: vec![root],
-            seed_template_id: Some(reference.root.template_id),
-        });
-    }
-
-    if let Some(builder) = builder
-        && Arc::ptr_eq(&builder.store_owner, &store_owner)
-    {
-        return Some(SameStoreTirRoots {
-            roots: builder.root_children().to_owned(),
-            seed_template_id: None,
-        });
-    }
-
-    None
-}
+pub(crate) use view::{TemplateTirPhase, TirView, finalized_tir_view_for_template};

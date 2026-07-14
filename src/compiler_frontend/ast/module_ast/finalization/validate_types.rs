@@ -4,6 +4,9 @@
 //! `TypeEnvironment`.
 //! WHY: AST owns name/type resolution; HIR should receive canonical semantic type identity,
 //! not diagnostic-only `DataType` reconstructions.
+//!
+//! Template expression payloads are validated through one required finalized
+//! `TirView` authority; there is no raw same-store fallback after normalization.
 
 use super::finalizer::AstFinalizer;
 use crate::compiler_frontend::ast::ast_nodes::{
@@ -25,9 +28,8 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    FinalizedTirViewAttempt, TemplateIrRegistry, TemplateIrStore, TirExpressionPayloadVisitor,
-    current_same_store_tir_roots_for_template, finalized_tir_view_for_template,
-    walk_tir_expression_payloads, walk_tir_view_expression_payloads,
+    TemplateIrRegistry, TemplateIrStore, finalized_tir_view_for_template,
+    walk_tir_view_expression_payloads,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -37,35 +39,15 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// Context shared by every helper in this type-boundary validation pass.
 ///
-/// WHAT: bundles the final module `TypeEnvironment` and the module-scoped
+/// WHAT: bundles the final module `TypeEnvironment` with the module-scoped
 ///       `TemplateIrStore` and `TemplateIrRegistry` so template-expression
-///       payload validation can prefer a finalized same-store `TirView` before
-///       falling back to raw same-store TIR roots.
+///       payload validation resolves one required finalized `TirView`.
 /// WHY: the pass is read-only and short-lived; a small context struct keeps the
 ///      recursive walk signatures focused and stage-local.
 struct TypeValidationContext<'a> {
     type_environment: &'a TypeEnvironment,
     template_ir_store: &'a TemplateIrStore,
     template_ir_registry: &'a TemplateIrRegistry,
-}
-
-/// Visitor that validates expression payloads reachable from same-store TIR roots.
-///
-/// WHAT: adapts the shared TIR expression-payload walker to the finalization
-///       type-boundary validator by delegating each expression to the existing
-///       `validate_expression` helper.
-/// WHY: keeps the structural TIR walk in one TIR-owned helper while this file
-///      retains ownership of the actual TypeId validation policy.
-struct TemplateExpressionPayloadTypeValidator<'a> {
-    context: &'a TypeValidationContext<'a>,
-}
-
-impl TirExpressionPayloadVisitor for TemplateExpressionPayloadTypeValidator<'_> {
-    type Error = CompilerError;
-
-    fn visit_expression_payload(&mut self, expression: &Expression) -> Result<(), Self::Error> {
-        validate_expression(expression, self.context)
-    }
 }
 
 impl AstFinalizer<'_, '_> {
@@ -332,9 +314,7 @@ fn validate_expression(
 
         // Template and collection literals.
         ExpressionKind::Template(template) => {
-            // Same-store TIR roots are required after normalization.
-            // Templates without TIR roots after normalization indicate a compiler bug.
-
+            // A finalized registry-backed TIR view is required after normalization.
             validate_template_expression_payloads(template, context)?;
             Ok(())
         }
@@ -460,45 +440,30 @@ fn validate_owned_runtime_slot_application_handoff(
 //  Template expression payload validation
 // --------------------------
 
-/// Validates a template's nested expression payloads through same-store TIR.
+/// Validates a template's nested expression payloads through one finalized `TirView`.
 ///
-/// WHAT: prefers a finalized registry-backed `TirView` so effective
+/// WHAT: resolves the required finalized registry-backed `TirView` for the
+///       template and walks its effective expression payloads. Effective
 ///       expression overlays are authoritative for dynamic-expression splices,
-///       branch selectors, and loop headers. If the template lacks a usable view
-///       identity, falls back to raw same-store TIR roots. A template without
-///       TIR roots after normalization is an internal compiler invariant violation.
-///       Malformed finalized registry/view identity is returned as `CompilerError`
-///       rather than downgraded.
-/// WHY: type-boundary validation should validate the same effective TIR
-///      representation that later phases consume.
+///       branch selectors and loop headers. A template that reaches this
+///       boundary without a Finalized registry-backed identity is an internal
+///       compiler invariant violation.
+/// WHY: type-boundary validation must validate the same effective TIR
+///      representation that later phases consume; there is no raw same-store
+///      downgrade after normalization.
 fn validate_template_expression_payloads(
     template: &Template,
     context: &TypeValidationContext,
 ) -> Result<(), CompilerError> {
-    match finalized_tir_view_for_template(
+    let view = finalized_tir_view_for_template(
         template,
         context.template_ir_store,
         context.template_ir_registry,
-    ) {
-        FinalizedTirViewAttempt::Available(view) => {
-            return walk_tir_view_expression_payloads(&view, &mut |expression| {
-                validate_expression(expression, context)
-            });
-        }
-        FinalizedTirViewAttempt::Invalid(error) => return Err(error),
-        FinalizedTirViewAttempt::Unavailable => {}
-    }
+    )?;
 
-    if let Some(roots) =
-        current_same_store_tir_roots_for_template(template, context.template_ir_store, None)
-    {
-        let mut visitor = TemplateExpressionPayloadTypeValidator { context };
-        return walk_tir_expression_payloads(context.template_ir_store, &roots, &mut visitor);
-    }
-
-    Err(CompilerError::compiler_error(
-        "Template reached type validation without same-store TIR roots. This indicates a parser or normalization bug.",
-    ))
+    walk_tir_view_expression_payloads(&view, &mut |expression| {
+        validate_expression(expression, context)
+    })
 }
 
 // --------------------------

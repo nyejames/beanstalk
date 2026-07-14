@@ -24,9 +24,8 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    FinalizedTirViewAttempt, TemplateIrRegistry, TemplateIrStore, TirExpressionPayloadVisitor,
-    current_same_store_tir_roots_for_template, finalized_tir_view_for_template,
-    walk_tir_expression_payloads, walk_tir_view_expression_payloads,
+    TemplateIrRegistry, TemplateIrStore, finalized_tir_view_for_template,
+    walk_tir_view_expression_payloads,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody,
@@ -37,41 +36,18 @@ use crate::compiler_frontend::datatypes::definitions::{
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use std::convert::Infallible;
 
 /// Context shared by every helper in this debug validation pass.
 ///
 /// WHAT: bundles the final module `TypeEnvironment` with the module-scoped
 ///       `TemplateIrStore` and `TemplateIrRegistry` so template-expression
-///       payload validation can prefer a finalized `TirView` before falling
-///       back to raw same-store TIR roots.
+///       payload validation resolves one required finalized `TirView`.
 /// WHY: debug validation is read-only and short-lived; a small context struct
 ///      keeps the recursive walk signatures focused.
 struct DebugTypeValidationContext<'a> {
     type_environment: &'a TypeEnvironment,
     template_ir_store: &'a TemplateIrStore,
     template_ir_registry: &'a TemplateIrRegistry,
-}
-
-/// Visitor that debug-validates expression payloads reachable from same-store
-/// TIR roots.
-///
-/// WHAT: adapts the shared TIR expression-payload walker to the debug TypeId
-///       validator by delegating each expression to the existing
-///       `debug_validate_expression_type_id` helper.
-/// WHY: keeps the structural TIR walk in one TIR-owned helper while this file
-///      retains ownership of the actual debug TypeId assertion policy.
-struct DebugTemplateExpressionPayloadTypeValidator<'a> {
-    context: &'a DebugTypeValidationContext<'a>,
-}
-
-impl TirExpressionPayloadVisitor for DebugTemplateExpressionPayloadTypeValidator<'_> {
-    type Error = Infallible;
-
-    fn visit_expression_payload(&mut self, expression: &Expression) -> Result<(), Self::Error> {
-        debug_validate_expression_type_id(expression, self.context);
-        Ok(())
-    }
 }
 
 /// Entry point for debug TypeId validation before HIR lowering.
@@ -447,10 +423,8 @@ fn debug_validate_expression_type_id_with_context(
         }
 
         ExpressionKind::Template(template) => {
-            // Prefer same-store TIR roots for nested expression payload traversal.
-            // The owned runtime handoffs below remain the authoritative source for
-            // finalized HIR-bound runtime templates; this TIR walk only validates
-            // expression payloads that may not have reached the handoff yet.
+            // Finalized effective TIR remains authoritative until the template is
+            // replaced by one of the owned runtime handoff variants below.
             debug_validate_template_expression_payloads(template, context);
 
             // The finalizer materializes the TIR-derived owned wrapper node
@@ -618,29 +592,28 @@ fn debug_validate_fallible_handling_type_ids(
     }
 }
 
-/// Validates a template's nested expression payloads through same-store TIR.
+/// Validates a template's nested expression payloads through one finalized `TirView`.
 ///
-/// WHAT: prefers a finalized registry-backed `TirView` so effective
+/// WHAT: resolves the required finalized registry-backed `TirView` for the
+///       template and walks its effective expression payloads. Effective
 ///       expression overlays are authoritative for dynamic-expression splices,
-///       branch selectors, and loop headers. If the template lacks a usable
-///       view identity, falls back to raw same-store TIR roots. A template
-///       without TIR roots after normalization is an internal compiler invariant
-///       violation.
-/// WHY: debug validation should consume the same effective TIR representation
-///      that later phases consume.
+///       branch selectors and loop headers. A template that reaches this
+///       boundary without a Finalized registry-backed identity is an internal
+///       compiler invariant violation.
+/// WHY: debug validation consumes the same effective TIR representation that
+///      later phases consume. The walk returns `()`; the required-view error
+///      and any walk failure are debug-asserted so a release build never
+///      silently downgrades to a raw same-store path.
 fn debug_validate_template_expression_payloads(
     template: &Template,
     context: &DebugTypeValidationContext,
 ) {
-    // Prefer a finalized registry-backed `TirView` so effective expression
-    // overlays are authoritative for dynamic-expression splices, branch
-    // selectors, and loop headers.
     match finalized_tir_view_for_template(
         template,
         context.template_ir_store,
         context.template_ir_registry,
     ) {
-        FinalizedTirViewAttempt::Available(view) => {
+        Ok(view) => {
             let result = walk_tir_view_expression_payloads(&view, &mut |expression| {
                 debug_validate_expression_type_id(expression, context);
                 Ok(())
@@ -650,35 +623,15 @@ fn debug_validate_template_expression_payloads(
                 "TIR view expression-payload walk failed during debug TypeId validation: {:?}",
                 result.err()
             );
-            return;
         }
 
-        FinalizedTirViewAttempt::Invalid(error) => {
+        Err(error) => {
             debug_assert!(
                 false,
-                "TIR view construction failed during debug TypeId validation: {error:?}"
+                "finalized TIR view resolution failed during debug TypeId validation: {error:?}"
             );
-            return;
         }
-
-        FinalizedTirViewAttempt::Unavailable => {}
     }
-
-    if let Some(roots) =
-        current_same_store_tir_roots_for_template(template, context.template_ir_store, None)
-    {
-        let mut visitor = DebugTemplateExpressionPayloadTypeValidator { context };
-        let result = walk_tir_expression_payloads(context.template_ir_store, &roots, &mut visitor);
-        match result {
-            Ok(()) => {}
-            Err(error) => match error {},
-        }
-        return;
-    }
-
-    unreachable!(
-        "Template reached debug type validation without same-store TIR roots. This indicates a parser or normalization bug.",
-    );
 }
 fn debug_validate_loop_bindings_type_ids(
     bindings: &LoopBindings,
