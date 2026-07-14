@@ -131,7 +131,7 @@ pub(super) fn handle_template_value_in_template_head(
     // cross-context template values must not have their raw `TemplateIrId` reused
     // here because IDs are only valid inside their originating store.
     let store_owner = construction_context.store_owner();
-    let same_store = Arc::ptr_eq(&value.tir_store_owner(), &store_owner);
+    let same_store = Arc::ptr_eq(&value.tir_reference.store_owner, &store_owner);
 
     if same_store {
         let child_reference = &value.tir_reference;

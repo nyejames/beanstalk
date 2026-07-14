@@ -262,7 +262,7 @@ fn convert_head_node_for_aggregate_wrapper(
                 // an intermediate content representation.
                 let foreign_reference = &child_template.tir_reference;
                 if foreign_reference.root.store_id != store.store_id()
-                    && !Arc::ptr_eq(&child_template.tir_store_owner(), &store_owner)
+                    && !Arc::ptr_eq(&child_template.tir_reference.store_owner, &store_owner)
                     && registry
                         .store_handle(foreign_reference.root.store_id)
                         .is_some_and(|handle| {

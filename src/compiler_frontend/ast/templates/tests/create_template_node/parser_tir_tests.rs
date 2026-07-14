@@ -59,7 +59,7 @@ fn parse_const_required_template(
 }
 
 fn tir_root_child_ids(template: &Template, store: &TemplateIrStore) -> Vec<TemplateIrNodeId> {
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -227,7 +227,7 @@ fn parser_tir_root_kind<'store>(
     template: &Template,
     store: &'store TemplateIrStore,
 ) -> &'store TemplateIrNodeKind {
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -311,7 +311,7 @@ fn parser_tir_records_if_else_if_else_branch_chain() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -379,7 +379,7 @@ fn branch_chain_from_root(
     Vec<crate::compiler_frontend::ast::templates::tir::TemplateIrBranch>,
     Option<TemplateIrNodeId>,
 ) {
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -518,7 +518,7 @@ fn parser_tir_records_loop_node() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -675,7 +675,7 @@ fn parser_tir_records_default_slot_placeholder() {
     );
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.slot_count, 1);
     assert!(parent_template.summary.has_slots);
@@ -866,7 +866,7 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
     assert_eq!(parser_tir_text(children[1], &store, &string_table), " body");
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_reactivity);
 
@@ -1272,7 +1272,7 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_template_id())
+            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1358,7 +1358,7 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_template_id())
+            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1463,7 +1463,7 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         store
-            .control_flow_node_id_for_template(template.tir_template_id())
+            .control_flow_node_id_for_template(template.tir_reference.root.template_id)
             .is_some()
     };
     let tir_reference = &mut template.tir_reference;
@@ -1708,7 +1708,7 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
     );
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
 
@@ -1999,7 +1999,7 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
 
     assert!(
@@ -2033,7 +2033,7 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -2088,7 +2088,7 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -2268,7 +2268,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let (template, store) = parse_template(r#"["head": body]"#, &mut string_table);
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2284,7 +2284,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
         .expect("runtime template should parse");
     let store = context.template_ir_store.borrow();
     let tir_kind = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2297,7 +2297,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
     let (template, store) = parse_template("[$doc: doc body]", &mut string_table);
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2324,7 +2324,7 @@ fn durable_kind_synchronization_updates_tir_and_cache_together() {
 
     let store = store.borrow();
     let tir_kind = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("TIR entry should exist")
         .kind
         .clone();
@@ -2363,7 +2363,7 @@ fn parser_tir_records_finalized_same_store_child_template_as_child_template_node
     assert!(!child_template.summary.has_control_flow);
 
     let parent_template = store
-        .get_template(template.tir_template_id())
+        .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
     assert!(parent_template.summary.is_const_evaluable_shape);

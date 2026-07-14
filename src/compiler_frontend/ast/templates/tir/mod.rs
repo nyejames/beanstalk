@@ -201,7 +201,11 @@ pub(crate) use node::TemplateLoopHeaderExpressionSites;
 pub(crate) use node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
-pub(crate) use store::{TemplateIrStore, TemplateIrStoreOwner};
+pub(crate) use store::TemplateIrStore;
+// `TemplateIrStoreOwner` is only needed by focused TIR tests through this
+// re-export; production code imports it directly from `store`.
+#[cfg(test)]
+pub(crate) use store::TemplateIrStoreOwner;
 pub(crate) use summary::TemplateIrSummary;
 
 // Registry-qualified handles used by production TIR registry and view consumers.

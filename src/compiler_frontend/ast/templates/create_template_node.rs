@@ -516,7 +516,7 @@ impl Template {
         // ensures the authoritative TIR entry carries the classified kind. Both
         // copies are initialized once here; later refresh goes through the
         // single synchronization owner.
-        let template_id = template.tir_template_id();
+        let template_id = template.tir_reference.root.template_id;
         let mut template_ir_store = context.template_ir_store.borrow_mut();
         if !template_ir_store.set_template_kind(template_id, template.kind.to_owned()) {
             return Err(Box::new(

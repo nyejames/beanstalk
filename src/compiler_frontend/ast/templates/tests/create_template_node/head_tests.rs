@@ -313,7 +313,7 @@ fn source_authored_template_range_loop_suffix_reaches_ast() {
     let (template, context, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
 
     let store = context.template_ir_store.borrow();
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     assert!(
         store
             .control_flow_node_id_for_template(template_id)
@@ -3226,7 +3226,7 @@ fn assert_invalid_template_structure(
 
 fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
     let store = context.template_ir_store.borrow();
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
         .expect("template should contain a control-flow node");
@@ -3242,7 +3242,7 @@ fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> Temp
 
 fn expect_loop_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
     let store = context.template_ir_store.borrow();
-    let template_id = template.tir_template_id();
+    let template_id = template.tir_reference.root.template_id;
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
         .expect("template should contain a control-flow node");

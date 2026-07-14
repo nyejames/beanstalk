@@ -613,7 +613,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         // Control-flow children are fully TIR-owned: their body roots carry the
         // branch/loop structure and the child template node is already recorded
         // above through `record_parser_tir_child_template`.
-        let child_template_id = child_template.tir_template_id();
+        let child_template_id = child_template.tir_reference.root.template_id;
         let has_control_flow_root = {
             let store = construction_context.store();
             store
@@ -713,7 +713,7 @@ fn record_parser_tir_insert_contribution(
     construction_context: &mut TemplateConstructionContext,
     child_template: &Template,
 ) {
-    let child_template_id = child_template.tir_template_id();
+    let child_template_id = child_template.tir_reference.root.template_id;
 
     construction_context
         .record_insert_contribution(child_template_id, child_template.location.clone());

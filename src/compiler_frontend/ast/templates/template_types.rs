@@ -8,8 +8,8 @@
 
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrId, TemplateIrRegistry, TemplateIrStore,
-    TemplateIrStoreOwner, TemplateTirReference, refresh_kind_from_classification,
+    MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateIrStore,
+    TemplateTirReference, refresh_kind_from_classification,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -109,7 +109,7 @@ impl Template {
 
         refresh_kind_from_classification(&mut kind, classification);
 
-        if !store.set_template_kind(self.tir_template_id(), kind.clone()) {
+        if !store.set_template_kind(self.tir_reference.root.template_id, kind.clone()) {
             return Err(CompilerError::compiler_error(
                 "Template TIR entry was missing during kind synchronization write-back.",
             ));
@@ -134,7 +134,7 @@ impl Template {
             return None;
         }
         store
-            .get_template(self.tir_template_id())
+            .get_template(self.tir_reference.root.template_id)
             .map(|template_ir| template_ir.kind.clone())
     }
 
@@ -155,23 +155,7 @@ impl Template {
             return None;
         }
         store
-            .get_template(self.tir_template_id())
+            .get_template(self.tir_reference.root.template_id)
             .map(|template_ir| template_ir.kind.clone())
-    }
-
-    /// Returns the logical store-owner token for this template's TIR reference.
-    ///
-    /// WHAT: lets direct-store consumers prove a `TemplateIrId` belongs to the
-    ///       same logical store before using it as a local ID.
-    /// WHY: these consumers may already hold a store borrow, so they cannot
-    ///      re-borrow through the registry. The token also rejects references
-    ///      from another registry whose numeric store ID happens to match.
-    pub(crate) fn tir_store_owner(&self) -> Arc<TemplateIrStoreOwner> {
-        Arc::clone(&self.tir_reference.store_owner)
-    }
-
-    /// Returns the authoritative TIR template ID for this template.
-    pub(crate) fn tir_template_id(&self) -> TemplateIrId {
-        self.tir_reference.root.template_id
     }
 }
