@@ -60,8 +60,8 @@ use crate::compiler_frontend::ast::templates::runtime_handoff::{
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateIrStore,
-    TemplateOverlaySet, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirView,
+    ExpressionSiteId, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase,
+    TemplateTirReference, TirExpressionOverlay, TirTemplateClassification, TirView,
     classify_effective_tir_view_template, collect_effective_tir_expression_overlay_payloads,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -772,7 +772,7 @@ enum NormalizedTemplateExpression {
 fn runtime_template_expression_replacement(
     template: &mut Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
-    classification: &MaterializedTirTemplateClassification,
+    classification: &TirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
     if let Some(replacement) = try_materialize_runtime_handoff_from_final_effective_template_view(
@@ -908,7 +908,7 @@ fn reactive_template_metadata_from_store(
 fn classify_final_effective_template_view(
     template: &mut Template,
     context: &TemplateNormalizationContext<'_, '_>,
-) -> Result<MaterializedTirTemplateClassification, TemplateNormalizationError> {
+) -> Result<TirTemplateClassification, TemplateNormalizationError> {
     let reference = template.tir_reference.clone();
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
@@ -1149,7 +1149,7 @@ fn normalize_runtime_slot_template_expression_for_hir(
 fn materialize_runtime_template_handoff_for_hir(
     template: &Template,
     context: &mut TemplateNormalizationContext<'_, '_>,
-    classification: &MaterializedTirTemplateClassification,
+    classification: &TirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
     let reference = template.tir_reference.clone();

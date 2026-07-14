@@ -3,9 +3,8 @@
 //! WHAT: answers unresolved-slot, escaped-insert, and const-evaluable questions
 //! from TIR trees in the module-scoped `TemplateIrStore`.
 //!
-//! Callers classify either a materialized TIR template ID they already own or a
-//! stable registry-backed `TirView`. Both paths query TIR directly and preserve
-//! the effective overlay context carried by the authoritative reference.
+//! Callers classify a stable registry-backed `TirView` whose root, phase and
+//! overlay set carry the authoritative reference identity.
 //!
 //! WHY: normalization and folding should classify from the TIR root they
 //! already trust instead of reconstructing template structure through a
@@ -52,10 +51,10 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 /// Classification result from one TIR template root.
 ///
 /// WHAT: bundles const-value kind, shape const-evaluability, and escaped-insert
-///       detection for one built or stable registry-backed template tree.
+///       detection for one registry-backed template tree.
 /// WHY: lets callers classify from TIR once and reuse the combined answer
 ///      without rebuilding the tree or running separate tree walks.
-pub(crate) struct MaterializedTirTemplateClassification {
+pub(crate) struct TirTemplateClassification {
     pub(crate) const_value_kind: TemplateConstValueKind,
     pub(crate) shape_const_evaluable: bool,
     pub(crate) has_unresolved_slots: bool,
@@ -127,120 +126,10 @@ pub(crate) fn tir_subtree_contains_slot_insertions(
     tir_tree_has_slot_insert_children(store, root, &mut HashSet::new())
 }
 
-/// Classifies a materialized TIR template already owned by the caller.
-///
-/// WHAT: reads constness, unresolved slots and escaped inserts from the supplied
-///       TIR template ID.
-/// WHY: HIR normalization needs kind refresh, helper validation, and owned
-///      handoff construction from one authoritative tree. Reusing that tree
-///      keeps every decision on the same TIR identity.
-pub(crate) fn classify_materialized_current_tir_template(
-    store: &mut TemplateIrStore,
-    template_id: TemplateIrId,
-    string_table: &StringTable,
-) -> Result<MaterializedTirTemplateClassification, TemplateError> {
-    let (root, template_kind) = fresh_tir_root_and_kind(store, template_id)?;
-
-    let shape_const_evaluable =
-        tir_template_is_const_evaluable_value(store, template_id, string_table);
-    let has_unresolved_slots = tir_tree_has_slots(store, root, &mut HashSet::new());
-    let has_slot_insertions = tir_tree_has_slot_insert_children(store, root, &mut HashSet::new());
-
-    let const_value_kind = classify_materialized_current_tir_const_value(
-        &template_kind,
-        store,
-        root,
-        shape_const_evaluable,
-        has_unresolved_slots,
-        has_slot_insertions,
-    );
-
-    Ok(MaterializedTirTemplateClassification {
-        const_value_kind,
-        shape_const_evaluable,
-        has_unresolved_slots,
-        has_slot_insertions,
-    })
-}
-
-/// Classifies an existing registry-backed empty-overlay `TirView`.
-///
-/// WHAT: answers the same const-value question as materialized TIR
-///       classification, but uses the view root and its overlay context as the
-///       authority.
-/// WHY: finalization already has stable registry/view identity for the narrow
-///      view-backed fold shortcut. Classifying that exact view keeps folding
-///      and classification on one TIR-owned root while non-empty overlay-
-///      effective classification remains deferred.
-#[cfg(test)]
-pub(crate) fn classify_empty_overlay_tir_view_template(
-    view: &TirView<'_>,
-    store: &mut TemplateIrStore,
-    string_table: &StringTable,
-) -> Result<MaterializedTirTemplateClassification, TemplateError> {
-    if !view.phase().is_at_least(TemplateTirPhase::Composed) {
-        return Err(TemplateError::from(CompilerError::compiler_error(format!(
-            "classify_empty_overlay_tir_view_template: root {} is at phase {}, but classification requires Composed or later",
-            view.root_ref(),
-            view.phase()
-        ))));
-    }
-
-    if view.root_ref().store_id != store.store_id() {
-        return Err(TemplateError::from(CompilerError::compiler_error(format!(
-            "classify_empty_overlay_tir_view_template: view root {} does not belong to supplied store {}",
-            view.root_ref(),
-            store.store_id()
-        ))));
-    }
-
-    if !view.overlay_set()?.is_empty() {
-        return Err(TemplateError::from(CompilerError::compiler_error(format!(
-            "classify_empty_overlay_tir_view_template: root {} uses overlay set {}; overlay-effective classification is deferred",
-            view.root_ref(),
-            view.overlay_set_id()
-        ))));
-    }
-
-    // Read the root node and authoritative kind from the store directly (see
-    // classify_effective_tir_view_template for rationale).
-    let (store_root, template_kind) = store
-        .get_template(view.root_ref().template_id)
-        .map(|template| (template.root, template.kind.clone()))
-        .ok_or_else(|| {
-            TemplateError::from(CompilerError::compiler_error(format!(
-                "classify_empty_overlay_tir_view_template: root {} is missing from supplied store",
-                view.root_ref()
-            )))
-        })?;
-
-    let shape_const_evaluable =
-        tir_template_is_const_evaluable_value(store, view.root_ref().template_id, string_table);
-    let has_unresolved_slots = tir_tree_has_slots(store, store_root, &mut HashSet::new());
-    let has_slot_insertions =
-        tir_tree_has_slot_insert_children(store, store_root, &mut HashSet::new());
-
-    let const_value_kind = classify_materialized_current_tir_const_value(
-        &template_kind,
-        store,
-        store_root,
-        shape_const_evaluable,
-        has_unresolved_slots,
-        has_slot_insertions,
-    );
-
-    Ok(MaterializedTirTemplateClassification {
-        const_value_kind,
-        shape_const_evaluable,
-        has_unresolved_slots,
-        has_slot_insertions,
-    })
-}
-
 /// Classifies an existing effective `TirView`, applying supported overlays.
 ///
-/// WHAT: answers the same const-value question as materialized TIR
-///       classification, but reads expression-bearing sites through `TirView`
+/// WHAT: answers the const-value question by reading expression-bearing sites
+///       through `TirView`
 ///       so finalization classifies the exact effective view produced by
 ///       expression-overlay normalization.
 /// WHY: finalization stores normalized dynamic-expression, branch-selector,
@@ -256,7 +145,7 @@ pub(crate) fn classify_effective_tir_view_template(
     view: &TirView<'_>,
     store: &TemplateIrStore,
     string_table: &StringTable,
-) -> Result<MaterializedTirTemplateClassification, TemplateError> {
+) -> Result<TirTemplateClassification, TemplateError> {
     if !view.phase().is_at_least(TemplateTirPhase::Composed) {
         return Err(TemplateError::from(CompilerError::compiler_error(format!(
             "classify_effective_tir_view_template: root {} is at phase {}, but classification requires Composed or later",
@@ -309,22 +198,22 @@ pub(crate) fn classify_effective_tir_view_template(
     // output per the language rules, so they do not force the runtime handoff
     // wrapper path. Only slots that resolve to actual contribution sources turn
     // a const-evaluable `String` template into a `WrapperTemplate`.
-    let has_effectively_resolved_slots = if has_unresolved_slots {
+    let has_resolved_slot_sources = if has_unresolved_slots {
         tir_view_has_resolved_slots(view, store, store_root, &mut HashSet::new())?
     } else {
         false
     };
 
-    let const_value_kind = classify_materialized_current_tir_const_value(
+    let const_value_kind = classify_tir_const_value(
         &template_kind,
         store,
         store_root,
         shape_const_evaluable,
-        has_effectively_resolved_slots,
+        has_resolved_slot_sources,
         has_slot_insertions,
     );
 
-    Ok(MaterializedTirTemplateClassification {
+    Ok(TirTemplateClassification {
         const_value_kind,
         shape_const_evaluable,
         has_unresolved_slots,
@@ -343,7 +232,7 @@ pub(crate) fn classify_effective_tir_view_template(
 ///      synchronization method.
 pub(crate) fn refresh_kind_from_classification(
     kind: &mut TemplateType,
-    classification: &MaterializedTirTemplateClassification,
+    classification: &TirTemplateClassification,
 ) {
     if matches!(
         *kind,
@@ -359,12 +248,12 @@ pub(crate) fn refresh_kind_from_classification(
     };
 }
 
-fn classify_materialized_current_tir_const_value(
+fn classify_tir_const_value(
     template_kind: &TemplateType,
     store: &TemplateIrStore,
     root: TemplateIrNodeId,
     shape_const_evaluable: bool,
-    has_unresolved_slots: bool,
+    has_resolved_slot_sources: bool,
     has_slot_insertions: bool,
 ) -> TemplateConstValueKind {
     if tir_tree_is_loop_control_signal(store, root) {
@@ -378,7 +267,7 @@ fn classify_materialized_current_tir_const_value(
     if matches!(template_kind, TemplateType::SlotInsert(_)) {
         // Slot-insert helper templates are compile-time wrapper values. Escaped
         // nested `$insert(...)` children make them NonConst. Fresh TIR makes
-        // this check authoritative — no extra template body read is needed.
+        // this check authoritative — the TIR kind is the sole owner.
         if has_slot_insertions {
             return TemplateConstValueKind::NonConst;
         }
@@ -393,11 +282,10 @@ fn classify_materialized_current_tir_const_value(
         return TemplateConstValueKind::NonConst;
     }
 
-    // Structural slot/insert hits in the materialized TIR are authoritative.
-    // A slot means the template still has an unresolved placeholder; an
-    // escaped insert child means it still has an unconsumed `$insert(...)`
-    // helper.
-    if has_unresolved_slots {
+    // Resolved slot sources still require wrapper application at fold time.
+    // Missing and uncovered slots emit no output, so they don't make the
+    // effective value a wrapper on their own.
+    if has_resolved_slot_sources {
         return TemplateConstValueKind::WrapperTemplate;
     }
 
@@ -446,32 +334,6 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
         &mut HashSet::new(),
         StringFunctionChildConstPolicy::StructuralHeadFunction,
     )
-}
-
-/// Returns the root node ID for a freshly built template.
-///
-/// WHAT: looks up the template entry by ID and returns its root node.
-/// WHY: the finalized TIR id just pushed this entry, so the lookup is a proven
-///      internal invariant. The error path exists only to keep the API
-///      panic-free per the style guide.
-/// Returns both the root node ID and the authoritative kind for a freshly built
-/// TIR template.
-///
-/// WHAT: single lookup that avoids a second store borrow for the kind.
-/// WHY: classification now reads the kind from the store instead of a durable
-///      copy, so the root and kind are fetched together.
-fn fresh_tir_root_and_kind(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-) -> Result<(TemplateIrNodeId, TemplateType), TemplateError> {
-    store
-        .get_template(template_id)
-        .map(|tir_template| (tir_template.root, tir_template.kind.clone()))
-        .ok_or_else(|| {
-            TemplateError::from(CompilerError::compiler_error(
-                "Freshly built TIR template ID not found in store; internal invariant violation.",
-            ))
-        })
 }
 
 // -------------------------
@@ -658,7 +520,7 @@ fn tir_view_visit_child_template(
 ///       robustness) and inspects the referenced template's `kind` field to
 ///       detect escaped `$insert(...)` helpers. `TemplateIr.kind` is the sole
 ///       post-construction owner of this semantic marker.
-/// WHY: materialized trees may represent an escaped insert through either a
+/// WHY: TIR trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
 fn tir_tree_has_slot_insert_children(
     store: &TemplateIrStore,
@@ -737,38 +599,6 @@ fn tir_tree_has_slot_insert_children(
         | TemplateIrNodeKind::LoopControl { .. }
         | TemplateIrNodeKind::RuntimeSlotSite { .. } => false,
     }
-}
-
-/// Classifies whether a materialized TIR template has a const-evaluable value
-/// shape.
-///
-/// WHAT: uses the TIR tree as the source of truth for structural template
-/// constness. `Slot`, `AggregateOutput`, and `LoopControl` are structural
-/// compile-time values; dynamic expressions and control-flow selectors reuse
-/// the existing binding-aware const rules from `template_control_flow`.
-/// WHY: the materialized TIR tree is the authority for this query.
-fn tir_template_is_const_evaluable_value(
-    store: &mut TemplateIrStore,
-    template_id: TemplateIrId,
-    string_table: &StringTable,
-) -> bool {
-    let Some(root) = store
-        .get_template(template_id)
-        .map(|template| template.root)
-    else {
-        return false;
-    };
-
-    let mut visiting_templates = HashSet::new();
-    tir_child_template_is_const_evaluable_value(
-        store,
-        template_id,
-        root,
-        &[],
-        string_table,
-        &mut visiting_templates,
-        StringFunctionChildConstPolicy::Strict,
-    )
 }
 
 fn tir_view_template_is_const_evaluable_value(

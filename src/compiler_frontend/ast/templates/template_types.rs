@@ -8,8 +8,8 @@
 
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateIrStore,
-    TemplateTirReference, refresh_kind_from_classification,
+    TemplateIrRegistry, TemplateIrStore, TemplateTirReference, TirTemplateClassification,
+    refresh_kind_from_classification,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -99,7 +99,7 @@ impl Template {
     pub(crate) fn synchronize_kind_from_classification(
         &mut self,
         store: &mut TemplateIrStore,
-        classification: &MaterializedTirTemplateClassification,
+        classification: &TirTemplateClassification,
     ) -> Result<(), CompilerError> {
         let mut kind = self.tir_kind_from_store(store).ok_or_else(|| {
             CompilerError::compiler_error(

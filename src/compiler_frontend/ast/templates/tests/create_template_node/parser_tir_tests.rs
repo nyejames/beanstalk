@@ -14,9 +14,9 @@ use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoo
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind,
-    TemplateIrStore, TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase,
-    TemplateTirReference,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary,
+    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TirTemplateClassification,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::datatypes::datatype::DataType;
@@ -2312,7 +2312,7 @@ fn durable_kind_cache_matches_tir_kind_after_construction() {
 fn durable_kind_synchronization_updates_tir_and_cache_together() {
     let mut string_table = StringTable::new();
     let (mut template, store) = parse_template(r#"["head": body]"#, &mut string_table);
-    let classification = MaterializedTirTemplateClassification {
+    let classification = TirTemplateClassification {
         const_value_kind: TemplateConstValueKind::RenderableString,
         shape_const_evaluable: false,
         has_unresolved_slots: false,

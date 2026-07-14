@@ -41,8 +41,8 @@ use crate::compiler_frontend::ast::templates::tir::{
     ChildTemplateOccurrenceId, TemplateConstructionContext, TemplateIr, TemplateIrId,
     TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet,
     TemplateRef, TemplateTirPhase, TemplateTirReference, TemplateWrapperReference,
-    TemplateWrapperSetRef, TirWrapperApplicationMode, TirWrapperContext, TirWrapperContextOverlay,
-    TirWrapperContextOverlayId, classify_materialized_current_tir_template,
+    TemplateWrapperSetRef, TirView, TirWrapperApplicationMode, TirWrapperContext,
+    TirWrapperContextOverlay, TirWrapperContextOverlayId, classify_effective_tir_view_template,
     compose_tir_head_chain_with_overlays, merge_tir_slot_resolution_overlay_sets,
 };
 
@@ -423,20 +423,26 @@ impl Template {
             }
         }
 
-        // Stage 6: Classification from the final TIR reference (post-composition).
+        // Stage 6: Classification from the effective TirView of the final
+        // reference (post-composition).
         //
         // The reference is now either a composed root with slots expanded and
         // inserts consumed, or a formatted linear root. Classification reads
-        // that authoritative reference without a separate TIR allocation.
+        // that authoritative view — preserving exact root, phase and overlay-set
+        // identity — without a separate TIR allocation.
         let template_classification = {
-            let mut template_ir_store = context.registered_template_ir_store.store().borrow_mut();
-            let template_id = tir_reference.root.template_id;
-            classify_materialized_current_tir_template(
-                &mut template_ir_store,
-                template_id,
-                string_table,
+            let registry = context.registered_template_ir_store.registry().borrow();
+            let view = TirView::with_minimum_phase(
+                &registry,
+                tir_reference.root,
+                tir_reference.phase,
+                TemplateTirPhase::Composed,
+                tir_reference.overlay_set_id,
             )
-            .map_err(TemplateError::into_diagnostic)?
+            .map_err(|error| TemplateError::from(error).into_diagnostic())?;
+            let template_ir_store = context.registered_template_ir_store.store().borrow();
+            classify_effective_tir_view_template(&view, &template_ir_store, string_table)
+                .map_err(TemplateError::into_diagnostic)?
         };
 
         build_state.refresh_kind_from_tir_classification(&template_classification);

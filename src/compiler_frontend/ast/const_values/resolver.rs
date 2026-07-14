@@ -23,7 +23,7 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrRegistry, TemplateTirPhase, TirView,
+    TemplateIrRegistry, TemplateTirPhase, TirTemplateClassification, TirView,
     classify_effective_tir_view_template,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -384,7 +384,7 @@ pub(crate) fn classify_template_effective_tir(
     template: &Template,
     registry: &Rc<RefCell<TemplateIrRegistry>>,
     string_table: &StringTable,
-) -> Result<MaterializedTirTemplateClassification, TemplateError> {
+) -> Result<TirTemplateClassification, TemplateError> {
     let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {

@@ -8,8 +8,7 @@
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::classification::{
-    classify_effective_tir_view_template, classify_empty_overlay_tir_view_template,
-    classify_materialized_current_tir_template, same_store_tir_id,
+    classify_effective_tir_view_template, same_store_tir_id,
     tir_node_is_const_evaluable_value_with_bindings, tir_view_subtree_is_const_evaluable_value,
 };
 use super::super::node::TemplateIrNodeKind;
@@ -165,7 +164,7 @@ fn classify_registry_view_template(
         Some(TemplateStoreState::FrozenModuleLocal { .. })
     ));
 
-    let mut store_snapshot = store_handle.borrow().clone();
+    let store_snapshot = store_handle.borrow().clone();
     let view = TirView::with_minimum_phase(
         &registry,
         TemplateRef::new(store_id, template_id),
@@ -175,7 +174,7 @@ fn classify_registry_view_template(
     )
     .expect("test view should resolve");
 
-    classify_empty_overlay_tir_view_template(&view, &mut store_snapshot, string_table)
+    classify_effective_tir_view_template(&view, &store_snapshot, string_table)
         .expect("view classification should succeed")
         .const_value_kind
 }
@@ -364,52 +363,6 @@ fn tir_view_classification_returns_renderable_string_for_text_root() {
 }
 
 #[test]
-fn materialized_classification_rejects_reactive_text() {
-    let mut string_table = StringTable::new();
-    let mut store = TemplateIrStore::new();
-    let location = empty_location();
-    let source_path = InternedPath::from_single_str("main.bst/#reactive", &mut string_table);
-    let subscription = ReactiveSubscription {
-        source: ReactiveSource {
-            path: source_path,
-            kind: ReactiveSourceKind::Declaration,
-        },
-        type_id: builtin_type_ids::STRING,
-        location: location.clone(),
-    };
-
-    let template_id = {
-        let text = string_table.intern("reactive text");
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let text_node = builder.push_text_node_with_subscription(
-            text,
-            "reactive text".len() as u32,
-            TemplateSegmentOrigin::Body,
-            Some(subscription),
-            location.clone(),
-        );
-        let root = builder.push_sequence_node(vec![text_node], location.clone());
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::empty(),
-            location,
-        )
-    };
-
-    let classification =
-        classify_materialized_current_tir_template(&mut store, template_id, &string_table)
-            .expect("reactive text classification should succeed");
-
-    assert!(!classification.shape_const_evaluable);
-    assert_eq!(
-        classification.const_value_kind,
-        TemplateConstValueKind::NonConst
-    );
-}
-
-#[test]
 fn tir_view_classification_rejects_reactive_text() {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("main.bst/#reactive", &mut string_table);
@@ -443,7 +396,7 @@ fn tir_view_classification_rejects_reactive_text() {
 }
 
 #[test]
-fn tir_view_classification_returns_wrapper_for_slot_root() {
+fn tir_view_classification_unresolved_slot_returns_renderable_string() {
     let mut string_table = StringTable::new();
 
     let const_kind =
@@ -453,7 +406,11 @@ fn tir_view_classification_returns_wrapper_for_slot_root() {
             builder.push_sequence_node(vec![slot], empty_location())
         });
 
-    assert_eq!(const_kind, TemplateConstValueKind::WrapperTemplate);
+    assert_eq!(
+        const_kind,
+        TemplateConstValueKind::RenderableString,
+        "an unresolved slot with no slot-resolution overlay folds to empty output"
+    );
 }
 
 #[test]
@@ -516,64 +473,7 @@ fn tir_view_classification_returns_non_const_for_runtime_expression() {
 }
 
 #[test]
-fn tir_view_classification_rejects_non_empty_overlay_set() {
-    let mut string_table = StringTable::new();
-    let mut registry = TemplateIrRegistry::new();
-    let store_id = registry.allocate_store();
-    let slot_overlay_id = registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
-        resolutions: Vec::new(),
-    });
-    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
-        expression_overrides: None,
-        slot_resolution: Some(slot_overlay_id),
-        wrapper_context: None,
-    });
-    let store_handle = registry
-        .store_handle(store_id)
-        .expect("test store should be allocated");
-
-    let template_id = {
-        let mut store = store_handle.borrow_mut();
-        let mut builder = TemplateIrBuilder::new(&mut store);
-        let text = string_table.intern("overlay");
-        let text_node = builder.push_text_node(
-            text,
-            "overlay".len() as u32,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-        let root = builder.push_sequence_node(vec![text_node], empty_location());
-
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::empty(),
-            empty_location(),
-        )
-    };
-
-    let mut store_snapshot = store_handle.borrow().clone();
-    let view = TirView::with_minimum_phase(
-        &registry,
-        TemplateRef::new(store_id, template_id),
-        TemplateTirPhase::Composed,
-        TemplateTirPhase::Composed,
-        overlay_set_id,
-    )
-    .expect("test view should resolve");
-
-    let result =
-        classify_empty_overlay_tir_view_template(&view, &mut store_snapshot, &string_table);
-
-    assert!(
-        result.is_err(),
-        "non-empty overlays must stay off the Phase 9 structural view classifier"
-    );
-}
-
-#[test]
-fn finalized_tir_view_classification_uses_effective_dynamic_expression_overlay() {
+fn expression_overlay_requires_finalized_view_and_drives_classification() {
     let mut string_table = StringTable::new();
     let mut registry = TemplateIrRegistry::new();
     let store_id = registry.allocate_store();
@@ -632,6 +532,35 @@ fn finalized_tir_view_classification_uses_effective_dynamic_expression_overlay()
         .expect("test store should freeze");
 
     let store_snapshot = store_handle.borrow().clone();
+    let composed_view = TirView::with_minimum_phase(
+        &registry,
+        TemplateRef::new(store_id, template_id),
+        TemplateTirPhase::Composed,
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("composed test view should resolve");
+
+    let error = match classify_effective_tir_view_template(
+        &composed_view,
+        &store_snapshot,
+        &string_table,
+    ) {
+        Ok(_) => panic!("expression overlays must not classify before Finalized"),
+        Err(error) => error,
+    };
+    let crate::compiler_frontend::ast::templates::error::TemplateError::Infrastructure(error) =
+        error
+    else {
+        panic!("phase rejection should be an internal classification invariant");
+    };
+    assert!(
+        error
+            .msg
+            .contains("expression-overlay classification requires Finalized"),
+        "phase rejection should identify the expression-overlay boundary"
+    );
+
     let view = TirView::with_minimum_phase(
         &registry,
         TemplateRef::new(store_id, template_id),

@@ -21,29 +21,29 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2E - remove the HIR raw-template shim
-LAST_ACCEPTED_COMMIT: `f3f2efe20` (`refactor: consolidate registered TIR store context`)
+CURRENT_SLICE: Phase 3A1 - consolidate classification on effective `TirView`
+LAST_ACCEPTED_COMMIT: `e039b7547` (`refactor: remove raw template HIR shim`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 2E patch ready to commit, 12 commits ahead of `origin/main`
+WORKTREE: `main`, reviewed and validated Phase 3A1 patch ready to commit, 13 commits ahead of `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- AST finalization replaces surviving runtime templates with neutral owned handoff variants before HIR.
-- HIR rejects an impossible raw `ExpressionKind::Template` directly in its dispatcher and imports no `Template` type.
-- Runtime lowering accepts only the two owned handoff variants. The nested append path falls through to the same dispatcher invariant for an impossible raw template.
+- `classify_effective_tir_view_template` is the sole full-template production classifier and consumes exact root, phase and overlay identity.
+- The result is `TirTemplateClassification`; raw current/materialized and test-only empty-overlay entry points plus their dead private helpers are deleted.
+- Effective slot policy distinguishes structural unresolved slots from resolved slot sources. A focused test protects the Finalized requirement for expression overlays.
 ACCEPTANCE_CRITERIA:
-- all Phase 2E and Phase 2 acceptance checks are satisfied
+- Phase 3A1 classifier API, ownership, identity and focused test checks are satisfied
 VALIDATION_STATE:
-- Phase 2D6 `just validate`: passed before commit `f3f2efe20`; cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
-- Ollama implementation: passed 217 focused HIR tests and all-target warnings-as-errors Clippy
-- Parent correction: passed 217 focused HIR tests, the HIR/backend `Template` import hard grep and `git diff --check`
-- Separate fresh Ollama read-only review: complete with no actionable finding
-- Phase 2E `just validate`: passed cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- Phase 2E `just validate`: passed before commit `e039b7547`; cross-target Clippy, 3301 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- Ollama implementation: passed 3299 unit tests, 20 classification tests, 791 template tests, 35 AST finalization tests and all-target warnings-as-errors Clippy
+- Parent correction: passed 20 classification tests and 791 template tests
+- Separate fresh Ollama final review after the phase-guard test: complete with no actionable finding
+- Phase 3A1 `just validate`: passed cross-target Clippy, 3299 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only review complete
+DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only final review complete
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2E, reload the plan and delegate Phase 3A
+NEXT_RESUME_ACTION: commit Phase 3A1, reload the plan and delegate Phase 3A2
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -363,12 +363,14 @@ Use existing final systems consistently, delete duplicate walkers/state, and mak
 
 #### Slice 3A — One classification/read path
 
-- [ ] Make `TirView` the production classification input.
-- [ ] Rename `MaterializedTirTemplateClassification` to `TirTemplateClassification`.
-- [ ] Replace `classify_materialized_current_tir_template` and other “current/materialized/fresh” entry points with one effective-view classifier.
-- [ ] Keep raw store recursion private to the view/classification owner only where required.
+- [x] Make `TirView` the production classification input.
+- [x] Rename `MaterializedTirTemplateClassification` to `TirTemplateClassification`.
+- [x] Replace `classify_materialized_current_tir_template` and other “current/materialized/fresh” entry points with one effective-view classifier.
+- [x] Keep raw store recursion private to the view/classification owner only where required.
 - [ ] Reuse the existing registry-aware expression-payload walker for nested template/expression inspection; delete ad hoc recursion in head parsing, finalization, and helper filters when semantics match.
 - [ ] Preserve exact root + phase + overlay cycle identity.
+
+Phase 3A1 checkpoint: full-template classification now has one effective-view entry and one neutral result type. Create-template classification carries the authoritative reference identity, effective slot policy distinguishes resolved sources from uncovered slots, standalone structural predicates retain their narrow owners and expression overlays have a focused Finalized-phase invariant test.
 
 #### Slice 3B — Make render-unit and overlay failures explicit
 
