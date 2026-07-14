@@ -20,11 +20,11 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
 };
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, RegisteredTemplateIrStore, SlotOccurrenceId, TemplateConstructionContext,
-    TemplateIrBranch, TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateIrStoreOwner, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateStoreId,
-    TemplateTirChildReference, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
-    TirSlotResolution, TirSlotResolutionOverlay,
+    TemplateIrBranch, TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind,
+    TemplateIrRegistry, TemplateIrStore, TemplateIrStoreOwner, TemplateIrSummary,
+    TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef,
+    TemplateStoreId, TemplateTirChildReference, TemplateTirPhase, TemplateTirReference,
+    TirExpressionOverlay, TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -2731,6 +2731,149 @@ fn const_required_template_loop_validates_header_through_tir_view_overlay() {
         InvalidTemplateStructureReason::TemplateConditionalLoopConstTrue,
     );
     assert_eq!(error.primary_location, override_location);
+}
+
+#[test]
+fn const_required_validation_reports_missing_effective_node_as_internal_error() {
+    // A const-required template whose root node has been corrupted to reference
+    // a non-existent node must propagate the missing-node error through the
+    // internal-error lane instead of silently returning success.
+    let (mut template, context, string_table) = parse_const_required_template("[if true: body]");
+    let source_template_id = template.tir_reference.root.template_id;
+
+    let malformed_template_id = {
+        let store_handle = context.registered_template_ir_store.store();
+        let mut store = store_handle.borrow_mut();
+        let mut malformed_template = store
+            .get_template(source_template_id)
+            .cloned()
+            .expect("parsed template should exist in its registered store");
+        malformed_template.root = TemplateIrNodeId::new(store.node_count() + 1);
+        store.push_template(malformed_template)
+    };
+    template.tir_reference.root.template_id = malformed_template_id;
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_const_required_template_control_flow(&template, &registry, &string_table)
+        .expect_err("missing root node should be an internal error, not a silent success");
+
+    let DiagnosticPayload::InfrastructureError { msg, .. } = &error.payload else {
+        panic!(
+            "expected InfrastructureError for missing effective node, got: {:?}",
+            error.payload
+        );
+    };
+    assert!(
+        msg.contains("does not exist in the registry"),
+        "error message should mention missing node, got: {msg}"
+    );
+}
+
+#[test]
+fn const_required_validation_uses_exact_child_overlay_identity() {
+    // Active recursion into the same TemplateRef under a distinct overlay must
+    // be validated instead of mistaken for a cycle. Root-only detection would
+    // skip that recursive child; exact root + phase + overlay identity enters it.
+    //
+    // The recursive template first evaluates a structurally const branch, then
+    // references itself with an overlay that makes that selector runtime-only.
+    // The overlaid view references itself again with the same identity, which
+    // remains a real cycle and terminates normally after the selector is checked.
+    let (valid_template, context, mut string_table) =
+        parse_const_required_template("[if true: body]");
+
+    let valid_branch_root = {
+        let store_handle = context.registered_template_ir_store.store();
+        let store = store_handle.borrow();
+        store
+            .get_template(valid_template.tir_reference.root.template_id)
+            .expect("parsed const template should exist")
+            .root
+    };
+    let const_overlay_set_id = valid_template.tir_reference.overlay_set_id;
+
+    let non_const_overlay_set_id = {
+        let mut registry = context.registered_template_ir_store.registry().borrow_mut();
+        let site_id = find_first_branch_selector_site_id(&valid_template, &registry)
+            .expect("child branch should have a selector site");
+
+        let non_const_condition = Expression::reference_with_type_id(
+            InternedPath::from_single_str("runtime_condition", &mut string_table),
+            DataType::Bool,
+            builtin_type_ids::BOOL,
+            SourceLocation::default(),
+            ValueMode::ImmutableReference,
+            ConstRecordState::RuntimeValue,
+        );
+
+        let overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+            overrides: vec![(site_id, Box::new(non_const_condition))],
+        });
+        registry.allocate_overlay_set(TemplateOverlaySet {
+            expression_overrides: Some(overlay_id),
+            slot_resolution: None,
+            wrapper_context: None,
+        })
+    };
+
+    let location = SourceLocation::default();
+    let (recursive_template_id, store_id, store_owner) = {
+        let store_handle = context.registered_template_ir_store.store();
+        let mut store = store_handle.borrow_mut();
+        let recursive_template_id = TemplateIrId::new(store.template_count());
+        let recursive_root = TemplateRef::new(store.store_id(), recursive_template_id);
+
+        let recursive_child_reference = TemplateTirChildReference::new(
+            recursive_root,
+            TemplateTirPhase::Finalized,
+            non_const_overlay_set_id,
+        );
+
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let recursive_child = builder
+            .push_child_template_node_with_reference(recursive_child_reference, location.clone());
+        let root =
+            builder.push_sequence_node(vec![valid_branch_root, recursive_child], location.clone());
+        let built_template_id = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            location.clone(),
+        );
+        assert_eq!(
+            built_template_id, recursive_template_id,
+            "recursive fixture must reference the template allocated next"
+        );
+
+        (recursive_template_id, store.store_id(), store.owner())
+    };
+
+    let recursive_template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, recursive_template_id),
+            store_owner,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: const_overlay_set_id,
+        },
+        location,
+    };
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_const_required_template_control_flow(
+        &recursive_template,
+        &registry,
+        &string_table,
+    )
+    .expect_err(
+        "non-const child overlay must be visited under distinct overlay identity and rejected",
+    );
+
+    assert_invalid_template_structure(
+        &error,
+        InvalidTemplateStructureReason::TemplateIfConditionNotConst,
+    );
 }
 
 #[test]

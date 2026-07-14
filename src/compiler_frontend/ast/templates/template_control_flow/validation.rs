@@ -134,21 +134,23 @@ fn validate_const_required_template_control_flow_with_bindings(
     validate_const_required_tir_view_control_flow(&view, &store, loop_binding_paths, string_table)
 }
 
-/// Cycle-detection key for runtime child-view traversal.
+/// Cycle-detection key for runtime and const-required child-view traversal.
 ///
 /// WHAT: uniquely identifies a child view by its store-qualified root, pipeline
 ///       phase and overlay set so the same root visited under a different
 ///       overlay context is still checked.
 /// WHY: child templates may reference each other; the cycle key prevents infinite
-///      recursion while preserving each reference's exact identity.
+///      recursion while preserving each reference's exact identity. Runtime and
+///      const-required traversal share the same cycle semantics, so one key type
+///      serves both paths.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct RuntimeTirViewCycleKey {
+struct TirViewCycleKey {
     root: TemplateRef,
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
 }
 
-impl RuntimeTirViewCycleKey {
+impl TirViewCycleKey {
     fn for_view(view: &TirView<'_>) -> Self {
         Self {
             root: view.root_ref(),
@@ -182,7 +184,7 @@ fn validate_runtime_tir_view_control_flow_slot_artifacts(
 ) -> Result<(), TemplateError> {
     let store_id = view.root_ref().store_id;
     let root_node_id = view.root_template()?.root;
-    let mut visiting = HashSet::from([RuntimeTirViewCycleKey::for_view(view)]);
+    let mut visiting = HashSet::from([TirViewCycleKey::for_view(view)]);
 
     validate_runtime_tir_view_node(
         view,
@@ -201,7 +203,7 @@ fn validate_runtime_tir_view_control_flow_slot_artifacts(
 fn validate_runtime_tir_view_node(
     view: &TirView<'_>,
     node_ref: TemplateNodeRef,
-    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), TemplateError> {
     let node = view.effective_node(node_ref)?;
     let store_id = node_ref.store_id;
@@ -313,9 +315,9 @@ fn validate_runtime_qualified_child_view(
     child_root: TemplateRef,
     child_phase: TemplateTirPhase,
     child_overlay_set_id: TemplateOverlaySetId,
-    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), TemplateError> {
-    let cycle_key = RuntimeTirViewCycleKey {
+    let cycle_key = TirViewCycleKey {
         root: child_root,
         phase: child_phase,
         overlay_set_id: child_overlay_set_id,
@@ -348,7 +350,7 @@ fn validate_runtime_tir_view_control_flow_body(
 ) -> Result<(), TemplateError> {
     let store_id = view.root_ref().store_id;
     let body_ref = TemplateNodeRef::new(store_id, body_root);
-    let root_cycle_key = RuntimeTirViewCycleKey::for_view(view);
+    let root_cycle_key = TirViewCycleKey::for_view(view);
     let mut escaped_insert_visiting = HashSet::from([root_cycle_key]);
 
     if tir_view_subtree_contains_runtime_artifact(
@@ -394,7 +396,7 @@ fn tir_view_subtree_contains_runtime_artifact(
     view: &TirView<'_>,
     node_ref: TemplateNodeRef,
     artifact: RuntimeControlFlowArtifact,
-    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<bool, TemplateError> {
     let node = view.effective_node(node_ref)?;
     let store_id = node_ref.store_id;
@@ -539,9 +541,9 @@ fn runtime_child_view_contains_artifact(
     child_phase: TemplateTirPhase,
     child_overlay_set_id: TemplateOverlaySetId,
     artifact: RuntimeControlFlowArtifact,
-    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<bool, TemplateError> {
-    let cycle_key = RuntimeTirViewCycleKey {
+    let cycle_key = TirViewCycleKey {
         root: child_root,
         phase: child_phase,
         overlay_set_id: child_overlay_set_id,
@@ -579,8 +581,8 @@ fn runtime_child_view_contains_artifact(
 
 /// Constructs the required `TirView` for a const-required template.
 ///
-/// WHAT: validates the durable reference, owning registry store and minimum
-///       composition phase before constructing the effective view.
+/// WHAT: validates the durable reference, owning registry store, stamped store
+///       ID and minimum composition phase before constructing the effective view.
 /// WHY: production callers run after template construction and finalization
 ///      preserves the same reference. Missing authority indicates compiler drift.
 fn const_required_tir_view_for_template<'a>(
@@ -605,6 +607,13 @@ fn const_required_tir_view_for_template<'a>(
     if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
         return Err(CompilerError::compiler_error(format!(
             "Const-required template root {} does not match its registry store owner.",
+            reference.root
+        ))
+        .into());
+    }
+    if reference.root.store_id != store.store_id() {
+        return Err(CompilerError::compiler_error(format!(
+            "Const-required template root {} does not match its registry store ID.",
             reference.root
         ))
         .into());
@@ -641,7 +650,7 @@ fn validate_const_required_tir_view_control_flow(
         .map_err(|error| TemplateError::from(error).into_diagnostic())?;
     let store_id = view.root_ref().store_id;
     let root_node_ref = TemplateNodeRef::new(store_id, root_node_id);
-    let mut visiting_templates = HashSet::from([view.root_ref()]);
+    let mut visiting = HashSet::from([TirViewCycleKey::for_view(view)]);
 
     validate_const_required_tir_view_node(
         view,
@@ -649,7 +658,7 @@ fn validate_const_required_tir_view_control_flow(
         root_node_ref,
         loop_binding_paths,
         string_table,
-        &mut visiting_templates,
+        &mut visiting,
     )
 }
 
@@ -659,13 +668,12 @@ fn validate_const_required_tir_view_node(
     node_ref: TemplateNodeRef,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting_templates: &mut HashSet<TemplateRef>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), CompilerDiagnostic> {
     let store_id = view.root_ref().store_id;
-    let node = match view.effective_node(node_ref) {
-        Ok(node) => node,
-        Err(_) => return Ok(()),
-    };
+    let node = view
+        .effective_node(node_ref)
+        .map_err(|error| TemplateError::from(error).into_diagnostic())?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -678,7 +686,7 @@ fn validate_const_required_tir_view_node(
                     TemplateNodeRef::new(store_id, child),
                     loop_binding_paths,
                     string_table,
-                    visiting_templates,
+                    visiting,
                 )?;
             }
         }
@@ -694,7 +702,7 @@ fn validate_const_required_tir_view_node(
                 },
                 loop_binding_paths,
                 string_table,
-                visiting_templates,
+                visiting,
             )?;
         }
 
@@ -717,7 +725,7 @@ fn validate_const_required_tir_view_node(
                 },
                 loop_binding_paths,
                 string_table,
-                visiting_templates,
+                visiting,
             )?;
         }
 
@@ -731,7 +739,7 @@ fn validate_const_required_tir_view_node(
                 reference.overlay_set_id,
                 loop_binding_paths,
                 string_table,
-                visiting_templates,
+                visiting,
             )?;
         }
 
@@ -745,7 +753,7 @@ fn validate_const_required_tir_view_node(
                 view.overlay_set_id(),
                 loop_binding_paths,
                 string_table,
-                visiting_templates,
+                visiting,
             )?;
         }
 
@@ -767,9 +775,14 @@ fn validate_const_required_qualified_child_view(
     child_overlay_set_id: TemplateOverlaySetId,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting_templates: &mut HashSet<TemplateRef>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), CompilerDiagnostic> {
-    if !visiting_templates.insert(child_root) {
+    let cycle_key = TirViewCycleKey {
+        root: child_root,
+        phase: child_phase,
+        overlay_set_id: child_overlay_set_id,
+    };
+    if !visiting.insert(cycle_key) {
         return Ok(());
     }
 
@@ -789,10 +802,10 @@ fn validate_const_required_qualified_child_view(
         TemplateNodeRef::new(child_root.store_id, child_root_node),
         loop_binding_paths,
         string_table,
-        visiting_templates,
+        visiting,
     );
 
-    visiting_templates.remove(&child_root);
+    visiting.remove(&cycle_key);
     result
 }
 
@@ -802,7 +815,7 @@ fn validate_const_required_tir_view_branch_chain(
     inputs: ConstRequiredTirViewBranchInputs<'_>,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting_templates: &mut HashSet<TemplateRef>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), CompilerDiagnostic> {
     let store_id = view.root_ref().store_id;
 
@@ -841,7 +854,7 @@ fn validate_const_required_tir_view_branch_chain(
             TemplateNodeRef::new(store_id, branch.body),
             &branch_binding_paths,
             string_table,
-            visiting_templates,
+            visiting,
         )?;
     }
 
@@ -867,7 +880,7 @@ fn validate_const_required_tir_view_branch_chain(
             TemplateNodeRef::new(store_id, fallback_id),
             loop_binding_paths,
             string_table,
-            visiting_templates,
+            visiting,
         )?;
     }
 
@@ -886,7 +899,7 @@ fn validate_const_required_tir_view_loop(
     inputs: ConstRequiredTirViewLoopInputs<'_>,
     loop_binding_paths: &[InternedPath],
     string_table: &StringTable,
-    visiting_templates: &mut HashSet<TemplateRef>,
+    visiting: &mut HashSet<TirViewCycleKey>,
 ) -> Result<(), CompilerDiagnostic> {
     let effective_header = effective_loop_header_for_view(view, inputs.header, inputs.header_sites)
         .map_err(TemplateError::into_diagnostic)?;
@@ -924,7 +937,7 @@ fn validate_const_required_tir_view_loop(
         TemplateNodeRef::new(store_id, inputs.body),
         &body_binding_paths,
         string_table,
-        visiting_templates,
+        visiting,
     )?;
 
     if let Some(wrapper_id) = inputs.aggregate_wrapper {
@@ -934,7 +947,7 @@ fn validate_const_required_tir_view_loop(
             TemplateNodeRef::new(store_id, wrapper_id),
             loop_binding_paths,
             string_table,
-            visiting_templates,
+            visiting,
         )?;
     }
 

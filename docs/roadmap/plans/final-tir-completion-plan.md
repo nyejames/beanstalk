@@ -21,30 +21,29 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B3 - require finalized effective views for type-boundary expression validation
-LAST_ACCEPTED_COMMIT: `4ecb7edc0` (`refactor: require authoritative TIR validation`)
+CURRENT_SLICE: Phase 3B4 - propagate const-required control-flow view failures
+LAST_ACCEPTED_COMMIT: `cf6b4c51b` (`refactor: require finalized TIR type views`)
 BRANCH: `main`
-WORKTREE: `main`, reviewed and validated Phase 3B3 patch ready to commit, 17 commits ahead and 2 behind `origin/main`
+WORKTREE: `main`, reviewed and validated Phase 3B4 patch ready to commit, 18 commits ahead and 2 behind `origin/main`
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- Final type and debug TypeId validation resolve one required Finalized effective view. Phase, direct-store owner, store ID, registry-store owner, root and overlay failures propagate explicitly.
-- Insert contributions recurse through child views with inherited phase and overlay identity. Raw same-store expression walking and its migration adapters are deleted.
-- The next Phase 3B slice is const-required control-flow validation, whose node lookup still ignores `effective_node` errors and whose child cycle key omits phase and overlay identity.
+- Const-required node, store, template, root and overlay failures now propagate through the existing compiler-error diagnostic lane.
+- Runtime and const control-flow traversal share one exact root + phase + overlay active-cycle key.
+- The recursive same-root/different-overlay regression proves distinct effective identities are visited while repeated full identities terminate.
 ACCEPTANCE_CRITERIA:
-- Phase 3B3 required-view, exact identity, deleted fallback and focused invariant checks are satisfied.
+- Phase 3B4 strict failure propagation, exact cycle identity and focused invariant checks are satisfied.
 VALIDATION_STATE:
-- Phase 3B2 accepted in `4ecb7edc0`; fresh Ollama review found no actionable issue and `just validate` passed cross-target Clippy, 3317 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
-- Ollama implementation: passed 4 validate-types tests, 24 expression-walker tests, 834 template tests, 3320 unit tests and all-target warnings-as-errors Clippy
-- Parent correction: added exact registry/direct-store owner proof and a same-ID collision regression; passed 5 validate-types tests, 24 expression-walker tests, 834 template tests, all-target warnings-as-errors Clippy, formatting and diff checks
-- First fresh Ollama review: found one stale same-store-fallback comment, which the parent corrected
-- Exact commit-candidate Ollama review: complete with no actionable findings; deletion-gate greps passed
-- Phase 3B3 `just validate`: passed cross-target Clippy, 3321 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower
+- Phase 3B3 accepted in `cf6b4c51b`; exact Ollama review found no actionable issue and `just validate` passed cross-target Clippy, 3321 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower
+- Ollama implementation: passed 33 const-template tests, 11 control-flow tests, 836 template tests and all-target warnings-as-errors Clippy
+- Parent correction: replaced sibling overlay coverage with an active recursive same-root/different-overlay invariant; passed both const-validation tests, 33 const-template tests, 11 control-flow tests, 836 template tests and all-target warnings-as-errors Clippy
+- Separate fresh Ollama review: complete with no actionable findings; independently passed both new tests, 46 related tests and warnings-as-errors Clippy
+- Phase 3B4 `just validate`: passed cross-target Clippy, 3323 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama implementation and separate fresh Ollama read-only final review complete
 NEXT_WORKER_ORDER: none for this accepted slice
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 3B3, reload the plan and delegate the const-required control-flow failure-propagation slice
+NEXT_RESUME_ACTION: commit Phase 3B4, reload the plan and inventory the remaining Phase 3B required-Result/fallback paths
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -390,6 +389,8 @@ Phase 3B1 checkpoint: wrapper-context construction now belongs to the TIR wrappe
 Phase 3B2 checkpoint: linear formatter installation rejects wrong-store authority, and runtime control-flow artifact validation now has one required registry-backed effective-view path. Nested children retain exact root, phase and overlay identity, malformed stores/templates/nodes/overlays fail explicitly, and the raw same-store validator plus redundant pre-pass are deleted.
 
 Phase 3B3 checkpoint: final type and debug TypeId validation require one Finalized effective view with exact direct-store and registry-store ownership. Insert contributions preserve inherited phase and overlay identity, while the tri-state authority attempt, raw same-store expression walker and its adapters are deleted.
+
+Phase 3B4 checkpoint: const-required control-flow validation propagates missing effective authority through the compiler-error diagnostic lane. Runtime and const traversal share an exact root, phase and overlay active-cycle key, and recursive overlay coverage protects distinct effective identities.
 
 #### Slice 3C — Consolidate TIR summary construction
 
