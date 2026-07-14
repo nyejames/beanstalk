@@ -596,17 +596,8 @@ Tone may include concise, acerbic humour where it lightens the mood without obsc
 
 ### DIAG-039: Legacy `#import` syntax terse output is empty
 
-- **Stage:** Diagnostic rendering (terse)
-- **Current code:** `BST-RULE-0025`
-- **Snippet:**
-  ```beanstalk
-  #import @core/math
-  ```
-- **Current diagnostic (terse):** `E|BST-RULE-0025|legacy_import.bst|1:2|` (empty message field)
-- **Current diagnostic (terminal):** `Legacy #import syntax is no longer supported`
-- **Weakness:** Another instance of the terse renderer failing to fall back to the descriptor title. This confirms the issue is not limited to one or two codes.
-- **Proposed diagnostic:** Fix the renderer fallback path (see DIAG-013 and DIAG-027).
-- **Test coverage to add:** Include `BST-RULE-0025` in the renderer regression sweep.
+- legacy #import syntax needs to be removed completely from thr compiler without any disgnostics.
+references to the old #import should be removed and nothing should reference it anymore.
 
 ### DIAG-040: Import of external namespace member says "Unknown value name"
 
@@ -622,6 +613,41 @@ Tone may include concise, acerbic humour where it lightens the mood without obsc
 - **Weakness:** `pi` is a member of the `@core/math` namespace, but the current access pattern is not supported. The error does not explain *why* it is unknown or how to access it correctly.
 - **Proposed diagnostic:** Once the supported access pattern is known, tailor the message: e.g. `External package constants are not accessed through namespace members. Use a grouped import: 'import @core/math { pi }'.` (Verify the exact supported syntax before implementing.)
 - **Test coverage to add:** `tests/cases/external_namespace_member_access`.
+
+DIAG-042: @bst.sig before an unexported JavaScript function hides the missing export
+
+* Stage: HTML external-JS annotation scanning and binding
+* Current code: BST-IMPORT-0022
+* Snippet:
+
+/**
+ * @bst.sig add |left Int, right Int| -> Int
+ */
+function add(left, right) {
+    return left + right
+}
+
+* Current diagnostic: `@bst.sig` for `add` is not followed by a supported JS export declaration.
+* Confirmed cause: The export scanner records only export function and export const ... => {} declarations. Plain functions and plain arrow-function constants are invisible to annotation binding. The binder then searches for any later supported export rather than the nearest top-level declaration.
+* Weakness: The diagnostic does not identify the obvious missing keyword. Worse, when another export appears later in the file, the annotation can bind to that later export, causing misleading arity, duplicate-name or orphaned-annotation errors.
+* Proposed correction:
+    * Extend scanning to produce an ordered top-level declaration stream containing supported exported declarations and supported-looking unexported declarations.
+    * Bind each @bst.sig to the nearest following top-level declaration, allowing only whitespace and comments between them.
+    * Add a distinct parser reason such as MissingExportKeyword.
+    * When the matched declaration is an unexported function, report: `@bst.sig` for `add` applies to JavaScript function `add`, but the function is not exported. Add `export` before `function`.
+    * Provide the equivalent Add 'export' before 'const' correction for block-bodied arrow functions.
+    * Place the primary label at the declaration’s insertion point and a secondary label on the @bst.sig.
+    * Consume the unexported declaration after reporting it so the annotation cannot drift onto a later export.
+    * Retain MissingExportAfterSig for genuinely orphaned annotations where no supported declaration follows. Improve that message to state the two accepted forms explicitly.
+    * Preserve the JS parser reason through provider conversion instead of reducing every external-library failure to an opaque message string. A typed InvalidExternalLibraryReason under BST-IMPORT-0022 is sufficient unless separate stable codes are desired.
+* Test coverage to add:
+    * @bst.sig followed by a plain function reports only MissingExportKeyword.
+    * @bst.sig followed by a plain block-bodied arrow constant reports the export const correction.
+    * A missing-export function followed by a correctly annotated export does not shift either annotation.
+    * A private helper declaration between an annotation and an export prevents distant binding.
+    * A genuinely orphaned annotation continues to report MissingExportAfterSig.
+    * Provider-level rendering preserves BST-IMPORT-0022, the targeted message and the JavaScript source span.
+
 
 ---
 
