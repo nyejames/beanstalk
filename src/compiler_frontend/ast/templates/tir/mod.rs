@@ -271,8 +271,7 @@ pub(crate) use classification::{
     TirTemplateClassification, classify_effective_tir_view_template,
     effective_branch_selector_for_view, effective_loop_header_for_view,
     refresh_kind_from_classification, tir_node_is_const_evaluable_value,
-    tir_subtree_contains_slot_insertions, tir_subtree_has_unresolved_slots,
-    tir_view_expression_is_const_evaluable_value_with_bindings,
+    tir_subtree_has_unresolved_slots, tir_view_expression_is_const_evaluable_value_with_bindings,
     tir_view_option_capture_presence_is_const_decidable, tir_view_subtree_is_const_evaluable_value,
 };
 // TirView-aware fold entrypoint is used internally by recursive child folding

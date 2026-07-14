@@ -21,9 +21,10 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, RegisteredTemplateIrStore, SlotOccurrenceId, TemplateConstructionContext,
     TemplateIrBranch, TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
-    TemplateRef, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    TemplateIrStore, TemplateIrStoreOwner, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
+    TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateStoreId,
+    TemplateTirChildReference, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+    TirSlotResolution, TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -2738,13 +2739,11 @@ fn runtime_template_if_rejects_unresolved_slot_through_tir_view() {
         parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
 
     let registry = context.registered_template_ir_store.registry().borrow();
-    let store = context.registered_template_ir_store.store().borrow();
     let expected_location = find_first_branch_location(&template, &registry)
         .expect("runtime branch should have a stable source location");
 
-    let error =
-        validate_runtime_template_control_flow_slot_artifacts(&template, &registry, &store, None)
-            .expect_err("TirView path should report the unresolved slot in the branch body");
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("TirView path should report the unresolved slot in the branch body");
 
     let diagnostic = error.into_diagnostic();
     assert_invalid_template_structure(
@@ -2761,13 +2760,11 @@ fn runtime_template_if_rejects_unresolved_insert_through_tir_view() {
     );
 
     let registry = context.registered_template_ir_store.registry().borrow();
-    let store = context.registered_template_ir_store.store().borrow();
     let expected_location = find_first_branch_location(&template, &registry)
         .expect("runtime branch should have a stable source location");
 
-    let error =
-        validate_runtime_template_control_flow_slot_artifacts(&template, &registry, &store, None)
-            .expect_err("TirView path should report the escaped insert in the branch body");
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("TirView path should report the escaped insert in the branch body");
 
     let diagnostic = error.into_diagnostic();
     assert_invalid_template_structure(
@@ -2795,9 +2792,159 @@ fn runtime_template_if_allows_resolved_slot_through_tir_view_overlay() {
 
     drop(registry);
     let registry = context.registered_template_ir_store.registry().borrow();
-    let store = context.registered_template_ir_store.store().borrow();
-    validate_runtime_template_control_flow_slot_artifacts(&template, &registry, &store, None)
+    validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
         .expect("resolved slot overlay should suppress the unresolved-slot artifact");
+}
+
+#[test]
+fn runtime_validation_uses_nested_child_overlay_identity() {
+    let (mut child_template, context, _string_table) =
+        parse_runtime_template_without_validation("[if true:\n            [$slot]\n        ]");
+
+    {
+        let mut registry = context.registered_template_ir_store.registry().borrow_mut();
+        let (occurrence_id, key) = find_first_slot_occurrence_id(&child_template, &registry)
+            .expect("nested runtime child should contain a slot occurrence");
+        install_slot_resolution_overlay_on_template(
+            &mut child_template,
+            &mut registry,
+            occurrence_id,
+            TirSlotResolution::missing(key),
+        );
+    }
+
+    let location = SourceLocation::default();
+    let child_reference = TemplateTirChildReference::new(
+        child_template.tir_reference.root,
+        child_template.tir_reference.phase,
+        child_template.tir_reference.overlay_set_id,
+    );
+    let (parent_template_id, store_id, store_owner) = {
+        let store_handle = context.registered_template_ir_store.store();
+        let mut store = store_handle.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let child_node =
+            builder.push_child_template_node_with_reference(child_reference, location.clone());
+        let root = builder.push_sequence_node(vec![child_node], location.clone());
+        let parent_template_id = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            location.clone(),
+        );
+
+        (parent_template_id, store.store_id(), store.owner())
+    };
+    let parent_overlay_set_id = context
+        .registered_template_ir_store
+        .registry()
+        .borrow_mut()
+        .allocate_overlay_set(TemplateOverlaySet::empty());
+    let parent_template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, parent_template_id),
+            store_owner,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: parent_overlay_set_id,
+        },
+        location,
+    };
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    validate_runtime_template_control_flow_slot_artifacts(&parent_template, &registry)
+        .expect("nested child validation should use the child's resolved-slot overlay");
+}
+
+#[test]
+fn runtime_validation_reports_wrong_store_owner_as_internal_error() {
+    // A template whose durable `store_owner` does not match the registry store
+    // has lost its authoritative TIR identity. Runtime validation must report
+    // this as an internal error rather than silently returning success.
+    let (mut template, context, _string_table) =
+        parse_runtime_template_without_validation("[if true: body]");
+
+    template.tir_reference.store_owner = TemplateIrStoreOwner::new();
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("mismatched store owner should be an internal error");
+
+    assert_internal_template_error_contains(error, "does not match its registry store owner");
+}
+
+#[test]
+fn runtime_validation_reports_unregistered_store_as_internal_error() {
+    // A template whose `root.store_id` does not resolve in the registry has no
+    // backing store. Runtime validation must report this as an internal error
+    // rather than collapsing into a silent no-op.
+    let (mut template, context, _string_table) =
+        parse_runtime_template_without_validation("[if true: body]");
+
+    template.tir_reference.root.store_id = TemplateStoreId::new(999);
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("unregistered store should be an internal error");
+
+    assert_internal_template_error_contains(error, "unregistered TIR store");
+}
+
+#[test]
+fn runtime_validation_reports_missing_root_node_as_internal_error() {
+    let (mut template, context, _string_table) =
+        parse_runtime_template_without_validation("[if true: body]");
+    let source_template_id = template.tir_reference.root.template_id;
+
+    let malformed_template_id = {
+        let store_handle = context.registered_template_ir_store.store();
+        let mut store = store_handle.borrow_mut();
+        let mut malformed_template = store
+            .get_template(source_template_id)
+            .cloned()
+            .expect("parsed template should exist in its registered store");
+        malformed_template.root = TemplateIrNodeId::new(store.node_count() + 1);
+        store.push_template(malformed_template)
+    };
+    template.tir_reference.root.template_id = malformed_template_id;
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("missing root node should be an internal error");
+
+    assert_internal_template_error_contains(error, "does not exist in the registry");
+}
+
+#[test]
+fn runtime_validation_reports_missing_overlay_set_as_internal_error() {
+    let (mut template, context, _string_table) =
+        parse_runtime_template_without_validation("[if true: body]");
+    template.tir_reference.overlay_set_id = TemplateOverlaySetId::new(999);
+
+    let registry = context.registered_template_ir_store.registry().borrow();
+    let error = validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
+        .expect_err("missing overlay set should be an internal error");
+
+    assert_internal_template_error_contains(error, "overlay set");
+}
+
+fn assert_internal_template_error_contains(error: TemplateError, expected_message: &str) {
+    let diagnostic = error.into_diagnostic();
+    let CompilerDiagnostic {
+        payload: DiagnosticPayload::InfrastructureError { msg, .. },
+        ..
+    } = &diagnostic
+    else {
+        panic!(
+            "expected InfrastructureError, got: {:?}",
+            diagnostic.payload
+        );
+    };
+    assert!(
+        msg.contains(expected_message),
+        "error message should contain {expected_message:?}, got: {msg}"
+    );
 }
 
 fn find_first_branch_selector_site_id(

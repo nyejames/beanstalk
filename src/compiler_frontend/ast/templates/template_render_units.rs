@@ -14,10 +14,9 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Style;
 use crate::compiler_frontend::ast::templates::tir::{
     ControlFlowBodyKind, TemplateConstructionContext, TemplateIr, TemplateIrBranch,
-    TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateParserIrBuilderState,
-    TemplateRef, TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TirView,
-    apply_inherited_child_wrappers_to_body_root, build_branch_body_candidate_from_tir_nodes,
-    compose_tir_head_chain, current_same_store_tir_roots_for_template, format_tir_body_root,
+    TemplateIrNodeId, TemplateIrNodeKind, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TemplateWrapperReference, TirView, apply_inherited_child_wrappers_to_body_root,
+    build_branch_body_candidate_from_tir_nodes, compose_tir_head_chain, format_tir_body_root,
     head_prefix_tir_nodes, prepare_loop_aggregate_wrapper, replace_control_flow_body_tir_root,
     replace_loop_aggregate_wrapper_tir_root, run_tir_formatter_with_warnings, sequence_children,
     trim_whitespace_before_loop_control_boundary,
@@ -52,7 +51,10 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     let store = context.registered_template_ir_store.store().borrow();
     let store_owner = store.owner();
     if !Arc::ptr_eq(&reference.store_owner, &store_owner) {
-        return Ok(());
+        return Err(CompilerError::compiler_error(
+            "Linear formatter installation: durable TIR reference does not match the registered construction store.",
+        )
+        .into());
     }
 
     let original_template = store
@@ -538,18 +540,4 @@ fn prepare_loop_render_units(
     )?;
 
     Ok(())
-}
-
-pub(crate) fn template_contains_control_flow(
-    template: &crate::compiler_frontend::ast::templates::template_types::Template,
-    template_ir_store: &TemplateIrStore,
-    builder: Option<&TemplateParserIrBuilderState>,
-) -> bool {
-    let Some(roots) =
-        current_same_store_tir_roots_for_template(template, template_ir_store, builder)
-    else {
-        return false;
-    };
-
-    template_ir_store.subtree_contains_control_flow_from_roots(&roots.roots)
 }

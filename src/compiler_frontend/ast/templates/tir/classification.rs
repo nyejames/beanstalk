@@ -112,20 +112,6 @@ pub(crate) fn tir_subtree_has_unresolved_slots(
     tir_tree_has_slots(store, root, &mut HashSet::new())
 }
 
-/// Read-only escaped-insert query over an existing same-store TIR subtree.
-///
-/// WHAT: walks the subtree rooted at `root` for child templates whose kind is
-///       `SlotInsert(_)`, recursing through child templates and nested
-///       control-flow bodies.
-/// WHY: runtime control-flow insert-artifact validation reads the finalized
-///      body root after render-unit preparation.
-pub(crate) fn tir_subtree_contains_slot_insertions(
-    store: &TemplateIrStore,
-    root: TemplateIrNodeId,
-) -> bool {
-    tir_tree_has_slot_insert_children(store, root, &mut HashSet::new())
-}
-
 /// Classifies an existing effective `TirView`, applying supported overlays.
 ///
 /// WHAT: answers the const-value question by reading expression-bearing sites

@@ -14,11 +14,12 @@ use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoo
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary,
-    TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
+    TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrStoreOwner,
+    TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,
     TirTemplateClassification,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticPayload};
 use crate::compiler_frontend::datatypes::datatype::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -1499,6 +1500,64 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
             .map(|subscription| &subscription.source.path),
         Some(&expected_source_path),
         "formatting must preserve the text node's reactive side-table entry"
+    );
+}
+
+#[test]
+fn linear_formatter_installation_reports_wrong_store_owner_as_internal_error() {
+    // A linear template whose durable `store_owner` does not match the
+    // registered construction store has lost its authoritative TIR identity.
+    // Formatter installation must report this as an internal error rather
+    // than silently skipping formatting.
+    let mut string_table = StringTable::new();
+    let context =
+        new_constant_context(InternedPath::from_single_str("main.bst", &mut string_table));
+    let location = SourceLocation::default();
+
+    let mut template = build_template_with_direct_tir_root(
+        &context,
+        TemplateType::String,
+        Style::default(),
+        location.clone(),
+        move |store, string_table| {
+            let text_id = string_table.intern("body");
+            let mut builder = TemplateIrBuilder::new(store);
+            let text =
+                builder.push_text_node(text_id, 4, TemplateSegmentOrigin::Body, location.clone());
+            let root = builder.push_sequence_node(vec![text], location.clone());
+            (root, TemplateIrSummary::default())
+        },
+        &mut string_table,
+    );
+
+    template.tir_reference.store_owner = TemplateIrStoreOwner::new();
+
+    let style = Style::default();
+    let has_control_flow = false;
+    let tir_reference = &mut template.tir_reference;
+    let error = install_formatted_tir_reference_for_linear_template(
+        tir_reference,
+        has_control_flow,
+        &style,
+        &context,
+        &mut string_table,
+    )
+    .expect_err("mismatched store owner should be an internal error");
+
+    let diagnostic = error.into_diagnostic();
+    let CompilerDiagnostic {
+        payload: DiagnosticPayload::InfrastructureError { msg, .. },
+        ..
+    } = &diagnostic
+    else {
+        panic!(
+            "expected InfrastructureError for mismatched store owner, got: {:?}",
+            diagnostic.payload
+        );
+    };
+    assert!(
+        msg.contains("does not match the registered construction store"),
+        "error message should name the store-owner mismatch, got: {msg}"
     );
 }
 

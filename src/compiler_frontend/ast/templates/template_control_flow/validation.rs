@@ -11,12 +11,10 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrBranch, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateOverlaySetId,
-    TemplateParserIrBuilderState, TemplateRef, TemplateStoreId, TemplateTirPhase, TirView,
-    current_same_store_tir_roots_for_template, effective_branch_selector_for_view,
-    effective_loop_header_for_view, tir_subtree_contains_slot_insertions,
-    tir_subtree_has_unresolved_slots, tir_view_expression_is_const_evaluable_value_with_bindings,
+    TemplateIrBranch, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
+    TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateOverlaySetId, TemplateRef,
+    TemplateTirPhase, TirView, effective_branch_selector_for_view, effective_loop_header_for_view,
+    tir_view_expression_is_const_evaluable_value_with_bindings,
     tir_view_option_capture_presence_is_const_decidable, tir_view_subtree_is_const_evaluable_value,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -64,53 +62,52 @@ pub(crate) fn validate_const_required_template_control_flow(
 /// still be resolved or folded before runtime. This runtime-only check runs
 /// after composition/formatting, when any remaining slot or insertion inside a
 /// control-flow body would otherwise become a HIR invariant failure.
+///
+/// WHAT: constructs one required registry-backed `TirView` and validates every
+///       reachable control-flow body through that view. Missing store, owner,
+///       template, root, node or overlay authority propagates as an internal
+///       error rather than a silent no-op.
 pub(crate) fn validate_runtime_template_control_flow_slot_artifacts(
     template: &Template,
     registry: &TemplateIrRegistry,
-    store: &TemplateIrStore,
-    builder: Option<&TemplateParserIrBuilderState>,
 ) -> Result<(), TemplateError> {
-    // TIR-authoritative view path: when the template owns a durable registry-backed
-    // reference, validate through `TirView` so effective slot-resolution overlays
-    // are respected. Runtime validation runs during construction, so any post-parse
-    // phase is sufficient; we do not require `Finalized` here.
-    if let Some(view) = try_runtime_tir_view_for_template(template, registry) {
-        return validate_runtime_tir_view_control_flow_slot_artifacts(&view, registry);
-    }
-
-    // Raw same-store TIR fallback: for roots that lack a stable registry-backed
-    // view identity (parser-local builder roots, cross-store references, or
-    // templates without a registry-backed view), keep the existing store-local behavior.
-    if let Some(roots) = current_same_store_tir_roots_for_template(template, store, builder) {
-        return validate_runtime_tir_subtree_control_flow_slot_artifacts(store, &roots.roots);
-    }
-
-    // No same-store TIR authority is available. The TIR path is the only source
-    // for runtime control-flow artifact validation, so the top-level recursion
-    // returns OK.
-    Ok(())
+    let view = runtime_tir_view_for_template(template, registry)?;
+    validate_runtime_tir_view_control_flow_slot_artifacts(&view)
 }
 
-/// Returns a same-store `TirView` for runtime artifact validation.
+/// Constructs the required registry-backed `TirView` for runtime artifact
+/// validation.
 ///
-/// WHAT: accepts any post-parse phase because runtime validation is invoked
-///       during template construction, before finalization is guaranteed.
-/// WHY: keeps the view path open for composed/formatted roots while letting
-///      unsupported roots fall back to the raw same-store walker.
-fn try_runtime_tir_view_for_template<'a>(
+/// WHAT: validates the durable reference, owning registry store and store ID
+///       before constructing the effective view. Runtime validation runs during
+///       template construction, so any post-parse phase is sufficient; we do not
+///       require `Finalized` here. Missing authority is an internal compiler
+///       error, not permission to fall back to a raw store walk.
+fn runtime_tir_view_for_template<'a>(
     template: &Template,
     registry: &'a TemplateIrRegistry,
-) -> Option<TirView<'a>> {
+) -> Result<TirView<'a>, TemplateError> {
     let reference = &template.tir_reference;
 
-    {
-        let store = registry.store(reference.root.store_id)?;
-        if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-            return None;
-        }
-        if reference.root.store_id != store.store_id() {
-            return None;
-        }
+    let store = registry.store(reference.root.store_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "Runtime template root {} refers to an unregistered TIR store.",
+            reference.root
+        ))
+    })?;
+    if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
+        return Err(CompilerError::compiler_error(format!(
+            "Runtime template root {} does not match its registry store owner.",
+            reference.root
+        ))
+        .into());
+    }
+    if reference.root.store_id != store.store_id() {
+        return Err(CompilerError::compiler_error(format!(
+            "Runtime template root {} does not match its registry store ID.",
+            reference.root
+        ))
+        .into());
     }
 
     TirView::new(
@@ -119,7 +116,7 @@ fn try_runtime_tir_view_for_template<'a>(
         reference.phase,
         reference.overlay_set_id,
     )
-    .ok()
+    .map_err(TemplateError::from)
 }
 
 fn validate_const_required_template_control_flow_with_bindings(
@@ -137,6 +134,36 @@ fn validate_const_required_template_control_flow_with_bindings(
     validate_const_required_tir_view_control_flow(&view, &store, loop_binding_paths, string_table)
 }
 
+/// Cycle-detection key for runtime child-view traversal.
+///
+/// WHAT: uniquely identifies a child view by its store-qualified root, pipeline
+///       phase and overlay set so the same root visited under a different
+///       overlay context is still checked.
+/// WHY: child templates may reference each other; the cycle key prevents infinite
+///      recursion while preserving each reference's exact identity.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct RuntimeTirViewCycleKey {
+    root: TemplateRef,
+    phase: TemplateTirPhase,
+    overlay_set_id: TemplateOverlaySetId,
+}
+
+impl RuntimeTirViewCycleKey {
+    fn for_view(view: &TirView<'_>) -> Self {
+        Self {
+            root: view.root_ref(),
+            phase: view.phase(),
+            overlay_set_id: view.overlay_set_id(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RuntimeControlFlowArtifact {
+    UnresolvedSlot,
+    EscapedInsert,
+}
+
 /// Validates every reachable runtime control-flow body through a registry-backed
 /// `TirView`.
 ///
@@ -144,42 +171,40 @@ fn validate_const_required_template_control_flow_with_bindings(
 ///       bodies for unresolved slots and escaped `$insert(...)` contributions.
 ///       Slot occurrences are checked against the view's effective slot-resolution
 ///       overlay so resolved slots are not falsely reported as artifacts.
-/// WHY: this is the registry-backed replacement for the raw same-store walker;
-///      it keeps overlay resolution centralized while child-template recursion
-///      deliberately falls back to the raw-store walker to keep the slice narrow.
+///       Nested child-template traversal descends through registry-backed child
+///       views, preserving each child reference's exact root, phase and overlay
+///       identity.
+/// WHY: the `TirView` is the sole production read path for runtime artifact
+///      validation; overlay resolution stays centralized and child authority
+///      propagates as an internal error when missing.
 fn validate_runtime_tir_view_control_flow_slot_artifacts(
     view: &TirView<'_>,
-    registry: &TemplateIrRegistry,
 ) -> Result<(), TemplateError> {
     let store_id = view.root_ref().store_id;
     let root_node_id = view.root_template()?.root;
-    let mut visited = HashSet::new();
+    let mut visiting = HashSet::from([RuntimeTirViewCycleKey::for_view(view)]);
 
     validate_runtime_tir_view_node(
         view,
-        registry,
-        store_id,
         TemplateNodeRef::new(store_id, root_node_id),
-        &mut visited,
+        &mut visiting,
     )
 }
 
-/// Validates every reachable runtime control-flow body in a same-store TIR subtree.
+/// Validates every reachable runtime control-flow body in a registry-backed view.
+///
+/// WHAT: walks the structural tree from `node_ref`. For each `BranchChain` and
+///       `Loop` body, checks for unresolved slots and escaped `$insert(...)`
+///       contributions. Recurses through `Sequence`, control-flow bodies,
+///       aggregate wrappers and nested child views. Missing effective-node
+///       authority propagates as an internal error.
 fn validate_runtime_tir_view_node(
     view: &TirView<'_>,
-    registry: &TemplateIrRegistry,
-    store_id: TemplateStoreId,
     node_ref: TemplateNodeRef,
-    visited: &mut HashSet<TemplateIrNodeId>,
+    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
 ) -> Result<(), TemplateError> {
-    if !visited.insert(node_ref.node_id) {
-        return Ok(());
-    }
-
-    let node = match view.effective_node(node_ref) {
-        Ok(node) => node,
-        Err(_) => return Ok(()),
-    };
+    let node = view.effective_node(node_ref)?;
+    let store_id = node_ref.store_id;
 
     match &node.kind {
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
@@ -189,34 +214,20 @@ fn validate_runtime_tir_view_node(
             drop(node);
 
             for branch in branches {
-                validate_runtime_tir_view_control_flow_body(
-                    view,
-                    registry,
-                    branch.body,
-                    &branch.location,
-                )?;
+                validate_runtime_tir_view_control_flow_body(view, branch.body, &branch.location)?;
                 validate_runtime_tir_view_node(
                     view,
-                    registry,
-                    store_id,
                     TemplateNodeRef::new(store_id, branch.body),
-                    visited,
+                    visiting,
                 )?;
             }
 
             if let Some(fallback_id) = fallback {
-                validate_runtime_tir_view_control_flow_body(
-                    view,
-                    registry,
-                    fallback_id,
-                    &node_location,
-                )?;
+                validate_runtime_tir_view_control_flow_body(view, fallback_id, &node_location)?;
                 validate_runtime_tir_view_node(
                     view,
-                    registry,
-                    store_id,
                     TemplateNodeRef::new(store_id, fallback_id),
-                    visited,
+                    visiting,
                 )?;
             }
         }
@@ -231,22 +242,14 @@ fn validate_runtime_tir_view_node(
             let node_location = node.location.clone();
             drop(node);
 
-            validate_runtime_tir_view_control_flow_body(view, registry, body, &node_location)?;
-            validate_runtime_tir_view_node(
-                view,
-                registry,
-                store_id,
-                TemplateNodeRef::new(store_id, body),
-                visited,
-            )?;
+            validate_runtime_tir_view_control_flow_body(view, body, &node_location)?;
+            validate_runtime_tir_view_node(view, TemplateNodeRef::new(store_id, body), visiting)?;
 
             if let Some(wrapper_id) = aggregate_wrapper {
                 validate_runtime_tir_view_node(
                     view,
-                    registry,
-                    store_id,
                     TemplateNodeRef::new(store_id, wrapper_id),
-                    visited,
+                    visiting,
                 )?;
             }
         }
@@ -257,10 +260,8 @@ fn validate_runtime_tir_view_node(
             for child in children {
                 validate_runtime_tir_view_node(
                     view,
-                    registry,
-                    store_id,
                     TemplateNodeRef::new(store_id, child),
-                    visited,
+                    visiting,
                 )?;
             }
         }
@@ -268,27 +269,25 @@ fn validate_runtime_tir_view_node(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
             drop(node);
-
-            // Child-template bodies carry their own phase and overlay context;
-            // the runtime view path stays narrow by falling back to the raw-store
-            // walker for nested children.
-            if let Some(store) = registry.store(store_id)
-                && let Some(template_id) = reference.template_id_in_store(store_id)
-                && let Some(template_ir) = store.get_template(template_id)
-            {
-                validate_runtime_tir_subtree_node(&store, template_ir.root, &mut HashSet::new())?;
-            }
+            validate_runtime_qualified_child_view(
+                view,
+                reference.root,
+                reference.phase,
+                reference.overlay_set_id,
+                visiting,
+            )?;
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
             drop(node);
-
-            if let Some(store) = registry.store(store_id)
-                && let Some(template_ir) = store.get_template(template_id)
-            {
-                validate_runtime_tir_subtree_node(&store, template_ir.root, &mut HashSet::new())?;
-            }
+            validate_runtime_qualified_child_view(
+                view,
+                TemplateRef::new(store_id, template_id),
+                view.phase(),
+                view.overlay_set_id(),
+                visiting,
+            )?;
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -302,20 +301,61 @@ fn validate_runtime_tir_view_node(
     Ok(())
 }
 
+/// Recurses into a registry-backed child view to validate nested control-flow
+/// bodies.
+///
+/// WHAT: constructs a child `TirView` preserving the child reference's exact
+///       root, phase and overlay identity, then recurses into
+///       [`validate_runtime_tir_view_node`]. The cycle key prevents infinite
+///       recursion through mutually-referencing child templates.
+fn validate_runtime_qualified_child_view(
+    parent_view: &TirView<'_>,
+    child_root: TemplateRef,
+    child_phase: TemplateTirPhase,
+    child_overlay_set_id: TemplateOverlaySetId,
+    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+) -> Result<(), TemplateError> {
+    let cycle_key = RuntimeTirViewCycleKey {
+        root: child_root,
+        phase: child_phase,
+        overlay_set_id: child_overlay_set_id,
+    };
+    if !visiting.insert(cycle_key) {
+        return Ok(());
+    }
+
+    let child_view = parent_view.child_view(child_root, child_phase, child_overlay_set_id)?;
+    let child_root_node = child_view.root_template()?.root;
+    let result = validate_runtime_tir_view_node(
+        &child_view,
+        TemplateNodeRef::new(child_root.store_id, child_root_node),
+        visiting,
+    );
+
+    visiting.remove(&cycle_key);
+    result
+}
+
+/// Checks a control-flow body root for unresolved slots and escaped inserts.
+///
+/// WHAT: runs two independent artifact scans over the body subtree, each with a
+///       fresh cycle set, so a child view checked for one artifact kind is still
+///       checked for the other.
 fn validate_runtime_tir_view_control_flow_body(
     view: &TirView<'_>,
-    registry: &TemplateIrRegistry,
     body_root: TemplateIrNodeId,
     location: &SourceLocation,
 ) -> Result<(), TemplateError> {
     let store_id = view.root_ref().store_id;
     let body_ref = TemplateNodeRef::new(store_id, body_root);
+    let root_cycle_key = RuntimeTirViewCycleKey::for_view(view);
+    let mut escaped_insert_visiting = HashSet::from([root_cycle_key]);
 
     if tir_view_subtree_contains_runtime_artifact(
         view,
-        registry,
         body_ref,
         RuntimeControlFlowArtifact::EscapedInsert,
+        &mut escaped_insert_visiting,
     )? {
         return Err(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeControlFlowUnresolvedInsert,
@@ -324,11 +364,12 @@ fn validate_runtime_tir_view_control_flow_body(
         .into());
     }
 
+    let mut unresolved_slot_visiting = HashSet::from([root_cycle_key]);
     if tir_view_subtree_contains_runtime_artifact(
         view,
-        registry,
         body_ref,
         RuntimeControlFlowArtifact::UnresolvedSlot,
+        &mut unresolved_slot_visiting,
     )? {
         return Err(CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::RuntimeControlFlowUnresolvedSlot,
@@ -340,23 +381,22 @@ fn validate_runtime_tir_view_control_flow_body(
     Ok(())
 }
 
-#[derive(Clone, Copy)]
-enum RuntimeControlFlowArtifact {
-    UnresolvedSlot,
-    EscapedInsert,
-}
-
+/// Returns true when the subtree rooted at `node_ref` contains the requested
+/// runtime artifact.
+///
+/// WHAT: walks the structural tree through the view's effective nodes. For
+///       `Slot` nodes, checks the effective slot-resolution overlay. For
+///       `ChildTemplate` and `InsertContribution` nodes, descends through
+///       registry-backed child views, preserving each child reference's exact
+///       root, phase and overlay identity. Missing effective-node or child-view
+///       authority propagates as an internal error.
 fn tir_view_subtree_contains_runtime_artifact(
     view: &TirView<'_>,
-    registry: &TemplateIrRegistry,
     node_ref: TemplateNodeRef,
     artifact: RuntimeControlFlowArtifact,
+    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
 ) -> Result<bool, TemplateError> {
-    let node = match view.effective_node(node_ref) {
-        Ok(node) => node,
-        Err(_) => return Ok(false),
-    };
-
+    let node = view.effective_node(node_ref)?;
     let store_id = node_ref.store_id;
 
     match &node.kind {
@@ -380,9 +420,9 @@ fn tir_view_subtree_contains_runtime_artifact(
             for child in children {
                 if tir_view_subtree_contains_runtime_artifact(
                     view,
-                    registry,
                     TemplateNodeRef::new(store_id, child),
                     artifact,
+                    visiting,
                 )? {
                     return Ok(true);
                 }
@@ -398,9 +438,9 @@ fn tir_view_subtree_contains_runtime_artifact(
             for body in bodies {
                 if tir_view_subtree_contains_runtime_artifact(
                     view,
-                    registry,
                     TemplateNodeRef::new(store_id, body),
                     artifact,
+                    visiting,
                 )? {
                     return Ok(true);
                 }
@@ -409,9 +449,9 @@ fn tir_view_subtree_contains_runtime_artifact(
             if let Some(fallback) = fallback
                 && tir_view_subtree_contains_runtime_artifact(
                     view,
-                    registry,
                     TemplateNodeRef::new(store_id, fallback),
                     artifact,
+                    visiting,
                 )?
             {
                 return Ok(true);
@@ -431,9 +471,9 @@ fn tir_view_subtree_contains_runtime_artifact(
 
             if tir_view_subtree_contains_runtime_artifact(
                 view,
-                registry,
                 TemplateNodeRef::new(store_id, body),
                 artifact,
+                visiting,
             )? {
                 return Ok(true);
             }
@@ -441,9 +481,9 @@ fn tir_view_subtree_contains_runtime_artifact(
             if let Some(wrapper_id) = aggregate_wrapper
                 && tir_view_subtree_contains_runtime_artifact(
                     view,
-                    registry,
                     TemplateNodeRef::new(store_id, wrapper_id),
                     artifact,
+                    visiting,
                 )?
             {
                 return Ok(true);
@@ -455,33 +495,27 @@ fn tir_view_subtree_contains_runtime_artifact(
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
             drop(node);
-
-            if let Some(store) = registry.store(store_id)
-                && let Some(template_id) = reference.template_id_in_store(store_id)
-            {
-                return Ok(tir_template_contains_runtime_artifact(
-                    &store,
-                    template_id,
-                    artifact,
-                ));
-            }
-
-            Ok(false)
+            runtime_child_view_contains_artifact(
+                view,
+                reference.root,
+                reference.phase,
+                reference.overlay_set_id,
+                artifact,
+                visiting,
+            )
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
             drop(node);
-
-            if let Some(store) = registry.store(store_id) {
-                return Ok(tir_template_contains_runtime_artifact(
-                    &store,
-                    template_id,
-                    artifact,
-                ));
-            }
-
-            Ok(false)
+            runtime_child_view_contains_artifact(
+                view,
+                TemplateRef::new(store_id, template_id),
+                view.phase(),
+                view.overlay_set_id(),
+                artifact,
+                visiting,
+            )
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -492,143 +526,52 @@ fn tir_view_subtree_contains_runtime_artifact(
     }
 }
 
-fn tir_template_contains_runtime_artifact(
-    store: &TemplateIrStore,
-    template_id: TemplateIrId,
-    artifact: RuntimeControlFlowArtifact,
-) -> bool {
-    let Some(template_ir) = store.get_template(template_id) else {
-        return false;
-    };
-
-    match artifact {
-        RuntimeControlFlowArtifact::UnresolvedSlot => {
-            tir_subtree_has_unresolved_slots(store, template_ir.root)
-        }
-        RuntimeControlFlowArtifact::EscapedInsert => {
-            matches!(template_ir.kind, TemplateType::SlotInsert(_))
-                || tir_subtree_contains_slot_insertions(store, template_ir.root)
-        }
-    }
-}
-
-/// Validates every reachable runtime control-flow body in a same-store TIR subtree.
+/// Checks a registry-backed child view for the requested runtime artifact.
 ///
-/// WHAT: walks from `roots`, recursing through sequences, child-template references,
-///       insert-contribution references, and control-flow bodies/aggregate wrappers.
-///       Every `BranchChain` and `Loop` body is checked for unresolved slots and
-///       escaped `$insert(...)` contributions using the TIR node or branch location
-///       for diagnostics.
-/// WHY: this is the production authority for runtime control-flow artifact
-///      validation; the TIR store is the sole source of truth.
-fn validate_runtime_tir_subtree_control_flow_slot_artifacts(
-    store: &TemplateIrStore,
-    roots: &[TemplateIrNodeId],
-) -> Result<(), TemplateError> {
-    let mut visited = HashSet::new();
-    for root in roots {
-        validate_runtime_tir_subtree_node(store, *root, &mut visited)?;
-    }
-    Ok(())
-}
-
-fn validate_runtime_tir_subtree_node(
-    store: &TemplateIrStore,
-    node_id: TemplateIrNodeId,
-    visited: &mut HashSet<TemplateIrNodeId>,
-) -> Result<(), TemplateError> {
-    if !visited.insert(node_id) {
-        return Ok(());
-    }
-
-    let Some(node) = store.get_node(node_id) else {
-        return Ok(());
+/// WHAT: constructs a child `TirView` preserving the child reference's exact
+///       root, phase and overlay identity. For `EscapedInsert`, a child template
+///       whose kind is `SlotInsert` is itself an escaped insert. The child view's
+///       subtree is then checked recursively. The cycle key prevents infinite
+///       recursion through mutually-referencing child templates.
+fn runtime_child_view_contains_artifact(
+    parent_view: &TirView<'_>,
+    child_root: TemplateRef,
+    child_phase: TemplateTirPhase,
+    child_overlay_set_id: TemplateOverlaySetId,
+    artifact: RuntimeControlFlowArtifact,
+    visiting: &mut HashSet<RuntimeTirViewCycleKey>,
+) -> Result<bool, TemplateError> {
+    let cycle_key = RuntimeTirViewCycleKey {
+        root: child_root,
+        phase: child_phase,
+        overlay_set_id: child_overlay_set_id,
     };
-
-    match &node.kind {
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                validate_runtime_tir_control_flow_body(store, branch.body, &branch.location)?;
-                validate_runtime_tir_subtree_node(store, branch.body, visited)?;
-            }
-
-            if let Some(fallback_id) = fallback {
-                validate_runtime_tir_control_flow_body(store, *fallback_id, &node.location)?;
-                validate_runtime_tir_subtree_node(store, *fallback_id, visited)?;
-            }
-        }
-
-        TemplateIrNodeKind::Loop {
-            body,
-            aggregate_wrapper,
-            ..
-        } => {
-            validate_runtime_tir_control_flow_body(store, *body, &node.location)?;
-            validate_runtime_tir_subtree_node(store, *body, visited)?;
-
-            if let Some(wrapper_id) = aggregate_wrapper {
-                validate_runtime_tir_subtree_node(store, *wrapper_id, visited)?;
-            }
-        }
-
-        TemplateIrNodeKind::Sequence { children } => {
-            for child in children {
-                validate_runtime_tir_subtree_node(store, *child, visited)?;
-            }
-        }
-
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id())
-                && let Some(template_ir) = store.get_template(template_id)
-            {
-                validate_runtime_tir_subtree_node(store, template_ir.root, visited)?;
-            }
-        }
-
-        TemplateIrNodeKind::InsertContribution { template } => {
-            if let Some(template_ir) = store.get_template(*template) {
-                validate_runtime_tir_subtree_node(store, template_ir.root, visited)?;
-            }
-        }
-
-        TemplateIrNodeKind::Text { .. }
-        | TemplateIrNodeKind::DynamicExpression { .. }
-        | TemplateIrNodeKind::Slot { .. }
-        | TemplateIrNodeKind::AggregateOutput
-        | TemplateIrNodeKind::LoopControl { .. }
-        | TemplateIrNodeKind::RuntimeSlotSite { .. } => {}
+    if !visiting.insert(cycle_key) {
+        return Ok(false);
     }
 
-    Ok(())
+    let child_view = parent_view.child_view(child_root, child_phase, child_overlay_set_id)?;
+
+    if matches!(artifact, RuntimeControlFlowArtifact::EscapedInsert) {
+        let child_template = child_view.root_template()?;
+        if matches!(child_template.kind, TemplateType::SlotInsert(_)) {
+            visiting.remove(&cycle_key);
+            return Ok(true);
+        }
+        drop(child_template);
+    }
+
+    let child_root_node = child_view.root_template()?.root;
+    let result = tir_view_subtree_contains_runtime_artifact(
+        &child_view,
+        TemplateNodeRef::new(child_root.store_id, child_root_node),
+        artifact,
+        visiting,
+    );
+
+    visiting.remove(&cycle_key);
+    result
 }
-
-fn validate_runtime_tir_control_flow_body(
-    store: &TemplateIrStore,
-    body_root: TemplateIrNodeId,
-    location: &SourceLocation,
-) -> Result<(), TemplateError> {
-    if tir_subtree_contains_slot_insertions(store, body_root) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
-            InvalidTemplateStructureReason::RuntimeControlFlowUnresolvedInsert,
-            location.clone(),
-        )
-        .into());
-    }
-
-    if tir_subtree_has_unresolved_slots(store, body_root) {
-        return Err(CompilerDiagnostic::invalid_template_structure(
-            InvalidTemplateStructureReason::RuntimeControlFlowUnresolvedSlot,
-            location.clone(),
-        )
-        .into());
-    }
-
-    Ok(())
-}
-
-// -------------------------
-//  Const-required TIR subtree validation
-// -------------------------
 
 // -------------------------
 //  Const-required TirView validation

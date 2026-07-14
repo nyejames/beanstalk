@@ -603,69 +603,6 @@ impl TemplateIrStore {
         self.find_control_flow_node_in_subtree(root, &mut visited)
     }
 
-    /// Returns true when any node under one of the supplied roots is a `BranchChain` or `Loop`,
-    /// including control flow nested inside referenced child templates.
-    ///
-    /// WHAT: lets an in-progress parser builder state check its root children
-    ///       before they have been sealed into a single sequence node.
-    pub(crate) fn subtree_contains_control_flow_from_roots(
-        &self,
-        roots: &[TemplateIrNodeId],
-    ) -> bool {
-        let mut visited = HashSet::new();
-        roots
-            .iter()
-            .any(|root| self.subtree_contains_control_flow_impl(*root, &mut visited))
-    }
-
-    fn subtree_contains_control_flow_impl(
-        &self,
-        node_id: TemplateIrNodeId,
-        visited: &mut HashSet<TemplateIrNodeId>,
-    ) -> bool {
-        if !visited.insert(node_id) {
-            return false;
-        }
-
-        let Some(node) = self.nodes.get(node_id.index()) else {
-            return false;
-        };
-
-        match &node.kind {
-            TemplateIrNodeKind::BranchChain { .. }
-            | TemplateIrNodeKind::Loop { .. }
-            | TemplateIrNodeKind::LoopControl { .. } => true,
-
-            TemplateIrNodeKind::Sequence { children } => children
-                .iter()
-                .any(|child| self.subtree_contains_control_flow_impl(*child, visited)),
-
-            TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                if let Some(template_id) = reference.template_id_in_store(self.store_id) {
-                    self.templates
-                        .get(template_id.index())
-                        .is_some_and(|child_template| {
-                            self.subtree_contains_control_flow_impl(child_template.root, visited)
-                        })
-                } else {
-                    false
-                }
-            }
-            TemplateIrNodeKind::InsertContribution { template } => self
-                .templates
-                .get(template.index())
-                .is_some_and(|child_template| {
-                    self.subtree_contains_control_flow_impl(child_template.root, visited)
-                }),
-
-            TemplateIrNodeKind::Text { .. }
-            | TemplateIrNodeKind::DynamicExpression { .. }
-            | TemplateIrNodeKind::Slot { .. }
-            | TemplateIrNodeKind::AggregateOutput
-            | TemplateIrNodeKind::RuntimeSlotSite { .. } => false,
-        }
-    }
-
     fn find_control_flow_node_in_subtree(
         &self,
         node_id: TemplateIrNodeId,

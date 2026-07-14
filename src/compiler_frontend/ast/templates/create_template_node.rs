@@ -34,7 +34,7 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
 };
 use crate::compiler_frontend::ast::templates::template_render_units::{
     ControlFlowRenderUnitRequest, install_formatted_tir_reference_for_linear_template,
-    prepare_control_flow_render_units, template_contains_control_flow,
+    prepare_control_flow_render_units,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
@@ -472,21 +472,9 @@ impl Template {
             TemplateControlFlowValidationMode::RuntimeCapable
         ) {
             let registry = context.registered_template_ir_store.registry().borrow();
-            let template_ir_store = context.registered_template_ir_store.store().borrow();
 
-            if template_contains_control_flow(
-                &template,
-                &template_ir_store,
-                Some(construction_context.builder()),
-            ) {
-                validate_runtime_template_control_flow_slot_artifacts(
-                    &template,
-                    &registry,
-                    &template_ir_store,
-                    Some(construction_context.builder()),
-                )
+            validate_runtime_template_control_flow_slot_artifacts(&template, &registry)
                 .map_err(TemplateError::into_diagnostic)?;
-            }
         }
 
         // `$insert(...)` helpers are allowed to survive while a template still has
