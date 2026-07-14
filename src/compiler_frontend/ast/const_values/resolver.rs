@@ -385,11 +385,7 @@ pub(crate) fn classify_template_effective_tir(
     registry: &Rc<RefCell<TemplateIrRegistry>>,
     string_table: &StringTable,
 ) -> Result<MaterializedTirTemplateClassification, TemplateError> {
-    let reference = template.tir_reference.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "AST const template classification requires a registry-backed TIR reference.",
-        )
-    })?;
+    let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return Err(CompilerError::compiler_error(format!(

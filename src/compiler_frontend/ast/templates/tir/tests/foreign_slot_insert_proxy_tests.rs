@@ -89,17 +89,18 @@ fn foreign_slot_insert_template(
     overlay_set_id: TemplateOverlaySetId,
     slot_key: SlotKey,
 ) -> Template {
-    let mut template = Template::empty();
-    template.location = empty_location();
-    template.kind = TemplateType::SlotInsert(slot_key);
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(foreign_store_id, foreign_template_id),
-        store_owner,
-        is_composed: false,
-        phase,
-        overlay_set_id,
-    });
-    template
+    Template {
+        kind: TemplateType::SlotInsert(slot_key),
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(foreign_store_id, foreign_template_id),
+            store_owner,
+            is_composed: false,
+            phase,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: empty_location(),
+    }
 }
 
 /// Extracts the `InsertContribution` template ID from a built aggregate

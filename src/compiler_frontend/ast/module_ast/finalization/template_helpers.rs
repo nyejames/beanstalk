@@ -54,11 +54,7 @@ fn fold_registry_backed_template_to_string(
     template: &Template,
     fold_inputs: &mut TemplateFinalizationFoldInputs<'_, '_>,
 ) -> Result<TemplateFinalizationFoldResult, TemplateNormalizationError> {
-    let reference = template.tir_reference.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "AST finalization template folding requires an authoritative TIR reference.",
-        )
-    })?;
+    let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return Err(CompilerError::compiler_error(format!(

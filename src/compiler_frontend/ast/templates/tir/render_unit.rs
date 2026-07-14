@@ -260,11 +260,9 @@ fn convert_head_node_for_aggregate_wrapper(
                 // and discover nested inserts recursively — like the same-store
                 // contract — without deep-copying the foreign tree or reading
                 // an intermediate content representation.
-                if let Some(foreign_reference) = child_template.tir_reference.as_ref()
-                    && foreign_reference.root.store_id != store.store_id()
-                    && !child_template
-                        .tir_store_owner()
-                        .is_some_and(|owner| Arc::ptr_eq(&owner, &store_owner))
+                let foreign_reference = &child_template.tir_reference;
+                if foreign_reference.root.store_id != store.store_id()
+                    && !Arc::ptr_eq(&child_template.tir_store_owner(), &store_owner)
                     && registry
                         .store_handle(foreign_reference.root.store_id)
                         .is_some_and(|handle| {
@@ -309,19 +307,17 @@ fn convert_head_node_for_aggregate_wrapper(
                 // Same-store parser children already carry their complete TIR
                 // identity. Preserve it exactly instead of reducing it to a
                 // local ID and inventing Parsed/empty overlay metadata.
-                let child_reference = child_template
-                    .tir_reference
-                    .as_ref()
-                    .filter(|reference| Arc::ptr_eq(&reference.store_owner, &store_owner))
-                    .filter(|reference| reference.root.store_id == store.store_id())
-                    .filter(|reference| {
-                        store.get_template(reference.root.template_id).is_some()
-                    })
-                    .ok_or_else(|| {
-                        TemplateError::from(CompilerError::compiler_error(
-                            "TIR render-unit child was missing its parser-emitted store-qualified reference.",
-                        ))
-                    })?;
+                let child_reference = &child_template.tir_reference;
+                if !Arc::ptr_eq(&child_reference.store_owner, &store_owner)
+                    || child_reference.root.store_id != store.store_id()
+                    || store
+                        .get_template(child_reference.root.template_id)
+                        .is_none()
+                {
+                    return Err(TemplateError::from(CompilerError::compiler_error(
+                        "TIR render-unit child did not carry a same-store parser-emitted reference.",
+                    )));
+                }
                 let child_reference = TemplateTirChildReference::new(
                     child_reference.root,
                     child_reference.phase,

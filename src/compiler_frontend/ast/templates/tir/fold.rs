@@ -580,11 +580,7 @@ fn fold_tir_dynamic_expression(
             };
 
             reject_slot_insert_template(&template.kind)?;
-            let reference = template.tir_reference.as_ref().ok_or_else(|| {
-                CompilerError::compiler_error(
-                    "Invalid nested template reached TIR folding without an authoritative TIR reference.",
-                )
-            })?;
+            let reference = &template.tir_reference;
             let child_reference = TemplateTirChildReference::new(
                 reference.root,
                 reference.phase,

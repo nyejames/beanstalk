@@ -91,7 +91,7 @@ pub(crate) fn same_store_tir_id(
     template: &Template,
     store: &TemplateIrStore,
 ) -> Option<TemplateIrId> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     if Arc::ptr_eq(&reference.store_owner, &store.owner()) {
         Some(reference.root.template_id)
     } else {
@@ -1597,9 +1597,7 @@ fn tir_view_expression_is_const_evaluable(
         }
 
         ExpressionKind::Template(template) => {
-            let Some(reference) = template.tir_reference.as_ref() else {
-                return Ok(false);
-            };
+            let reference = &template.tir_reference;
             let child_reference = TemplateTirChildReference::new(
                 reference.root,
                 reference.phase,
@@ -2010,9 +2008,7 @@ fn tir_embedded_template_is_const_evaluable(
     visiting_templates: &mut HashSet<TemplateIrId>,
     string_function_child_policy: StringFunctionChildConstPolicy,
 ) -> bool {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return false;
-    };
+    let reference = &template.tir_reference;
     if reference.root.store_id != store.store_id()
         || !Arc::ptr_eq(&reference.store_owner, &store.owner())
         || reference.overlay_set_id != TemplateOverlaySetId::empty()

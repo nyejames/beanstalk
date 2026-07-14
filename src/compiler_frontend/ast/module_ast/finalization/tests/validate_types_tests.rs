@@ -66,16 +66,18 @@ fn finalized_template_with_expression_overlay(
         wrapper_context: None,
     });
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner,
-        is_composed: true,
-        phase: TemplateTirPhase::Finalized,
-        overlay_set_id,
-    });
-    template
+    Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: true,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    }
 }
 
 fn invalid_bool_expression(value: bool, location: SourceLocation) -> Expression {

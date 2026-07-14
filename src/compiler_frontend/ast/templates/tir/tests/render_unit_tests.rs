@@ -40,6 +40,51 @@ use std::sync::Arc;
 
 use crate::compiler_frontend::ast::templates::template_types::Template;
 
+/// Constructs a `Template` directly from a real registry-qualified TIR reference.
+fn template_with_reference(
+    reference: TemplateTirReference,
+    kind: TemplateType,
+    location: SourceLocation,
+) -> Template {
+    Template {
+        kind,
+        tir_reference: reference,
+        id: String::new(),
+        location,
+    }
+}
+
+/// Builds a standalone `Template` with a valid registry-owned store and overlay
+/// set. The caller must retain the returned `TemplateIrRegistry` for the
+/// entire Template use lifetime so the store data stays alive.
+fn standalone_test_template() -> (Template, TemplateIrRegistry) {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_handle = registry.store_handle(store_id).expect("allocated store");
+    let template_id = {
+        let mut store = store_handle.borrow_mut();
+        let root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence { children: vec![] },
+            empty_location(),
+        ));
+        push_template_entry(&mut store, root)
+    };
+    let store_owner = store_handle.borrow().owner();
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
+    (template, registry)
+}
 fn empty_location() -> SourceLocation {
     SourceLocation::default()
 }
@@ -114,15 +159,18 @@ fn wrapper_template_with_reference(
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
 ) -> Template {
-    let mut template = Template::empty();
-    template.tir_reference = Some(TemplateTirReference {
-        root,
-        store_owner,
-        is_composed: false,
-        phase,
-        overlay_set_id,
-    });
-    template
+    Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root,
+            store_owner,
+            is_composed: false,
+            phase,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    }
 }
 
 /// Allocates a registry with one current store, one foreign store, and the
@@ -227,18 +275,18 @@ fn foreign_wrapper_reference_preserves_identity_without_copying() {
 }
 
 #[test]
-fn wrapper_without_tir_reference_returns_none() {
+fn wrapper_with_mismatched_store_owner_returns_none() {
     let (registry, current_store_id, _, _) = wrapper_test_registry();
     let current_handle = registry
         .store_handle(current_store_id)
         .expect("current store");
 
-    let wrapper = Template::empty();
+    let (wrapper, _mismatched_registry) = standalone_test_template();
     let store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &store, &registry);
     assert!(
         refs.is_none(),
-        "wrapper without a TIR reference should yield None"
+        "wrapper whose TIR reference belongs to a different store should yield None"
     );
 }
 
@@ -383,15 +431,17 @@ fn foreign_template_expression(
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
 ) -> Expression {
-    let mut child_template = Template::empty();
-    child_template.location = empty_location();
-    child_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(foreign_store_id, foreign_template_id),
-        store_owner,
-        is_composed: false,
-        phase,
-        overlay_set_id,
-    });
+    let child_template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(foreign_store_id, foreign_template_id),
+            store_owner,
+            is_composed: false,
+            phase,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        empty_location(),
+    );
 
     Expression {
         kind: ExpressionKind::Template(Box::new(child_template)),
@@ -423,14 +473,17 @@ fn aggregate_wrapper_preserves_same_store_child_identity() {
         empty_location(),
     ));
     let child_template_id = push_template_entry(&mut store, child_root);
-    let mut child_template = Template::empty();
-    child_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, child_template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Finalized,
-        overlay_set_id,
-    });
+    let child_template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, child_template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
     let child_expression = Expression::template(child_template, ValueMode::ImmutableOwned);
     let dynamic_node = push_dynamic_expression(&mut store, child_expression);
 
@@ -448,19 +501,20 @@ fn aggregate_wrapper_preserves_same_store_child_identity() {
 }
 
 #[test]
-fn aggregate_wrapper_rejects_child_without_tir_authority() {
+fn aggregate_wrapper_rejects_child_with_mismatched_tir_authority() {
     let registry = TemplateIrRegistry::new();
     let mut store = TemplateIrStore::new();
-    let child_expression = Expression::template(Template::empty(), ValueMode::ImmutableOwned);
+    let (mismatched_template, _mismatched_registry) = standalone_test_template();
+    let child_expression = Expression::template(mismatched_template, ValueMode::ImmutableOwned);
     let dynamic_node = push_dynamic_expression(&mut store, child_expression);
 
     let error =
         build_aggregate_wrapper_candidate_from_tir_nodes(&[dynamic_node], &mut store, &registry)
-            .expect_err("child without parser TIR authority should be rejected");
+            .expect_err("child with mismatched-store TIR authority should be rejected");
 
     assert!(
-        error_message(error).contains("missing its parser-emitted store-qualified reference"),
-        "missing child authority should retain the invariant diagnostic"
+        error_message(error).contains("did not carry a same-store parser-emitted reference"),
+        "mismatched child authority should retain the invariant diagnostic"
     );
 }
 

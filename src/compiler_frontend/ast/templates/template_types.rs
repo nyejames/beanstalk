@@ -36,14 +36,14 @@ use std::sync::Arc;
 pub struct Template {
     pub kind: TemplateType,
 
-    /// Finalized TIR reference.
+    /// Authoritative TIR reference.
     ///
     /// WHAT: holds the store-qualified `TemplateRef` root and store-owner token
     /// WHY: this is the long-lived reference; the `TemplateRef` makes the owning
     ///      store explicit for registry/view consumers, while the store-owner
     ///      `Arc` keeps the same-store instance-identity proof that numeric store
     ///      IDs alone cannot provide.
-    pub(crate) tir_reference: Option<TemplateTirReference>,
+    pub(crate) tir_reference: TemplateTirReference,
 
     pub id: String,
     pub location: SourceLocation,
@@ -68,27 +68,6 @@ impl Clone for Template {
 // -------------------------
 
 impl Template {
-    /// Creates an empty template handle with default style and no TIR identity.
-    ///
-    /// Production parser construction no longer uses this; the durable
-    /// `Template` is constructed once after authoritative TIR identity exists.
-    /// Direct test fixtures may still use it until Phase 2D completes the
-    /// non-optional reference migration.
-    #[cfg(test)]
-    pub fn empty() -> Template {
-        Self::build_empty()
-    }
-
-    #[cfg(test)]
-    fn build_empty() -> Template {
-        Template {
-            kind: TemplateType::StringFunction,
-            tir_reference: None,
-            id: String::new(),
-            location: SourceLocation::default(),
-        }
-    }
-
     /// Refreshes the ordinary durable kind from authoritative TIR classification.
     ///
     /// Helper, slot-definition, and comment markers remain semantic tags and
@@ -113,25 +92,21 @@ impl Template {
         };
     }
 
-    /// Returns the store-owner token for this template's finalized TIR
-    /// reference, if any.
+    /// Returns the store-owner token for this template's authoritative TIR
+    /// reference.
     ///
     /// WHAT: lets callers prove that a finalized `TemplateIrId` belongs to the
     ///       same `TemplateIrStore` they are writing into before recording it as
     ///       a `ChildTemplate` reference.
-    /// WHY: ordinary `Template::clone()` preserves the finalized reference after
-    ///      parsing so callers can prove same-store ownership of a finalized
+    /// WHY: ordinary `Template::clone()` preserves the authoritative reference after
+    ///      parsing so callers can prove same-store ownership of a finished
     ///      `TemplateIrId` without carrying the full builder-state children/summary.
-    pub(crate) fn tir_store_owner(&self) -> Option<Arc<TemplateIrStoreOwner>> {
-        self.tir_reference
-            .as_ref()
-            .map(|reference| Arc::clone(&reference.store_owner))
+    pub(crate) fn tir_store_owner(&self) -> Arc<TemplateIrStoreOwner> {
+        Arc::clone(&self.tir_reference.store_owner)
     }
 
-    /// Returns the finalized TIR template ID for this template, when present.
-    pub(crate) fn tir_template_id(&self) -> Option<TemplateIrId> {
-        self.tir_reference
-            .as_ref()
-            .map(|reference| reference.root.template_id)
+    /// Returns the authoritative TIR template ID for this template.
+    pub(crate) fn tir_template_id(&self) -> TemplateIrId {
+        self.tir_reference.root.template_id
     }
 }

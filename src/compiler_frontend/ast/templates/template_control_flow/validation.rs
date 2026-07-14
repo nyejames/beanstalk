@@ -80,7 +80,7 @@ pub(crate) fn validate_runtime_template_control_flow_slot_artifacts(
 
     // Raw same-store TIR fallback: for roots that lack a stable registry-backed
     // view identity (parser-local builder roots, cross-store references, or
-    // templates without a `tir_reference`), keep the existing store-local behavior.
+    // templates without a registry-backed view), keep the existing store-local behavior.
     if let Some(roots) = current_same_store_tir_roots_for_template(template, store, builder) {
         return validate_runtime_tir_subtree_control_flow_slot_artifacts(store, &roots.roots);
     }
@@ -101,7 +101,7 @@ fn try_runtime_tir_view_for_template<'a>(
     template: &Template,
     registry: &'a TemplateIrRegistry,
 ) -> Option<TirView<'a>> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
 
     {
         let store = registry.store(reference.root.store_id)?;
@@ -644,11 +644,7 @@ fn const_required_tir_view_for_template<'a>(
     template: &Template,
     registry: &'a TemplateIrRegistry,
 ) -> Result<TirView<'a>, TemplateError> {
-    let reference = template.tir_reference.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Const-required template validation requires a registry-backed TIR reference.",
-        )
-    })?;
+    let reference = &template.tir_reference;
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return Err(CompilerError::compiler_error(format!(
             "Const-required template root {} is at phase {}, but validation requires Composed or later.",

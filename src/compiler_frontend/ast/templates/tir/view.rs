@@ -165,9 +165,7 @@ pub(crate) fn finalized_tir_view_for_template<'a>(
     store: &TemplateIrStore,
     registry: &'a TemplateIrRegistry,
 ) -> FinalizedTirViewAttempt<'a> {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return FinalizedTirViewAttempt::Unavailable;
-    };
+    let reference = &template.tir_reference;
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return FinalizedTirViewAttempt::Unavailable;
     }

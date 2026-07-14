@@ -42,8 +42,22 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
     function_node, node, symbol, test_location,
 };
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// Constructs a `Template` directly from a real registry-qualified TIR reference.
+fn template_with_reference(
+    reference: TemplateTirReference,
+    kind: TemplateType,
+    location: SourceLocation,
+) -> Template {
+    Template {
+        kind,
+        tir_reference: reference,
+        id: String::new(),
+        location,
+    }
+}
 fn string_return_slot() -> ReturnSlot {
     ReturnSlot {
         value: FunctionReturn::Value(DataType::StringSlice),
@@ -106,8 +120,7 @@ fn template_expression_from_tir(
     expression: Expression,
     reactive_subscription: Option<ReactiveSubscription>,
 ) -> Expression {
-    let mut template = Template::empty();
-    template.location = test_location(2);
+    let location = test_location(2);
 
     let site_id = store.next_expression_site_id();
     let root = store.push_node(TemplateIrNode::new(
@@ -117,23 +130,26 @@ fn template_expression_from_tir(
             reactive_subscription,
             site_id,
         },
-        template.location.clone(),
+        location.clone(),
     ));
     let template_id = store.push_template(TemplateIr::new(
         root,
         Style::default(),
         TemplateType::String,
         TemplateIrSummary::empty(),
-        template.location.clone(),
+        location.clone(),
     ));
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id:
-            crate::compiler_frontend::ast::templates::tir::TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location,
+    );
 
     Expression::template(template, ValueMode::ImmutableOwned)
 }
@@ -143,7 +159,7 @@ fn linear_tir_expression_overlay_metadata<'a>(
     template: &Template,
     site_id: ExpressionSiteId,
 ) -> Option<&'a ReactiveTemplateMetadata> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     let overlay_set = registry.overlay_set(reference.overlay_set_id)?;
     let expression_overlay_id = overlay_set.expression_overrides?;
     let expression_overlay = registry.expression_overlay(expression_overlay_id)?;
@@ -478,15 +494,17 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -568,15 +586,17 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -649,15 +669,17 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
@@ -742,15 +764,17 @@ fn annotates_branch_selector_and_body_through_one_root_overlay() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![
         node(
@@ -849,15 +873,17 @@ fn annotates_existing_effective_expression_override_instead_of_structural_payloa
         wrapper_context: None,
     });
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![
         node(
@@ -967,15 +993,17 @@ fn annotates_existing_same_store_child_expression_override() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), parent_template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: root_overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), parent_template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: root_overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
     let mut ast = vec![
         node(
             NodeKind::VariableDeclaration(show_declaration),
@@ -1071,15 +1099,17 @@ fn option_capture_body_uses_scrutinee_reactive_metadata() {
         location.clone(),
     ));
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![
         node(
@@ -1151,15 +1181,17 @@ fn annotates_same_store_linear_tir_root_metadata_through_overlay() {
     let mut registry = TemplateIrRegistry::new();
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let mut template = Template::empty();
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
 
     let mut ast = vec![node(
         NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),

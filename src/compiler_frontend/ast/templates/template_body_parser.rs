@@ -598,14 +598,15 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         // Control-flow children are fully TIR-owned: their body roots carry the
         // branch/loop structure and the child template node is already recorded
         // above through `record_parser_tir_child_template`.
-        if let Some(child_template_id) = child_template.tir_template_id() {
+        let child_template_id = child_template.tir_template_id();
+        let has_control_flow_root = {
             let store = construction_context.store();
-            if store
+            store
                 .control_flow_node_id_for_template(child_template_id)
                 .is_some()
-            {
-                return Ok(());
-            }
+        };
+        if has_control_flow_root {
+            return Ok(());
         }
 
         match &child_template.kind {
@@ -684,9 +685,7 @@ fn record_parser_tir_child_template(
     construction_context: &mut TemplateConstructionContext,
     child_template: &Template,
 ) {
-    let Some(child_reference) = child_template.tir_reference.as_ref() else {
-        return;
-    };
+    let child_reference = &child_template.tir_reference;
 
     construction_context.record_child_template(
         child_reference,
@@ -699,9 +698,7 @@ fn record_parser_tir_insert_contribution(
     construction_context: &mut TemplateConstructionContext,
     child_template: &Template,
 ) {
-    let Some(child_template_id) = child_template.tir_template_id() else {
-        return;
-    };
+    let child_template_id = child_template.tir_template_id();
 
     construction_context
         .record_insert_contribution(child_template_id, child_template.location.clone());

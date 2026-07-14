@@ -30,10 +30,7 @@ fn collect_formatted_body_text_locations_from_tir(
     template: &Template,
     context: &ScopeContext,
 ) -> Vec<SourceLocation> {
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("parsed template should carry a TIR reference");
+    let reference = &template.tir_reference;
     let store = context.template_ir_store();
     let store = store.borrow();
     let tir = store
@@ -76,10 +73,7 @@ fn collect_formatted_body_text_from_tir(
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> Vec<String> {
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("parsed template should carry a TIR reference");
+    let reference = &template.tir_reference;
     let store = context.template_ir_store();
     let store = store.borrow();
     let tir = store

@@ -461,7 +461,7 @@ impl Template {
         // and classified kind exist. The build state fields are moved into it.
         let template = Template {
             kind: build_state.kind,
-            tir_reference: Some(tir_reference),
+            tir_reference,
             id: build_state.id,
             location: construction_context.location().to_owned(),
         };
@@ -501,10 +501,7 @@ impl Template {
         if !matches!(template.kind, TemplateType::SlotInsert(_))
             && !template_classification.has_unresolved_slots
             && template_classification.has_slot_insertions
-            && !template
-                .tir_reference
-                .as_ref()
-                .is_some_and(|reference| reference.is_composed)
+            && !template.tir_reference.is_composed
         {
             return Err(Box::new(CompilerDiagnostic::invalid_template_slot(
                 InvalidTemplateSlotReason::InsertOutsideParentSlot,
@@ -516,10 +513,9 @@ impl Template {
         // Align the final TIR entry's kind with the classification result.
         // `finish()` was called with a provisional kind before composition; this
         // ensures the authoritative TIR entry carries the classified kind.
-        if let Some(template_id) = template.tir_template_id() {
-            let mut template_ir_store = context.template_ir_store.borrow_mut();
-            template_ir_store.set_template_kind(template_id, template.kind.to_owned());
-        }
+        let template_id = template.tir_template_id();
+        let mut template_ir_store = context.template_ir_store.borrow_mut();
+        template_ir_store.set_template_kind(template_id, template.kind.to_owned());
 
         increment_frontend_counter(FrontendCounter::TemplateCount);
         match control_flow_validation {

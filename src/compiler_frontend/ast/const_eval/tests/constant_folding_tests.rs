@@ -979,18 +979,18 @@ fn slot_handler_template(
         location.clone(),
     );
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(template_ir_store.store_id(), template_id),
-        store_owner: template_ir_store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-
-    template
+    Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(template_ir_store.store_id(), template_id),
+            store_owner: template_ir_store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location,
+    }
 }
 
 fn fallible_builtin_cast_with_catch(

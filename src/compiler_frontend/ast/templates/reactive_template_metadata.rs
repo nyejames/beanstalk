@@ -69,7 +69,7 @@ fn authoritative_tir_root_for_template(
     template: &Template,
     store: &TemplateIrStore,
 ) -> Option<TemplateIrNodeId> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return None;
     }
@@ -576,7 +576,7 @@ fn try_finalized_tir_view_for_template<'a>(
     store: &TemplateIrStore,
     registry: &'a TemplateIrRegistry,
 ) -> Option<TirView<'a>> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return None;
@@ -1078,6 +1078,19 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    /// Constructs a `Template` directly from a real registry-qualified TIR reference.
+    fn template_with_reference(
+        reference: TemplateTirReference,
+        kind: TemplateType,
+        location: SourceLocation,
+    ) -> Template {
+        Template {
+            kind,
+            tir_reference: reference,
+            id: String::new(),
+            location,
+        }
+    }
     fn test_location() -> SourceLocation {
         SourceLocation::default()
     }
@@ -1158,14 +1171,17 @@ mod tests {
             .store(store_id)
             .expect("adopted store should remain registered");
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -1300,14 +1316,17 @@ mod tests {
             test_location(),
         );
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_resolver(
@@ -1388,14 +1407,17 @@ mod tests {
         let root = builder.push_sequence_node(vec![branch_chain], test_location());
         let template_id = finish_string_function_template(&mut builder, root);
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1415,14 +1437,17 @@ mod tests {
         let root = builder.push_sequence_node(vec![loop_node], test_location());
         let template_id = finish_string_function_template(&mut builder, root);
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1453,14 +1478,17 @@ mod tests {
         let root = builder.push_sequence_node(vec![loop_node], test_location());
         let template_id = finish_string_function_template(&mut builder, root);
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1484,14 +1512,17 @@ mod tests {
             reactive_dynamic_expression_node(&mut builder, &mut string_table, "body_count");
         let template_id = finish_string_function_template(&mut builder, body_root);
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Formatted,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Formatted,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1515,14 +1546,17 @@ mod tests {
             reactive_dynamic_expression_node(&mut builder, &mut string_table, "tir_count");
         let template_id = finish_string_function_template(&mut builder, body_root);
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store.store_id(), template_id),
-            store_owner: store.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Parsed,
-            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store.store_id(), template_id),
+                store_owner: store.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Parsed,
+                overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let metadata = collect_store_aware_metadata(&template, &store);
 
@@ -1579,14 +1613,17 @@ mod tests {
         let (registry, store_id, overlay_set_id) = registry_adopting_store(&store_rc);
         let store_ref = registry.store(store_id).unwrap();
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -1662,14 +1699,17 @@ mod tests {
         });
         let store_ref = registry.store(store_id).unwrap();
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -1768,14 +1808,17 @@ mod tests {
         });
         let store_ref = registry.store(store_id).unwrap();
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Finalized,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -1833,15 +1876,18 @@ mod tests {
         let (registry, store_id, overlay_set_id) = registry_adopting_store(&store_rc);
         let store_ref = registry.store(store_id).unwrap();
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            // Phase is below Composed, so neither the view nor raw root is authoritative.
-            phase: TemplateTirPhase::Parsed,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                // Phase is below Composed, so neither the view nor raw root is authoritative.
+                phase: TemplateTirPhase::Parsed,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(
@@ -1916,14 +1962,17 @@ mod tests {
         });
         let store_ref = registry.store(store_id).unwrap();
 
-        let mut template = Template::empty();
-        template.tir_reference = Some(TemplateTirReference {
-            root: TemplateRef::new(store_id, template_id),
-            store_owner: store_ref.owner(),
-            is_composed: false,
-            phase: TemplateTirPhase::Formatted,
-            overlay_set_id,
-        });
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                is_composed: false,
+                phase: TemplateTirPhase::Formatted,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            SourceLocation::default(),
+        );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
         merge_reactive_template_metadata_with_store_and_registry(

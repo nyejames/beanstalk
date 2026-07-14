@@ -315,16 +315,18 @@ fn constant_identifier_uses_foreign_effective_tir() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location.clone();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(foreign_store.borrow().store_id(), template_id),
-        store_owner: foreign_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(foreign_store.borrow().store_id(), template_id),
+            store_owner: foreign_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        id: String::new(),
+        location: location.clone(),
+    };
 
     let mut context = ScopeContext::new(
         ContextKind::Constant,
@@ -365,12 +367,7 @@ fn constant_identifier_uses_foreign_effective_tir() {
         panic!("constant reference should preserve the existing inlined template behavior");
     };
     assert_eq!(
-        parsed_template
-            .tir_reference
-            .as_ref()
-            .expect("inlined template should keep its TIR identity")
-            .root
-            .store_id,
+        parsed_template.tir_reference.root.store_id,
         foreign_store_id
     );
 }

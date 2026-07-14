@@ -54,14 +54,16 @@ fn tir_reference_matches_correct_store_owner_and_rejects_wrong_owner() {
 #[test]
 fn template_clone_preserves_tir_reference() {
     let store = TemplateIrStore::new();
-    let mut original = Template::empty();
-    original.tir_reference = Some(make_reference(TemplateIrId::new(5), &store));
+    let original = Template {
+        kind: crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction,
+        tir_reference: make_reference(TemplateIrId::new(5), &store),
+        id: String::new(),
+        location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
+    };
 
     let cloned = original.clone();
 
-    let cloned_reference = cloned
-        .tir_reference
-        .expect("clone must preserve finalized TIR reference");
+    let cloned_reference = &cloned.tir_reference;
     assert_eq!(cloned_reference.root.template_id, TemplateIrId::new(5));
     assert!(Arc::ptr_eq(&cloned_reference.store_owner, &store.owner()));
 }

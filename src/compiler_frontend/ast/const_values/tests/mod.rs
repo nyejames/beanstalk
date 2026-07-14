@@ -559,16 +559,18 @@ fn build_resolved_slot_template_registry() -> (Template, Rc<RefCell<TemplateIrRe
         wrapper_context: None,
     });
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner,
-        is_composed: true,
-        phase: TemplateTirPhase::Finalized,
-        overlay_set_id,
-    });
+    let template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: true,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location,
+    };
 
     (template, Rc::new(RefCell::new(registry)))
 }

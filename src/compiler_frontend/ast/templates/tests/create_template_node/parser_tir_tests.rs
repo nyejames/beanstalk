@@ -57,9 +57,7 @@ fn parse_const_required_template(
 }
 
 fn tir_root_child_ids(template: &Template, store: &TemplateIrStore) -> Vec<TemplateIrNodeId> {
-    let template_id = template
-        .tir_template_id()
-        .expect("parser should finalize a B6 TIR reference");
+    let template_id = template.tir_template_id();
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -125,10 +123,7 @@ fn parser_tir_owns_contiguous_literal_body_text() {
     let store = store.borrow();
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "simple no-formatter text bodies should reuse the formatted TIR root"
     );
     assert_eq!(
@@ -230,9 +225,7 @@ fn parser_tir_root_kind<'store>(
     template: &Template,
     store: &'store TemplateIrStore,
 ) -> &'store TemplateIrNodeKind {
-    let template_id = template
-        .tir_template_id()
-        .expect("parser should finalize a TIR reference");
+    let template_id = template.tir_template_id();
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -316,11 +309,7 @@ fn parser_tir_records_if_else_if_else_branch_chain() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -388,9 +377,7 @@ fn branch_chain_from_root(
     Vec<crate::compiler_frontend::ast::templates::tir::TemplateIrBranch>,
     Option<TemplateIrNodeId>,
 ) {
-    let template_id = template
-        .tir_template_id()
-        .expect("parser should finalize a B6 TIR reference");
+    let template_id = template.tir_template_id();
     let template_ir = store
         .get_template(template_id)
         .expect("parser TIR template should exist");
@@ -529,11 +516,7 @@ fn parser_tir_records_loop_node() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
 
@@ -690,11 +673,7 @@ fn parser_tir_records_default_slot_placeholder() {
     );
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.slot_count, 1);
     assert!(parent_template.summary.has_slots);
@@ -885,11 +864,7 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
     assert_eq!(parser_tir_text(children[1], &store, &string_table), " body");
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_reactivity);
 
@@ -954,10 +929,7 @@ fn formatter_inline_code_literal_preserves_code_markup_in_parser_tir() {
     let (template, store) = parse_template("[$md: `literal code`]", &mut string_table);
     let store = store.borrow();
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("markdown inline-code template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
@@ -1007,10 +979,7 @@ fn formatter_inline_code_preserves_span_for_authored_body_head_insert_anchor() {
     let store = context.template_ir_store();
     let store = store.borrow();
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("markdown inline-code template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
@@ -1018,11 +987,7 @@ fn formatter_inline_code_preserves_span_for_authored_body_head_insert_anchor() {
     );
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(
         !parent_template.summary.has_formatter,
@@ -1062,20 +1027,14 @@ fn simple_formatter_template_records_formatted_tir_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[$md: body]", &mut string_table);
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("linear markdown template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
         "setup: text-only formatter template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "simple formatter templates must reuse the formatted TIR root"
     );
 }
@@ -1091,20 +1050,14 @@ fn inline_code_head_insert_records_formatted_tir_phase() {
         parse_template("[$md:\nLiteral syntax `[\"[slot]\"]`\n]", &mut string_table);
     let store = store.borrow();
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("inline-code markdown template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
         "setup: inline-code markdown template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "markdown/head-insert inline-code surfaces must reuse the formatted TIR root"
     );
 
@@ -1133,20 +1086,14 @@ fn head_stringslice_records_formatted_tir_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[\"prefix\", $md: body]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("head-stringslice markdown template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "setup: head-stringslice markdown template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "head-origin literal text must reuse the formatted TIR root"
     );
 
@@ -1167,20 +1114,14 @@ fn style_child_wrapper_no_children_records_formatted_tir_phase() {
         &mut string_table,
     );
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("style-wrapper markdown template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "setup: style-wrapper markdown template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "style child-template wrappers with no body children must reuse the formatted TIR root"
     );
 
@@ -1202,9 +1143,7 @@ fn style_child_wrapper_with_children_records_formatted_tir_phase() {
         &mut string_table,
     );
 
-    let reference = template.tir_reference.as_ref().expect(
-        "style-wrapper-with-children markdown template should keep a same-store TIR reference",
-    );
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
@@ -1215,10 +1154,7 @@ fn style_child_wrapper_with_children_records_formatted_tir_phase() {
         "setup: style-wrapper-with-children template must have composed TIR"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "style child-template wrappers with body children must reuse the formatted TIR root"
     );
 
@@ -1237,20 +1173,14 @@ fn head_only_literal_text_records_formatted_tir_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[\"head\", $md:]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("head-only literal template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "setup: head-only literal markdown template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "head-only literal explicit-formatter templates must reuse the formatted TIR root"
     );
 
@@ -1299,14 +1229,14 @@ fn build_template_with_direct_tir_root(
     Template {
         kind,
         location,
-        tir_reference: Some(TemplateTirReference {
+        tir_reference: TemplateTirReference {
             root: TemplateRef::new(resolved_store_id, template_id),
             store_owner,
             is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
-        }),
-        ..Template::empty()
+        },
+        id: String::new(),
     }
 }
 
@@ -1353,15 +1283,11 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
-        template
-            .tir_template_id()
-            .and_then(|id| store.control_flow_node_id_for_template(id))
+        store
+            .control_flow_node_id_for_template(template.tir_template_id())
             .is_some()
     };
-    let tir_reference = template
-        .tir_reference
-        .as_mut()
-        .expect("parsed template should carry a TIR reference");
+    let tir_reference = &mut template.tir_reference;
     install_formatted_tir_reference_for_linear_template(
         tir_reference,
         has_control_flow,
@@ -1372,10 +1298,7 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
     .expect("formatted TIR reference installation should succeed");
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "pure direct-dynamic explicit-formatter templates must reuse the formatted TIR root"
     );
 }
@@ -1446,15 +1369,11 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
-        template
-            .tir_template_id()
-            .and_then(|id| store.control_flow_node_id_for_template(id))
+        store
+            .control_flow_node_id_for_template(template.tir_template_id())
             .is_some()
     };
-    let tir_reference = template
-        .tir_reference
-        .as_mut()
-        .expect("parsed template should carry a TIR reference");
+    let tir_reference = &mut template.tir_reference;
     install_formatted_tir_reference_for_linear_template(
         tir_reference,
         has_control_flow,
@@ -1465,10 +1384,7 @@ fn reactive_body_segment_records_formatted_tir_phase() {
     .expect("formatted TIR reference installation should succeed");
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "reactive body segments with safe formatter anchors must reuse the formatted TIR root"
     );
 
@@ -1558,15 +1474,11 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
     let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
-        template
-            .tir_template_id()
-            .and_then(|id| store.control_flow_node_id_for_template(id))
+        store
+            .control_flow_node_id_for_template(template.tir_template_id())
             .is_some()
     };
-    let tir_reference = template
-        .tir_reference
-        .as_mut()
-        .expect("parsed template should carry a TIR reference");
+    let tir_reference = &mut template.tir_reference;
     install_formatted_tir_reference_for_linear_template(
         tir_reference,
         has_control_flow,
@@ -1577,10 +1489,7 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
     .expect("formatted TIR reference installation should succeed");
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "reactive subscriptions on literal body text must reuse the formatted TIR root"
     );
 
@@ -1612,20 +1521,14 @@ fn head_expression_folds_through_tir_formatter() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[42, $md:]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("head-expression markdown template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "setup: head-expression markdown template must have a Formatted TIR reference"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "head-expression templates must reuse the formatted TIR root"
     );
 
@@ -1650,10 +1553,7 @@ fn raw_directive_preserves_whitespace_and_advances_through_formatter_adapter() {
     let (template, store) = parse_template("[$raw:\n    Hello\n    World\n]", &mut string_table);
     let store = store.borrow();
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("$raw template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
     assert_eq!(
         tir_reference.phase,
         TemplateTirPhase::Formatted,
@@ -1661,11 +1561,7 @@ fn raw_directive_preserves_whitespace_and_advances_through_formatter_adapter() {
     );
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(
         !parent_template.summary.has_formatter,
@@ -1723,10 +1619,7 @@ fn parent_formatter_does_not_leak_into_nested_child_without_formatter() {
     let (template, store) = parse_template("[$md: outer [: <b>inner</b> ]]", &mut string_table);
     let store = store.borrow();
 
-    let parent_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("parent markdown template should keep a formatted TIR reference");
+    let parent_reference = &template.tir_reference;
     assert_eq!(
         parent_reference.phase,
         TemplateTirPhase::Formatted,
@@ -1766,10 +1659,7 @@ fn nested_child_with_own_formatter_is_formatted_independently() {
     let (template, store) = parse_template("[$md: outer [$md: <b>inner</b>]]", &mut string_table);
     let store = store.borrow();
 
-    let parent_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("parent markdown template should keep a formatted TIR reference");
+    let parent_reference = &template.tir_reference;
     assert_eq!(
         parent_reference.phase,
         TemplateTirPhase::Formatted,
@@ -1810,17 +1700,10 @@ fn formatted_tir_reference_clears_formatter_summary_for_simple_template() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md: body]", &mut string_table);
     let store = store.borrow();
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("formatted template should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
 
     assert_eq!(
@@ -1844,10 +1727,7 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
     let mut string_table = StringTable::new();
     let (template, store) = parse_template("[$md: before [: child] after]", &mut string_table);
     let store = store.borrow();
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("formatter template with child should keep a same-store TIR reference");
+    let tir_reference = &template.tir_reference;
 
     assert_eq!(
         tir_reference.phase,
@@ -1856,11 +1736,7 @@ fn formatted_tir_reference_installs_with_opaque_body_child_template() {
     );
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
     assert!(
@@ -1937,10 +1813,7 @@ fn formatter_head_chain_composition_keeps_formatted_reference() {
     )
     .expect("formatted head-chain template should parse");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("formatted head-chain template should keep a TIR reference");
+    let reference = &template.tir_reference;
 
     assert_eq!(
         reference.phase,
@@ -2016,10 +1889,7 @@ fn formatter_children_wrapper_composition_keeps_formatted_reference() {
         &mut string_table,
     );
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("formatted child-wrapper template should keep a TIR reference");
+    let reference = &template.tir_reference;
 
     assert!(
         reference.is_composed,
@@ -2057,10 +1927,7 @@ fn formatter_named_insert_installs_formatted_reference_and_preserves_routing() {
     )
     .expect("formatted named-slot wrapper should parse");
 
-    let wrapper_reference = wrapper
-        .tir_reference
-        .as_ref()
-        .expect("formatted named-slot wrapper should keep a TIR reference");
+    let wrapper_reference = &wrapper.tir_reference;
     assert_eq!(
         wrapper_reference.phase,
         TemplateTirPhase::Formatted,
@@ -2079,10 +1946,7 @@ fn formatter_named_insert_installs_formatted_reference_and_preserves_routing() {
     )
     .expect("formatted named insert should parse");
 
-    let insert_reference = insert
-        .tir_reference
-        .as_ref()
-        .expect("formatted insert helper should keep a TIR reference");
+    let insert_reference = &insert.tir_reference;
     assert_eq!(
         insert_reference.phase,
         TemplateTirPhase::Formatted,
@@ -2125,10 +1989,7 @@ fn no_formatter_slot_receiver_does_not_claim_formatted_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[:before[$slot]after]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("slot receiver should keep a TIR reference");
+    let reference = &template.tir_reference;
 
     assert_eq!(
         reference.phase,
@@ -2150,10 +2011,7 @@ fn no_formatter_child_wrapper_reaches_formatted_phase_through_tir() {
         &mut string_table,
     );
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("template with child should keep a TIR reference");
+    let reference = &template.tir_reference;
 
     assert!(
         reference.phase.is_at_least(TemplateTirPhase::Formatted),
@@ -2173,11 +2031,7 @@ fn formatted_tir_reference_installs_formatted_control_flow_branch_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
 
     assert!(
@@ -2215,11 +2069,7 @@ fn formatted_tir_reference_installs_formatted_branch_and_fallback_bodies() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
     assert!(!parent_template.summary.has_formatter);
@@ -2275,11 +2125,7 @@ fn formatted_tir_reference_installs_formatted_loop_body() {
     let store = store.borrow();
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_control_flow);
     assert!(!parent_template.summary.has_formatter);
@@ -2340,11 +2186,7 @@ fn no_formatter_control_flow_owner_reaches_formatted_phase() {
         "no-formatter branch body should preserve normalized output"
     );
     assert_eq!(
-        branch_template
-            .tir_reference
-            .as_ref()
-            .expect("branch template should keep its TIR reference")
-            .phase,
+        branch_template.tir_reference.phase,
         TemplateTirPhase::Formatted,
     );
 
@@ -2365,11 +2207,7 @@ fn no_formatter_control_flow_owner_reaches_formatted_phase() {
         "no-formatter fallback body should preserve normalized output"
     );
     assert_eq!(
-        fallback_template
-            .tir_reference
-            .as_ref()
-            .expect("fallback template should keep its TIR reference")
-            .phase,
+        fallback_template.tir_reference.phase,
         TemplateTirPhase::Formatted,
     );
 
@@ -2385,11 +2223,7 @@ fn no_formatter_control_flow_owner_reaches_formatted_phase() {
         "no-formatter loop body should preserve normalized output"
     );
     assert_eq!(
-        loop_template
-            .tir_reference
-            .as_ref()
-            .expect("loop template should keep its TIR reference")
-            .phase,
+        loop_template.tir_reference.phase,
         TemplateTirPhase::Formatted,
     );
 
@@ -2405,11 +2239,7 @@ fn no_formatter_control_flow_owner_reaches_formatted_phase() {
         "$raw branch body should preserve authored whitespace"
     );
     assert_eq!(
-        raw_template
-            .tir_reference
-            .as_ref()
-            .expect("raw branch template should keep its TIR reference")
-            .phase,
+        raw_template.tir_reference.phase,
         TemplateTirPhase::Formatted,
     );
 }
@@ -2426,20 +2256,14 @@ fn default_whitespace_linear_records_formatted_tir_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[:\n    Hello\n    World\n]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("default-whitespace template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "default-whitespace linear bodies should advance through the formatter adapter"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "default-whitespace linear bodies should reuse the formatted TIR root"
     );
 
@@ -2457,20 +2281,14 @@ fn raw_directive_records_formatted_tir_phase() {
     let mut string_table = StringTable::new();
     let (template, _store) = parse_template("[$raw:\n    Hello\n    World\n]", &mut string_table);
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("$raw template should keep a same-store TIR reference");
+    let reference = &template.tir_reference;
     assert_eq!(
         reference.phase,
         TemplateTirPhase::Formatted,
         "$raw linear bodies should advance through the formatter adapter"
     );
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "$raw linear bodies should reuse the formatted TIR root"
     );
 
@@ -2490,11 +2308,7 @@ fn parser_tir_template_kind_matches_final_template_kind() {
     assert_eq!(template.kind, TemplateType::String);
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.kind, template.kind);
 }
@@ -2530,11 +2344,7 @@ fn parser_tir_records_finalized_same_store_child_template_as_child_template_node
     assert!(!child_template.summary.has_control_flow);
 
     let parent_template = store
-        .get_template(
-            template
-                .tir_template_id()
-                .expect("parent parser TIR template ID should be finalized"),
-        )
+        .get_template(template.tir_template_id())
         .expect("parent parser TIR template should exist");
     assert_eq!(parent_template.summary.child_template_count, 1);
     assert!(parent_template.summary.is_const_evaluable_shape);
@@ -2684,8 +2494,8 @@ fn parser_tir_recursively_materializes_cross_store_template_valued_head() {
     assert!(
         wrapper_ref
             .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.phase.is_at_least(TemplateTirPhase::Formatted)),
+            .phase
+            .is_at_least(TemplateTirPhase::Formatted),
         "cross-store wrapper template should already be formatted in its own store"
     );
 
@@ -2744,10 +2554,7 @@ fn doc_comment_with_formatter_reuses_formatted_tir_root() {
     );
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "formatter-bearing $doc comment should reuse the formatted TIR root"
     );
 }
@@ -2791,16 +2598,10 @@ fn non_empty_slot_insert_reuses_formatted_tir_root() {
     // reuse means the TIR root is authoritative once render-unit preparation
     // has run.
     assert!(
-        insert
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        insert.tir_reference.can_reuse_as_linear_current_state(),
         "non-empty insert helper should reuse the formatted TIR root"
     );
-    let insert_reference = insert
-        .tir_reference
-        .as_ref()
-        .expect("non-empty insert helper should carry a TIR reference");
+    let insert_reference = &insert.tir_reference;
     assert!(
         insert_reference
             .phase
@@ -2849,17 +2650,11 @@ fn empty_slot_insert_records_formatted_tir_phase() {
     let (template, _store) = parse_template("[$md, $insert(\"name\"):]", &mut string_table);
 
     assert!(
-        template
-            .tir_reference
-            .as_ref()
-            .is_some_and(|r| r.can_reuse_as_linear_current_state()),
+        template.tir_reference.can_reuse_as_linear_current_state(),
         "empty SlotInsert helper should reuse the formatted TIR root"
     );
 
-    let tir_reference = template
-        .tir_reference
-        .as_ref()
-        .expect("setup: empty SlotInsert helper must have a TIR reference");
+    let tir_reference = &template.tir_reference;
     assert!(
         tir_reference.phase.is_at_least(TemplateTirPhase::Formatted),
         "setup: empty SlotInsert helper must have a Formatted-or-later TIR reference"

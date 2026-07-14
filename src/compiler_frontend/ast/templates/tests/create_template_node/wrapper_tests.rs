@@ -26,10 +26,7 @@ fn docs_style_data_wrapper_keeps_tir_node_count_bounded_for_many_rows() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("docs-style table with many rows should parse");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("docs-style table should produce a TIR reference");
+    let reference = &template.tir_reference;
 
     let store = context.template_ir_store();
     let store_borrow = store.borrow();
@@ -115,10 +112,7 @@ fn child_wrapper_composition_marks_template_tir_reference_composed() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("child-wrapper composition should parse");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("child-wrapper composition should produce a TIR reference");
+    let reference = &template.tir_reference;
 
     assert!(
         reference.is_composed,

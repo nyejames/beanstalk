@@ -333,11 +333,11 @@ pub(crate) struct SameStoreTirRoots {
     pub(crate) seed_template_id: Option<TemplateIrId>,
 }
 
-/// WHAT: returns the finalized template root when `template.tir_reference`
+/// WHAT: returns the authoritative template root when `template.tir_reference`
 ///       belongs to `store`, or the in-progress parser builder children passed
-///       via `builder` while parsing is still in progress. A cross-store or
-///       missing TIR proof yields `None`.
-/// WHY: centralizes the store-owner proof for finalized TIR references and
+///       via `builder` while parsing is still in progress. A cross-store TIR
+///       proof yields `None`.
+/// WHY: centralizes the store-owner proof for finished TIR references and
 ///      active parser construction contexts so every validation/debug walker
 ///      uses the same current TIR authority.
 pub(crate) fn current_same_store_tir_roots_for_template(
@@ -347,9 +347,8 @@ pub(crate) fn current_same_store_tir_roots_for_template(
 ) -> Option<SameStoreTirRoots> {
     let store_owner = store.owner();
 
-    if let Some(reference) = &template.tir_reference
-        && Arc::ptr_eq(&reference.store_owner, &store_owner)
-    {
+    let reference = &template.tir_reference;
+    if Arc::ptr_eq(&reference.store_owner, &store_owner) {
         let root = store.get_template(reference.root.template_id)?.root;
         return Some(SameStoreTirRoots {
             roots: vec![root],

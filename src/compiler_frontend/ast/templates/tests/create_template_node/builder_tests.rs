@@ -296,11 +296,7 @@ fn builder_registered_handler_directive_rejects_foreign_runtime_template_argumen
         &mut string_table,
     )
     .expect("runtime template argument should parse");
-    let argument_reference = argument
-        .tir_reference
-        .as_ref()
-        .expect("runtime template argument should retain its TIR identity")
-        .clone();
+    let argument_reference = argument.tir_reference.clone();
     let argument_name = string_table.intern("argument");
     let declarations = vec![Declaration {
         id: argument_tokens.src_path.append(argument_name),

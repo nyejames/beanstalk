@@ -149,16 +149,18 @@ fn foreign_parent_template(
     phase: TemplateTirPhase,
     overlay_set_id: TemplateOverlaySetId,
 ) -> Template {
-    let mut template = Template::empty();
-    template.location = empty_location();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner,
-        is_composed: false,
-        phase,
-        overlay_set_id,
-    });
-    template
+    Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: empty_location(),
+    }
 }
 
 /// Folds a parent template through `fold_to_emission` with a fold context that

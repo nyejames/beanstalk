@@ -40,17 +40,18 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
         location.clone(),
     );
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
-    template
+    Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        id: String::new(),
+        location,
+    }
 }
 
 fn registry_with_foreign_template() -> (Rc<RefCell<TemplateIrRegistry>>, Template) {

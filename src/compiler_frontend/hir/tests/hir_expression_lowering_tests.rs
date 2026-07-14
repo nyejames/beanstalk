@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry
 use crate::compiler_frontend::ast::statements::fallible_handling::wrap_catch_expression;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
+use crate::compiler_frontend::ast::templates::template::Style;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotKey, TemplateType,
 };
@@ -25,6 +26,10 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrBuilder, TemplateIrRegistry, TemplateIrSummary, TemplateOverlaySet, TemplateRef,
+    TemplateTirPhase, TemplateTirReference,
+};
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeTemplateBody, OwnedRuntimeTemplateBranch, OwnedRuntimeTemplateHandoff,
     OwnedRuntimeTemplateNode,
@@ -71,6 +76,41 @@ use crate::compiler_frontend::tests::type_id_fixture_support::{
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
 
+/// Builds a standalone `Template` with a valid registry-owned store and overlay
+/// set. The caller must retain the returned `TemplateIrRegistry` for the entire
+/// Template use lifetime so the store data stays alive.
+fn standalone_test_template() -> (Template, TemplateIrRegistry) {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_handle = registry.store_handle(store_id).expect("allocated store");
+    let template_id = {
+        let mut store = store_handle.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let root = builder.push_sequence_node(vec![], SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::empty(),
+            SourceLocation::default(),
+        )
+    };
+    let store_owner = store_handle.borrow().owner();
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
+    (template, registry)
+}
 pub(crate) fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
     let mut builder = HirBuilder::new(
@@ -468,7 +508,7 @@ fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
-    let mut helper = Template::empty();
+    let (mut helper, _helper_registry) = standalone_test_template();
     helper.location = location.clone();
     helper.kind = TemplateType::SlotInsert(SlotKey::named(body_slot));
 
@@ -490,7 +530,7 @@ fn escaped_slot_definition_helpers_fail_when_they_reach_hir_runtime_lowering() {
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
-    let mut helper = Template::empty();
+    let (mut helper, _helper_registry) = standalone_test_template();
     helper.location = location.clone();
     helper.kind = TemplateType::SlotDefinition(SlotKey::named(body_slot));
 
@@ -510,7 +550,7 @@ fn runtime_template_without_handoff_reports_compiler_bug() {
     let mut string_table = StringTable::new();
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
-    let mut template = Template::empty();
+    let (mut template, _template_registry) = standalone_test_template();
     template.location = location.clone();
     template.kind = TemplateType::StringFunction;
 

@@ -1269,9 +1269,7 @@ fn annotate_template_tir_root(
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
 ) {
-    let Some(reference) = template.tir_reference.as_mut() else {
-        return;
-    };
+    let reference = &mut template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
         return;

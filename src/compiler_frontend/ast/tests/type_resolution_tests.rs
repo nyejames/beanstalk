@@ -514,18 +514,18 @@ fn slot_field_default_template(template_ir_store: &mut TemplateIrStore) -> Templ
         location.clone(),
     );
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.location = location;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(template_ir_store.store_id(), template_id),
-        store_owner: template_ir_store.owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
-
-    template
+    Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(template_ir_store.store_id(), template_id),
+            store_owner: template_ir_store.owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        id: String::new(),
+        location,
+    }
 }
 
 #[test]

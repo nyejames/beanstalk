@@ -52,6 +52,20 @@ fn test_project_path_resolver() -> ProjectPathResolver {
     .expect("test path resolver should be valid")
 }
 
+/// Constructs a `Template` directly from a real registry-qualified TIR reference.
+fn template_with_reference(
+    reference: TemplateTirReference,
+    kind: TemplateType,
+    location: SourceLocation,
+) -> Template {
+    Template {
+        kind,
+        tir_reference: reference,
+        id: String::new(),
+        location,
+    }
+}
+
 /// Builds a `Template` carrying a registered TIR root with a single text node,
 /// matching the production shape parser-created const text templates carry
 /// before finalization normalizes their enclosing payload.
@@ -81,16 +95,17 @@ fn registered_text_template(
             SourceLocation::default(),
         )
     };
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-    template
+    template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    )
 }
 
 fn location_at(line: i32, column: i32) -> SourceLocation {
@@ -226,15 +241,17 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         (template_id, dynamic_node_id, site_id)
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let mut template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
@@ -249,10 +266,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
     normalize_template_for_hir(&mut template, &mut context)
         .expect("template normalization should install the dynamic expression overlay");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("template reference should remain attached");
+    let reference = &template.tir_reference;
     assert_ne!(
         reference.overlay_set_id, overlay_set_id,
         "normalization should update the template reference to the expression-overlay set"
@@ -350,15 +364,17 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: false,
-        phase: TemplateTirPhase::Parsed,
-        overlay_set_id,
-    });
+    let mut template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
@@ -373,10 +389,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
     normalize_template_for_hir(&mut template, &mut context)
         .expect("template normalization should preserve parsed reference identity");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("template reference should remain attached");
+    let reference = &template.tir_reference;
     assert_ne!(
         reference.overlay_set_id, overlay_set_id,
         "parsed references may receive expression overlays without becoming finalized views"
@@ -445,15 +458,17 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         (template_id, branch_chain_node_id, selector_site_id)
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let mut template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
@@ -468,10 +483,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
     normalize_template_for_hir(&mut template, &mut context)
         .expect("template normalization should install the branch selector overlay");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("template reference should remain attached");
+    let reference = &template.tir_reference;
     assert_ne!(
         reference.overlay_set_id, overlay_set_id,
         "normalization should update the template reference to the expression-overlay set"
@@ -578,15 +590,17 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         (template_id, loop_node_id, condition_site_id)
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let mut template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut context = TemplateNormalizationContext {
         source_file_scope: &source_file_scope,
@@ -601,10 +615,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
     normalize_template_for_hir(&mut template, &mut context)
         .expect("template normalization should install the loop header overlay");
 
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("template reference should remain attached");
+    let reference = &template.tir_reference;
     assert_ne!(
         reference.overlay_set_id, overlay_set_id,
         "normalization should update the template reference to the expression-overlay set"
@@ -727,15 +738,17 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         .compose_overlay_sets(&[empty_overlay_set_id, expression_overlay_set_id])
         .expect("expression overlay set should compose");
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Finalized,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    );
 
     #[cfg(feature = "benchmark_counters")]
     reset_ast_counters();
@@ -868,9 +881,8 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
         }
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(reference);
+    let template =
+        template_with_reference(reference, TemplateType::String, SourceLocation::default());
 
     let folded = try_fold_template_to_string(
         &template,
@@ -940,9 +952,8 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
         }
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(reference);
+    let template =
+        template_with_reference(reference, TemplateType::String, SourceLocation::default());
 
     let folded = try_fold_template_to_string(
         &template,
@@ -1016,9 +1027,8 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
         }
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(reference);
+    let template =
+        template_with_reference(reference, TemplateType::String, SourceLocation::default());
 
     #[cfg(feature = "benchmark_counters")]
     reset_ast_counters();
@@ -1126,15 +1136,17 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
     let project_path_resolver = test_project_path_resolver();
@@ -1231,15 +1243,17 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
 
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
     let project_path_resolver = test_project_path_resolver();
@@ -1421,16 +1435,17 @@ fn registered_runtime_template(
             SourceLocation::default(),
         )
     };
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-    template
+    template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    )
 }
 
 #[test]
@@ -1594,16 +1609,17 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.location = SourceLocation::default();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id: empty_overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: empty_overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
     let mut context = TemplateNormalizationContext {
@@ -1682,16 +1698,17 @@ fn nested_runtime_template_normalizes_through_final_view() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.location = SourceLocation::default();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
     let mut context = TemplateNormalizationContext {
@@ -1818,15 +1835,17 @@ fn nested_const_template_folds_through_final_view() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, outer_template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, outer_template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    );
 
     let folded = try_fold_template_to_string(
         &template,
@@ -1904,16 +1923,17 @@ fn reactive_metadata_derived_from_nested_final_view() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::StringFunction;
-    template.location = SourceLocation::default();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        SourceLocation::default(),
+    );
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 
     let mut context = TemplateNormalizationContext {
@@ -1984,16 +2004,17 @@ fn helper_artifact_rejected_after_final_view_traversal() {
         )
     };
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::SlotInsert(SlotKey::Default);
-    template.location = SourceLocation::default();
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner: template_ir_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::SlotInsert(SlotKey::Default),
+        SourceLocation::default(),
+    );
 
     let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
 

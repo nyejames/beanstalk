@@ -197,11 +197,7 @@ fn template_tir_contains_runtime_slot_handoff(
     registry: &TemplateIrRegistry,
     visited_templates: &mut HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
 ) -> bool {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        // Without a TIR authority, inlining cannot prove that it preserves a
-        // composition-owned runtime slot plan.
-        return true;
-    };
+    let reference = &template.tir_reference;
     let effective_identity = (reference.root, reference.phase, reference.overlay_set_id);
     if !visited_templates.insert(effective_identity) {
         return false;

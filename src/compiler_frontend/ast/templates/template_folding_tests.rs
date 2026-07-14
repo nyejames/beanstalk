@@ -365,10 +365,12 @@ fn option_capture_classifies_foreign_store_payload_through_effective_tir() {
 }
 
 fn store_qualified_template_with_tir_reference(tir_reference: TemplateTirReference) -> Template {
-    let mut payload_template = Template::empty();
-    payload_template.kind = TemplateType::String;
-    payload_template.tir_reference = Some(tir_reference);
-    payload_template
+    Template {
+        kind: TemplateType::String,
+        tir_reference,
+        id: String::new(),
+        location: SourceLocation::default(),
+    }
 }
 
 fn assert_registry_backed_option_capture(
@@ -484,15 +486,18 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
         )
     };
 
-    let mut nested_template = Template::empty();
-    nested_template.kind = TemplateType::String;
-    nested_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(tir_store.store_id(), template_id),
-        store_owner: tir_store.owner(),
-        is_composed: false,
-        phase: TemplateTirPhase::Parsed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    let nested_template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(tir_store.store_id(), template_id),
+            store_owner: tir_store.owner(),
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
 
     let coerced_template = Expression::coerced(
         Expression::template(nested_template, ValueMode::ImmutableOwned),

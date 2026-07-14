@@ -155,12 +155,7 @@ fn fold_template_in_context(
     string_table: &mut StringTable,
 ) -> StringId {
     // Every caller supplies a parser-emitted or direct-registry-qualified TIR
-    // reference. A missing reference is a test-fixture bug, not a recoverable
-    // state, so there is no content-finalizer fallback here.
-    template
-        .tir_reference
-        .as_ref()
-        .expect("fold_template_in_context requires an authoritative TIR reference");
+    // reference, so folding never needs a content-finalizer fallback here.
 
     let mut fold_context = context
         .new_template_fold_context(string_table, "template tests fold")
@@ -171,10 +166,7 @@ fn fold_template_in_context(
 }
 
 fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("effective_tir_style requires an authoritative TIR reference");
+    let reference = &template.tir_reference;
     let registry = context.template_ir_registry.borrow();
     let view = TirView::new(
         &registry,
@@ -382,9 +374,7 @@ fn collect_body_text_from_tir(
     store: &TemplateIrStore,
     string_table: &StringTable,
 ) -> Vec<String> {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return Vec::new();
-    };
+    let reference = &template.tir_reference;
     let template_ir = match store.get_template(reference.root.template_id) {
         Some(t) => t,
         None => return Vec::new(),
@@ -421,9 +411,7 @@ fn tir_root_has_head_dynamic_expression(
     store: &TemplateIrStore,
     predicate: impl Fn(&Expression) -> bool,
 ) -> bool {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return false;
-    };
+    let reference = &template.tir_reference;
     let Some(template_ir) = store.get_template(reference.root.template_id) else {
         return false;
     };

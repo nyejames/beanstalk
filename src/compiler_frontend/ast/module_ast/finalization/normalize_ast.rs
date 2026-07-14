@@ -791,9 +791,7 @@ fn try_materialize_runtime_handoff_from_final_effective_template_view(
     context: &mut TemplateNormalizationContext<'_, '_>,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return Ok(None);
-    };
+    let reference = &template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Ok(None);
@@ -906,11 +904,7 @@ fn classify_final_effective_template_view(
     template: &mut Template,
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<MaterializedTirTemplateClassification, TemplateNormalizationError> {
-    let reference = template.tir_reference.clone().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Template HIR normalization requires a finalized TIR reference.",
-        )
-    })?;
+    let reference = template.tir_reference.clone();
 
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Err(CompilerError::compiler_error(format!(
@@ -1010,9 +1004,7 @@ fn normalize_expression_overlays_for_template_reference(
     // by the finalized effective view and runtime handoff materializer. This
     // preserves shared TIR nodes while covering dynamic expressions, selectors,
     // loop headers, and every reachable control-flow body from one root pass.
-    let Some(reference) = template.tir_reference.clone() else {
-        return Ok(());
-    };
+    let reference = template.tir_reference.clone();
     let Some(registry) = context.template_ir_registry.as_ref().map(Rc::clone) else {
         return Ok(());
     };
@@ -1026,8 +1018,8 @@ fn normalize_expression_overlays_for_template_reference(
         Vec::new()
     };
     if expression_payloads.is_empty() {
-        if should_mark_finalized && let Some(current_reference) = template.tir_reference.as_mut() {
-            current_reference.phase = TemplateTirPhase::Finalized;
+        if should_mark_finalized {
+            template.tir_reference.phase = TemplateTirPhase::Finalized;
         }
         return Ok(());
     }
@@ -1088,11 +1080,9 @@ fn normalize_expression_overlays_for_template_reference(
     let overlay_set_id =
         registry.compose_overlay_sets(&[reference.overlay_set_id, expression_overlay_set_id])?;
 
-    if let Some(current_reference) = template.tir_reference.as_mut() {
-        current_reference.overlay_set_id = overlay_set_id;
-        if should_mark_finalized {
-            current_reference.phase = TemplateTirPhase::Finalized;
-        }
+    template.tir_reference.overlay_set_id = overlay_set_id;
+    if should_mark_finalized {
+        template.tir_reference.phase = TemplateTirPhase::Finalized;
     }
 
     Ok(())
@@ -1157,11 +1147,7 @@ fn materialize_runtime_template_handoff_for_hir(
     classification: &MaterializedTirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let reference = template.tir_reference.clone().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Runtime template HIR handoff requires a finalized TIR reference.",
-        )
-    })?;
+    let reference = template.tir_reference.clone();
     if !reference.phase.is_at_least(TemplateTirPhase::Finalized) {
         return Err(CompilerError::compiler_error(format!(
             "Runtime template HIR handoff requires Finalized TIR, but root {} is at phase {}.",

@@ -8,7 +8,12 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrBuilder, TemplateIrRegistry, TemplateIrSummary, TemplateOverlaySet, TemplateRef,
+    TemplateTirPhase, TemplateTirReference,
+};
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind};
@@ -18,12 +23,48 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::ast_fixture_support::{
     function_node, make_test_variable, node, test_location,
 };
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 use crate::compiler_frontend::tests::type_id_fixture_support::{no_value_expr, reference_expr};
 
+/// Builds a standalone `Template` with a valid registry-owned store and overlay
+/// set. The caller must retain the returned `TemplateIrRegistry` for the entire
+/// Template use lifetime so the store data stays alive.
+fn standalone_test_template() -> (Template, TemplateIrRegistry) {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let store_handle = registry.store_handle(store_id).expect("allocated store");
+    let template_id = {
+        let mut store = store_handle.borrow_mut();
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let root = builder.push_sequence_node(vec![], SourceLocation::default());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::empty(),
+            SourceLocation::default(),
+        )
+    };
+    let store_owner = store_handle.borrow().owner();
+    let template = Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
+    (template, registry)
+}
 #[test]
 fn registers_declarations_and_resolves_start_function() {
     let mut string_table = StringTable::new();
@@ -171,9 +212,8 @@ fn rejects_unmaterialized_template_constants_in_hir_module_constant_lowering() {
         test_location(1),
     );
 
-    let mut template_constant = Template::empty();
-    template_constant.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::String;
+    let (mut template_constant, _template_registry) = standalone_test_template();
+    template_constant.kind = TemplateType::String;
     template_constant.location = test_location(2);
 
     let mut ast = build_ast(vec![start_function], entry_path);
@@ -207,9 +247,8 @@ fn rejects_nested_unmaterialized_template_constants_in_hir_module_constant_lower
         test_location(1),
     );
 
-    let mut template_constant = Template::empty();
-    template_constant.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::String;
+    let (mut template_constant, _template_registry) = standalone_test_template();
+    template_constant.kind = TemplateType::String;
     template_constant.location = test_location(2);
 
     let page_const_name = super::symbol("PAGE", &mut string_table);

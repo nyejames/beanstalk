@@ -48,14 +48,14 @@ pub(crate) fn wrapper_sets_are_equivalent(
 ///      wrapper-ref shape before they enter a wrapper set.
 ///
 /// Returns `None` when the wrapper has no valid registry-backed TIR identity,
-/// including a missing reference, store, template, owner or overlay. Callers
-/// must not recover through an intermediate content representation.
+/// including a wrong store, missing template, owner mismatch or missing overlay.
+/// Callers must not recover through an intermediate content representation.
 pub(crate) fn wrapper_reference_for_template(
     template: &Template,
     current_store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
 ) -> Option<TemplateWrapperReference> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     registry.overlay_set(reference.overlay_set_id)?;
 
     if reference.root.store_id == current_store.store_id() {

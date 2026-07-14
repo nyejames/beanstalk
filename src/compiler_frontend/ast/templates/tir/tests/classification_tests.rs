@@ -75,26 +75,30 @@ fn string_function_call_expression(string_table: &mut StringTable, name: &str) -
     )
 }
 
-/// Seeds a finalized same-store TIR reference on `template` by building a
-/// trivial TIR tree in `store`.
-fn seed_tir_reference(template: &mut Template, store: &mut TemplateIrStore) {
+/// Builds a `Template` with a real same-store TIR reference from a trivial
+/// TIR tree in `store`.
+fn template_with_seeded_reference(store: &mut TemplateIrStore) -> Template {
     let mut builder = TemplateIrBuilder::new(store);
     let root = builder.push_sequence_node(vec![], empty_location());
     let template_id = builder.finish_template(
         root,
-        crate::compiler_frontend::ast::templates::template::Style::default(),
+        Style::default(),
         TemplateType::String,
         TemplateIrSummary::empty(),
         empty_location(),
     );
-
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store.store_id(), template_id),
-        store_owner: store.owner(),
-        is_composed: false,
-        phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
-        overlay_set_id: TemplateOverlaySetId::empty_for_test(),
-    });
+    Template {
+        kind: TemplateType::StringFunction,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            is_composed: false,
+            phase: TemplateTirPhase::Parsed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    }
 }
 
 fn string_function_child_id_with_runtime_head(
@@ -190,8 +194,7 @@ fn classify_registry_view_template(
 #[test]
 fn same_store_tir_id_returns_id_for_matching_store() {
     let mut store = TemplateIrStore::new();
-    let mut template = Template::empty();
-    seed_tir_reference(&mut template, &mut store);
+    let template = template_with_seeded_reference(&mut store);
 
     let id = same_store_tir_id(&template, &store);
     assert!(id.is_some(), "same-store reference should resolve");
@@ -201,20 +204,10 @@ fn same_store_tir_id_returns_id_for_matching_store() {
 fn same_store_tir_id_returns_none_for_cross_store_reference() {
     let store_a = TemplateIrStore::new();
     let mut store_b = TemplateIrStore::new();
-    let mut template = Template::empty();
-    seed_tir_reference(&mut template, &mut store_b);
+    let template = template_with_seeded_reference(&mut store_b);
 
     let id = same_store_tir_id(&template, &store_a);
     assert!(id.is_none(), "cross-store reference must not resolve");
-}
-
-#[test]
-fn same_store_tir_id_returns_none_when_reference_missing() {
-    let store = TemplateIrStore::new();
-    let template = Template::empty();
-
-    let id = same_store_tir_id(&template, &store);
-    assert!(id.is_none(), "missing reference must not resolve");
 }
 
 #[test]
@@ -296,15 +289,18 @@ fn view_const_evaluation_follows_foreign_embedded_template_overlay() {
         wrapper_context: None,
     });
 
-    let mut child_template = Template::empty();
-    child_template.kind = TemplateType::String;
-    child_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(child_store_id, child_template_id),
-        store_owner: child_owner,
-        is_composed: true,
-        phase: TemplateTirPhase::Finalized,
-        overlay_set_id: child_overlay_set_id,
-    });
+    let child_template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(child_store_id, child_template_id),
+            store_owner: child_owner,
+            is_composed: true,
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: child_overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
 
     let outer_store_handle = registry
         .store_handle(outer_store_id)

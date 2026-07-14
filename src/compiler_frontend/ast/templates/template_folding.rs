@@ -207,11 +207,7 @@ fn fold_to_emission_from_view(
     template: &Template,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let reference = template.tir_reference.as_ref().ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Template reached folding without an authoritative TIR reference.",
-        )
-    })?;
+    let reference = &template.tir_reference;
 
     let registry_rc = fold_context
         .template_ir_registry

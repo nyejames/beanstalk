@@ -120,10 +120,7 @@ fn parsed_template_tir_reference_carries_registry_empty_overlay_set() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template source should parse");
-    let reference = template
-        .tir_reference
-        .as_ref()
-        .expect("parsed template should carry a TIR reference");
+    let reference = &template.tir_reference;
 
     let registry = context.template_ir_registry.borrow();
     let overlay_set = registry
@@ -316,9 +313,7 @@ fn source_authored_template_range_loop_suffix_reaches_ast() {
     let (template, context, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
 
     let store = context.template_ir_store.borrow();
-    let template_id = template
-        .tir_template_id()
-        .expect("template should carry a TIR reference");
+    let template_id = template.tir_template_id();
     assert!(
         store
             .control_flow_node_id_for_template(template_id)
@@ -2149,15 +2144,18 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
         )
     };
 
-    let mut payload_template = Template::empty();
-    payload_template.kind = TemplateType::String;
-    payload_template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(foreign_store_id, payload_template_id),
-        store_owner: foreign_store.borrow().owner(),
-        is_composed: true,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
+    let payload_template = Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(foreign_store_id, payload_template_id),
+            store_owner: foreign_store.borrow().owner(),
+            is_composed: true,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    };
 
     let declaration = Declaration {
         id: token_stream.src_path.append(maybe_name),
@@ -2185,7 +2183,10 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
     .expect("registry-backed source const template should be accepted through effective TIR");
 
     assert!(
-        template.tir_reference.is_some(),
+        template
+            .tir_reference
+            .phase
+            .is_at_least(TemplateTirPhase::Composed),
         "accepted const-required template should retain its authoritative TIR reference"
     );
 }
@@ -2419,17 +2420,18 @@ fn const_required_option_capture_template_with_direct_tir(
         .borrow_mut()
         .allocate_overlay_set(TemplateOverlaySet::empty());
 
-    let mut template = Template::empty();
-    template.kind = TemplateType::String;
-    template.tir_reference = Some(TemplateTirReference {
-        root: TemplateRef::new(store_id, template_id),
-        store_owner,
-        is_composed: false,
-        phase: TemplateTirPhase::Composed,
-        overlay_set_id,
-    });
-
-    template
+    Template {
+        kind: TemplateType::String,
+        tir_reference: TemplateTirReference {
+            root: TemplateRef::new(store_id, template_id),
+            store_owner,
+            is_composed: false,
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        id: String::new(),
+        location: SourceLocation::default(),
+    }
 }
 
 fn parse_template_error(
@@ -2513,7 +2515,7 @@ fn parse_control_flow_template_after_body_parse(
 
     let template = Template {
         kind: build_state.kind,
-        tir_reference: Some(tir_reference),
+        tir_reference,
         id: build_state.id,
         location: construction_context.location().to_owned(),
     };
@@ -2628,7 +2630,7 @@ fn parse_runtime_template_without_validation(
 
     let template = Template {
         kind: build_state.kind,
-        tir_reference: Some(tir_reference),
+        tir_reference,
         id: build_state.id,
         location: construction_context.location().to_owned(),
     };
@@ -2827,7 +2829,7 @@ fn find_first_branch_selector_site_id(
     template: &Template,
     registry: &TemplateIrRegistry,
 ) -> Option<ExpressionSiteId> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     let store = registry.store(reference.root.store_id)?;
     let template_ir = store.get_template(reference.root.template_id)?;
     find_branch_selector_site_id_in_subtree(&store, template_ir.root)
@@ -2853,7 +2855,7 @@ fn find_first_branch_location(
     template: &Template,
     registry: &TemplateIrRegistry,
 ) -> Option<SourceLocation> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     let store = registry.store(reference.root.store_id)?;
     let template_ir = store.get_template(reference.root.template_id)?;
     find_branch_location_in_subtree(&store, template_ir.root)
@@ -2879,7 +2881,7 @@ fn find_first_loop_header_site_id(
     template: &Template,
     registry: &TemplateIrRegistry,
 ) -> Option<ExpressionSiteId> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     let store = registry.store(reference.root.store_id)?;
     let template_ir = store.get_template(reference.root.template_id)?;
     find_loop_header_site_id_in_subtree(&store, template_ir.root)
@@ -2917,7 +2919,8 @@ fn install_expression_overlay_on_template(
         wrapper_context: None,
     });
 
-    if let Some(reference) = &mut template.tir_reference {
+    {
+        let reference = &mut template.tir_reference;
         reference.phase = TemplateTirPhase::Finalized;
         reference.overlay_set_id = overlay_set_id;
     }
@@ -2927,7 +2930,7 @@ fn find_first_slot_occurrence_id(
     template: &Template,
     registry: &TemplateIrRegistry,
 ) -> Option<(SlotOccurrenceId, SlotKey)> {
-    let reference = template.tir_reference.as_ref()?;
+    let reference = &template.tir_reference;
     let store = registry.store(reference.root.store_id)?;
     let template_ir = store.get_template(reference.root.template_id)?;
     find_slot_occurrence_id_in_subtree(&store, template_ir.root)
@@ -2986,7 +2989,8 @@ fn install_slot_resolution_overlay_on_template(
         wrapper_context: None,
     });
 
-    if let Some(reference) = &mut template.tir_reference {
+    {
+        let reference = &mut template.tir_reference;
         reference.phase = TemplateTirPhase::Finalized;
         reference.overlay_set_id = overlay_set_id;
     }
@@ -3228,9 +3232,7 @@ fn assert_invalid_template_structure(
 
 fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
     let store = context.template_ir_store.borrow();
-    let template_id = template
-        .tir_template_id()
-        .expect("template should carry a finalized TIR reference");
+    let template_id = template.tir_template_id();
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
         .expect("template should contain a control-flow node");
@@ -3246,9 +3248,7 @@ fn expect_branch_chain_node(template: &Template, context: &ScopeContext) -> Temp
 
 fn expect_loop_node(template: &Template, context: &ScopeContext) -> TemplateIrNodeId {
     let store = context.template_ir_store.borrow();
-    let template_id = template
-        .tir_template_id()
-        .expect("template should carry a finalized TIR reference");
+    let template_id = template.tir_template_id();
     let control_flow_node_id = store
         .control_flow_node_id_for_template(template_id)
         .expect("template should contain a control-flow node");
@@ -3395,9 +3395,7 @@ fn tir_subtree_contains_control_flow(node_id: TemplateIrNodeId, store: &Template
 /// Returns true when the template's TIR root contains a `ChildTemplate` node
 /// whose referenced child template has control flow.
 fn tir_root_has_control_flow_child(template: &Template, store: &TemplateIrStore) -> bool {
-    let Some(reference) = template.tir_reference.as_ref() else {
-        return false;
-    };
+    let reference = &template.tir_reference;
     let Some(tir_template) = store.get_template(reference.root.template_id) else {
         return false;
     };

@@ -16,13 +16,10 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
     let context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(&mut wrapper_tokens, &context, vec![], &mut string_table)
         .expect("inherited wrapper should parse");
-    let inherited_wrapper = wrapper
-        .tir_reference
-        .as_ref()
-        .map(|reference| {
-            TemplateWrapperReference::new(reference.root, reference.phase, reference.overlay_set_id)
-        })
-        .expect("inherited wrapper should have durable TIR authority");
+    let inherited_wrapper = {
+        let reference = &wrapper.tir_reference;
+        TemplateWrapperReference::new(reference.root, reference.phase, reference.overlay_set_id)
+    };
 
     let mut token_stream =
         template_tokens_from_source("[$fresh, $md:\n# Hello\n]", &mut string_table);
@@ -43,13 +40,7 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
     // No $children directive means no wrapper-context overlay is attached.
     let registry = context.template_ir_registry.borrow();
     let overlay_set = registry
-        .overlay_set(
-            template
-                .tir_reference
-                .as_ref()
-                .expect("template should have TIR reference")
-                .overlay_set_id,
-        )
+        .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
     assert!(
         overlay_set.wrapper_context.is_none(),
@@ -71,13 +62,7 @@ fn children_directive_attaches_wrapper_context_to_direct_child() {
     // one inherited wrapper set for the direct child occurrence.
     let registry = context.template_ir_registry.borrow();
     let overlay_set = registry
-        .overlay_set(
-            template
-                .tir_reference
-                .as_ref()
-                .expect("template should have TIR reference")
-                .overlay_set_id,
-        )
+        .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
     let wrapper_overlay_id = overlay_set
         .wrapper_context
@@ -105,11 +90,7 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
         &mut string_table,
     )
     .expect("slot wrapper should parse");
-    let wrapper_reference = wrapper
-        .tir_reference
-        .as_ref()
-        .expect("slot wrapper should retain its TIR identity")
-        .clone();
+    let wrapper_reference = wrapper.tir_reference.clone();
 
     let wrapper_name = string_table.intern("wrapper");
     let declarations = vec![Declaration {
@@ -144,13 +125,7 @@ fn children_directive_classifies_foreign_slot_wrapper_from_registry() {
     // overlay set and the store wrapper-set side table.
     let registry = context.template_ir_registry.borrow();
     let overlay_set = registry
-        .overlay_set(
-            template
-                .tir_reference
-                .as_ref()
-                .expect("template should have TIR reference")
-                .overlay_set_id,
-        )
+        .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
     let wrapper_overlay_id = overlay_set
         .wrapper_context
@@ -211,13 +186,7 @@ fn children_directive_accepts_const_string_reference() {
     // Resolve the wrapper reference through the TIR overlay system.
     let registry = context.template_ir_registry.borrow();
     let overlay_set = registry
-        .overlay_set(
-            template
-                .tir_reference
-                .as_ref()
-                .expect("template should have TIR reference")
-                .overlay_set_id,
-        )
+        .overlay_set(template.tir_reference.overlay_set_id)
         .expect("overlay set should exist");
     let wrapper_overlay_id = overlay_set
         .wrapper_context
