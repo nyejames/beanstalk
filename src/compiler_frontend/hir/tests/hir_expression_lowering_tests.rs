@@ -102,7 +102,6 @@ fn standalone_test_template() -> (Template, TemplateIrRegistry) {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },

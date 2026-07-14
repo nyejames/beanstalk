@@ -400,7 +400,6 @@ impl Template {
                 tir_reference = TemplateTirReference {
                     root: TemplateRef::new(store_id, composed_template_id),
                     store_owner: template_ir_store.owner(),
-                    is_composed: true,
                     // Head-chain composition consumes the already formatted
                     // body root only when Phase 8 installed one earlier in
                     // this constructor flow. Otherwise this remains a
@@ -501,7 +500,10 @@ impl Template {
         if !matches!(template.kind, TemplateType::SlotInsert(_))
             && !template_classification.has_unresolved_slots
             && template_classification.has_slot_insertions
-            && !template.tir_reference.is_composed
+            && !template
+                .tir_reference
+                .phase
+                .is_at_least(TemplateTirPhase::Composed)
         {
             return Err(Box::new(CompilerDiagnostic::invalid_template_slot(
                 InvalidTemplateSlotReason::InsertOutsideParentSlot,
@@ -623,7 +625,6 @@ fn attach_wrapper_context_overlay_to_template(
         registry.compose_overlay_sets(&[current_overlay_set_id, wrapper_only_overlay_set_id])
     {
         tir_reference.overlay_set_id = merged_overlay_set_id;
-        tir_reference.is_composed = true;
         if !tir_reference.phase.is_at_least(TemplateTirPhase::Composed) {
             tir_reference.phase = TemplateTirPhase::Composed;
         }

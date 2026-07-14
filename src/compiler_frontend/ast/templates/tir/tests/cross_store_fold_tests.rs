@@ -154,7 +154,6 @@ fn foreign_parent_template(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: false,
             phase,
             overlay_set_id,
         },

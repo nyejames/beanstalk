@@ -256,7 +256,6 @@ fn option_capture_classifies_same_store_payload_under_active_fold_borrow() {
     let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
         root: TemplateRef::new(active_store_id, template_id),
         store_owner: active_store.borrow().owner(),
-        is_composed: true,
         phase: TemplateTirPhase::Composed,
         overlay_set_id,
     });
@@ -351,7 +350,6 @@ fn option_capture_classifies_foreign_store_payload_through_effective_tir() {
     let payload_template = store_qualified_template_with_tir_reference(TemplateTirReference {
         root: TemplateRef::new(payload_store_id, template_id),
         store_owner: payload_store.borrow().owner(),
-        is_composed: true,
         phase: TemplateTirPhase::Composed,
         overlay_set_id,
     });
@@ -491,7 +489,6 @@ fn coerced_template_with_no_bindings_returns_inner_template_borrow() {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(tir_store.store_id(), template_id),
             store_owner: tir_store.owner(),
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },

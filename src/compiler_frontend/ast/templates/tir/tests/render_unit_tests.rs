@@ -76,7 +76,6 @@ fn standalone_test_template() -> (Template, TemplateIrRegistry) {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
@@ -164,7 +163,6 @@ fn wrapper_template_with_reference(
         tir_reference: TemplateTirReference {
             root,
             store_owner,
-            is_composed: false,
             phase,
             overlay_set_id,
         },
@@ -435,7 +433,6 @@ fn foreign_template_expression(
         TemplateTirReference {
             root: TemplateRef::new(foreign_store_id, foreign_template_id),
             store_owner,
-            is_composed: false,
             phase,
             overlay_set_id,
         },
@@ -477,7 +474,6 @@ fn aggregate_wrapper_preserves_same_store_child_identity() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, child_template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },

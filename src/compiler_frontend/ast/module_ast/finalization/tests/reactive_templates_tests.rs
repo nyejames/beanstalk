@@ -143,7 +143,6 @@ fn template_expression_from_tir(
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -498,7 +497,6 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -590,7 +588,6 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -673,7 +670,6 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -768,7 +764,6 @@ fn annotates_branch_selector_and_body_through_one_root_overlay() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -877,7 +872,6 @@ fn annotates_existing_effective_expression_override_instead_of_structural_payloa
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -997,7 +991,6 @@ fn annotates_existing_same_store_child_expression_override() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), parent_template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: root_overlay_set_id,
         },
@@ -1103,7 +1096,6 @@ fn option_capture_body_uses_scrutinee_reactive_metadata() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -1185,7 +1177,6 @@ fn annotates_same_store_linear_tir_root_metadata_through_overlay() {
         TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },

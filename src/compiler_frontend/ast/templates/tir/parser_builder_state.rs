@@ -53,14 +53,6 @@ pub(crate) struct TemplateTirReference {
     pub(crate) root: TemplateRef,
     pub(crate) store_owner: Arc<TemplateIrStoreOwner>,
 
-    /// True when this reference points to a TIR tree produced by TIR-native
-    /// head-chain composition rather than direct parser emission.
-    ///
-    /// WHAT: records that the referenced root already reflects composed output.
-    /// WHY: downstream classification and handoff must preserve the composed
-    ///      structural root rather than treating it as raw parser output.
-    pub(crate) is_composed: bool,
-
     /// Pipeline phase represented by this root reference.
     ///
     /// WHAT: records whether the referenced root is raw parser output,
@@ -166,7 +158,6 @@ impl TemplateParserIrBuilderState {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: Arc::clone(&self.store_owner),
-            is_composed: false,
             phase,
             overlay_set_id,
         }

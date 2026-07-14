@@ -16,7 +16,6 @@ fn make_reference(template_id: TemplateIrId, store: &TemplateIrStore) -> Templat
     TemplateTirReference {
         root: TemplateRef::new(store.store_id(), template_id),
         store_owner: store.owner(),
-        is_composed: false,
         phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Parsed,
         overlay_set_id: TemplateOverlaySetId::empty_for_test(),
     }

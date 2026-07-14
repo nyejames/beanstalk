@@ -2149,7 +2149,6 @@ fn const_required_option_capture_classifies_foreign_source_const_template_throug
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(foreign_store_id, payload_template_id),
             store_owner: foreign_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2425,7 +2424,6 @@ fn const_required_option_capture_template_with_direct_tir(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: false,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },

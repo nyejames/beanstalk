@@ -45,7 +45,6 @@ fn slot_template(store: &mut TemplateIrStore) -> Template {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },

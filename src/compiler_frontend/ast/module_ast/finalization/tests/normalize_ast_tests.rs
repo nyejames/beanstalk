@@ -99,7 +99,6 @@ fn registered_text_template(
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -245,7 +244,6 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -368,7 +366,6 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
@@ -462,7 +459,6 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -594,7 +590,6 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -742,7 +737,6 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },
@@ -875,7 +869,6 @@ fn finalization_fold_uses_resolved_slot_overlay_set() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, wrapper_template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         }
@@ -946,7 +939,6 @@ fn finalization_fold_composed_root_with_unfilled_slot_emits_no_slot_output() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         }
@@ -1021,7 +1013,6 @@ fn finalization_fold_formatted_root_with_unfilled_slot_emits_no_slot_output() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: store.owner(),
-            is_composed: false,
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         }
@@ -1140,7 +1131,6 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -1247,7 +1237,6 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -1439,7 +1428,6 @@ fn registered_runtime_template(
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -1613,7 +1601,6 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: empty_overlay_set_id,
         },
@@ -1702,7 +1689,6 @@ fn nested_runtime_template_normalizes_through_final_view() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -1839,7 +1825,6 @@ fn nested_const_template_folds_through_final_view() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, outer_template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -1927,7 +1912,6 @@ fn reactive_metadata_derived_from_nested_final_view() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },
@@ -2008,7 +1992,6 @@ fn helper_artifact_rejected_after_final_view_traversal() {
         TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner: template_ir_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },

@@ -1150,10 +1150,6 @@ fn style_child_wrapper_with_children_records_formatted_tir_phase() {
         "setup: style-wrapper-with-children markdown template must have a Formatted TIR reference"
     );
     assert!(
-        reference.is_composed,
-        "setup: style-wrapper-with-children template must have composed TIR"
-    );
-    assert!(
         template.tir_reference.can_reuse_as_linear_current_state(),
         "style child-template wrappers with body children must reuse the formatted TIR root"
     );
@@ -1232,7 +1228,6 @@ fn build_template_with_direct_tir_root(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(resolved_store_id, template_id),
             store_owner,
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id,
         },
@@ -1892,8 +1887,8 @@ fn formatter_children_wrapper_composition_keeps_formatted_reference() {
     let reference = &template.tir_reference;
 
     assert!(
-        reference.is_composed,
-        "direct-child wrapper composition should still mark the derived TIR reference as composed"
+        reference.phase.is_at_least(TemplateTirPhase::Composed),
+        "direct-child wrapper composition should still advance the derived TIR reference to at least Composed"
     );
     assert_eq!(
         reference.phase,

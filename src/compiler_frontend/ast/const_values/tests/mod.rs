@@ -564,7 +564,6 @@ fn build_resolved_slot_template_registry() -> (Template, Rc<RefCell<TemplateIrRe
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: true,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },

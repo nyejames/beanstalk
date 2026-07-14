@@ -95,7 +95,6 @@ pub(in crate::compiler_frontend::ast::templates) fn install_formatted_tir_refere
     *tir_reference = TemplateTirReference {
         root: TemplateRef::new(context.template_ir_store_id, formatted_template_id),
         store_owner,
-        is_composed: reference.is_composed,
         phase: TemplateTirPhase::Formatted,
         overlay_set_id: reference.overlay_set_id,
     };

@@ -296,7 +296,6 @@ fn formatted_doc_template_with_direct_tir(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, formatted_template_id),
             store_owner: Arc::clone(&store_handle.borrow().owner()),
-            is_composed: false,
             phase: TemplateTirPhase::Formatted,
             overlay_set_id,
         },

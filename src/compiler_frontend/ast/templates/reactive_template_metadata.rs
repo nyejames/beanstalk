@@ -1175,7 +1175,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Finalized,
                 overlay_set_id,
             },
@@ -1320,7 +1319,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1411,7 +1409,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1441,7 +1438,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1482,7 +1478,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: crate::compiler_frontend::ast::templates::tir::TemplateTirPhase::Composed,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1516,7 +1511,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Formatted,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1550,7 +1544,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store.store_id(), template_id),
                 store_owner: store.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Parsed,
                 overlay_set_id: TemplateOverlaySetId::empty_for_test(),
             },
@@ -1617,7 +1610,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Finalized,
                 overlay_set_id,
             },
@@ -1703,7 +1695,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Finalized,
                 overlay_set_id,
             },
@@ -1812,7 +1803,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Finalized,
                 overlay_set_id,
             },
@@ -1880,7 +1870,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 // Phase is below Composed, so neither the view nor raw root is authoritative.
                 phase: TemplateTirPhase::Parsed,
                 overlay_set_id,
@@ -1966,7 +1955,6 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                is_composed: false,
                 phase: TemplateTirPhase::Formatted,
                 overlay_set_id,
             },

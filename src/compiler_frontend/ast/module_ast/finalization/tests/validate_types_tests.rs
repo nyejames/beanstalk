@@ -71,7 +71,6 @@ fn finalized_template_with_expression_overlay(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store_id, template_id),
             store_owner,
-            is_composed: true,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id,
         },

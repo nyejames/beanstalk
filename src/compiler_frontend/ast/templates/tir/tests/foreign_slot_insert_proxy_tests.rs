@@ -94,7 +94,6 @@ fn foreign_slot_insert_template(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(foreign_store_id, foreign_template_id),
             store_owner,
-            is_composed: false,
             phase,
             overlay_set_id,
         },

@@ -92,7 +92,6 @@ fn template_with_seeded_reference(store: &mut TemplateIrStore) -> Template {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(store.store_id(), template_id),
             store_owner: store.owner(),
-            is_composed: false,
             phase: TemplateTirPhase::Parsed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },
@@ -294,7 +293,6 @@ fn view_const_evaluation_follows_foreign_embedded_template_overlay() {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(child_store_id, child_template_id),
             store_owner: child_owner,
-            is_composed: true,
             phase: TemplateTirPhase::Finalized,
             overlay_set_id: child_overlay_set_id,
         },

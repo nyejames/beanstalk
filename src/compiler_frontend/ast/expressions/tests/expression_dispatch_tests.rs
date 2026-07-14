@@ -320,7 +320,6 @@ fn constant_identifier_uses_foreign_effective_tir() {
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(foreign_store.borrow().store_id(), template_id),
             store_owner: foreign_store.borrow().owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id: TemplateOverlaySetId::empty_for_test(),
         },

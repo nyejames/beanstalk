@@ -115,8 +115,8 @@ fn child_wrapper_composition_marks_template_tir_reference_composed() {
     let reference = &template.tir_reference;
 
     assert!(
-        reference.is_composed,
-        "child-wrapper composition must mark the template's TIR reference as composed"
+        reference.phase.is_at_least(TemplateTirPhase::Composed),
+        "child-wrapper composition must advance the template's TIR reference to at least Composed"
     );
     assert!(
         reference.phase.is_at_least(TemplateTirPhase::Formatted),

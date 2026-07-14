@@ -984,7 +984,6 @@ fn slot_handler_template(
         tir_reference: TemplateTirReference {
             root: TemplateRef::new(template_ir_store.store_id(), template_id),
             store_owner: template_ir_store.owner(),
-            is_composed: true,
             phase: TemplateTirPhase::Composed,
             overlay_set_id,
         },

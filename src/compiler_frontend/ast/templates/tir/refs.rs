@@ -148,8 +148,8 @@ impl fmt::Display for TemplateRef {
 ///
 /// This type is intentionally smaller than [`TemplateTirReference`]: it does not
 /// carry the `store_owner` token because the registry resolves stores by
-/// `TemplateStoreId`, and it does not carry `is_composed` because the phase and
-/// overlay already describe the structural context.
+/// `TemplateStoreId`; the phase and overlay already describe the structural
+/// context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TemplateTirChildReference {
     pub(crate) root: TemplateRef,
