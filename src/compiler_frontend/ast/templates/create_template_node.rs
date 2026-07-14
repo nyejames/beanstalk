@@ -461,8 +461,6 @@ impl Template {
         // and classified kind exist. The build state fields are moved into it.
         let template = Template {
             kind: build_state.kind,
-            style: build_state.style,
-            child_wrappers: build_state.child_wrappers,
             tir_reference: Some(tir_reference),
             id: build_state.id,
             location: construction_context.location().to_owned(),
@@ -590,7 +588,7 @@ fn apply_default_style_if_needed(
     }
 
     if let Some(default_style) = default_style {
-        build_state.apply_style(default_style.to_owned());
+        build_state.style = default_style.to_owned();
     }
 }
 

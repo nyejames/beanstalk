@@ -43,7 +43,7 @@ pub enum StyleDirectiveArgumentValue {
 /// Template-style toggles that a handler-based directive can apply when used.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StyleDirectiveEffects {
-    /// Optional semantic style label applied to `Template.style.id`.
+    /// Optional semantic style label applied to the effective `TemplateIr.style.id`.
     ///
     /// This is intentionally distinct from `Formatter.id`:
     /// - `style_id` tags parsed template semantics.

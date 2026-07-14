@@ -2513,8 +2513,6 @@ fn parse_control_flow_template_after_body_parse(
 
     let template = Template {
         kind: build_state.kind,
-        style: build_state.style,
-        child_wrappers: build_state.child_wrappers,
         tir_reference: Some(tir_reference),
         id: build_state.id,
         location: construction_context.location().to_owned(),
@@ -2630,8 +2628,6 @@ fn parse_runtime_template_without_validation(
 
     let template = Template {
         kind: build_state.kind,
-        style: build_state.style,
-        child_wrappers: build_state.child_wrappers,
         tir_reference: Some(tir_reference),
         id: build_state.id,
         location: construction_context.location().to_owned(),

@@ -435,7 +435,6 @@ impl TemplateIrRegistry {
     ///       a stable `TirWrapperContextOverlayId`.
     /// WHY: the registry owns durable wrapper-context storage so child-template
     ///      occurrence state stays layered over shared structural roots.
-    #[allow(dead_code)] // used by tests today; production composition will use this soon.
     pub(crate) fn allocate_wrapper_context_overlay(
         &mut self,
         overlay: TirWrapperContextOverlay,

@@ -198,7 +198,6 @@ impl TirWrapperContextOverlayId {
     /// Creates a new ID from a raw index.
     ///
     /// Panics if the index exceeds `u32::MAX`. This is an internal invariant.
-    #[allow(dead_code)] // used by tests and by `allocate_wrapper_context_overlay` once production callers land.
     pub(crate) fn new(index: usize) -> Self {
         Self(
             u32::try_from(index)

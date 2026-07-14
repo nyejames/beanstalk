@@ -97,7 +97,7 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("builder-registered directives should parse in scaffold mode");
 
-    assert_eq!(template.style.id, "");
+    assert_eq!(effective_tir_style(&template, &context).id, "");
     assert!(matches!(template.kind, TemplateType::String));
 }
 
@@ -130,8 +130,9 @@ fn builder_effects_only_handler_updates_style_without_formatter() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("effects-only directive should parse");
 
-    assert_eq!(template.style.id, "brand");
-    assert!(template.style.formatter.is_none());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "brand");
+    assert!(effective_style.formatter.is_none());
 }
 
 #[test]

@@ -21,33 +21,32 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B3 accepted - next is Phase 2C style and wrapper duplication removal
-LAST_ACCEPTED_COMMIT: `26fde34db` (`refactor: finalize templates through root TIR views`)
+CURRENT_SLICE: Phase 2C accepted - next is Phase 2D reference and classification-marker simplification
+LAST_ACCEPTED_COMMIT: `975ff902d` (`refactor: make TIR own template control flow`)
 BRANCH: `main`
-WORKTREE: `main`; accepted Phase 2B3 source, tests and this plan update are pending the checkpoint commit
+WORKTREE: `main`; accepted Phase 2C source, tests and this plan update are pending the checkpoint commit
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - `Template.control_flow`, duplicate branch/fallback/loop carriers and `TemplateTirBodyReference` are deleted. Parser and render-unit preparation update the exact owning TIR control-flow node.
 - Reactive metadata and runtime handoff read selectors, headers, bodies and aggregate wrappers from the finalized TIR root.
 - Removing the last durable remap root exposed an unreachable AST/TIR string-ID remap graph. Its test-only APIs and representation fixtures are deleted while header, diagnostic, parsed-type, type-environment and HIR remap boundaries remain.
-- The durable `Template` still duplicates TIR-owned `style` and `child_wrappers`. Its reference remains optional and retains the redundant `is_composed` marker for later Phase 2 slices.
+- The durable `Template` no longer duplicates TIR-owned style or child-wrapper state. Its reference remains optional and retains the redundant `is_composed` marker for Phase 2D.
 ACCEPTANCE_CRITERIA:
-- remove durable `Template.style`, `apply_style` and `apply_style_updates`
-- keep mutable parse-time style on `TemplateBuildState` and effective style on TIR
-- normalize `$children(..)` arguments at the directive boundary and attach final wrapper context through TIR wrapper sets/overlays
-- remove durable `Template.child_wrappers`
-- keep folding, formatting, classification and runtime handoff on effective TIR views
+- make `Template.tir_reference` non-optional and replace missing-reference branches with construction invariants
+- delete `TemplateTirReference::is_composed` and derive lifecycle from `TemplateTirPhase`
+- audit and remove redundant `TemplateIrSummary::has_formatter`, store-owner, kind, ID and reference convenience state where final ownership permits
+- keep registry-qualified identity explicit without forcing parser writes through registry lookup
 VALIDATION_STATE:
-- Phase 2B3 focused tests passed: 286 create-template, 73 parser-TIR, 16 reactive-metadata, 44 control-flow, 539 TIR, 46 choice, 125 match, 163 loop and 96 datatype tests plus a warning-free lib-test build.
-- Separate read-only Ollama review found no blocker. Its one actionable low-risk test-name finding was corrected before the final gate.
-- Phase 2B3 `just validate` passed: cross-target Clippy, 3300 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 15 faster and 0 slower.
+- Phase 2C focused validation passed: 286 create-template tests and warnings-as-errors Clippy. The implementation worker also passed children, directive, wrapper, TIR and all 3300 library tests.
+- Separate read-only Ollama review found no blocker. Its stale wrapper-overlay lint-suppression finding was corrected before the final gate.
+- Phase 2C `just validate` passed: cross-target Clippy, 3300 unit tests, 1756 integration cases, docs check and `bench-check` 28/28 with a 2 ms average improvement, 13 faster and 0 slower.
 DOCS_IMPACT: progress matrix unchanged for representation-only slices. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS:
 - `Template.kind` and `TemplateTirReference::store_owner` may remain only if a final audit proves they carry distinct, non-derivable semantics.
-DELEGATION_DECISION: Ollama implementation worker for Phase 2C - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
+DELEGATION_DECISION: Ollama implementation worker for Phase 2D - user requested Ollama for each bounded slice with Codex CLI fallback after a clean availability blocker
 NEXT_WORKER_ORDER: Ollama, Codex CLI after a clean blocker, then parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2B3, refresh the accepted hash and delegate bounded Phase 2C
+NEXT_RESUME_ACTION: commit accepted Phase 2C, refresh the accepted hash and delegate bounded Phase 2D
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -299,12 +298,14 @@ Phase 2B3 checkpoint: control-flow structure now exists only in TIR. The obsolet
 
 #### Slice 2C — Remove style and wrapper duplication
 
-- [ ] Keep effective style on `TemplateIr`; keep mutable parse-time style on `TemplateBuildState`.
-- [ ] Remove `Template.style`, `apply_style`, and `apply_style_updates`.
-- [ ] Normalize `$children(..)` arguments at the directive boundary and carry refs through parse-local state.
-- [ ] Attach final wrapper context through the existing wrapper-set/overlay owner.
-- [ ] Remove `Template.child_wrappers`.
-- [ ] Ensure folding, formatting, classification, and handoff read style/wrappers from the effective TIR view, never from the durable handle.
+- [x] Keep effective style on `TemplateIr`; keep mutable parse-time style on `TemplateBuildState`.
+- [x] Remove `Template.style`, `apply_style`, and `apply_style_updates`.
+- [x] Normalize `$children(..)` arguments at the directive boundary and carry refs through parse-local state.
+- [x] Attach final wrapper context through the existing wrapper-set/overlay owner.
+- [x] Remove `Template.child_wrappers`.
+- [x] Ensure folding, formatting, classification, and handoff read style/wrappers from the effective TIR view, never from the durable handle.
+
+Phase 2C checkpoint: mutable style and wrapper references now end with parser-local build state. Durable templates carry neither, effective reads use TIR views and wrapper application remains registry-owned through canonical wrapper sets and context overlays.
 
 #### Slice 2D — Simplify final references and classification markers
 

@@ -31,8 +31,9 @@ fn html_directive_sets_formatter_via_handler_behavior() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("html template should parse");
 
-    assert_eq!(template.style.id, "html");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "html");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]
@@ -52,8 +53,9 @@ fn css_directive_sets_style_and_formatter_identity() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("css template should parse");
 
-    assert_eq!(template.style.id, "css");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "css");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]
@@ -65,8 +67,9 @@ fn markdown_directive_sets_style_and_formatter_identity() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown template should parse");
 
-    assert_eq!(template.style.id, "markdown");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "markdown");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]
@@ -78,8 +81,9 @@ fn code_directive_sets_style_and_formatter_identity() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("code template should parse");
 
-    assert_eq!(template.style.id, "code");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "code");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]
@@ -99,8 +103,9 @@ fn escape_html_directive_sets_style_and_formatter_identity() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("escape_html template should parse");
 
-    assert_eq!(template.style.id, "escape_html");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "escape_html");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]

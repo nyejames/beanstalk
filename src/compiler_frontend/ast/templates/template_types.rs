@@ -1,15 +1,14 @@
 //! Template struct and core type definitions.
 //!
-//! WHAT: Houses the central `Template` struct and its associated methods —
-//! queries (constness, slots), construction helpers, and style application.
+//! WHAT: Houses the central `Template` struct and its associated identity and
+//! classification queries.
 //!
 //! WHY: Separates the `Template` data type from the parsing/composition logic
 //! so other modules can depend on the struct without pulling in the full parser.
 
-use crate::compiler_frontend::ast::templates::template::{Style, TemplateType};
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::tir::{
-    MaterializedTirTemplateClassification, TemplateIrId, TemplateIrStoreOwner,
-    TemplateTirReference, TemplateWrapperReference,
+    MaterializedTirTemplateClassification, TemplateIrId, TemplateIrStoreOwner, TemplateTirReference,
 };
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::sync::Arc;
@@ -20,29 +19,22 @@ use std::sync::Arc;
 
 /// The central template representation in the AST.
 ///
-/// A `Template` carries its TIR identity, style configuration, constness
-/// classification and source location. It is the primary data structure passed
-/// between parsing, composition, formatting, folding and HIR preparation.
+/// A `Template` is a narrow durable handle carrying its TIR identity, kind
+/// classification and source location. Effective style and wrapper context are
+/// owned by the `TemplateIr` entry resolved through `tir_reference`. The
+/// `Template` is the primary data structure passed between parsing, composition,
+/// formatting, folding and HIR preparation.
 ///
 /// ## Metadata lifecycle invariants
 ///
 /// - **`kind`** is refreshed from finalized effective TIR views while preserving
 ///   semantic markers such as `SlotDefinition`, `SlotInsert`, and `Comment` that
 ///   must not be overwritten by generic cleanup.
+/// - **`style`** is owned by `TemplateIr` and read through the registry-backed
+///   TIR view after construction.
 #[derive(Debug)]
 pub struct Template {
     pub kind: TemplateType,
-    pub style: Style,
-
-    /// `$children(..)` wrapper references that apply to this template's direct
-    /// child-template outputs.
-    ///
-    /// WHAT: stores exact store-qualified roots with their phase and overlay
-    ///       identity instead of recursively owning wrapper templates.
-    /// WHY: `$children(..)` wrappers already have durable TIR authority when
-    ///      accepted by the directive, so later parsing and composition can
-    ///      propagate that identity without normalizing templates again.
-    pub(crate) child_wrappers: Vec<TemplateWrapperReference>,
 
     /// Finalized TIR reference.
     ///
@@ -61,8 +53,6 @@ impl Clone for Template {
     fn clone(&self) -> Self {
         Self {
             kind: self.kind.to_owned(),
-            style: self.style.to_owned(),
-            child_wrappers: self.child_wrappers.to_owned(),
             // `tir_reference` contains an `Arc`-backed store owner, so a normal
             // `clone()` is the explicit, cheap reference-count increment.
             tir_reference: self.tir_reference.clone(),
@@ -93,8 +83,6 @@ impl Template {
     fn build_empty() -> Template {
         Template {
             kind: TemplateType::StringFunction,
-            style: Style::default(),
-            child_wrappers: vec![],
             tir_reference: None,
             id: String::new(),
             location: SourceLocation::default(),

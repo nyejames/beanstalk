@@ -64,9 +64,7 @@ pub(super) fn apply_handler_style_directive(
             )
         })?;
 
-        build_state.apply_style_updates(|style| {
-            style.formatter = Some(formatter.clone());
-        });
+        build_state.style.formatter = Some(formatter.clone());
     }
 
     Ok(())
@@ -78,20 +76,19 @@ fn apply_style_directive_effects(
 ) {
     // Effects mutate semantic template style state. Formatter identity is set
     // separately by the optional formatter factory output.
-    build_state.apply_style_updates(|style| {
-        if let Some(style_id) = effects.style_id {
-            style.id = style_id;
-        }
-        if let Some(policy) = effects.body_whitespace_policy {
-            style.body_whitespace_policy = policy;
-        }
-        if let Some(suppress_child_templates) = effects.suppress_child_templates {
-            style.suppress_child_templates = suppress_child_templates;
-        }
-        if let Some(skip_parent_wrappers) = effects.skip_parent_child_wrappers {
-            style.skip_parent_child_wrappers = skip_parent_wrappers;
-        }
-    });
+    let style = &mut build_state.style;
+    if let Some(style_id) = effects.style_id {
+        style.id = style_id;
+    }
+    if let Some(policy) = effects.body_whitespace_policy {
+        style.body_whitespace_policy = policy;
+    }
+    if let Some(suppress_child_templates) = effects.suppress_child_templates {
+        style.suppress_child_templates = suppress_child_templates;
+    }
+    if let Some(skip_parent_wrappers) = effects.skip_parent_child_wrappers {
+        style.skip_parent_child_wrappers = skip_parent_wrappers;
+    }
 }
 
 /// Parses the optional handler argument and validates whether this directive

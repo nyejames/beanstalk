@@ -1047,9 +1047,9 @@ fn annotate_owned_runtime_template_handoff_event(
         }
 
         runtime_handoff::OwnedRuntimeTemplateWalkMutEvent::HandoffAfterBody(_handoff) => {
-            // `Style` no longer stores recursive wrapper templates; they are owned
-            // by `Template.child_wrappers` and visited through normal template
-            // recursion. There is nothing to annotate at the handoff boundary.
+            // Wrapper templates are owned by TIR wrapper-context overlays
+            // and visited through normal template recursion. There is nothing
+            // to annotate at the handoff boundary.
         }
     }
 }

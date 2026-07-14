@@ -294,7 +294,6 @@ fn formatted_doc_template_with_direct_tir(
     let mut template = Template::empty();
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     template.location = location;
-    template.style = style;
     template.tir_reference = Some(TemplateTirReference {
         root: TemplateRef::new(store_id, formatted_template_id),
         store_owner: Arc::clone(&store_handle.borrow().owner()),

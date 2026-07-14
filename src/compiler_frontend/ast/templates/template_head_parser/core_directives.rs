@@ -96,21 +96,21 @@ pub(super) fn parse_core_style_directive(
         CoreStyleDirectiveKind::Fresh => {
             // `$fresh` opt-outs this template from parent-applied `$children(..)`
             // wrappers while still allowing local directives/wrappers in the same head.
-            build_state.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
+            build_state.style.skip_parent_child_wrappers = true;
         }
 
         CoreStyleDirectiveKind::Note => {
             let note_name = string_table.intern("note");
             reject_unexpected_directive_arguments(note_name, token_stream)?;
             build_state.kind = TemplateType::Comment(CommentDirectiveKind::Note);
-            build_state.apply_style(Style::default());
+            build_state.style = Style::default();
         }
 
         CoreStyleDirectiveKind::Todo => {
             let todo_name = string_table.intern("todo");
             reject_unexpected_directive_arguments(todo_name, token_stream)?;
             build_state.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
-            build_state.apply_style(Style::default());
+            build_state.style = Style::default();
         }
 
         CoreStyleDirectiveKind::Doc => {
@@ -138,26 +138,20 @@ pub(super) fn parse_core_style_directive(
 
 pub(crate) fn apply_doc_comment_defaults(build_state: &mut TemplateBuildState) {
     build_state.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
-    build_state.apply_style(Style::default());
+    build_state.style = Style::default();
 
     // Doc comments use Markdown formatting with balanced bracket escaping.
     // Nested child templates are suppressed — `[...]` brackets in the body are
     // treated as literal text.
     apply_markdown_style(build_state);
-    build_state.apply_style_updates(|style| {
-        style.suppress_child_templates = true;
-    });
+    build_state.style.suppress_child_templates = true;
 }
 
 fn apply_markdown_style(build_state: &mut TemplateBuildState) {
-    build_state.apply_style_updates(|style| {
-        style.id = "markdown";
-        style.formatter = Some(markdown_formatter());
-    });
+    build_state.style.id = "markdown";
+    build_state.style.formatter = Some(markdown_formatter());
 }
 
 pub(super) fn mark_template_body_whitespace_style_controlled(build_state: &mut TemplateBuildState) {
-    build_state.apply_style_updates(|style| {
-        style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
-    });
+    build_state.style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
 }

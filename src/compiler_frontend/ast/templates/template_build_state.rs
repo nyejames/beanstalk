@@ -42,16 +42,6 @@ impl TemplateBuildState {
         }
     }
 
-    /// Replace the effective style.
-    pub(crate) fn apply_style(&mut self, style: Style) {
-        self.style = style;
-    }
-
-    /// Mutate the effective style in place.
-    pub(crate) fn apply_style_updates(&mut self, mut update: impl FnMut(&mut Style)) {
-        update(&mut self.style);
-    }
-
     /// Applies generic String/StringFunction classification from an already
     /// materialized current-state TIR classification.
     pub(crate) fn refresh_kind_from_tir_classification(

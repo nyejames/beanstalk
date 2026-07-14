@@ -1298,7 +1298,6 @@ fn build_template_with_direct_tir_root(
         .allocate_overlay_set(TemplateOverlaySet::empty());
     Template {
         kind,
-        style,
         location,
         tir_reference: Some(TemplateTirReference {
             root: TemplateRef::new(resolved_store_id, template_id),
@@ -1351,7 +1350,7 @@ fn pure_direct_dynamic_formatter_template_records_formatted_tir_phase() {
         &mut string_table,
     );
 
-    let style = template.style.clone();
+    let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         template
@@ -1444,7 +1443,7 @@ fn reactive_body_segment_records_formatted_tir_phase() {
         &mut string_table,
     );
 
-    let style = template.style.clone();
+    let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         template
@@ -1556,7 +1555,7 @@ fn reactive_literal_text_segment_records_formatted_tir_phase() {
         &mut string_table,
     );
 
-    let style = template.style.clone();
+    let style = effective_tir_style(&template, &context);
     let has_control_flow = {
         let store = context.template_ir_store.borrow();
         template

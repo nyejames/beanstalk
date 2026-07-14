@@ -461,7 +461,7 @@ fn non_formatter_and_formatter_directives_can_coexist() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("non-formatter and formatter directives should coexist in the same head");
 
-    assert_eq!(template.style.id, "markdown");
+    assert_eq!(effective_tir_style(&template, &context).id, "markdown");
 }
 
 #[test]
@@ -552,8 +552,9 @@ fn css_without_argument_uses_css_formatter() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("css template should parse");
 
-    assert_eq!(template.style.id, "css");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "css");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]
@@ -572,8 +573,9 @@ fn css_inline_argument_parses_correctly() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("inline css template should parse");
 
-    assert_eq!(template.style.id, "css");
-    assert!(template.style.formatter.is_some());
+    let effective_style = effective_tir_style(&template, &context);
+    assert_eq!(effective_style.id, "css");
+    assert!(effective_style.formatter.is_some());
 }
 
 #[test]

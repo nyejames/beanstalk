@@ -2,6 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::tir::TirView;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, terminal, terse,
@@ -167,6 +168,26 @@ fn fold_template_in_context(
     template
         .fold_into_stringid(&mut fold_context)
         .expect("template should fold")
+}
+
+fn effective_tir_style(template: &Template, context: &ScopeContext) -> Style {
+    let reference = template
+        .tir_reference
+        .as_ref()
+        .expect("effective_tir_style requires an authoritative TIR reference");
+    let registry = context.template_ir_registry.borrow();
+    let view = TirView::new(
+        &registry,
+        reference.root,
+        reference.phase,
+        reference.overlay_set_id,
+    )
+    .expect("template reference should resolve through its TIR registry");
+    let template_ir = view
+        .root_template()
+        .expect("template TIR entry should remain available");
+
+    template_ir.style.clone()
 }
 
 fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable) -> ScopeContext {

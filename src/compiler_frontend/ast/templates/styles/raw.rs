@@ -14,7 +14,5 @@ use crate::compiler_frontend::ast::templates::template::BodyWhitespacePolicy;
 use crate::compiler_frontend::ast::templates::template_build_state::TemplateBuildState;
 
 pub(crate) fn configure_raw_style(build_state: &mut TemplateBuildState) {
-    build_state.apply_style_updates(|style| {
-        style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
-    });
+    build_state.style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
 }
