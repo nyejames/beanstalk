@@ -379,6 +379,37 @@ fn is_actionable_event(event: &Event) -> bool {
     )
 }
 
+/// Builds a [`FileFingerprint`] from a modification-time result and length.
+///
+/// WHAT: converts `metadata.modified()` into a fingerprint, propagating timestamp-read failures
+/// instead of silently falling back to the Unix epoch.
+/// WHY: an epoch sentinel could make a failed timestamp read look identical to a real file whose
+/// modification time is genuinely the epoch, hiding same-length edits or read errors. Passing the
+/// `modified` result in (rather than `&fs::Metadata`) lets tests inject a synthetic failure
+/// without platform-specific tricks that coerce a real file's metadata into failing.
+fn fingerprint_from_modified(
+    modified: io::Result<SystemTime>,
+    len: u64,
+    path: &Path,
+) -> io::Result<FileFingerprint> {
+    Ok(FileFingerprint {
+        modified: modified.map_err(|error| fingerprint_timestamp_error(path, error))?,
+        len,
+    })
+}
+
+/// Wraps a modification-time read failure with the affected path while preserving the underlying
+/// [`io::ErrorKind`].
+fn fingerprint_timestamp_error(path: &Path, error: io::Error) -> io::Error {
+    io::Error::new(
+        error.kind(),
+        format!(
+            "dev-server watch: failed to read modification time for {}: {error}",
+            path.display()
+        ),
+    )
+}
+
 pub fn collect_fingerprints(scope: &WatchScope) -> io::Result<HashMap<PathBuf, FileFingerprint>> {
     let mut fingerprints = HashMap::new();
 
@@ -414,13 +445,8 @@ fn collect_exact_path_fingerprint(
         Err(error) => return Err(error),
     };
 
-    fingerprints.insert(
-        target_path.to_path_buf(),
-        FileFingerprint {
-            modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-            len: metadata.len(),
-        },
-    );
+    let fingerprint = fingerprint_from_modified(metadata.modified(), metadata.len(), target_path)?;
+    fingerprints.insert(target_path.to_path_buf(), fingerprint);
 
     Ok(())
 }
@@ -459,13 +485,9 @@ fn collect_directory_fingerprints(
             }
 
             if metadata.is_file() {
-                fingerprints.insert(
-                    path,
-                    FileFingerprint {
-                        modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
-                        len: metadata.len(),
-                    },
-                );
+                let fingerprint =
+                    fingerprint_from_modified(metadata.modified(), metadata.len(), &path)?;
+                fingerprints.insert(path, fingerprint);
             }
         }
 

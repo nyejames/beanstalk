@@ -2,12 +2,13 @@
 
 use super::{
     FileFingerprint, WatchScope, WatchSession, WatchTarget, collect_fingerprints, detect_changes,
-    should_ignore_path,
+    fingerprint_from_modified, should_ignore_path,
 };
 use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::{CONFIG_FILE_NAME, Config};
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
@@ -218,4 +219,138 @@ fn ignore_rules_cover_git_output_and_editor_temp_files() {
         &output_dir
     ));
     assert!(!should_ignore_path(&root.join("src/main.bst"), &output_dir));
+}
+
+#[test]
+fn exact_file_target_collects_single_fingerprint() {
+    let root = temp_dir("watch_exact_file");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(&root).expect("should create temp test dir");
+    let source_file = root.join("page.bst");
+    fs::write(&source_file, "hello").expect("should write source file");
+
+    let scope = WatchScope {
+        output_dir: output_dir.clone(),
+        targets: vec![WatchTarget {
+            watch_path: source_file.clone(),
+            interest_path: Some(source_file.clone()),
+            recursive: false,
+        }],
+    };
+
+    let fingerprints = collect_fingerprints(&scope).expect("exact-file scan should complete");
+    assert_eq!(
+        fingerprints.len(),
+        1,
+        "exact-file target should collect one file"
+    );
+    let fingerprint = fingerprints
+        .get(&source_file)
+        .expect("source file should be fingerprinted");
+    assert_eq!(fingerprint.len, 5);
+
+    fs::remove_dir_all(&root).expect("should remove temp test dir");
+}
+
+#[test]
+fn recursive_directory_target_collects_nested_files() {
+    let root = temp_dir("watch_recursive_directory");
+    let output_dir = root.join("dev");
+    let src_dir = root.join("src");
+    let nested_dir = src_dir.join("pages");
+    fs::create_dir_all(&nested_dir).expect("should create nested dirs");
+    fs::write(src_dir.join("main.bst"), "main").expect("should write main");
+    fs::write(nested_dir.join("about.bst"), "about").expect("should write nested file");
+
+    let scope = WatchScope {
+        output_dir: output_dir.clone(),
+        targets: vec![WatchTarget {
+            watch_path: src_dir.clone(),
+            interest_path: None,
+            recursive: true,
+        }],
+    };
+
+    let fingerprints = collect_fingerprints(&scope).expect("recursive scan should complete");
+    assert_eq!(
+        fingerprints.len(),
+        2,
+        "recursive target should collect nested files"
+    );
+    assert!(fingerprints.keys().any(|path| path.ends_with("main.bst")));
+    assert!(fingerprints.keys().any(|path| path.ends_with("about.bst")));
+
+    fs::remove_dir_all(&root).expect("should remove temp test dir");
+}
+
+#[test]
+fn timestamp_failure_propagates_with_path_context() {
+    let path = PathBuf::from("unreachable.bst");
+    let result = fingerprint_from_modified(
+        Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+        12,
+        &path,
+    );
+
+    let error = result.expect_err("modified-time failure should propagate");
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    assert!(
+        error.to_string().contains("unreachable.bst"),
+        "error should name the affected path: {error}"
+    );
+}
+
+#[test]
+fn same_length_edit_detected_via_timestamp_change() {
+    let root = temp_dir("watch_same_length_edit");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(&root).expect("should create temp test dir");
+    let source_file = root.join("page.bst");
+    fs::write(&source_file, "first value").expect("should write initial content");
+
+    let scope = WatchScope {
+        output_dir: output_dir.clone(),
+        targets: vec![WatchTarget {
+            watch_path: source_file.clone(),
+            interest_path: Some(source_file.clone()),
+            recursive: false,
+        }],
+    };
+
+    let before = collect_fingerprints(&scope).expect("initial scan should complete");
+    let before_fingerprint = before
+        .get(&source_file)
+        .expect("source file should be fingerprinted before edit");
+
+    fs::write(&source_file, "second word").expect("should rewrite same-length content");
+    let advanced_modified = before_fingerprint
+        .modified
+        .checked_add(Duration::from_secs(1))
+        .expect("test timestamp should advance");
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .open(&source_file)
+        .expect("should reopen source file");
+    let set_times_result = file.set_times(fs::FileTimes::new().set_modified(advanced_modified));
+    drop(file);
+    if let Err(error) = set_times_result {
+        if error.kind() == io::ErrorKind::Unsupported {
+            fs::remove_dir_all(&root).expect("should remove temp test dir");
+            return;
+        }
+        panic!("supported modified-time update should succeed: {error}");
+    }
+
+    let after = collect_fingerprints(&scope).expect("post-edit scan should complete");
+    let after_fingerprint = after
+        .get(&source_file)
+        .expect("source file should be fingerprinted after edit");
+    assert_eq!(after_fingerprint.len, before_fingerprint.len);
+    assert_ne!(after_fingerprint.modified, before_fingerprint.modified);
+    assert!(
+        detect_changes(&before, &after),
+        "same-length edit with a changed timestamp must be detected"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp test dir");
 }

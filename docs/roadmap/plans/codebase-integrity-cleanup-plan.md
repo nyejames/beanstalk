@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4B, stop hiding watch timestamp failures
-LAST_ACCEPTED_COMMIT: `f6fabce60`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4A accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 4C, reject tracked-asset traversal underflow
+LAST_ACCEPTED_COMMIT: `2a1029cad`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4B accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: dev-server watch ownership and infrastructure error propagation
-- code: `src/projects/dev_server/watch.rs` exact-file and recursive-directory fingerprints
+- docs: tracked-asset output-root ownership and authored compile-time path diagnostics
+- code: `src/projects/html_project/tracked_assets.rs` relative asset route traversal
 ACCEPTANCE_CRITERIA:
-- `metadata.modified()` failures propagate through the existing `io::Result`
-- exact-file and recursive-directory fingerprint paths add useful path context at the boundary
-- no Unix epoch sentinel can make same-length edits appear unchanged
-- exact-file, recursive-directory, extracted failure and same-length edit tests cover the policy
-- the intentional dev-server output-directory canonicalization fallback remains unchanged
+- `..` pops only real route components above the output-root floor
+- traversal exactly back to the output root remains valid
+- one or repeated segments crossing above the root return a typed invalid compile-time path diagnostic
+- diagnostics use `RenderedPathUsage::render_location`
+- final output-path validation remains defense in depth
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -52,12 +52,14 @@ VALIDATION_STATE:
 - Phase 3 separate `just bench-check`: passed, 28/28 cases
 - Phase 4A focused cleanup tests: passed, 23 tests
 - Phase 4A `just validate`: passed, including cross-target Clippy, 3,380 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 4B focused watch tests: passed, 13 tests
+- Phase 4B `just validate`: passed, including cross-target Clippy, 3,384 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 4B is a bounded dev-watch fingerprint slice
+DELEGATION_DECISION: ollama implementation worker - Phase 4C is a bounded tracked-asset path slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 4A, then delegate Phase 4B timestamp error propagation
+NEXT_RESUME_ACTION: commit accepted Phase 4B, then delegate Phase 4C traversal underflow rejection
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -425,7 +427,9 @@ Do not alter the current imported support-file entry semantics. Imported config 
 Progress: Slice 4A is complete. V2 manifests now require exact normalized managed-extension set
 equality after builder ownership matches. Missing and extra extensions enter limited safe mode with
 a distinct reason carrying both deterministic sets. Stale files remain untouched and the active
-manifest is rewritten for the next build. Focused tests and `just validate` passed.
+manifest is rewritten for the next build. Slice 4B is complete. Dev-watch fingerprints propagate
+modified-time failures with path context and preserve error kinds. Exact and recursive collection,
+synthetic failure and deterministic same-length edits have focused coverage. `just validate` passed.
 
 ### Slice 4A: Verify manifest extension ownership
 
