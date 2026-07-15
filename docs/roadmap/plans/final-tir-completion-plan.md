@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3c2b - require structural classification authority
-LAST_ACCEPTED_COMMIT: `dc65ca80d` (prior checkpoint; Slice 3E3c2a is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3c2c - distinguish fold fallback from malformed authority
+LAST_ACCEPTED_COMMIT: `9936aa48b` (prior checkpoint; Slice 3E3c2b is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`; reviewed Slice 3E3c2a change pending commit, with no unrelated uncommitted changes
+WORKTREE: `main`; reviewed Slice 3E3c2b change pending commit, with no unrelated uncommitted changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/classification.rs` effective classification helpers and focused classification tests
-- effective classification must distinguish malformed required nodes/templates from semantic false results. Foreign child references, cycle guards, uncovered slots and present non-slot/non-insert nodes remain ordinary classification outcomes.
+- code: `tir/fold_safety.rs`, finalization fold-path selection and focused fold-cache/wrapper-context tests
+- unsupported fold shapes are semantic fallback reasons. Wrong-store views and missing required templates, nodes, overlays or child-view authority must propagate as internal errors rather than selecting a fallback path.
 ACCEPTANCE_CRITERIA:
-- Make structural unresolved-slot, resolved-slot and escaped-insert classification propagate missing node and same-store template authority through the existing template error lane.
-- Preserve conservative test-only probes and semantic foreign-reference, cycle and absent-overlay outcomes only where their callers genuinely require boolean probing.
-- Keep classification and slot-composition walkers separate because one owns effective semantic classification and the other owns strict structural composition.
+- Make production fold-safety selection distinguish malformed authority from supported semantic fallback reasons through a narrow result type.
+- Propagate required view/store/overlay/node/template and wrapper-context lookup failures through the existing template/finalization error lane.
+- Preserve runtime-slot, reactive, cross-store, cycle, unsupported-wrapper and other genuine non-foldable shapes as explicit fallback reasons without changing valid output.
 VALIDATION_STATE:
-- Slice 3E3c2a focused suites: passed 84 slot-composition, 16 contribution, 16 runtime-slot and 29 classification tests
-- Slice 3E3c2a parent `just validate`: passed cross-target Clippy, 3450 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 11 faster and 0 slower
+- Slice 3E3c2b focused suites: passed 32 classification and 17 runtime-slot tests
+- Slice 3E3c2b parent `just validate`: passed cross-target Clippy, 3454 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 7 faster and 1 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: default implementation order - user requested Ollama as the primary provider after Slice 3E3c2a
+BLOCKERS_OR_OPEN_DECISIONS: Ollama was unreachable at `http://localhost:11434` for Slice 3E3c2b before edits; retry the default order for the next slice
+DELEGATION_DECISION: default implementation order - Ollama primary as requested, then codex-cli and parent-direct
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Slice 3E3c2a, then delegate strict structural classification authority through Ollama
+NEXT_RESUME_ACTION: commit Slice 3E3c2b, then delegate strict fold-safety authority through Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -452,6 +452,8 @@ Slice 3E3b2 checkpoint: post-normalization reactive metadata now requires a Fina
 Slice 3E3c1 checkpoint: reactive annotation, flow refresh and raw structural metadata traversal now propagate same-store root, overlay, node, slot-plan, slot-site and resolver failures through the AST finalizer. Below-Composed and foreign-store templates remain semantic non-participants, while the flow-aware collector and effective-view paths keep their distinct state and owned runtime handoffs use one fallible canonical walker.
 
 Slice 3E3c2a checkpoint: contribution-shape classification, loose-content routing, control-flow detection and wrapper-set composition now propagate missing node, same-store template and wrapper-set authority through the internal compiler diagnostic lane. Foreign child references, absent optional wrapper fields and genuinely empty combined wrapper sets remain semantic outcomes, with focused malformed-store coverage at the classification and slot-composition owners.
+
+Slice 3E3c2b checkpoint: effective unresolved-slot, resolved-slot and escaped-insert classification now propagates missing node and required same-store child or insert-template authority through `TemplateError`. Runtime slot-site planning carries the strict result through `TemplateSlotError`, while foreign references, cycle re-entry, uncovered slots, present no-slot wrappers and named-only wrapper routing remain semantic outcomes.
 
 #### Phase 3 acceptance
 

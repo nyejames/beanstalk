@@ -105,10 +105,12 @@ pub(crate) fn same_store_tir_id(
 ///       caller already holds a finalized same-store root.
 /// WHY: runtime control-flow slot-artifact validation prefers the finalized
 ///      body root after render-unit preparation.
+/// Missing nodes and required same-store templates are compiler errors. Foreign
+/// child references and cycle re-entry remain semantic non-matches.
 pub(crate) fn tir_subtree_has_unresolved_slots(
     store: &TemplateIrStore,
     root: TemplateIrNodeId,
-) -> bool {
+) -> Result<bool, TemplateError> {
     tir_tree_has_slots(store, root, &mut HashSet::new())
 }
 
@@ -175,9 +177,9 @@ pub(crate) fn classify_effective_tir_view_template(
 
     let shape_const_evaluable =
         tir_view_template_is_const_evaluable_value(view, store, string_table)?;
-    let has_unresolved_slots = tir_tree_has_slots(store, store_root, &mut HashSet::new());
+    let has_unresolved_slots = tir_tree_has_slots(store, store_root, &mut HashSet::new())?;
     let has_slot_insertions =
-        tir_tree_has_slot_insert_children(store, store_root, &mut HashSet::new());
+        tir_tree_has_slot_insert_children(store, store_root, &mut HashSet::new())?;
 
     // Structural `Slot` nodes that are not covered by the view's slot-resolution
     // overlay (or are covered only by `Missing`/`Unresolved` entries) fold to no
@@ -330,27 +332,41 @@ pub(crate) fn tir_node_is_const_evaluable_value_with_bindings(
 ///
 /// Follows `ChildTemplate` references into the same store with a visited set to
 /// prevent infinite recursion on cyclic references.
+///
+/// Missing nodes and required same-store templates are malformed TIR authority,
+/// not semantic absence. Foreign child references remain non-participants for
+/// this same-store structural query, and cycle re-entry remains a non-match.
 fn tir_tree_has_slots(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     visited: &mut HashSet<TemplateIrId>,
-) -> bool {
-    let Some(node) = store.get_node(node_id) else {
-        return false;
-    };
+) -> Result<bool, TemplateError> {
+    let node = store.get_node(node_id).ok_or_else(|| {
+        TemplateError::from(CompilerError::compiler_error(format!(
+            "TIR slot classification lost node {} in store {}.",
+            node_id,
+            store.store_id()
+        )))
+    })?;
 
     match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => children
-            .iter()
-            .any(|child| tir_tree_has_slots(store, *child, visited)),
+        TemplateIrNodeKind::Sequence { children } => {
+            for child in children {
+                if tir_tree_has_slots(store, *child, visited)? {
+                    return Ok(true);
+                }
+            }
 
-        TemplateIrNodeKind::Slot { .. } => true,
+            Ok(false)
+        }
+
+        TemplateIrNodeKind::Slot { .. } => Ok(true),
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             if let Some(template_id) = reference.template_id_in_store(store.store_id()) {
                 visit_child_template(store, template_id, visited, tir_tree_has_slots)
             } else {
-                false
+                Ok(false)
             }
         }
 
@@ -359,12 +375,19 @@ fn tir_tree_has_slots(
         }
 
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            branches
-                .iter()
-                .any(|branch| tir_tree_has_slots(store, branch.body, visited))
-                || fallback
-                    .as_ref()
-                    .is_some_and(|fallback_id| tir_tree_has_slots(store, *fallback_id, visited))
+            for branch in branches {
+                if tir_tree_has_slots(store, branch.body, visited)? {
+                    return Ok(true);
+                }
+            }
+
+            if let Some(fallback_id) = fallback
+                && tir_tree_has_slots(store, *fallback_id, visited)?
+            {
+                return Ok(true);
+            }
+
+            Ok(false)
         }
 
         TemplateIrNodeKind::Loop {
@@ -372,17 +395,24 @@ fn tir_tree_has_slots(
             aggregate_wrapper,
             ..
         } => {
-            tir_tree_has_slots(store, *body, visited)
-                || aggregate_wrapper
-                    .as_ref()
-                    .is_some_and(|wrapper_id| tir_tree_has_slots(store, *wrapper_id, visited))
+            if tir_tree_has_slots(store, *body, visited)? {
+                return Ok(true);
+            }
+
+            if let Some(wrapper_id) = aggregate_wrapper
+                && tir_tree_has_slots(store, *wrapper_id, visited)?
+            {
+                return Ok(true);
+            }
+
+            Ok(false)
         }
 
         TemplateIrNodeKind::Text { .. }
         | TemplateIrNodeKind::DynamicExpression { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. }
-        | TemplateIrNodeKind::RuntimeSlotSite { .. } => false,
+        | TemplateIrNodeKind::RuntimeSlotSite { .. } => Ok(false),
     }
 }
 
@@ -398,15 +428,23 @@ fn tir_tree_has_slots(
 ///      (or covered only by `Missing`/`Unresolved` entries) classifies as a
 ///      renderable string. Only slots that actually resolve to source templates
 ///      turn the template into a `WrapperTemplate`.
+///
+/// Missing nodes and required same-store child or insert templates are malformed
+/// TIR authority and propagate through `TemplateError`. Foreign child references
+/// remain semantic non-participants, and cycle re-entry remains a non-match.
 fn tir_view_has_resolved_slots(
     view: &TirView<'_>,
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     visited: &mut HashSet<TemplateIrId>,
 ) -> Result<bool, TemplateError> {
-    let Some(node) = store.get_node(node_id) else {
-        return Ok(false);
-    };
+    let node = store.get_node(node_id).ok_or_else(|| {
+        TemplateError::from(CompilerError::compiler_error(format!(
+            "TIR resolved-slot classification lost node {} in store {}.",
+            node_id,
+            store.store_id()
+        )))
+    })?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -492,7 +530,11 @@ fn tir_view_visit_child_template(
     let resolved = if let Some(child_template) = store.get_template(template_id) {
         tir_view_has_resolved_slots(view, store, child_template.root, visited)?
     } else {
-        false
+        return Err(TemplateError::from(CompilerError::compiler_error(format!(
+            "TIR resolved-slot classification lost same-store child template {} in store {}.",
+            template_id,
+            store.store_id()
+        ))));
     };
 
     visited.remove(&template_id);
@@ -508,19 +550,32 @@ fn tir_view_visit_child_template(
 ///       post-construction owner of this semantic marker.
 /// WHY: TIR trees may represent an escaped insert through either a
 ///      `ChildTemplate` or `InsertContribution`, so both forms must be checked.
+/// Missing nodes and required same-store templates are malformed TIR authority,
+/// not semantic absence. Foreign child references remain non-participants and
+/// cycle re-entry remains a non-match.
 fn tir_tree_has_slot_insert_children(
     store: &TemplateIrStore,
     node_id: TemplateIrNodeId,
     visited: &mut HashSet<TemplateIrId>,
-) -> bool {
-    let Some(node) = store.get_node(node_id) else {
-        return false;
-    };
+) -> Result<bool, TemplateError> {
+    let node = store.get_node(node_id).ok_or_else(|| {
+        TemplateError::from(CompilerError::compiler_error(format!(
+            "TIR escaped-insert classification lost node {} in store {}.",
+            node_id,
+            store.store_id()
+        )))
+    })?;
 
     match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => children
-            .iter()
-            .any(|child| tir_tree_has_slot_insert_children(store, *child, visited)),
+        TemplateIrNodeKind::Sequence { children } => {
+            for child in children {
+                if tir_tree_has_slot_insert_children(store, *child, visited)? {
+                    return Ok(true);
+                }
+            }
+
+            Ok(false)
+        }
 
         // Both `ChildTemplate` and `InsertContribution` reference a child
         // template. Check whether the child's kind is `SlotInsert(_)` before
@@ -529,42 +584,60 @@ fn tir_tree_has_slot_insert_children(
         // encounter; subsequent re-encounters short-circuit via the visited set.
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
-                return false;
+                return Ok(false);
             };
-            let is_slot_insert = store
-                .get_template(template_id)
-                .is_some_and(|child| matches!(child.kind, TemplateType::SlotInsert(_)));
+            let child = store.get_template(template_id).ok_or_else(|| {
+                TemplateError::from(CompilerError::compiler_error(format!(
+                    "TIR escaped-insert classification lost same-store child template {} in store {}.",
+                    template_id,
+                    store.store_id()
+                )))
+            })?;
+            let is_slot_insert = matches!(child.kind, TemplateType::SlotInsert(_));
 
-            is_slot_insert
-                || visit_child_template(
+            if is_slot_insert {
+                Ok(true)
+            } else {
+                visit_child_template(
                     store,
                     template_id,
                     visited,
                     tir_tree_has_slot_insert_children,
                 )
+            }
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
-            let is_slot_insert = store
-                .get_template(*template)
-                .is_some_and(|child| matches!(child.kind, TemplateType::SlotInsert(_)));
+            let child = store.get_template(*template).ok_or_else(|| {
+                TemplateError::from(CompilerError::compiler_error(format!(
+                    "TIR escaped-insert classification lost insert-contribution template {} in store {}.",
+                    template,
+                    store.store_id()
+                )))
+            })?;
+            let is_slot_insert = matches!(child.kind, TemplateType::SlotInsert(_));
 
-            is_slot_insert
-                || visit_child_template(
-                    store,
-                    *template,
-                    visited,
-                    tir_tree_has_slot_insert_children,
-                )
+            if is_slot_insert {
+                Ok(true)
+            } else {
+                visit_child_template(store, *template, visited, tir_tree_has_slot_insert_children)
+            }
         }
 
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            branches
-                .iter()
-                .any(|branch| tir_tree_has_slot_insert_children(store, branch.body, visited))
-                || fallback.as_ref().is_some_and(|fallback_id| {
-                    tir_tree_has_slot_insert_children(store, *fallback_id, visited)
-                })
+            for branch in branches {
+                if tir_tree_has_slot_insert_children(store, branch.body, visited)? {
+                    return Ok(true);
+                }
+            }
+
+            if let Some(fallback_id) = fallback
+                && tir_tree_has_slot_insert_children(store, *fallback_id, visited)?
+            {
+                return Ok(true);
+            }
+
+            Ok(false)
         }
 
         TemplateIrNodeKind::Loop {
@@ -572,10 +645,17 @@ fn tir_tree_has_slot_insert_children(
             aggregate_wrapper,
             ..
         } => {
-            tir_tree_has_slot_insert_children(store, *body, visited)
-                || aggregate_wrapper.as_ref().is_some_and(|wrapper_id| {
-                    tir_tree_has_slot_insert_children(store, *wrapper_id, visited)
-                })
+            if tir_tree_has_slot_insert_children(store, *body, visited)? {
+                return Ok(true);
+            }
+
+            if let Some(wrapper_id) = aggregate_wrapper
+                && tir_tree_has_slot_insert_children(store, *wrapper_id, visited)?
+            {
+                return Ok(true);
+            }
+
+            Ok(false)
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -583,7 +663,7 @@ fn tir_tree_has_slot_insert_children(
         | TemplateIrNodeKind::Slot { .. }
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. }
-        | TemplateIrNodeKind::RuntimeSlotSite { .. } => false,
+        | TemplateIrNodeKind::RuntimeSlotSite { .. } => Ok(false),
     }
 }
 
@@ -1894,18 +1974,28 @@ fn tir_tree_is_loop_control_signal(store: &TemplateIrStore, node_id: TemplateIrN
 ///       child-reference resolution logic.
 /// WHY: both slot and insert-contribution walkers need to descend into the same
 ///      referenced template's root; extracting this step avoids duplicating the
-///      visited-set guard and missing-template handling.
+///      visited-set guard while keeping missing-template authority explicit.
 fn visit_child_template(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
     visited: &mut HashSet<TemplateIrId>,
-    walker: fn(&TemplateIrStore, TemplateIrNodeId, &mut HashSet<TemplateIrId>) -> bool,
-) -> bool {
+    walker: fn(
+        &TemplateIrStore,
+        TemplateIrNodeId,
+        &mut HashSet<TemplateIrId>,
+    ) -> Result<bool, TemplateError>,
+) -> Result<bool, TemplateError> {
     if !visited.insert(template_id) {
-        return false;
+        return Ok(false);
     }
 
-    store
-        .get_template(template_id)
-        .is_some_and(|child_template| walker(store, child_template.root, visited))
+    let child_template = store.get_template(template_id).ok_or_else(|| {
+        TemplateError::from(CompilerError::compiler_error(format!(
+            "TIR structural classification lost same-store child template {} in store {}.",
+            template_id,
+            store.store_id()
+        )))
+    })?;
+
+    walker(store, child_template.root, visited)
 }

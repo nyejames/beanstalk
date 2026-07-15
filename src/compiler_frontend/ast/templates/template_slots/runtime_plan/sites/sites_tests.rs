@@ -11,11 +11,13 @@ use super::{build_tir_wrapper_render_pieces, slot_key_for_node};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin;
+use crate::compiler_frontend::ast::templates::template_slots::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrId, TemplateIrNodeId, TemplateIrStore, TemplateOverlaySetId,
-    TemplateRef, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateStoreId,
-    TemplateTirChildReference, TemplateTirPhase, TirCopyState,
+    TemplateRef, TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
+    TemplateStoreId, TemplateTirChildReference, TemplateTirPhase, TirCopyState,
 };
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -119,6 +121,39 @@ fn missing_same_store_child_template_is_an_authority_error() {
         "missing same-store child template",
         "Runtime slot site planning",
     );
+}
+
+#[test]
+fn missing_structural_authority_propagates_through_runtime_slot_site_planner() {
+    let mut store = TemplateIrStore::new();
+    let string_table = StringTable::new();
+    let mut copy_state = TirCopyState::new();
+    let inner_plan = TemplateSlotSiteRenderPlan::default();
+    let mut planner = super::RuntimeWrapperSitePlanBuilder {
+        sources: &[],
+        slot_plan_id: TemplateSlotPlanId::new(0),
+        store: &mut store,
+        string_table: &string_table,
+        copy_state: &mut copy_state,
+    };
+
+    let result = planner.try_build_child_wrapper_site_pieces_from_tir_id(
+        TemplateIrId::new(0),
+        TemplateIrNodeId::new(7),
+        &inner_plan,
+    );
+    let error = result.expect_err(
+        "runtime slot planning must propagate missing structural authority as an error",
+    );
+
+    match error {
+        TemplateSlotError::Infrastructure(error) => {
+            assert_eq!(error.error_type, ErrorType::Compiler);
+        }
+        TemplateSlotError::Diagnostic(_) => {
+            panic!("missing structural authority must not become a user diagnostic");
+        }
+    }
 }
 
 #[test]

@@ -8,7 +8,7 @@
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::classification::{
-    classify_effective_tir_view_template, same_store_tir_id,
+    TirTemplateClassification, classify_effective_tir_view_template, same_store_tir_id,
     tir_node_is_const_evaluable_value_with_bindings, tir_view_subtree_is_const_evaluable_value,
 };
 use super::super::contribution_shape::classify_tir_contribution_node;
@@ -23,6 +23,7 @@ use super::super::{
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
 };
+use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotKey, Style, TemplateConstValueKind, TemplateSegmentOrigin,
@@ -141,6 +142,19 @@ fn classify_registry_view_template(
         &mut StringTable,
     ) -> super::super::ids::TemplateIrNodeId,
 ) -> TemplateConstValueKind {
+    classify_registry_view_template_result(string_table, template_kind, build_root)
+        .expect("view classification should succeed")
+        .const_value_kind
+}
+
+fn classify_registry_view_template_result(
+    string_table: &mut StringTable,
+    template_kind: TemplateType,
+    build_root: impl FnOnce(
+        &mut TemplateIrBuilder<'_>,
+        &mut StringTable,
+    ) -> super::super::ids::TemplateIrNodeId,
+) -> Result<TirTemplateClassification, TemplateError> {
     let mut registry = TemplateIrRegistry::new();
     let store_id = registry.allocate_store();
     let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
@@ -182,8 +196,22 @@ fn classify_registry_view_template(
     .expect("test view should resolve");
 
     classify_effective_tir_view_template(&view, &store_snapshot, string_table)
-        .expect("view classification should succeed")
-        .const_value_kind
+}
+
+fn assert_compiler_infrastructure_error<T>(result: Result<T, TemplateError>, context: &str) {
+    let error = match result {
+        Ok(_) => panic!("{context} should fail through the compiler-error lane"),
+        Err(error) => error,
+    };
+
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("{context} should fail as infrastructure/compiler error");
+    };
+    assert_eq!(
+        error.error_type,
+        ErrorType::Compiler,
+        "{context} should use the compiler error type"
+    );
 }
 
 // -------------------------
@@ -207,6 +235,46 @@ fn same_store_tir_id_returns_none_for_cross_store_reference() {
 
     let id = same_store_tir_id(&template, &store_a);
     assert!(id.is_none(), "cross-store reference must not resolve");
+}
+
+#[test]
+fn effective_classification_rejects_missing_structural_node_authority() {
+    let mut string_table = StringTable::new();
+    let result = classify_registry_view_template_result(
+        &mut string_table,
+        TemplateType::String,
+        |builder, _| builder.push_sequence_node(vec![TemplateIrNodeId::new(99)], empty_location()),
+    );
+
+    assert_compiler_infrastructure_error(result, "missing structural node authority");
+}
+
+#[test]
+fn effective_classification_rejects_missing_same_store_child_template() {
+    let mut string_table = StringTable::new();
+    let result = classify_registry_view_template_result(
+        &mut string_table,
+        TemplateType::String,
+        |builder, _| builder.push_child_template_node(TemplateIrId::new(99), empty_location()),
+    );
+
+    assert_compiler_infrastructure_error(result, "missing same-store child template authority");
+}
+
+#[test]
+fn effective_classification_rejects_missing_insert_template() {
+    let mut string_table = StringTable::new();
+    let result = classify_registry_view_template_result(
+        &mut string_table,
+        TemplateType::String,
+        |builder, _| {
+            let insert =
+                builder.push_insert_contribution_node(TemplateIrId::new(99), empty_location());
+            builder.push_sequence_node(vec![insert], empty_location())
+        },
+    );
+
+    assert_compiler_infrastructure_error(result, "missing insert-template authority");
 }
 
 #[test]

@@ -260,7 +260,10 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         wrapper_root: TemplateIrNodeId,
         inner_plan: &TemplateSlotSiteRenderPlan,
     ) -> Result<Option<Vec<TemplateSlotSiteRenderPiece>>, TemplateSlotError> {
-        if !tir_subtree_has_unresolved_slots(self.store, wrapper_root) {
+        // Strict structural classification reports malformed TIR authority
+        // through `TemplateSlotError`; only a present wrapper with no slots
+        // takes the ordinary copy fast path.
+        if !tir_subtree_has_unresolved_slots(self.store, wrapper_root)? {
             let copied_root = copy_tir_subtree_with_active_slot_plan(
                 wrapper_root,
                 None,
