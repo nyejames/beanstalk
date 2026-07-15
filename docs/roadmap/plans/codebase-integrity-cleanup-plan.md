@@ -20,31 +20,34 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2B, report the correct initializer delimiter at EOF
-LAST_ACCEPTED_COMMIT: `7a478ea3a`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2A accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 2C, remove the constant-header index fallback
+LAST_ACCEPTED_COMMIT: `26fdc6b7d`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2B accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: tokenizer and header-parsing delimiter ownership plus structured syntax diagnostics
-- code: `utilities/token_scan.rs`, declaration-initializer scanner and focused scanner/parser tests
+- docs: header parsing, constant dependency sorting and internal invariant diagnostics
+- code: `headers/constant_dependencies.rs`, constant position metadata and focused dependency tests
 ACCEPTANCE_CRITERIA:
-- EOF reports the delimiter for the actual open template, parenthesis, collection, catch or value-producing if construct
-- nested scanning uses an explicit open-construct model instead of a fixed `]` fallback
-- an impossible nested state with no open construct is reported as an internal scanner invariant
-- focused tokenizer and parser cases pass without touching TIR-owned files
+- source constants carry their canonical source file and header index in one position record
+- a classified source constant cannot silently fall back to header index zero
+- missing compiler-owned position metadata produces a precise internal compiler error
+- backward, forward, cross-file, self-reference and corrupted-map cases retain their distinct behavior
+- focused constant dependency tests pass without touching TIR-owned files
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
 - Phase 1 separate `just bench-check`: passed, 28/28 cases
 - Phase 2A focused generic inference, diagnostic-label and rendering tests: passed
 - Phase 2A `just validate`: passed, including cross-target Clippy, 3,350 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-- Phase 2B validation: not run
+- Phase 2B focused scanner and delimiter tests: passed, including both mixed nesting orders
+- Phase 2B `just validate`: passed, including cross-target Clippy, 3,360 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 2C validation: not run
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 2B is a bounded scanner diagnostic slice
+DELEGATION_DECISION: ollama implementation worker - Phase 2C is a bounded header dependency invariant slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2A, then delegate Phase 2B
+NEXT_RESUME_ACTION: commit accepted Phase 2B, then delegate Phase 2C
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -227,6 +230,8 @@ Add platform-independent tests for:
 Progress: Slice 2A is complete. Generic nominal inference now preserves repeated binding conflicts,
 shares one typed conflict payload with generic function inference and retains current plus first
 evidence locations. Matching evidence and structural mismatch behavior have focused coverage.
+Slice 2B is complete. Declaration-initializer EOF diagnostics now track the actual open-construct
+stack for templates, parentheses, collections, catch blocks and value-producing if blocks.
 
 ### Slice 2A: Propagate generic nominal binding conflicts
 

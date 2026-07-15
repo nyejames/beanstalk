@@ -8,6 +8,7 @@
 //! This module owns generic scan mechanics only.
 //! It does NOT own statement/feature semantics or diagnostics policy.
 
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -105,18 +106,6 @@ impl NestingDepth {
         self.parenthesis == 0 && self.curly == 0 && self.template == 0
     }
 
-    fn expected_closing_delimiter(self) -> Option<&'static str> {
-        if self.template > 0 {
-            Some("]")
-        } else if self.parenthesis > 0 {
-            Some(")")
-        } else if self.curly > 0 {
-            Some("}")
-        } else {
-            None
-        }
-    }
-
     pub(crate) fn step(&mut self, token_kind: &TokenKind) {
         match token_kind {
             TokenKind::OpenParenthesis => self.parenthesis = self.parenthesis.saturating_add(1),
@@ -133,6 +122,56 @@ impl NestingDepth {
             }
             _ => {}
         }
+    }
+}
+
+/// The innermost open construct tracked by the declaration-initializer scanner.
+///
+/// WHAT: models which construct owns the next expected closing delimiter at EOF.
+/// WHY: the fixed `]` fallback could misreport the delimiter inside a value-producing
+///      block, a catch body, a parenthesis or a collection. Each construct owns its
+///      own terminator and must report it precisely at end-of-file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OpenConstruct {
+    Template,
+    Parenthesis,
+    CollectionOrMap,
+    CatchBlock,
+    ValueIfBlock,
+}
+
+impl OpenConstruct {
+    fn expected_delimiter(self) -> &'static str {
+        match self {
+            OpenConstruct::Template => "]",
+            OpenConstruct::Parenthesis => ")",
+            OpenConstruct::CollectionOrMap => "}",
+            OpenConstruct::CatchBlock => ";",
+            OpenConstruct::ValueIfBlock => ";",
+        }
+    }
+}
+
+/// Returns the construct that most recently opened and still owns a closing delimiter.
+///
+/// WHY: depth counters can say which construct kinds are open but not their nesting order.
+/// The scanner keeps this stack so mixed forms report the actual innermost delimiter.
+pub(crate) fn innermost_open_construct(open_constructs: &[OpenConstruct]) -> Option<OpenConstruct> {
+    open_constructs.last().copied()
+}
+
+fn close_open_construct(open_constructs: &mut Vec<OpenConstruct>, expected: OpenConstruct) {
+    if open_constructs.last() == Some(&expected) {
+        open_constructs.pop();
+    }
+}
+
+fn close_statement_construct(open_constructs: &mut Vec<OpenConstruct>) {
+    if matches!(
+        open_constructs.last(),
+        Some(OpenConstruct::CatchBlock | OpenConstruct::ValueIfBlock)
+    ) {
+        open_constructs.pop();
     }
 }
 
@@ -207,6 +246,7 @@ pub(crate) fn collect_declaration_initializer_tokens(
     let mut value_if_block_depth = 0usize;
     let mut value_if_header_pending = false;
     let mut initializer_closed_by_statement_block = false;
+    let mut open_constructs = Vec::new();
 
     while token_stream.index < token_stream.length {
         if initializer_closed_by_statement_block {
@@ -246,15 +286,23 @@ pub(crate) fn collect_declaration_initializer_tokens(
         }
 
         if matches!(token_kind, TokenKind::Eof) && !at_top_level {
-            let expected_delimiter = if catch_block_depth > 0 {
-                ";"
-            } else {
-                depth.expected_closing_delimiter().unwrap_or("]")
+            let expected_delimiter = match innermost_open_construct(&open_constructs) {
+                Some(open_construct) => {
+                    Some(string_table.get_or_intern(open_construct.expected_delimiter().to_owned()))
+                }
+                None => {
+                    // No construct is open but the scanner believes it is nested. This is an
+                    // internal scanner invariant, not a user-facing syntax error. Report it
+                    // through the infrastructure error lane instead of fabricating a delimiter.
+                    return Err(Box::new(CompilerDiagnostic::from(
+                        CompilerError::compiler_error(
+                            "declaration-initializer scanner reported a nested state with no open construct",
+                        ),
+                    )));
+                }
             };
-            // Intern the expected delimiter so the EOF diagnostic can name it.
-            // This is diagnostic-only string-table mutation.
             return Err(Box::new(CompilerDiagnostic::unexpected_end_of_file(
-                Some(string_table.get_or_intern(expected_delimiter.to_owned())),
+                expected_delimiter,
                 token_stream.current_location(),
             )));
         }
@@ -270,28 +318,34 @@ pub(crate) fn collect_declaration_initializer_tokens(
                 TokenKind::Colon if catch_header_pending => {
                     catch_header_pending = false;
                     catch_block_depth = catch_block_depth.saturating_add(1);
+                    open_constructs.push(OpenConstruct::CatchBlock);
                 }
                 TokenKind::Colon if catch_block_depth > 0 => {
                     catch_block_depth = catch_block_depth.saturating_add(1);
+                    open_constructs.push(OpenConstruct::CatchBlock);
                 }
                 TokenKind::Colon if value_if_header_pending => {
                     value_if_header_pending = false;
                     value_if_block_depth = value_if_block_depth.saturating_add(1);
+                    open_constructs.push(OpenConstruct::ValueIfBlock);
                 }
                 TokenKind::Colon if value_if_block_depth > 0 => {
                     value_if_block_depth = value_if_block_depth.saturating_add(1);
+                    open_constructs.push(OpenConstruct::ValueIfBlock);
                 }
                 TokenKind::End if catch_block_depth > 0 => {
                     let closing_outer_catch_block = catch_block_depth == 1;
                     catch_block_depth = catch_block_depth.saturating_sub(1);
                     catch_header_pending = false;
                     initializer_closed_by_statement_block = closing_outer_catch_block;
+                    close_statement_construct(&mut open_constructs);
                 }
                 TokenKind::End if value_if_block_depth > 0 => {
                     let closing_outer_value_if_block = value_if_block_depth == 1;
                     value_if_block_depth = value_if_block_depth.saturating_sub(1);
                     value_if_header_pending = false;
                     initializer_closed_by_statement_block = closing_outer_value_if_block;
+                    close_statement_construct(&mut open_constructs);
                 }
                 TokenKind::Then | TokenKind::Arrow | TokenKind::Newline | TokenKind::Eof => {
                     catch_header_pending = false;
@@ -301,6 +355,21 @@ pub(crate) fn collect_declaration_initializer_tokens(
             }
         }
 
+        match token_kind {
+            TokenKind::OpenParenthesis => open_constructs.push(OpenConstruct::Parenthesis),
+            TokenKind::CloseParenthesis => {
+                close_open_construct(&mut open_constructs, OpenConstruct::Parenthesis);
+            }
+            TokenKind::OpenCurly => open_constructs.push(OpenConstruct::CollectionOrMap),
+            TokenKind::CloseCurly => {
+                close_open_construct(&mut open_constructs, OpenConstruct::CollectionOrMap);
+            }
+            TokenKind::TemplateHead => open_constructs.push(OpenConstruct::Template),
+            TokenKind::TemplateClose => {
+                close_open_construct(&mut open_constructs, OpenConstruct::Template);
+            }
+            _ => {}
+        }
         depth.step(&token_kind);
 
         collected.push(token_stream.current_token());
