@@ -5,10 +5,9 @@
 //!       by target key; remaining loose content is coalesced into chunks and
 //!       assigned to positional slots first, then the default slot.
 //!
-//! WHY: this is the TIR-native replacement for the legacy
-//!      `template_slots/contributions.rs` routing phase. Separating routing from
-//!      schema discovery and placeholder expansion keeps each file focused on
-//!      one step of the composition pipeline.
+//! WHY: this is the TIR-native routing phase. Separating routing from schema
+//!      discovery and placeholder expansion keeps each file focused on one
+//!      step of the composition pipeline.
 
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateSegmentOrigin, TemplateType,
@@ -45,8 +44,7 @@ type ContributionResult<T> = Result<T, Box<CompilerDiagnostic>>;
 
 /// Partitioned TIR node IDs bucketed by slot target.
 ///
-/// WHAT: holds the routed content for each slot key, analogous to the legacy
-///       `SlotContributions` from `template_slots/contributions.rs`.
+/// WHAT: holds the routed TIR content for each slot key.
 /// WHY: TIR-native slot composition needs to partition fill content by target
 ///      slot before expanding placeholders or building runtime plans.
 #[derive(Debug, Default)]
@@ -120,7 +118,7 @@ pub(crate) struct RoutedTirSlotContributions {
 ///       and routes loose chunks to positional slots first, then the default
 ///       slot.
 /// WHY: TIR-native slot composition needs a single routing entry point that
-///      produces the same partitioning as atom-level AST slot routing.
+///      partitions authored fill content before expansion or runtime planning.
 pub(crate) fn route_tir_slot_contributions(
     store: &TemplateIrStore,
     wrapper_template_id: TemplateIrId,
@@ -157,7 +155,7 @@ pub(super) fn route_tir_fill_against_schema(
 ) -> ContributionResult<RoutedTirSlotContributions> {
     let fill_root = root_node_id_for_template(store, fill_template_id)?;
     let fill_children = children_of_node(store, fill_root)?;
-    let fill_location = location_for_template(store, fill_template_id);
+    let fill_location = location_for_template(store, fill_template_id)?;
 
     let mut contributions = TirSlotContributions::default();
     let mut loose_nodes = Vec::new();
@@ -179,13 +177,26 @@ pub(super) fn route_tir_fill_against_schema(
         // `$insert("name")` construct at different TIR construction stages.
         let insert_info = match &child_node.kind {
             TemplateIrNodeKind::InsertContribution { template } => Some(*template),
-            TemplateIrNodeKind::ChildTemplate { reference, .. } => reference
-                .template_id_in_store(store.store_id())
-                .filter(|template_id| {
-                    store
-                        .get_template(*template_id)
-                        .is_some_and(|t| matches!(t.kind, TemplateType::SlotInsert(_)))
-                }),
+            TemplateIrNodeKind::ChildTemplate { reference, .. } => {
+                match reference.template_id_in_store(store.store_id()) {
+                    // Foreign child references remain ordinary loose content;
+                    // their template authority belongs to another TIR store.
+                    None => None,
+                    Some(template_id) => {
+                        let template = store.get_template(template_id).ok_or_else(|| {
+                            Box::new(internal_compiler_error(
+                                "TIR slot routing: same-store child template ID was not present in the store.",
+                            ))
+                        })?;
+
+                        if matches!(template.kind, TemplateType::SlotInsert(_)) {
+                            Some(template_id)
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
 
             // Slots in fill content are slot declarations, not contributions.
             // They would only appear inside a wrapper, so they are ignored here.
@@ -247,9 +258,8 @@ pub(super) fn route_tir_fill_against_schema(
     }
 
     // Route loose content to positional slots first, then to the default slot.
-    // This mirrors the legacy routing order and keeps the closest positional
-    // slot receiving the next authored chunk.
-    let loose_chunks = collect_loose_tir_contributions(loose_nodes, store, string_table);
+    // Keep the closest positional slot receiving the next authored chunk.
+    let loose_chunks = collect_loose_tir_contributions(loose_nodes, store, string_table)?;
     let ordered_positional_slots = schema.ordered_positional_slots();
 
     for (chunk_index, chunk) in loose_chunks.into_iter().enumerate() {
@@ -266,7 +276,7 @@ pub(super) fn route_tir_fill_against_schema(
         // Formatting whitespace around explicit insert contributions carries no
         // value when the wrapper has nowhere to render loose content. Discard it
         // while preserving diagnostics for every meaningful loose contribution.
-        if tir_nodes_are_whitespace_only_text(&chunk.nodes, store, string_table) {
+        if tir_nodes_are_whitespace_only_text(&chunk.nodes, store, string_table)? {
             continue;
         }
 
@@ -308,7 +318,9 @@ fn collect_insert_contribution_content(
 
     for child_id in insert_children {
         let Some(child_node) = store.get_node(child_id) else {
-            continue;
+            return Err(Box::new(internal_compiler_error(
+                "TIR slot routing: insert contribution child node ID was not present in the store.",
+            )));
         };
 
         match &child_node.kind {
@@ -375,20 +387,25 @@ struct LooseTirContribution {
 ///       node starts a new logical contribution. Whitespace-only body text
 ///       before a new contribution is carried with that contribution; meaningful
 ///       body text stays as its own chunk.
-/// WHY: this mirrors the atom-level slot router's whitespace behavior while
-///      preserving TIR's existing handling for meaningful body text. In
-///      `[row, item: [item]]`, the separator after `:` belongs to the default
-///      body contribution, not the preceding positional head argument.
+/// WHY: whitespace handling stays local to TIR while preserving the existing
+///      treatment of meaningful body text. In `[row, item: [item]]`, the
+///      separator after `:` belongs to the default body contribution, not the
+///      preceding positional head argument.
 fn collect_loose_tir_contributions(
     loose_nodes: Vec<TemplateIrNodeId>,
     store: &TemplateIrStore,
     string_table: &StringTable,
-) -> Vec<LooseTirContribution> {
+) -> ContributionResult<Vec<LooseTirContribution>> {
     let mut chunks = Vec::new();
     let mut pending_nodes = Vec::new();
 
     for node_id in loose_nodes {
-        let starts_new_chunk = store.get_node(node_id).is_some_and(|node| {
+        let node = store.get_node(node_id).ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot routing: loose contribution node ID was not present in the store.",
+            ))
+        })?;
+        let starts_new_chunk = {
             matches!(&node.kind, TemplateIrNodeKind::ChildTemplate { .. })
                 || matches!(
                     &node.kind,
@@ -400,11 +417,11 @@ fn collect_loose_tir_contributions(
                         ..
                     }
                 )
-        });
+        };
 
         if starts_new_chunk {
             if pending_nodes.is_empty()
-                || tir_nodes_are_whitespace_only_text(&pending_nodes, store, string_table)
+                || tir_nodes_are_whitespace_only_text(&pending_nodes, store, string_table)?
             {
                 pending_nodes.push(node_id);
                 chunks.push(LooseTirContribution {
@@ -431,24 +448,33 @@ fn collect_loose_tir_contributions(
         });
     }
 
-    chunks
+    Ok(chunks)
 }
 
 fn tir_nodes_are_whitespace_only_text(
     nodes: &[TemplateIrNodeId],
     store: &TemplateIrStore,
     string_table: &StringTable,
-) -> bool {
-    !nodes.is_empty()
-        && nodes.iter().all(|node_id| {
-            let Some(node) = store.get_node(*node_id) else {
-                return false;
-            };
+) -> ContributionResult<bool> {
+    if nodes.is_empty() {
+        return Ok(false);
+    }
 
-            let TemplateIrNodeKind::Text { text, .. } = &node.kind else {
-                return false;
-            };
+    for node_id in nodes {
+        let node = store.get_node(*node_id).ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot routing: loose contribution whitespace check found a node ID that was not present in the store.",
+            ))
+        })?;
 
-            string_table.resolve(*text).trim().is_empty()
-        })
+        let TemplateIrNodeKind::Text { text, .. } = &node.kind else {
+            return Ok(false);
+        };
+
+        if !string_table.resolve(*text).trim().is_empty() {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }

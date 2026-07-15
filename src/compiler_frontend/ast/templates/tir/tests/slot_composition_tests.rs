@@ -12,7 +12,7 @@
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::SlotOccurrenceId;
-use super::super::ids::{TemplateIrId, TemplateIrNodeId};
+use super::super::ids::{TemplateIrId, TemplateIrNodeId, TemplateWrapperSetId};
 use super::super::node::{
     TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind, TirSlotPlaceholder,
 };
@@ -39,6 +39,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopControlKind, TemplateLoopHeader,
 };
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticPayload, InvalidTemplateSlotReason,
 };
@@ -235,6 +236,24 @@ fn assert_invalid_template_slot_reason(
         }
         other => panic!("expected InvalidTemplateSlot diagnostic, got {other:?}"),
     }
+}
+
+fn assert_internal_authority_error(error: &CompilerDiagnostic, expected_message: &str) {
+    let DiagnosticPayload::InfrastructureError {
+        msg, error_type, ..
+    } = &error.payload
+    else {
+        panic!(
+            "expected an infrastructure diagnostic, got {:?}",
+            error.payload
+        );
+    };
+
+    assert_eq!(*error_type, ErrorType::Compiler);
+    assert!(
+        msg.contains(expected_message),
+        "expected infrastructure message containing {expected_message:?}, got {msg:?}"
+    );
 }
 
 // -------------------------
@@ -821,6 +840,59 @@ fn route_explicit_insert_to_positional_slot() {
 }
 
 #[test]
+fn route_missing_loose_node_produces_internal_error() {
+    let string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let wrapper = build_single_slot_template(&mut store, SlotKey::Default);
+    let missing_node = TemplateIrNodeId::new(store.node_count() + 100);
+    let fill = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let root = builder.push_sequence_node(vec![missing_node], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            empty_location(),
+        )
+    };
+
+    let error = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect_err("missing loose nodes must not be treated as ordinary content");
+
+    assert_internal_authority_error(&error, "fill template child node ID");
+}
+
+#[test]
+fn route_missing_insert_body_node_produces_internal_error() {
+    let string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let wrapper = build_single_slot_template(&mut store, SlotKey::Default);
+    let missing_node = TemplateIrNodeId::new(store.node_count() + 100);
+    let insert_template = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let root = builder.push_sequence_node(vec![missing_node], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::SlotInsert(SlotKey::Default),
+            TemplateIrSummary::default(),
+            empty_location(),
+        )
+    };
+    let insert_node = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        builder.push_insert_contribution_node(insert_template, empty_location())
+    };
+    let fill = build_fill_template(&mut store, vec![insert_node]);
+
+    let error = route_tir_slot_contributions(&store, wrapper, fill, &string_table)
+        .expect_err("missing insert body nodes must fail routing");
+
+    assert_internal_authority_error(&error, "insert contribution child node ID");
+}
+
+#[test]
 fn route_loose_content_to_positional_slots() {
     let mut string_table = StringTable::new();
 
@@ -1295,6 +1367,103 @@ fn missing_slot_renders_as_empty() {
         sequence_children.is_empty(),
         "missing slot should expand to an empty Sequence node"
     );
+}
+
+#[test]
+fn expansion_missing_wrapper_set_produces_internal_error() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let placeholder = TirSlotPlaceholder::with_wrapper_sets(
+        SlotKey::Default,
+        store.next_slot_occurrence_id(),
+        empty_location(),
+        None,
+        Some(TemplateWrapperSetId::new(0)),
+        false,
+    );
+    let wrapper = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let slot_node = builder.push_tir_slot_placeholder_node(placeholder);
+        builder.finish_template(
+            slot_node,
+            Style::default(),
+            TemplateType::String,
+            slot_summary(1),
+            empty_location(),
+        )
+    };
+    let child_template = build_single_text_template(&mut store, &mut string_table, "child");
+    let child_node = build_child_template_node_for_template(&mut store, child_template);
+    let routed = RoutedTirSlotContributions {
+        schema: TirSlotSchema {
+            has_default_slot: true,
+            ..TirSlotSchema::default()
+        },
+        contributions: TirSlotContributions {
+            default_nodes: vec![child_node],
+            ..TirSlotContributions::default()
+        },
+    };
+
+    let error = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
+        .expect_err("missing wrapper sets must fail slot expansion");
+
+    assert_internal_authority_error(&error, "placeholder referenced a missing wrapper set");
+}
+
+#[test]
+fn expansion_missing_conditional_wrapper_set_produces_internal_error() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let placeholder = TirSlotPlaceholder::with_wrapper_sets(
+        SlotKey::Default,
+        store.next_slot_occurrence_id(),
+        empty_location(),
+        None,
+        Some(TemplateWrapperSetId::new(0)),
+        false,
+    );
+    let wrapper = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let slot_node = builder.push_tir_slot_placeholder_node(placeholder);
+        builder.finish_template(
+            slot_node,
+            Style::default(),
+            TemplateType::String,
+            slot_summary(1),
+            empty_location(),
+        )
+    };
+    let branch_node = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let body = builder.push_text_node(
+            string_table.intern("branch"),
+            "branch".len() as u32,
+            TemplateSegmentOrigin::Body,
+            empty_location(),
+        );
+        let branch = TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(bool_expression(true)),
+            body,
+            empty_location(),
+        );
+        builder.push_branch_chain_node(vec![branch], None, empty_location())
+    };
+    let routed = RoutedTirSlotContributions {
+        schema: TirSlotSchema {
+            has_default_slot: true,
+            ..TirSlotSchema::default()
+        },
+        contributions: TirSlotContributions {
+            default_nodes: vec![branch_node],
+            ..TirSlotContributions::default()
+        },
+    };
+
+    let error = expand_tir_slot_placeholders(&mut store, wrapper, &routed, &string_table)
+        .expect_err("missing conditional wrapper sets must fail slot expansion");
+
+    assert_internal_authority_error(&error, "conditional child wrapper set ID");
 }
 
 #[test]

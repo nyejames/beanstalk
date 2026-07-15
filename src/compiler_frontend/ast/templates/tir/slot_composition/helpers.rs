@@ -174,16 +174,20 @@ pub(super) fn children_of_node(
     }
 }
 
-/// Returns a template's source location, or a default location if the template
-/// is missing from the store.
+/// Returns a template's source location, or an internal error when the template
+/// authority is missing from the store.
 pub(super) fn location_for_template(
     store: &TemplateIrStore,
     template_id: TemplateIrId,
-) -> SourceLocation {
+) -> SlotCompositionResult<SourceLocation> {
     store
         .get_template(template_id)
         .map(|template| template.location.to_owned())
-        .unwrap_or_default()
+        .ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot routing: template ID was not present in the store while reading its location.",
+            ))
+        })
 }
 
 /// Returns true if the TIR tree rooted at `node_id` contains at least one

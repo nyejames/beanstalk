@@ -1,7 +1,7 @@
 //! Runtime contribution source planning.
 //!
 //! WHAT: Detects whether routed contributions require runtime lowering and
-//! converts routed atoms into deterministic source plans.
+//! converts routed TIR nodes into deterministic source plans.
 //!
 //! WHY: Source plans describe authored contribution work that HIR should lower
 //! exactly once. Wrapper-local `$children(..)` and `$fresh` behavior belongs to
@@ -48,11 +48,10 @@ pub(in crate::compiler_frontend::ast::templates) fn tir_contributions_need_runti
 ///       TIR node. Each node is deep-copied with no active slot plan so nested
 ///       child templates and insert contributions become independent render
 ///       roots that the HIR can materialize separately.
-/// WHY: the TIR-native head-chain composition path needs the same source-plan
-///      shape the atom-based `build_runtime_contribution_sources` produces, but
-///      starts from already-routed TIR node IDs instead of atoms. Keeping both
-///      builders in the same module makes the shared responsibility explicit
-///      while avoiding a broad utility abstraction.
+/// WHY: the TIR-native head-chain composition path starts from already-routed
+///      TIR node IDs and produces the source plans consumed by runtime slot
+///      sites. Keeping source construction here makes that responsibility
+///      explicit without introducing a broad utility abstraction.
 pub(in crate::compiler_frontend::ast::templates) fn build_tir_native_contribution_sources(
     schema: &TirSlotSchema,
     contributions: &TirSlotContributions,
@@ -77,7 +76,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_tir_native_contributio
             let renders_wrapper_unconditionally =
                 tir_node_is_const_evaluable_value(store, render_root, string_table);
 
-            let shape = classify_tir_contribution_node(store, *node_id);
+            let shape = classify_tir_contribution_node(store, *node_id)?;
 
             sources.push(RuntimeSlotContributionSourceDraft {
                 source: TemplateSlotContributionSourcePlan {

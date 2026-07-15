@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3c2a - require contribution and wrapper-shape authority
-LAST_ACCEPTED_COMMIT: `0b3af137c` (prior checkpoint; Slice 3E3c1 is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3c2b - require structural classification authority
+LAST_ACCEPTED_COMMIT: `dc65ca80d` (prior checkpoint; Slice 3E3c2a is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`; reviewed Slice 3E3c1 change pending commit, with no unrelated uncommitted changes
+WORKTREE: `main`; reviewed Slice 3E3c2a change pending commit, with no unrelated uncommitted changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/contribution_shape.rs`, slot-composition contribution/schema helpers, runtime slot contribution sources and focused slot/classification tests
-- missing contribution nodes, referenced same-store child templates and named wrapper-set IDs are required authority. Non-child nodes, foreign child references, named-only wrappers and an empty combined wrapper set remain semantic classifications.
+- code: `tir/classification.rs` effective classification helpers and focused classification tests
+- effective classification must distinguish malformed required nodes/templates from semantic false results. Foreign child references, cycle guards, uncovered slots and present non-slot/non-insert nodes remain ordinary classification outcomes.
 ACCEPTANCE_CRITERIA:
-- Make contribution-shape classification return a narrow `Result` and reject missing nodes or required same-store child/insert templates.
-- Propagate missing nodes and referenced wrapper-set authority through loose-contribution grouping, control-flow classification and wrapper-set merge/application helpers.
-- Preserve valid slot-routing behavior, foreign-reference handling and legitimate optional wrapper/target outcomes without merging distinct walkers.
+- Make structural unresolved-slot, resolved-slot and escaped-insert classification propagate missing node and same-store template authority through the existing template error lane.
+- Preserve conservative test-only probes and semantic foreign-reference, cycle and absent-overlay outcomes only where their callers genuinely require boolean probing.
+- Keep classification and slot-composition walkers separate because one owns effective semantic classification and the other owns strict structural composition.
 VALIDATION_STATE:
-- Slice 3E3c1 focused suites: passed 17 reactive-template, 23 reactive metadata, 5 type-validation and 1 finalizer tests
-- Slice 3E3c1 parent `just validate`: passed cross-target Clippy, 3442 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 7 faster and 0 slower
+- Slice 3E3c2a focused suites: passed 84 slot-composition, 16 contribution, 16 runtime-slot and 29 classification tests
+- Slice 3E3c2a parent `just validate`: passed cross-target Clippy, 3450 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 11 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli implementation - bounded slot/contribution authority slice
-NEXT_WORKER_ORDER: codex-cli, parent-direct
+DELEGATION_DECISION: default implementation order - user requested Ollama as the primary provider after Slice 3E3c2a
+NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Slice 3E3c1, then delegate required contribution/wrapper-shape authority
+NEXT_RESUME_ACTION: commit Slice 3E3c2a, then delegate strict structural classification authority through Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -450,6 +450,8 @@ Slice 3E3b1 checkpoint: HIR template normalization now carries a required module
 Slice 3E3b2 checkpoint: post-normalization reactive metadata now requires a Finalized registry-backed view. Exact child view identity selects the owning store for slot-plan traversal, semantic expression-override absence still uses the stored payload, and malformed store, root, node, overlay, plan or site authority propagates as an internal compiler error instead of downgrading to raw-store reads.
 
 Slice 3E3c1 checkpoint: reactive annotation, flow refresh and raw structural metadata traversal now propagate same-store root, overlay, node, slot-plan, slot-site and resolver failures through the AST finalizer. Below-Composed and foreign-store templates remain semantic non-participants, while the flow-aware collector and effective-view paths keep their distinct state and owned runtime handoffs use one fallible canonical walker.
+
+Slice 3E3c2a checkpoint: contribution-shape classification, loose-content routing, control-flow detection and wrapper-set composition now propagate missing node, same-store template and wrapper-set authority through the internal compiler diagnostic lane. Foreign child references, absent optional wrapper fields and genuinely empty combined wrapper sets remain semantic outcomes, with focused malformed-store coverage at the classification and slot-composition owners.
 
 #### Phase 3 acceptance
 

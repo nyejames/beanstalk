@@ -11,11 +11,15 @@ use super::super::classification::{
     classify_effective_tir_view_template, same_store_tir_id,
     tir_node_is_const_evaluable_value_with_bindings, tir_view_subtree_is_const_evaluable_value,
 };
-use super::super::node::TemplateIrNodeKind;
+use super::super::contribution_shape::classify_tir_contribution_node;
+use super::super::node::{TemplateIrNode, TemplateIrNodeKind};
 use super::super::registry::TemplateIrRegistry;
 use super::super::store::{TemplateIrStore, TemplateStoreState};
 use super::super::summary::TemplateIrSummary;
-use super::super::{TemplateRef, TemplateTirPhase, TemplateTirReference, TirView};
+use super::super::{
+    TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateTirPhase,
+    TemplateTirReference, TirView,
+};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
 };
@@ -25,11 +29,14 @@ use crate::compiler_frontend::ast::templates::template::{
     TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
-use crate::compiler_frontend::ast::templates::tir::ids::SlotOccurrenceId;
+use crate::compiler_frontend::ast::templates::tir::ids::{
+    SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
+};
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
     TirSlotResolutionOverlay, TirWrapperContextOverlay,
 };
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -101,7 +108,7 @@ fn template_with_seeded_reference(store: &mut TemplateIrStore) -> Template {
 fn string_function_child_id_with_runtime_head(
     store: &mut TemplateIrStore,
     string_table: &mut StringTable,
-) -> super::super::ids::TemplateIrId {
+) -> TemplateIrId {
     let runtime_head = string_function_call_expression(string_table, "wrapper");
     let mut builder = TemplateIrBuilder::new(store);
     let dynamic_head = builder.push_dynamic_expression_node(
@@ -200,6 +207,72 @@ fn same_store_tir_id_returns_none_for_cross_store_reference() {
 
     let id = same_store_tir_id(&template, &store_a);
     assert!(id.is_none(), "cross-store reference must not resolve");
+}
+
+#[test]
+fn contribution_shape_rejects_missing_node_authority() {
+    let store = TemplateIrStore::new();
+
+    let error = classify_tir_contribution_node(&store, TemplateIrNodeId::new(0))
+        .expect_err("missing contribution nodes must fail classification");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(error.msg.contains("contribution node ID"));
+}
+
+#[test]
+fn contribution_shape_rejects_missing_same_store_child_template() {
+    let mut store = TemplateIrStore::new();
+    let child_node = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        builder.push_child_template_node(TemplateIrId::new(0), empty_location())
+    };
+
+    let error = classify_tir_contribution_node(&store, child_node)
+        .expect_err("missing same-store child templates must fail classification");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(error.msg.contains("same-store child template ID"));
+}
+
+#[test]
+fn contribution_shape_rejects_missing_insert_template() {
+    let mut store = TemplateIrStore::new();
+    let insert_node = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::InsertContribution {
+            template: TemplateIrId::new(0),
+        },
+        empty_location(),
+    ));
+
+    let error = classify_tir_contribution_node(&store, insert_node)
+        .expect_err("missing insert templates must fail classification");
+
+    assert_eq!(error.error_type, ErrorType::Compiler);
+    assert!(error.msg.contains("insert contribution template ID"));
+}
+
+#[test]
+fn contribution_shape_keeps_foreign_child_as_child_without_fresh_fact() {
+    let mut store = TemplateIrStore::new();
+    let child_node = {
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::same_store(
+                TemplateIrId::new(0),
+                TemplateStoreId::new(1),
+                TemplateTirPhase::Parsed,
+                TemplateOverlaySetId::empty_for_test(),
+            ),
+            empty_location(),
+        )
+    };
+
+    let shape = classify_tir_contribution_node(&store, child_node)
+        .expect("foreign child references should remain valid child output");
+
+    assert!(shape.is_child_template_contribution);
+    assert!(!shape.skips_parent_child_wrappers);
 }
 
 #[test]

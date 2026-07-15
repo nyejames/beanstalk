@@ -23,6 +23,7 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrId, TemplateIrNode, TemplateIrNodeId,
     TemplateIrNodeKind, TemplateIrStore, TemplateWrapperSetId,
 };
+use crate::compiler_frontend::compiler_messages::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -427,9 +428,8 @@ fn collect_tir_slot_placeholders_from_node(
 /// WHAT: walks the wrapper template's TIR nodes, replaces each `Slot` node
 ///       with the contributions routed to that slot key, and recurses into
 ///       nested child templates that have their own slot definitions.
-/// WHY: this is the TIR-native equivalent of the legacy
-///      `compose_wrapper_atoms_recursive`. It completes the slot composition
-///      pipeline: schema extraction → routing → expansion.
+/// WHY: this completes the TIR slot-composition pipeline: schema extraction →
+///      routing → expansion.
 ///
 /// The expansion is non-destructive: it builds new nodes in the store but does
 /// not modify existing nodes. The original wrapper template's TIR tree is
@@ -521,8 +521,8 @@ fn expand_tir_slot_placeholders_from_node(
 
                     // Slot placeholders expand into a Sequence containing their
                     // contributions. Splice that Sequence into the parent so the
-                    // resulting tree mirrors the legacy flat atom expansion
-                    // instead of leaving nested sequences around every slot.
+                    // resulting tree keeps the composed sequence flat instead
+                    // of leaving nested sequences around every slot.
                     if let Some(expanded_node) = store.get_node(expanded_child_id)
                         && let TemplateIrNodeKind::Sequence {
                             children: contribution_children,
@@ -554,8 +554,7 @@ fn expand_tir_slot_placeholders_from_node(
                 .nodes_for_slot(&placeholder.key);
 
             // Apply the `$children(..)` wrapper sets carried on the placeholder,
-            // mirroring the legacy atom-level `expand_slot_placeholder`. Only
-            // child-template contributions receive external wrappers; text and
+            // Only child-template contributions receive external wrappers; text and
             // dynamic expressions pass through unchanged. Control-flow
             // contributions (branches and loops) must not be externally wrapped
             // because a skipped branch or empty loop would still render the
@@ -564,10 +563,11 @@ fn expand_tir_slot_placeholders_from_node(
             // emits no output.
             let mut wrapped_nodes = Vec::with_capacity(contribution_nodes.len());
             for node_id in contribution_nodes {
-                let current_node_id = if tir_node_is_control_flow_root(store, *node_id) {
-                    let shape = classify_tir_contribution_node(store, *node_id);
+                let current_node_id = if tir_node_is_control_flow_root(store, *node_id)? {
+                    let shape = classify_tir_contribution_node(store, *node_id)
+                        .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
                     if let Some(wrapper_set_id) =
-                        conditional_wrapper_set_for_control_flow(store, placeholder, &shape)
+                        conditional_wrapper_set_for_control_flow(store, placeholder, &shape)?
                     {
                         attach_conditional_wrapper_set(store, *node_id, wrapper_set_id)?
                     } else {
@@ -615,7 +615,7 @@ fn expand_tir_slot_placeholders_from_node(
             if !child_schema.has_any_slots() {
                 // The child template has no slot declarations of its own, so it
                 // cannot receive any of the routed contributions. Leave the
-                // reference unchanged, mirroring the legacy path.
+                // reference unchanged because it has no slot composition work.
                 return Ok(node_id);
             }
 
@@ -837,8 +837,8 @@ fn apply_tir_wrapper_set_to_node(
 ///       then applies `applied_child_wrapper_set` when the post-wrap shape is
 ///       still a child template and the placeholder does not skip parent
 ///       wrappers.
-/// WHY: mirrors the two-step wrapping in the legacy atom-level
-///      `expand_slot_placeholder` while operating on TIR node IDs.
+/// WHY: preserves the two-step wrapper application encoded by the slot
+///      placeholder while operating on TIR node IDs.
 fn apply_tir_wrapper_sets_to_contribution(
     store: &mut TemplateIrStore,
     node_id: TemplateIrNodeId,
@@ -848,7 +848,8 @@ fn apply_tir_wrapper_sets_to_contribution(
 ) -> SlotSchemaResult<TemplateIrNodeId> {
     let mut current_node_id = node_id;
 
-    let shape = classify_tir_contribution_node(store, current_node_id);
+    let shape = classify_tir_contribution_node(store, current_node_id)
+        .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
     if let Some(wrapper_set_id) = placeholder.child_wrapper_set
         && shape.is_child_template_contribution
         && !shape.skips_parent_child_wrappers
@@ -862,7 +863,8 @@ fn apply_tir_wrapper_sets_to_contribution(
         )?;
     }
 
-    let post_shape = classify_tir_contribution_node(store, current_node_id);
+    let post_shape = classify_tir_contribution_node(store, current_node_id)
+        .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
     if let Some(wrapper_set_id) = placeholder.applied_child_wrapper_set
         && !placeholder.skip_parent_child_wrappers
         && post_shape.is_child_template_contribution
@@ -882,25 +884,41 @@ fn apply_tir_wrapper_sets_to_contribution(
 /// Returns true when a TIR node is a control-flow root (a branch chain or loop,
 /// or a child-template reference to a template whose root is control flow).
 ///
-/// WHAT: answers the same question the legacy atom path asks with
-///       `Template::is_control_flow_template()`: does this contribution's
-///       output depend on a branch or loop being selected/active?
+/// WHAT: answers whether this contribution's output depends on a branch or
+///       loop being selected/active.
 /// WHY: control-flow contributions must receive parent `$children(..)` wrappers
 ///      conditionally so skipped branches and zero-iteration loops do not
 ///      render empty wrappers.
-fn tir_node_is_control_flow_root(store: &TemplateIrStore, node_id: TemplateIrNodeId) -> bool {
-    let Some(node) = store.get_node(node_id) else {
-        return false;
+fn tir_node_is_control_flow_root(
+    store: &TemplateIrStore,
+    node_id: TemplateIrNodeId,
+) -> SlotSchemaResult<bool> {
+    let node = store.get_node(node_id).ok_or_else(|| {
+        Box::new(internal_compiler_error(
+            "TIR slot expansion: contribution node ID was not present in the store while checking control flow.",
+        ))
+    })?;
+
+    let is_control_flow_root = match &node.kind {
+        TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. } => true,
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => {
+            let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
+                return Ok(false);
+            };
+            let template = store.get_template(template_id).ok_or_else(|| {
+                Box::new(internal_compiler_error(
+                    "TIR slot expansion: same-store child template ID was not present in the store while checking control flow.",
+                ))
+            })?;
+
+            store
+                .control_flow_node_id_in_subtree(template.root)
+                .is_some()
+        }
+        _ => false,
     };
 
-    match &node.kind {
-        TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. } => true,
-        TemplateIrNodeKind::ChildTemplate { reference, .. } => reference
-            .template_id_in_store(store.store_id())
-            .and_then(|template_id| store.control_flow_node_id_for_template(template_id))
-            .is_some(),
-        _ => false,
-    }
+    Ok(is_control_flow_root)
 }
 
 /// Builds a single wrapper set containing the wrappers that should be applied
@@ -916,27 +934,37 @@ fn conditional_wrapper_set_for_control_flow(
     store: &mut TemplateIrStore,
     placeholder: &TirSlotPlaceholder,
     shape: &ContributionShape,
-) -> Option<TemplateWrapperSetId> {
+) -> SlotSchemaResult<Option<TemplateWrapperSetId>> {
     let mut combined = Vec::new();
 
-    if let Some(wrapper_set_id) = placeholder.child_wrapper_set
-        && !shape.skips_parent_child_wrappers
-        && let Some(wrapper_set) = store.get_wrapper_set(wrapper_set_id)
-    {
-        combined.extend(wrapper_set.wrappers.iter().copied());
+    if let Some(wrapper_set_id) = placeholder.child_wrapper_set {
+        let wrapper_set = store.get_wrapper_set(wrapper_set_id).ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot expansion: conditional child wrapper set ID was not present in the store.",
+            ))
+        })?;
+
+        if !shape.skips_parent_child_wrappers {
+            combined.extend(wrapper_set.wrappers.iter().copied());
+        }
     }
 
-    if let Some(wrapper_set_id) = placeholder.applied_child_wrapper_set
-        && !placeholder.skip_parent_child_wrappers
-        && let Some(wrapper_set) = store.get_wrapper_set(wrapper_set_id)
-    {
-        combined.extend(wrapper_set.wrappers.iter().copied());
+    if let Some(wrapper_set_id) = placeholder.applied_child_wrapper_set {
+        let wrapper_set = store.get_wrapper_set(wrapper_set_id).ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot expansion: conditional applied wrapper set ID was not present in the store.",
+            ))
+        })?;
+
+        if !placeholder.skip_parent_child_wrappers {
+            combined.extend(wrapper_set.wrappers.iter().copied());
+        }
     }
 
     if combined.is_empty() {
-        None
+        Ok(None)
     } else {
-        Some(store.push_or_reuse_wrapper_set(combined))
+        Ok(Some(store.push_or_reuse_wrapper_set(combined)))
     }
 }
 
@@ -961,11 +989,6 @@ fn attach_conditional_wrapper_set(
         ))
     })?;
 
-    let wrapper_count = store
-        .get_wrapper_set(wrapper_set_id)
-        .map(|wrapper_set| u32::try_from(wrapper_set.wrappers.len()).unwrap_or(u32::MAX))
-        .unwrap_or(0);
-
     let (reference, location) = match &node.kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let Some(template_id) = reference.template_id_in_store(store.store_id()) else {
@@ -983,14 +1006,12 @@ fn attach_conditional_wrapper_set(
                 store,
                 template.conditional_child_wrapper_set,
                 wrapper_set_id,
-            );
+            )?;
 
             let mut copied = template;
             copied.conditional_child_wrapper_set = Some(merged_wrapper_set_id);
-            copied.summary.wrapper_count = store
-                .get_wrapper_set(merged_wrapper_set_id)
-                .map(|wrapper_set| u32::try_from(wrapper_set.wrappers.len()).unwrap_or(u32::MAX))
-                .unwrap_or(wrapper_count);
+            copied.summary.wrapper_count =
+                required_wrapper_set_count(store, merged_wrapper_set_id)?;
             let copied_id = store.push_template(copied);
 
             let new_reference = TemplateTirChildReference::same_store(
@@ -1003,6 +1024,7 @@ fn attach_conditional_wrapper_set(
         }
 
         TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. } => {
+            let wrapper_count = required_wrapper_set_count(store, wrapper_set_id)?;
             let mut summary = summarize_existing_root(store, node_id);
             summary.wrapper_count = wrapper_count;
             let mut template = TemplateIr::new(
@@ -1048,20 +1070,44 @@ fn merge_wrapper_sets(
     store: &mut TemplateIrStore,
     existing: Option<TemplateWrapperSetId>,
     additional: TemplateWrapperSetId,
-) -> TemplateWrapperSetId {
+) -> SlotSchemaResult<TemplateWrapperSetId> {
     let mut combined = Vec::new();
 
-    if let Some(existing_id) = existing
-        && let Some(existing_set) = store.get_wrapper_set(existing_id)
-    {
+    if let Some(existing_id) = existing {
+        let existing_set = store.get_wrapper_set(existing_id).ok_or_else(|| {
+            Box::new(internal_compiler_error(
+                "TIR slot expansion: existing conditional wrapper set ID was not present in the store.",
+            ))
+        })?;
         combined.extend(existing_set.wrappers.iter().copied());
     }
 
-    if let Some(additional_set) = store.get_wrapper_set(additional) {
-        combined.extend(additional_set.wrappers.iter().copied());
-    }
+    let additional_set = store.get_wrapper_set(additional).ok_or_else(|| {
+        Box::new(internal_compiler_error(
+            "TIR slot expansion: additional conditional wrapper set ID was not present in the store.",
+        ))
+    })?;
+    combined.extend(additional_set.wrappers.iter().copied());
 
-    store.push_or_reuse_wrapper_set(combined)
+    Ok(store.push_or_reuse_wrapper_set(combined))
+}
+
+/// Returns the wrapper count for a required wrapper-set authority.
+fn required_wrapper_set_count(
+    store: &TemplateIrStore,
+    wrapper_set_id: TemplateWrapperSetId,
+) -> SlotSchemaResult<u32> {
+    let wrapper_set = store.get_wrapper_set(wrapper_set_id).ok_or_else(|| {
+        Box::new(internal_compiler_error(
+            "TIR slot expansion: required wrapper set ID was not present in the store.",
+        ))
+    })?;
+
+    u32::try_from(wrapper_set.wrappers.len()).map_err(|_| {
+        Box::new(internal_compiler_error(
+            "TIR slot expansion: wrapper-set count exceeded the supported summary range.",
+        ))
+    })
 }
 
 /// Returns true if the referenced TIR template still has unresolved slot placeholders.
