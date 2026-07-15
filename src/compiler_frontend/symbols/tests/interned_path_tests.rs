@@ -14,7 +14,7 @@ fn to_portable_string_normalizes_windows_separator() {
 }
 
 #[test]
-fn from_path_buf_round_trips_temp_directory_path() {
+fn try_from_filesystem_path_round_trips_temp_directory_path() {
     let mut string_table = StringTable::new();
     let temp_dir = tempfile::tempdir().expect("should create temp directory");
 
@@ -23,7 +23,8 @@ fn from_path_buf_round_trips_temp_directory_path() {
         .canonicalize()
         .expect("temp directory should canonicalize");
 
-    let path = InternedPath::from_path_buf(&canonical, &mut string_table);
+    let path = InternedPath::try_from_filesystem_path(&canonical, &mut string_table)
+        .expect("test path should be UTF-8");
 
     assert_eq!(path.to_path_buf(&string_table), canonical);
 }
@@ -75,4 +76,51 @@ fn parent_of_single_component_path_is_empty_path() {
         .expect("single-component path should have a root parent");
     assert!(parent.is_empty());
     assert_eq!(parent.to_portable_string(&string_table), "");
+}
+
+#[cfg(unix)]
+mod non_utf8_filesystem_conversion {
+    use super::*;
+    use crate::compiler_frontend::symbols::interned_path::NonUtf8PathComponent;
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    #[test]
+    fn try_from_filesystem_path_rejects_non_utf8_component() {
+        let mut string_table = StringTable::new();
+        let bad_component = OsString::from_vec(vec![0xFF, 0xFE]);
+        let path = std::path::PathBuf::from("valid").join(bad_component);
+
+        let error = InternedPath::try_from_filesystem_path(&path, &mut string_table)
+            .expect_err("non-UTF-8 path component should be rejected");
+
+        assert_eq!(error.path, path, "error should retain the original path");
+    }
+
+    #[test]
+    fn try_from_filesystem_path_preserves_valid_utf8_path() {
+        let mut string_table = StringTable::new();
+        let path = std::path::PathBuf::from("src")
+            .join("compiler_frontend")
+            .join("main.bst");
+
+        let interned = InternedPath::try_from_filesystem_path(&path, &mut string_table)
+            .expect("valid UTF-8 path should convert");
+
+        assert_eq!(interned.to_path_buf(&string_table), path);
+        assert_eq!(
+            interned.to_portable_string(&string_table),
+            "src/compiler_frontend/main.bst"
+        );
+    }
+
+    #[test]
+    fn non_utf8_path_component_retains_original_path() {
+        let bad_component = OsString::from_vec(vec![0xC3, 0x28]);
+        let path = std::path::PathBuf::from("root").join(bad_component);
+
+        let error = NonUtf8PathComponent { path: path.clone() };
+
+        assert_eq!(error.path, path);
+    }
 }

@@ -10,7 +10,9 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 };
 use crate::compiler_frontend::arena::FrontendArenaCapacityEstimate;
 use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, compiler_error_to_diagnostic,
+};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -29,7 +31,7 @@ use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFo
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::{FileId, SourceFileTable};
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
@@ -94,18 +96,32 @@ fn source_file_identity(
     source_files: &SourceFileTable,
     source_path: &PathBuf,
     string_table: &mut StringTable,
-) -> FrontendSourceFileIdentity {
+) -> Result<FrontendSourceFileIdentity, CompilerError> {
     match source_files.get_by_canonical_path(source_path.as_path()) {
-        Some(identity) => FrontendSourceFileIdentity {
+        Some(identity) => Ok(FrontendSourceFileIdentity {
             logical_path: identity.logical_path.clone(),
             file_id: Some(identity.file_id),
             canonical_os_path: Some(identity.canonical_os_path.clone()),
-        },
-        None => FrontendSourceFileIdentity {
-            logical_path: InternedPath::from_path_buf(source_path, string_table),
-            file_id: None,
-            canonical_os_path: Some(source_path.to_owned()),
-        },
+        }),
+        None => {
+            let logical_path =
+                InternedPath::try_from_filesystem_path(source_path, string_table).map_err(
+                    |NonUtf8PathComponent { path }| {
+                        CompilerError::file_error(
+                            &path,
+                            format!(
+                                "Source file path {path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                            ),
+                            string_table,
+                        )
+                    },
+                )?;
+            Ok(FrontendSourceFileIdentity {
+                logical_path,
+                file_id: None,
+                canonical_os_path: Some(source_path.to_owned()),
+            })
+        }
     }
 }
 
@@ -160,7 +176,8 @@ impl CompilerFrontend {
         tokenizer_entry_mode: TokenizerEntryMode,
         string_table: &mut StringTable,
     ) -> Result<FileTokens, Box<CompilerDiagnostic>> {
-        let identity = source_file_identity(source_files, module_path, string_table);
+        let identity = source_file_identity(source_files, module_path, string_table)
+            .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
 
         let mut tokens = tokenize(
             source_code,
@@ -191,7 +208,11 @@ impl CompilerFrontend {
                     context.source_files,
                     input.source_path,
                     local_string_table,
-                );
+                )
+                .map_err(|error| FileFrontendPrepareError {
+                    warnings: Vec::new(),
+                    diagnostic: Box::new(compiler_error_to_diagnostic(&error)),
+                })?;
                 Ok(prepare_plain_markdown_file(
                     PlainMarkdownPrepareInput {
                         source_code: input.source_code,
@@ -262,13 +283,25 @@ impl CompilerFrontend {
         build_profile: FrontendBuildProfile,
         capacity_estimate: FrontendArenaCapacityEstimate,
     ) -> Result<Ast, CompilerMessages> {
-        let interned_entry_file = self
-            .source_files
-            .get_by_canonical_path(entry_file_path)
-            .map_or_else(
-                || InternedPath::from_path_buf(entry_file_path, &mut self.string_table),
-                |identity| identity.logical_path.clone(),
-            );
+        let interned_entry_file = match self.source_files.get_by_canonical_path(entry_file_path) {
+            Some(identity) => identity.logical_path.clone(),
+            None => match InternedPath::try_from_filesystem_path(
+                entry_file_path,
+                &mut self.string_table,
+            ) {
+                Ok(path) => path,
+                Err(NonUtf8PathComponent { path }) => {
+                    let error = CompilerError::file_error(
+                        &path,
+                        format!(
+                            "Entry file path {path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                        ),
+                        &mut self.string_table,
+                    );
+                    return Err(CompilerMessages::from_error_ref(error, &self.string_table));
+                }
+            },
+        };
 
         Ast::new(
             AstBuildInput {

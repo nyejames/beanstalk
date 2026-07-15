@@ -17,7 +17,7 @@
 //! - Pass 2 resolves public imports against the completed authored export maps.
 
 use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
-use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
+use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, ImportPublicSurfaceType, InvalidReceiverDeclarationReason,
     ReservedNameOwner,
@@ -35,11 +35,12 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::headers::types::{Header, HeaderExportMode, HeaderKind};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::path::Path;
 
 /// Boxed diagnostic result for public export and membership construction.
 ///
@@ -47,6 +48,28 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// WHY: public export construction carries structured diagnostics through many successful
 ///      build steps without inlining the large diagnostic value at every return.
 type PublicExportDataResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
+/// Intern one filesystem-derived public-surface path without losing path components.
+///
+/// Public-export construction sees several logical, canonical and module-root paths, but they all
+/// share the same exact-identity contract and infrastructure diagnostic lane.
+fn intern_public_surface_path(
+    path: &Path,
+    path_role: &str,
+    string_table: &mut StringTable,
+) -> PublicExportDataResult<InternedPath> {
+    InternedPath::try_from_filesystem_path(path, string_table).map_err(
+        |NonUtf8PathComponent { path }| {
+            Box::new(compiler_error_to_diagnostic(&CompilerError::file_error(
+                &path,
+                format!(
+                    "{path_role} {path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                ),
+                string_table,
+            )))
+        },
+    )
+}
 
 /// Whether a header kind represents a real authored declaration that can be exported by a
 /// module-root public API.
@@ -90,8 +113,8 @@ pub(super) fn build_public_exports(
     build_module_root_public_exports_pass1(module_symbols, headers, resolver, string_table)?;
 
     // Membership does not depend on import resolution.
-    build_source_package_membership(module_symbols, resolver, string_table);
-    build_module_root_membership(module_symbols, resolver, string_table);
+    build_source_package_membership(module_symbols, resolver, string_table)?;
+    build_module_root_membership(module_symbols, resolver, string_table)?;
 
     // Pass 2: resolve strict `export:` imports against the completed authored export maps.
     build_source_package_public_imports(
@@ -124,7 +147,11 @@ fn build_source_package_public_exports(
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
-        let root_file_interned = InternedPath::from_path_buf(&root_file_logical, string_table);
+        let root_file_interned = intern_public_surface_path(
+            &root_file_logical,
+            "Source package root file logical path",
+            string_table,
+        )?;
 
         let mut collector = PublicExportCollector::default();
 
@@ -177,7 +204,11 @@ fn build_source_package_public_imports(
         let root_file_logical = resolver
             .logical_path_for_canonical_file(root_file, string_table)
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
-        let root_file_interned = InternedPath::from_path_buf(&root_file_logical, string_table);
+        let root_file_interned = intern_public_surface_path(
+            &root_file_logical,
+            "Source package root file logical path",
+            string_table,
+        )?;
 
         let current_exports = module_symbols
             .source_package_public_exports
@@ -244,7 +275,8 @@ fn build_module_root_public_exports_pass1(
             continue;
         };
 
-        let module_root_interned = InternedPath::from_path_buf(&module_root, string_table);
+        let module_root_interned =
+            intern_public_surface_path(&module_root, "Module root path", string_table)?;
         let logical = header.source_file.clone();
         let canonical = header.canonical_source_file(string_table);
 
@@ -315,7 +347,8 @@ fn build_module_root_public_imports(
             continue;
         }
 
-        let module_root_interned = InternedPath::from_path_buf(&module_root, string_table);
+        let module_root_interned =
+            intern_public_surface_path(&module_root, "Module root path", string_table)?;
 
         let current_exports = module_symbols
             .module_root_public_exports
@@ -603,13 +636,14 @@ fn build_source_package_membership(
     module_symbols: &mut ModuleSymbols,
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) {
+) -> PublicExportDataResult<()> {
     for (source_file, canonical_path) in module_symbols.canonical_os_path_by_source.clone() {
         let Some((membership_prefix, _)) = resolver.source_package_for_file(&canonical_path) else {
             continue;
         };
 
-        let canonical_source = InternedPath::from_path_buf(&canonical_path, string_table);
+        let canonical_source =
+            intern_public_surface_path(&canonical_path, "Canonical source path", string_table)?;
         module_symbols
             .file_package_membership
             .insert(source_file.clone(), membership_prefix.to_owned());
@@ -617,20 +651,24 @@ fn build_source_package_membership(
             .file_package_membership
             .insert(canonical_source, membership_prefix.to_owned());
     }
+
+    Ok(())
 }
 
 fn build_module_root_membership(
     module_symbols: &mut ModuleSymbols,
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) {
+) -> PublicExportDataResult<()> {
     for (source_file, canonical_path) in module_symbols.canonical_os_path_by_source.clone() {
         let Some(module_root) = resolver.module_root_for_file(&canonical_path) else {
             continue;
         };
 
-        let module_root_interned = InternedPath::from_path_buf(&module_root, string_table);
-        let canonical_source = InternedPath::from_path_buf(&canonical_path, string_table);
+        let module_root_interned =
+            intern_public_surface_path(&module_root, "Module root path", string_table)?;
+        let canonical_source =
+            intern_public_surface_path(&canonical_path, "Canonical source path", string_table)?;
 
         module_symbols
             .file_module_membership
@@ -639,6 +677,8 @@ fn build_module_root_membership(
             .file_module_membership
             .insert(canonical_source, module_root_interned);
     }
+
+    Ok(())
 }
 
 fn build_module_root_boundaries(
@@ -649,7 +689,8 @@ fn build_module_root_boundaries(
     let mut module_root_boundaries = Vec::new();
 
     for module_root in resolver.module_roots() {
-        let root_interned = InternedPath::from_path_buf(module_root, string_table);
+        let root_interned =
+            intern_public_surface_path(module_root, "Module root path", string_table)?;
 
         let Some(root_file) = resolver.module_root_file_for_directory(module_root) else {
             continue;
@@ -660,11 +701,16 @@ fn build_module_root_boundaries(
             .or_default();
         let root_file = resolver
             .logical_path_for_canonical_file(&root_file, string_table)
-            .map(|logical_path| InternedPath::from_path_buf(&logical_path, string_table))
             .map_err(|error| Box::new(compiler_error_to_diagnostic(&error)))?;
+        let root_file =
+            intern_public_surface_path(&root_file, "Module root file logical path", string_table)?;
 
         if let Ok(relative) = module_root.strip_prefix(resolver.entry_root()) {
-            let prefix_interned = InternedPath::from_path_buf(relative, string_table);
+            let prefix_interned = intern_public_surface_path(
+                relative,
+                "Module root relative prefix path",
+                string_table,
+            )?;
             module_root_boundaries.push(ModuleRootBoundary {
                 import_prefix: prefix_interned,
                 module_root: root_interned,

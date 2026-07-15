@@ -14,6 +14,11 @@ use crate::compiler_frontend::utilities::basic::normalize_path;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
+
 fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "beanstalk_display_messages_{name}_{}",
@@ -213,10 +218,10 @@ fn with_scope_path_preserves_existing_span_positions() {
     let mut error = CompilerError::new(
         "bad compiler state",
         SourceLocation::new(
-            crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
+            crate::compiler_frontend::symbols::interned_path::InternedPath::try_from_filesystem_path(
                 Path::new("old.bst"),
                 &mut string_table,
-            ),
+            ).expect("test path should be UTF-8"),
             crate::compiler_frontend::tokenizer::tokens::CharPosition {
                 line_number: 4,
                 char_column: 7,
@@ -237,6 +242,27 @@ fn with_scope_path_preserves_existing_span_positions() {
         error.location.scope.to_path_buf(&string_table),
         PathBuf::from("project/main.bst")
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn invalid_utf8_diagnostic_scopes_remain_distinct() {
+    let first_path = PathBuf::from(OsString::from_vec(b"source-\xFF.bst".to_vec()));
+    let second_path = PathBuf::from(OsString::from_vec(b"source-\xFE.bst".to_vec()));
+    let mut string_table = StringTable::new();
+
+    let first_scope = SourceLocation::from_path(&first_path, &mut string_table)
+        .scope
+        .to_path_buf(&string_table);
+    let second_scope = CompilerError::compiler_error("test")
+        .with_scope_path(&second_path, &mut string_table)
+        .location
+        .scope
+        .to_path_buf(&string_table);
+
+    assert_ne!(first_scope, second_scope);
+    assert!(first_scope.to_string_lossy().contains("\\xFF"));
+    assert!(second_scope.to_string_lossy().contains("\\xFE"));
 }
 
 #[test]
@@ -265,10 +291,11 @@ fn resolve_source_file_path_strips_header_suffix_before_lookup() {
     let mut string_table = StringTable::new();
     let header_scope = source_file.join("title.header");
     let header_scope =
-        crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
+        crate::compiler_frontend::symbols::interned_path::InternedPath::try_from_filesystem_path(
             &header_scope,
             &mut string_table,
-        );
+        )
+        .expect("test path should be UTF-8");
     let resolved = resolve_source_file_path(&header_scope, &string_table);
 
     let expected = fs::canonicalize(&source_file).expect("should canonicalize source file");
@@ -289,10 +316,11 @@ fn formatted_warning_uses_resolved_source_file_path_for_header_scopes() {
     let mut string_table = StringTable::new();
     let header_scope = source_file.join("title.header");
     let header_scope =
-        crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
+        crate::compiler_frontend::symbols::interned_path::InternedPath::try_from_filesystem_path(
             &header_scope,
             &mut string_table,
-        );
+        )
+        .expect("test path should be UTF-8");
 
     let displayed = resolved_display_path(&header_scope, &string_table);
     assert!(displayed.ends_with("main.bst"));
@@ -308,7 +336,8 @@ fn resolve_source_file_path_normalizes_canonical_windows_paths() {
     fs::write(&source_file, "page #= []").expect("should write source file");
 
     let mut string_table = StringTable::new();
-    let interned = InternedPath::from_path_buf(&source_file, &mut string_table);
+    let interned = InternedPath::try_from_filesystem_path(&source_file, &mut string_table)
+        .expect("test path should be UTF-8");
 
     let resolved = resolve_source_file_path(&interned, &string_table);
     let expected = normalize_path(&fs::canonicalize(&source_file).expect("should canonicalize"));

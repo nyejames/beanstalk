@@ -95,10 +95,11 @@ fn parser_uses_precise_location_from_setting_locations() {
     set_setting(&mut config, "html_lang", "");
     let mut string_table = StringTable::new();
     let precise_location = SourceLocation::new(
-        InternedPath::from_path_buf(
+        InternedPath::try_from_filesystem_path(
             PathBuf::from("project/config.bst").as_path(),
             &mut string_table,
-        ),
+        )
+        .expect("test path should be UTF-8"),
         Default::default(),
         Default::default(),
     );

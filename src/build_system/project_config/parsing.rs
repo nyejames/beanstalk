@@ -90,8 +90,17 @@ pub(super) fn parse_config_file(
         std::fs::canonicalize(config_dir).unwrap_or_else(|_| config_dir.to_path_buf());
 
     let path_resolver_start = crate::timing::start_pipeline_timing();
-    let prepared_source_package_roots =
-        prepare_source_package_roots(&services.frontend_surface.source_packages);
+    let prepared_source_package_roots = match prepare_source_package_roots(
+        &services.frontend_surface.source_packages,
+        string_table,
+    ) {
+        Ok(roots) => roots,
+        Err(messages) => {
+            log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            return Err(messages);
+        }
+    };
     if let Err(messages) =
         validate_source_package_roots(&prepared_source_package_roots, string_table)
     {
@@ -269,7 +278,20 @@ pub(super) fn parse_config_file(
     //  AST Construction
     // -------------------------
     let ast_start = crate::timing::start_pipeline_timing();
-    let interned_path = InternedPath::from_path_buf(config_path, string_table);
+    let interned_path =
+        InternedPath::try_from_filesystem_path(config_path, string_table).map_err(|non_utf8| {
+            CompilerMessages::from_error(
+                CompilerError::file_error(
+                    &non_utf8.path,
+                    format!(
+                        "Config path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
+                        non_utf8.path
+                    ),
+                    string_table,
+                ),
+                string_table.clone(),
+            )
+        })?;
 
     let external_package_registry = Arc::new(services.frontend_surface.binding_packages.clone());
 
@@ -430,7 +452,20 @@ fn prepare_one_config_file(
 ) -> Result<Option<FileFrontendPrepareOutput>, CompilerMessages> {
     let source = extract_source_code(file_path, string_table)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-    let interned_path = InternedPath::from_path_buf(scope_path, string_table);
+    let interned_path =
+        InternedPath::try_from_filesystem_path(scope_path, string_table).map_err(|error| {
+            CompilerMessages::from_error(
+                CompilerError::file_error(
+                    &error.path,
+                    format!(
+                        "Config scope path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
+                        error.path
+                    ),
+                    string_table,
+                ),
+                string_table.clone(),
+            )
+        })?;
 
     let mut token_stream = match tokenize(
         &source,

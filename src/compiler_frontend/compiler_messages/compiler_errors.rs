@@ -83,7 +83,7 @@ use crate::compiler_frontend::compiler_messages::{
     InfrastructureDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -497,7 +497,13 @@ impl CompilerError {
     /// WHY: some helpers need to attach a resolved file path after building a precise span-based
     /// error, and downgrading that span to a file-level location would lose useful diagnostics.
     pub fn with_scope_path(mut self, file_path: &Path, string_table: &mut StringTable) -> Self {
-        self.location.scope = InternedPath::from_path_buf(file_path, string_table);
+        self.location.scope = match InternedPath::try_from_filesystem_path(file_path, string_table)
+        {
+            Ok(interned) => interned,
+            Err(NonUtf8PathComponent { .. }) => {
+                InternedPath::from_single_str(&format!("{file_path:?}"), string_table)
+            }
+        };
         self
     }
 

@@ -78,19 +78,7 @@ pub(crate) fn derive_logical_html_path(
         return derive_logical_html_path_from_entry_root(entry_point, entry_root, string_table);
     }
 
-    // Single-file build: legacy flat naming.
-    let file_stem = entry_point
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or("main");
-
-    if file_stem == "#page" {
-        Ok(PathBuf::from("index.html"))
-    } else {
-        let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-        Ok(PathBuf::from(format!("{route_name}.html")))
-    }
+    derive_single_file_logical_html_path(entry_point, string_table)
 }
 
 fn derive_logical_html_path_from_entry_root(
@@ -120,6 +108,61 @@ fn derive_logical_html_path_from_entry_root(
     }
 
     Ok(parent.join("index.html"))
+}
+
+/// Derive the logical HTML path for a single-file build.
+///
+/// WHAT: converts the entry stem to an exact UTF-8 route name, then maps `#page` to the
+/// homepage and strips a cosmetic leading `#` from any other stem.
+/// WHY: the stem is filesystem-authored, so an empty or non-UTF-8 stem is a File
+///      infrastructure error. It must never collapse to a generic `main` fallback, which
+///      would alias distinct source identities to one route.
+fn derive_single_file_logical_html_path(
+    entry_point: &Path,
+    string_table: &mut StringTable,
+) -> Result<PathBuf, CompilerError> {
+    let raw_stem = entry_point.file_stem().ok_or_else(|| {
+        CompilerError::file_error(
+            entry_point,
+            format!(
+                "HTML single-file entry {entry_point:?} has no file stem; Beanstalk routes need a non-empty UTF-8 stem."
+            ),
+            string_table,
+        )
+    })?;
+
+    let file_stem = raw_stem.to_str().ok_or_else(|| {
+        CompilerError::file_error(
+            entry_point,
+            "HTML single-file entry stem is not valid UTF-8; Beanstalk routes require UTF-8 stems."
+                .to_string(),
+            string_table,
+        )
+    })?;
+
+    if file_stem.is_empty() {
+        return Err(CompilerError::file_error(
+            entry_point,
+            "HTML single-file entry has an empty stem; Beanstalk routes require a non-empty UTF-8 stem.".to_string(),
+            string_table,
+        ));
+    }
+
+    if file_stem == "#page" {
+        return Ok(PathBuf::from("index.html"));
+    }
+
+    let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
+
+    if route_name.is_empty() {
+        return Err(CompilerError::file_error(
+            entry_point,
+            "HTML single-file entry stem is empty after stripping the cosmetic '#' prefix; Beanstalk routes require a non-empty route name.".to_string(),
+            string_table,
+        ));
+    }
+
+    Ok(PathBuf::from(format!("{route_name}.html")))
 }
 
 /// Derive the route folder base from a logical HTML path for Wasm artifact co-location.

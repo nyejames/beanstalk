@@ -25,6 +25,18 @@ pub struct InternedPath {
     components: Vec<StringId>,
 }
 
+/// Error returned when a filesystem path contains a non-UTF-8 component.
+///
+/// WHAT: retains the original `PathBuf` so the owning stage can report the
+///      offending path through its correct diagnostic lane.
+/// WHY: stage-independent conversion must not guess the error channel. The
+///      caller decides whether this is a `CompilerError` or a `CompilerDiagnostic`.
+#[derive(Debug, Clone)]
+pub(crate) struct NonUtf8PathComponent {
+    /// The filesystem path whose component could not be represented as UTF-8.
+    pub(crate) path: PathBuf,
+}
+
 impl InternedPath {
     /// Create a new empty path (equivalent to root)
     pub fn new() -> Self {
@@ -33,19 +45,27 @@ impl InternedPath {
         }
     }
 
-    /// Create an InternedPath from a PathBuf by interning each component
-    pub fn from_path_buf(path: &Path, string_table: &mut StringTable) -> Self {
-        let components = path
-            .components()
-            .filter_map(|component| {
-                component
-                    .as_os_str()
-                    .to_str()
-                    .map(|s| string_table.intern(s))
-            })
-            .collect();
-
-        Self { components }
+    /// Convert a filesystem path to an `InternedPath`, failing on the first
+    /// non-UTF-8 component.
+    ///
+    /// WHAT: interns each path component's UTF-8 string. If any component's
+    ///      `OsStr` is not valid UTF-8, returns the original path unchanged
+    ///      inside `NonUtf8PathComponent`.
+    /// WHY: lossy conversion can collapse distinct filesystem names into one
+    ///      compiler identity. Filesystem identity must be exact or rejected.
+    ///      The owning stage maps the failure to its correct error channel.
+    pub(crate) fn try_from_filesystem_path(
+        path: &Path,
+        string_table: &mut StringTable,
+    ) -> Result<Self, NonUtf8PathComponent> {
+        let mut components = Vec::new();
+        for component in path.components() {
+            let component_str = component.as_os_str().to_str().ok_or(NonUtf8PathComponent {
+                path: path.to_path_buf(),
+            })?;
+            components.push(string_table.intern(component_str));
+        }
+        Ok(Self { components })
     }
 
     /// Create an InternedPath from a vector of StringIds

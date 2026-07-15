@@ -1,11 +1,14 @@
 //! Stage 0 project-structure diagnostic helpers.
 //!
-//! WHAT: builds typed config/project-structure diagnostics at the input-preparation boundary.
+//! WHAT: builds typed config/project-structure diagnostics and filesystem infrastructure
+//!      errors at the input-preparation boundary.
 //! WHY: resolver setup, package discovery, and module inventory all report the same
 //! `InvalidConfigReason` payloads, so the location and string-table rules belong in one small
-//! Stage 0 owner instead of being duplicated across those modules.
+//! Stage 0 owner instead of being duplicated across those modules. Filesystem-origin
+//! unrepresentable-name errors share the same owner because the same Stage 0 callers
+//! discover both kinds of input.
 
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidConfigReason};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -44,4 +47,23 @@ pub(super) fn project_structure_messages(
 /// Intern a path spelling for diagnostic payloads.
 pub(super) fn path_id(path: &Path, string_table: &mut StringTable) -> StringId {
     string_table.get_or_intern(path.display().to_string())
+}
+
+/// Build an infrastructure error for a filesystem name that cannot be represented as UTF-8.
+///
+/// WHAT: retains the offending path in a `CompilerError` so the build boundary can render it.
+/// WHY: a non-UTF-8 filesystem name cannot enter the string table or import namespace. It is an
+///      unrepresentable filesystem input, not an authored config mistake, so it uses the
+///      `CompilerError` lane rather than `CompilerDiagnostic`.
+pub(super) fn non_utf8_filesystem_name_error(
+    path: &Path,
+    context: &str,
+    string_table: &mut StringTable,
+) -> CompilerMessages {
+    let error = CompilerError::file_error(
+        path,
+        format!("Non-UTF-8 filesystem name cannot enter compiler identity ({context}): {path:?}"),
+        string_table,
+    );
+    CompilerMessages::from_error_ref(error, string_table)
 }

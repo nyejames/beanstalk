@@ -4,7 +4,7 @@
 //! WHY: all diagnostics now preserve interned paths and resolve them through the shared
 //!      `StringTable` only at rendering or filesystem-adjacent boundaries.
 
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::cmp::Ordering;
 use std::path::Path;
@@ -37,12 +37,20 @@ impl SourceLocation {
     /// source locations.
     /// WHY: terminal/dev-server renderers now resolve all diagnostic paths through the shared
     /// string table instead of storing owned `PathBuf`s on errors or warnings.
+    /// Non-UTF-8 filesystem paths cannot enter the string table or import namespace. When the
+    /// path has a non-UTF-8 component, this method interns a unique debug-escaped representation
+    /// (`{:?}`) as a single component so the diagnostic can still reference the offending file
+    /// without collapsing distinct filesystem names. This is diagnostic display, not compiler
+    /// identity: the escaped scope must never be used for import resolution, module membership
+    /// or path comparison.
     pub fn from_path(path: &Path, string_table: &mut StringTable) -> Self {
-        Self::new(
-            InternedPath::from_path_buf(path, string_table),
-            CharPosition::default(),
-            CharPosition::default(),
-        )
+        let scope = match InternedPath::try_from_filesystem_path(path, string_table) {
+            Ok(interned) => interned,
+            Err(NonUtf8PathComponent { .. }) => {
+                InternedPath::from_single_str(&format!("{path:?}"), string_table)
+            }
+        };
+        Self::new(scope, CharPosition::default(), CharPosition::default())
     }
 
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {

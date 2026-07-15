@@ -127,10 +127,11 @@ fn parser_uses_precise_location_from_setting_locations() {
     // Store a precise location for the origin key
     let mut string_table = StringTable::new();
     let precise_location = SourceLocation::new(
-        InternedPath::from_path_buf(
+        InternedPath::try_from_filesystem_path(
             PathBuf::from("project/config.bst").as_path(),
             &mut string_table,
-        ),
+        )
+        .expect("test path should be UTF-8"),
         Default::default(),
         Default::default(),
     );

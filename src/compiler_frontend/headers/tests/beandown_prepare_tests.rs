@@ -225,11 +225,13 @@ impl BeandownScopeFixture {
         source_file_kinds.register("bd", SourceFileKind::Beandown);
 
         let module_roots = prepared_module_roots(&entry_root, &canonical_files);
+        let mut prep_string_table = StringTable::new();
         let project_path_resolver = ProjectPathResolver::new_with_module_roots(
             project_root.clone(),
             entry_root.clone(),
             crate::build_system::create_project_modules::source_package_discovery::
-                prepare_source_package_roots(&source_packages),
+                prepare_source_package_roots(&source_packages, &mut prep_string_table)
+                .expect("test source package roots should prepare"),
             &source_file_kinds,
             module_roots,
         )
@@ -275,7 +277,9 @@ impl BeandownScopeFixture {
         let (headers, mut string_table) = self.parse_headers_for(prepared_relative_paths)?;
         let sorted_headers = resolve_module_dependencies(headers, &mut string_table)
             .map_err(first_diagnostic_from_bag)?;
-        let entry_dir = InternedPath::from_path_buf(&self.entry_file_path, &mut string_table);
+        let entry_dir =
+            InternedPath::try_from_filesystem_path(&self.entry_file_path, &mut string_table)
+                .expect("test path should be UTF-8");
         let style_directives = StyleDirectiveRegistry::built_ins();
         let external_package_registry = Arc::new(ExternalPackageRegistry::new());
 
@@ -471,7 +475,8 @@ fn prepare_beanstalk_source(
     entry_file_path: &Path,
     string_table: &mut StringTable,
 ) -> FileFrontendPrepareOutput {
-    let source_path = InternedPath::from_path_buf(file_path, string_table);
+    let source_path = InternedPath::try_from_filesystem_path(file_path, string_table)
+        .expect("test path should be UTF-8");
     let style_directives = StyleDirectiveRegistry::built_ins();
     let file_tokens = tokenize(
         source,
@@ -807,7 +812,9 @@ fn beandown_header_visibility_contains_implicit_html_constants() {
         .project_path_resolver
         .logical_path_for_canonical_file(&beandown_canonical_path, &mut string_table)
         .expect("Beandown logical path should resolve");
-    let beandown_source = InternedPath::from_path_buf(&beandown_logical_path, &mut string_table);
+    let beandown_source =
+        InternedPath::try_from_filesystem_path(&beandown_logical_path, &mut string_table)
+            .expect("test path should be UTF-8");
     let visibility = headers
         .import_environment
         .visibility_for(&beandown_source)

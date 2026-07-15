@@ -18,7 +18,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
+use super::project_structure_diagnostics::{
+    config_diagnostic_messages, non_utf8_filesystem_name_error, path_id,
+};
 
 /// Prepare canonical source-backed package roots and their direct-child public-surface states.
 ///
@@ -28,10 +30,26 @@ use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
 ///     contract and must not scan or canonicalize source-backed package roots during construction.
 pub(crate) fn prepare_source_package_roots(
     source_packages: &SourcePackageRegistry,
-) -> PreparedSourcePackageRoots {
-    let entries = source_packages.iter().map(|package| {
+    string_table: &mut StringTable,
+) -> Result<PreparedSourcePackageRoots, CompilerMessages> {
+    let mut entries = Vec::new();
+
+    for package in source_packages.iter() {
         let ProvidedSourceRoot::Filesystem(path) = &package.root;
-        let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+
+        // Canonicalize each registered filesystem root before discovery so path resolution
+        // never proceeds against a path whose canonicalization failed.
+        let canonical_root = fs::canonicalize(path).map_err(|error| {
+            CompilerMessages::from_error_ref(
+                CompilerError::file_error(
+                    path,
+                    format!("Failed to canonicalize source-backed package root: {error}"),
+                    string_table,
+                ),
+                string_table,
+            )
+        })?;
+
         let discovery = match discover_hash_root_file(&canonical_root) {
             Ok(HashRootFileDiscovery::Unique(root_file)) => match fs::canonicalize(&root_file) {
                 Ok(canonical_root_file) => HashRootFileDiscovery::Unique(canonical_root_file),
@@ -47,10 +65,10 @@ pub(crate) fn prepare_source_package_roots(
             Err(error) => HashRootFileDiscovery::Unreadable(error.to_string()),
         };
 
-        (package.import_prefix.clone(), canonical_root, discovery)
-    });
+        entries.push((package.import_prefix.clone(), canonical_root, discovery));
+    }
 
-    PreparedSourcePackageRoots::from_entries(entries)
+    Ok(PreparedSourcePackageRoots::from_entries(entries))
 }
 
 /// Discover project-local source-backed packages from configured `package_folders`.
@@ -176,9 +194,16 @@ fn scan_project_package_folder(
             continue;
         }
 
-        let Some(prefix) = package_root.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
+        let prefix = package_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| {
+                non_utf8_filesystem_name_error(
+                    &package_root,
+                    "project-local package prefix",
+                    string_table,
+                )
+            })?;
         package_entries.push((prefix.to_owned(), package_root));
     }
 

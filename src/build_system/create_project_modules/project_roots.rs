@@ -74,7 +74,8 @@ pub(super) fn build_project_path_resolver_with_index(
         string_table,
     )?;
 
-    let prepared_source_package_roots = prepare_source_package_roots(&merged_packages);
+    let prepared_source_package_roots =
+        prepare_source_package_roots(&merged_packages, string_table)?;
     validate_source_package_roots(&prepared_source_package_roots, string_table)?;
 
     let entry_root = roots.entry_root.clone();

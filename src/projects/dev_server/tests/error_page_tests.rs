@@ -63,7 +63,8 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
         None,
         InvalidConfigReason::UnsupportedScalarValue,
         SourceLocation::new(
-            InternedPath::from_path_buf(&header_scope, &mut string_table),
+            InternedPath::try_from_filesystem_path(&header_scope, &mut string_table)
+                .expect("test path should be UTF-8"),
             CharPosition {
                 line_number: 0,
                 char_column: 4,

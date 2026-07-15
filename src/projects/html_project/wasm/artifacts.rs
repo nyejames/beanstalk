@@ -250,7 +250,8 @@ pub(crate) fn emit_html_wasm_artifacts(
         logical_html_output_path,
         project_name,
         entry_fragment_html,
-    );
+    )
+    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     Ok(HtmlWasmArtifacts {
         wasm_bytes: wasm_bytes.to_owned(),
@@ -265,7 +266,7 @@ fn render_wasm_html_document(
     logical_html_output_path: &Path,
     project_name: &str,
     entry_fragment_html: &str,
-) -> String {
+) -> Result<String, CompilerError> {
     render_html_document_shell(
         document_config,
         page_metadata,

@@ -51,7 +51,8 @@ pub(crate) fn prepare_single_file(
     let external_package_registry = ExternalPackageRegistry::new();
     let options = HeaderParseOptions::default();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let interned_path = InternedPath::from_path_buf(file_path, string_table);
+    let interned_path = InternedPath::try_from_filesystem_path(file_path, string_table)
+        .expect("test path should be UTF-8");
     let file_tokens = tokenize(
         source,
         &interned_path,
@@ -82,7 +83,8 @@ fn prepare_test_source_file(
     const_template_offset: usize,
     runtime_fragment_offset: usize,
 ) -> Result<FileFrontendPrepareOutput, FileFrontendPrepareError> {
-    let interned_path = InternedPath::from_path_buf(file_path, string_table);
+    let interned_path = InternedPath::try_from_filesystem_path(file_path, string_table)
+        .expect("test path should be UTF-8");
     let file_tokens = match tokenize(
         source,
         &interned_path,
@@ -177,7 +179,8 @@ fn parse_single_file_headers_with_entry(
     let external_package_registry = ExternalPackageRegistry::new();
     let options = HeaderParseOptions::default();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let interned_path = InternedPath::try_from_filesystem_path(&file_path, &mut string_table)
+        .expect("test path should be UTF-8");
     let file_tokens = tokenize(
         source,
         &interned_path,
@@ -2262,8 +2265,11 @@ fn import_only_file_contributes_file_imports_and_module_file_paths() {
         .expect("module symbols should build");
 
     let helper_path =
-        InternedPath::from_path_buf(&PathBuf::from("src/helper.bst"), &mut string_table);
-    let page_path = InternedPath::from_path_buf(&PathBuf::from("src/#page.bst"), &mut string_table);
+        InternedPath::try_from_filesystem_path(&PathBuf::from("src/helper.bst"), &mut string_table)
+            .expect("test path should be UTF-8");
+    let page_path =
+        InternedPath::try_from_filesystem_path(&PathBuf::from("src/#page.bst"), &mut string_table)
+            .expect("test path should be UTF-8");
 
     assert!(
         module_symbols.module_file_paths.contains(&helper_path),

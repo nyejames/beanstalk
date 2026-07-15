@@ -5,10 +5,10 @@
 //! owning filesystem traversal policy.
 
 use crate::builder_surface::SourceFileKind;
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::beandown::scope::{BeandownPathScope, BeandownScopeConstant};
 use std::collections::HashMap;
@@ -241,7 +241,21 @@ fn reject_duplicate_source_paths(
         let location = SourceLocation::from_path(&unit.source_path, string_table);
 
         if let Some(first_location) = first_locations.get(&normalized) {
-            let path = InternedPath::from_path_buf(&normalized, string_table);
+            let path = match InternedPath::try_from_filesystem_path(&normalized, string_table) {
+                Ok(interned) => interned,
+                Err(NonUtf8PathComponent { path: bad_path }) => {
+                    return Err(CompilerMessages::from_error_ref(
+                        CompilerError::file_error(
+                            &bad_path,
+                            format!(
+                                "Beandown source path {bad_path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                            ),
+                            string_table,
+                        ),
+                        string_table,
+                    ));
+                }
+            };
             diagnostics.push(CompilerDiagnostic::duplicate_beandown_input_path(
                 path,
                 first_location.clone(),
@@ -266,8 +280,26 @@ fn unsupported_scope_constant_messages(
     location_path: &Path,
     string_table: &mut StringTable,
 ) -> CompilerMessages {
-    let location = SourceLocation::from_path(location_path, string_table);
-    let path = InternedPath::from_path_buf(location_path, string_table);
+    let path = match InternedPath::try_from_filesystem_path(location_path, string_table) {
+        Ok(interned) => interned,
+        Err(NonUtf8PathComponent { path: bad_path }) => {
+            return CompilerMessages::from_error_ref(
+                CompilerError::file_error(
+                    &bad_path,
+                    format!(
+                        "Beandown scope path {bad_path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                    ),
+                    string_table,
+                ),
+                string_table,
+            );
+        }
+    };
+    let location = SourceLocation::new(
+        path.clone(),
+        CharPosition::default(),
+        CharPosition::default(),
+    );
     let diagnostic = CompilerDiagnostic::invalid_beandown_api_scope_item(path, location);
 
     CompilerMessages::from_diagnostics(vec![diagnostic], string_table.clone())

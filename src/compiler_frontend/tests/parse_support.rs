@@ -49,7 +49,8 @@ pub(crate) fn parse_single_file_ast_result(
         project_path_resolver: Some(test_project_path_resolver()),
     };
 
-    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let interned_path = InternedPath::try_from_filesystem_path(&file_path, &mut string_table)
+        .expect("test path should be UTF-8");
     let file_tokens = tokenize(
         source,
         &interned_path,

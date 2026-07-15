@@ -18,7 +18,9 @@ use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::project_structure_diagnostics::{path_id, project_structure_messages};
+use super::project_structure_diagnostics::{
+    non_utf8_filesystem_name_error, path_id, project_structure_messages,
+};
 
 const FIXED_SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     ".git",
@@ -147,9 +149,17 @@ impl SourceTreeIndex {
                     if skip_policy.should_skip(&path) {
                         stats.dirs_skipped += 1;
                     } else {
-                        if let Some(folder_name) = path.file_name().and_then(|name| name.to_str()) {
-                            importable_folder_names.insert(folder_name.to_owned());
-                        }
+                        let folder_name = path
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .ok_or_else(|| {
+                                non_utf8_filesystem_name_error(
+                                    &path,
+                                    "source tree folder name",
+                                    string_table,
+                                )
+                            })?;
+                        importable_folder_names.insert(folder_name.to_owned());
                         subdirectories.push(path);
                     }
                     continue;
@@ -161,11 +171,22 @@ impl SourceTreeIndex {
 
                 stats.files_seen += 1;
 
-                if let Some(stem) = bst_file_stem(&path) {
+                let file_name =
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .ok_or_else(|| {
+                            non_utf8_filesystem_name_error(
+                                &path,
+                                "source tree file name",
+                                string_table,
+                            )
+                        })?;
+
+                if let Some(stem) = bst_stem_from_file_name(file_name) {
                     bst_file_stems.insert(stem.to_owned());
                 }
 
-                if !path_is_hash_root_file(&path) {
+                if !file_name_is_hash_root_file(file_name) {
                     continue;
                 }
 
@@ -280,7 +301,13 @@ impl SourceTreeIndex {
         source_packages: &SourcePackageRegistry,
         string_table: &mut StringTable,
     ) -> Result<ModuleRootTable, CompilerMessages> {
-        if !path_is_hash_root_file(entry_file) {
+        let file_name = entry_file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| {
+                non_utf8_filesystem_name_error(entry_file, "single-file entry name", string_table)
+            })?;
+        if !file_name_is_hash_root_file(file_name) {
             return Ok(ModuleRootTable::empty());
         }
 
@@ -341,14 +368,12 @@ impl SourceTreeIndex {
     }
 }
 
-fn path_is_hash_root_file(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(file_name_is_hash_root_file)
-}
-
-/// Extract the import-name stem from a `.bst` file path, or `None` for other extensions.
-fn bst_file_stem(path: &Path) -> Option<&str> {
+/// Extract the import-name stem from a validated `.bst` file name, or `None` for other extensions.
+///
+/// The caller must have already validated `file_name` as UTF-8 so that extension and stem
+/// extraction can never silently skip a non-UTF-8 component.
+fn bst_stem_from_file_name(file_name: &str) -> Option<&str> {
+    let path = Path::new(file_name);
     let extension = path.extension().and_then(|extension| extension.to_str())?;
     if extension != BEANSTALK_FILE_EXTENSION {
         return None;

@@ -123,5 +123,9 @@ pub fn compile_project_frontend(
 mod create_project_modules_tests;
 
 #[cfg(test)]
+#[path = "../tests/stage0_filesystem_identity_tests.rs"]
+mod stage0_filesystem_identity_tests;
+
+#[cfg(test)]
 #[path = "../tests/compile_project_frontend_tests.rs"]
 mod compile_project_frontend_tests;

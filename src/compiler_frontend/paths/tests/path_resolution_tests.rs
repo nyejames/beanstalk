@@ -34,8 +34,10 @@ struct TestHarness {
 fn prepared_source_package_roots(
     source_packages: &SourcePackageRegistry,
 ) -> PreparedSourcePackageRoots {
+    let mut prep_string_table = StringTable::new();
     crate::build_system::create_project_modules::source_package_discovery::
-        prepare_source_package_roots(source_packages)
+        prepare_source_package_roots(source_packages, &mut prep_string_table)
+        .expect("test source package roots should prepare")
 }
 
 impl TestHarness {

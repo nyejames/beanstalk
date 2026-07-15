@@ -1169,7 +1169,16 @@ fn source_file_logical_path(
     let logical = project_path_resolver
         .logical_path_for_canonical_file(canonical_file, string_table)
         .map_err(SourceDiscoveryError::from)?;
-    Ok(logical.to_string_lossy().replace('\\', "/"))
+    let logical_text = logical.to_str().ok_or_else(|| {
+        SourceDiscoveryError::from(CompilerError::file_error(
+            &logical,
+            format!(
+                "Source file logical path {logical:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+            ),
+            string_table,
+        ))
+    })?;
+    Ok(logical_text.replace('\\', "/"))
 }
 
 // -------------------------

@@ -103,12 +103,7 @@ pub(crate) fn parse_constant_header_declaration(
 
     // Derive the file scope from the canonical OS path when available,
     // falling back to the header's source file identity.
-    let source_file_scope = header
-        .tokens
-        .canonical_os_path
-        .as_ref()
-        .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
-        .unwrap_or_else(|| header.source_file.to_owned());
+    let source_file_scope = header.canonical_source_file(string_table);
 
     // Constant headers are parsed while the AST environment is still being
     // assembled, so this context uses `ScopeContext::new` with explicit

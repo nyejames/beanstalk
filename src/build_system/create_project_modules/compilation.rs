@@ -17,6 +17,7 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringTable, StringTableForkSource};
 
 use crate::builder_surface::{BuilderSurface, SourceFileKind};
+use crate::compiler_frontend::source_packages::root_file::file_name_is_hash_root_file;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 use rayon::prelude::*;
@@ -30,6 +31,7 @@ use super::collision_detection::validate_source_package_tree_collisions;
 use super::frontend_orchestration::FrontendModuleBuildContext;
 use super::module_inventory;
 use super::project_roots;
+use super::project_structure_diagnostics::non_utf8_filesystem_name_error;
 use super::reachable_file_discovery;
 use super::root_validation::validate_source_package_roots;
 use super::source_package_discovery::prepare_source_package_roots;
@@ -62,14 +64,41 @@ pub(crate) fn compile_single_file_frontend(
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     // 1. Verify standard Beanstalk file extension.
-    let extension_text = extension.to_str().unwrap_or_default();
+    //
+    // A non-UTF-8 extension is an unrepresentable filesystem input. Reject it before
+    // any lossy conversion can collapse it into the empty extension.
+    let extension_text = match extension.to_str() {
+        Some(text) => text,
+        None => {
+            let error = CompilerError::file_error(
+                &config.entry_dir,
+                "Entry file extension is not valid UTF-8".to_owned(),
+                string_table,
+            );
+            return Err(CompilerMessages::from_error_ref(error, string_table));
+        }
+    };
+
     if extension_text != BEANSTALK_FILE_EXTENSION {
         if SourceFileKind::from_extension(extension_text).is_some() {
-            let path = InternedPath::from_path_buf(&config.entry_dir, string_table);
+            let interned_path =
+                match InternedPath::try_from_filesystem_path(&config.entry_dir, string_table) {
+                    Ok(path) => path,
+                    Err(non_utf8) => {
+                        return Err(non_utf8_filesystem_name_error(
+                            &non_utf8.path,
+                            "single-file entry path",
+                            string_table,
+                        ));
+                    }
+                };
             let extension = string_table.intern(extension_text);
-            let location = SourceLocation::from_path(&config.entry_dir, string_table);
+            let location = SourceLocation {
+                scope: interned_path.clone(),
+                ..Default::default()
+            };
             let diagnostic =
-                CompilerDiagnostic::invalid_source_file_entry(path, extension, location);
+                CompilerDiagnostic::invalid_source_file_entry(interned_path, extension, location);
 
             return Err(CompilerMessages::from_diagnostic(
                 diagnostic,
@@ -121,7 +150,14 @@ pub(crate) fn compile_single_file_frontend(
     // 3. Initialize path resolver for imports.
     let path_resolver_start = crate::timing::start_pipeline_timing();
     let prepared_source_package_roots =
-        prepare_source_package_roots(&builder_surface.source_packages);
+        match prepare_source_package_roots(&builder_surface.source_packages, string_table) {
+            Ok(roots) => roots,
+            Err(messages) => {
+                log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
+                log_stage_timing("stage0.single_file.total", total_start);
+                return Err(messages);
+            }
+        };
     if let Err(messages) =
         validate_source_package_roots(&prepared_source_package_roots, string_table)
     {
@@ -138,11 +174,18 @@ pub(crate) fn compile_single_file_frontend(
         return Err(messages);
     }
 
-    let module_roots = if entry_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with('#') && name.ends_with(".bst"))
-    {
+    let entry_file_name = match entry_path.file_name().and_then(|name| name.to_str()) {
+        Some(name) => name,
+        None => {
+            let messages =
+                non_utf8_filesystem_name_error(&entry_path, "single-file entry name", string_table);
+            log_stage_timing("stage0.single_file.path_resolver", path_resolver_start);
+            log_stage_timing("stage0.single_file.total", total_start);
+            return Err(messages);
+        }
+    };
+
+    let module_roots = if file_name_is_hash_root_file(entry_file_name) {
         match SourceTreeIndex::bounded_module_roots_for_single_file(
             &entry_path,
             config,

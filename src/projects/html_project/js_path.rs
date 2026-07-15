@@ -268,7 +268,7 @@ pub(crate) fn render_html_document(
         input.uses_reactive_runtime_fragments,
     );
 
-    Ok(render_html_document_shell(
+    render_html_document_shell(
         input.document_config,
         &page_metadata,
         input.logical_html_path,
@@ -276,7 +276,8 @@ pub(crate) fn render_html_document(
         body_html,
         script_html,
         input.import_map_html.clone(),
-    ))
+    )
+    .map_err(|error| CompilerMessages::from_error(error, input.string_table.clone()))
 }
 
 fn render_runtime_bootstrap_script_html(

@@ -828,8 +828,10 @@ fn directory_project_remaps_delta_collisions_across_modules() {
                 == Some("#b.bst")
         })
         .expect("expected #b.bst module");
-    let item_path = InternedPath::from_path_buf(Path::new("second/#b.bst"), &mut string_table)
-        .join_str("Item", &mut string_table);
+    let item_path =
+        InternedPath::try_from_filesystem_path(Path::new("second/#b.bst"), &mut string_table)
+            .expect("test path should be UTF-8")
+            .join_str("Item", &mut string_table);
     let nominal_id = second_module
         .type_environment
         .nominal_id_for_path(&item_path)

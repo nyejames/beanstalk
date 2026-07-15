@@ -33,7 +33,8 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
 
     for (path, source) in files {
         let path_buf = PathBuf::from(path);
-        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
+        let interned_path = InternedPath::try_from_filesystem_path(&path_buf, &mut string_table)
+            .expect("test path should be UTF-8");
         let file_tokens = tokenize(
             source,
             &interned_path,
@@ -310,7 +311,8 @@ fn capacity_reference_same_file_forward_reference_is_rejected() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let entry_path = PathBuf::from("src/a.bst");
     let file_path = PathBuf::from("src/a.bst");
-    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let interned_path = InternedPath::try_from_filesystem_path(&file_path, &mut string_table)
+        .expect("test path should be UTF-8");
     let file_tokens = tokenize(
         "make |items ~{capacity Int}| -> Int:\n    return 1\n;\ncapacity #Int = 64\n",
         &interned_path,
@@ -578,10 +580,11 @@ fn source_package_public_export_dependency_edges_do_not_require_concrete_header_
     let helper_prefix = string_table.intern("helper");
     let widget_name = string_table.intern("Widget");
     let public_export_path = InternedPath::from_components(vec![helper_prefix, widget_name]);
-    let concrete_target = InternedPath::from_path_buf(
+    let concrete_target = InternedPath::try_from_filesystem_path(
         &PathBuf::from("lib/helper/internal/Widget"),
         &mut string_table,
-    );
+    )
+    .expect("test path should be UTF-8");
 
     let dependent_header = headers
         .headers

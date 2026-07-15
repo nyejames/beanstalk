@@ -4,9 +4,10 @@
 // Import scanning preserves the same `SourceDiscoveryError` boundary as reachable-file discovery,
 // so syntax diagnostics and file/tooling failures stay typed until the Stage 0 boundary.
 
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::const_paths::collect_paths_from_tokens;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
@@ -55,7 +56,18 @@ pub(super) fn scan_imports_from_source(
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<ScannedImportSource, SourceDiscoveryError> {
-    let interned_path = InternedPath::from_path_buf(file_path, string_table);
+    let interned_path = match InternedPath::try_from_filesystem_path(file_path, string_table) {
+        Ok(path) => path,
+        Err(NonUtf8PathComponent { path }) => {
+            return Err(SourceDiscoveryError::from(CompilerError::file_error(
+                &path,
+                format!(
+                    "Source file path {path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                ),
+                string_table,
+            )));
+        }
+    };
 
     // Tokenize the file to find path declarations. Callers may supply source text that was read
     // during an earlier Stage 0 classification pass so provider-free discovery does not re-read

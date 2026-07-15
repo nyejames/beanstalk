@@ -14,9 +14,12 @@ use std::path::PathBuf;
 
 fn test_module(string_table: &mut StringTable) -> HirModule {
     let mut module = HirModule::new();
-    let start_path =
-        InternedPath::from_path_buf(PathBuf::from("docs/#page.bst").as_path(), string_table)
-            .join_str("start", string_table);
+    let start_path = InternedPath::try_from_filesystem_path(
+        PathBuf::from("docs/#page.bst").as_path(),
+        string_table,
+    )
+    .expect("test path should be UTF-8")
+    .join_str("start", string_table);
     let mut side_table = HirSideTable::default();
     side_table.bind_function_name(FunctionId(0), start_path);
     module.start_function = FunctionId(0);

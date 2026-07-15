@@ -18,7 +18,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::project_structure_diagnostics::{path_id, project_structure_messages};
+use super::project_structure_diagnostics::{
+    non_utf8_filesystem_name_error, path_id, project_structure_messages,
+};
 
 /// Reject sibling `.bst` file stems and folder names that share the same import name inside
 /// source-backed package trees.
@@ -87,10 +89,13 @@ fn validate_directory_tree_collisions(
             })?;
 
             let path = entry.path();
-            let name = match path.file_name().and_then(|n| n.to_str()) {
-                Some(name) => name,
-                None => continue,
-            };
+            let name = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+                non_utf8_filesystem_name_error(
+                    &path,
+                    "import-name collision check entry",
+                    string_table,
+                )
+            })?;
 
             if path.is_dir() {
                 folder_names.insert(name.to_owned());

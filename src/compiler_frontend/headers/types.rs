@@ -385,13 +385,20 @@ impl Header {
     /// WHY: const-template scopes use synthetic paths; the canonical path is needed for
     /// project-path-resolver lookups and rendered-path-usage tracking.
     pub(crate) fn canonical_source_file(&self, string_table: &mut StringTable) -> InternedPath {
-        // Mutation: canonical filesystem paths are project-derived inputs that must be interned
-        // before downstream stages can use them as InternedPath values.
-        self.tokens
-            .canonical_os_path
-            .as_ref()
-            .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
-            .unwrap_or_else(|| self.source_file.to_owned())
+        // Canonical filesystem paths are project-derived inputs that must be interned before
+        // downstream stages can use them as InternedPath values.
+        //
+        // Stage 0 validates filesystem names as UTF-8 before they become canonical OS paths, so
+        // a non-UTF-8 component here is a proven compiler invariant violation, not user input.
+        // The expect documents that invariant rather than silently dropping the component.
+        match self.tokens.canonical_os_path.as_ref() {
+            Some(canonical_path) => InternedPath::try_from_filesystem_path(
+                canonical_path,
+                string_table,
+            )
+            .expect("canonical_os_path must be UTF-8; Stage 0 validates filesystem names before canonicalization"),
+            None => self.source_file.to_owned(),
+        }
     }
 }
 

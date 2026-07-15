@@ -15,7 +15,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
 use crate::compiler_frontend::compiler_messages::compiler_diagnostic::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::external_js::package_registration::{
     register_parsed_js_module, required_runtime_imports_from_parsed,
@@ -83,9 +83,28 @@ impl ExternalImportProvider for JsExternalImportProvider {
 
         let parsed = parse_js_module(&source, &RuntimeModuleRegistry::v1());
 
+        let js_source_path = match InternedPath::try_from_filesystem_path(
+            &request.canonical_source_path,
+            context.string_table,
+        ) {
+            Ok(path) => path,
+            Err(NonUtf8PathComponent { path: bad_path }) => {
+                return Err(CompilerMessages::from_error_ref(
+                    CompilerError::file_error(
+                        &bad_path,
+                        format!(
+                            "JS import source path {bad_path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                        ),
+                        context.string_table,
+                    ),
+                    context.string_table,
+                ));
+            }
+        };
+
         let mut diagnostics = convert_js_parser_diagnostics(
             &parsed.diagnostics,
-            &request.canonical_source_path,
+            &js_source_path,
             context.string_table,
         );
 
@@ -95,7 +114,7 @@ impl ExternalImportProvider for JsExternalImportProvider {
         //      receiver-shaped signatures so every registration boundary can reject them.
         diagnostics.extend(reject_receiver_methods_in_project_local_js(
             &parsed,
-            &request.canonical_source_path,
+            &js_source_path,
             context.string_table,
         ));
 
@@ -156,11 +175,11 @@ fn js_provider_package_path(canonical_source_path: &Path) -> String {
 
 fn reject_receiver_methods_in_project_local_js(
     parsed: &ParsedJsModule,
-    js_source_path: &Path,
+    js_source_path: &InternedPath,
     string_table: &mut StringTable,
 ) -> Vec<CompilerDiagnostic> {
     let mut diagnostics = Vec::new();
-    let path = InternedPath::from_path_buf(js_source_path, string_table);
+    let path = js_source_path.clone();
 
     for receiver_method in &parsed.receiver_methods {
         let message = format!(
@@ -186,11 +205,11 @@ fn reject_receiver_methods_in_project_local_js(
 
 fn convert_js_parser_diagnostics(
     parser_diagnostics: &[JsParserDiagnostic],
-    js_source_path: &Path,
+    js_source_path: &InternedPath,
     string_table: &mut StringTable,
 ) -> Vec<CompilerDiagnostic> {
     let mut diagnostics = Vec::with_capacity(parser_diagnostics.len());
-    let path = InternedPath::from_path_buf(js_source_path, string_table);
+    let path = js_source_path.clone();
 
     for parser_diagnostic in parser_diagnostics {
         let message_id = string_table.intern(&parser_diagnostic.message);

@@ -9,6 +9,8 @@ use crate::projects::html_project::page_metadata::HtmlPageMetadata;
 use std::fmt::Write as _;
 use std::path::Path;
 
+use crate::compiler_frontend::compiler_errors::CompilerError;
+
 const CORE_CSS: &str = include_str!("bs-css-core.css");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,7 +38,7 @@ pub(crate) fn render_html_document_shell(
     body_html: String,
     script_html: String,
     import_map_html: Option<String>,
-) -> String {
+) -> Result<String, CompilerError> {
     let resolved = resolve_html_document(
         config,
         page_metadata,
@@ -45,9 +47,9 @@ pub(crate) fn render_html_document_shell(
         body_html,
         script_html,
         import_map_html,
-    );
+    )?;
 
-    render_resolved_document(&resolved)
+    Ok(render_resolved_document(&resolved))
 }
 
 fn resolve_html_document(
@@ -58,15 +60,17 @@ fn resolve_html_document(
     body_html: String,
     script_html: String,
     import_map_html: Option<String>,
-) -> ResolvedHtmlDocument {
-    let base_title = page_metadata
-        .title
-        .clone()
-        .or_else(|| route_title_fallback(logical_html_path))
-        .or_else(|| (!project_name.is_empty()).then(|| project_name.to_string()))
-        .unwrap_or_default();
+) -> Result<ResolvedHtmlDocument, CompilerError> {
+    let mut base_title = page_metadata.title.clone();
+    if base_title.is_none() {
+        base_title = route_title_fallback(logical_html_path)?;
+    }
+    if base_title.is_none() && !project_name.is_empty() {
+        base_title = Some(project_name.to_string());
+    }
+    let base_title = base_title.unwrap_or_default();
 
-    ResolvedHtmlDocument {
+    Ok(ResolvedHtmlDocument {
         lang: page_metadata
             .lang
             .clone()
@@ -92,7 +96,7 @@ fn resolve_html_document(
         script_html,
         core_css: config.inject_core_css.then(|| CORE_CSS.to_string()),
         import_map_html,
-    }
+    })
 }
 
 fn render_resolved_document(document: &ResolvedHtmlDocument) -> String {
@@ -181,20 +185,22 @@ fn render_resolved_document(document: &ResolvedHtmlDocument) -> String {
     html
 }
 
-fn route_title_fallback(logical_html_path: &Path) -> Option<String> {
-    let route_segment =
-        if logical_html_path.file_name().and_then(|name| name.to_str()) == Some("index.html") {
-            logical_html_path
-                .parent()?
-                .file_name()?
-                .to_str()?
-                .to_string()
-        } else {
-            logical_html_path.file_stem()?.to_str()?.to_string()
-        };
+/// Derive a human-readable title from the validated route path.
+///
+/// WHAT: returns the directory name for `index.html` routes or the file stem for flat routes,
+/// formatted with spaces and title-cased word boundaries.
+/// WHY: `logical_html_path` is built from already-validated route components, so a non-UTF-8
+///      segment here breaks the validated-route contract and must surface as an internal error
+///      rather than silently downgrading to a project-title fallback. A missing route segment
+///      (root page) legitimately returns `None` so the caller can fall through to the project name.
+fn route_title_fallback(logical_html_path: &Path) -> Result<Option<String>, CompilerError> {
+    let route_segment = match extract_route_segment(logical_html_path)? {
+        Some(segment) => segment,
+        None => return Ok(None),
+    };
 
     if route_segment.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let mut formatted = String::with_capacity(route_segment.len());
@@ -216,7 +222,43 @@ fn route_title_fallback(logical_html_path: &Path) -> Option<String> {
         }
     }
 
-    Some(formatted)
+    Ok(Some(formatted))
+}
+
+/// Extract the raw route segment used for the title fallback.
+///
+/// WHAT: returns the directory name for `index.html` routes or the file stem for flat routes.
+/// WHY: a missing segment (root page or path with no parent) legitimately yields `None`, but a
+///      present non-UTF-8 segment breaks the validated-route contract and must surface as an
+///      internal error rather than silently downgrading to a project-title fallback.
+fn extract_route_segment(logical_html_path: &Path) -> Result<Option<String>, CompilerError> {
+    let is_index_route =
+        logical_html_path.file_name().and_then(|name| name.to_str()) == Some("index.html");
+
+    if is_index_route {
+        let Some(parent) = logical_html_path.parent() else {
+            return Ok(None);
+        };
+        let Some(folder_name) = parent.file_name() else {
+            return Ok(None);
+        };
+        let segment = folder_name.to_str().ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "HTML route directory component {parent:?} is not valid UTF-8; route components must be validated before title fallback."
+            ))
+        })?;
+        return Ok(Some(segment.to_string()));
+    }
+
+    let Some(stem) = logical_html_path.file_stem() else {
+        return Ok(None);
+    };
+    let segment = stem.to_str().ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "HTML route stem component {logical_html_path:?} is not valid UTF-8; route components must be validated before title fallback."
+        ))
+    })?;
+    Ok(Some(segment.to_string()))
 }
 
 fn indent_html_block(input: &str, indent: &str) -> String {

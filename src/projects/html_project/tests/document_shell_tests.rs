@@ -25,6 +25,7 @@ fn render_shell(
         script_html.to_owned(),
         None,
     )
+    .expect("document shell should render for valid route inputs")
 }
 
 #[test]

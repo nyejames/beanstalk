@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::{InternedPath, NonUtf8PathComponent};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
@@ -62,21 +62,39 @@ impl SourceFileTable {
                 logical_path_for_single_file_mode(canonical, &fallback_root)
             };
 
-            rows.push((canonical.to_path_buf(), logical));
+            let portable_sort_key = logical
+                .to_str()
+                .ok_or_else(|| {
+                    CompilerError::file_error(
+                        &logical,
+                        format!(
+                            "Source file logical path {logical:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                        ),
+                        string_table,
+                    )
+                })?
+                .replace('\\', "/");
+
+            rows.push((canonical.to_path_buf(), logical, portable_sort_key));
         }
 
-        rows.sort_by(|(_, left), (_, right)| {
-            left.to_string_lossy()
-                .replace('\\', "/")
-                .cmp(&right.to_string_lossy().replace('\\', "/"))
-        });
+        rows.sort_by(|(_, _, left_key), (_, _, right_key)| left_key.cmp(right_key));
 
         let mut files = Vec::with_capacity(rows.len());
         let mut canonical_to_id = FxHashMap::default();
 
-        for (index, (canonical, logical)) in rows.into_iter().enumerate() {
+        for (index, (canonical, logical, _)) in rows.into_iter().enumerate() {
             let file_id = FileId(index as u32);
-            let logical_path = InternedPath::from_path_buf(&logical, string_table);
+            let logical_path = InternedPath::try_from_filesystem_path(&logical, string_table)
+                .map_err(|NonUtf8PathComponent { path }| {
+                    CompilerError::file_error(
+                        &path,
+                        format!(
+                            "Source file logical path {path:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths."
+                        ),
+                        string_table,
+                    )
+                })?;
 
             canonical_to_id.insert(canonical.clone(), file_id);
             let identity = SourceFileIdentity {
