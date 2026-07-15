@@ -45,7 +45,7 @@ use crate::compiler_frontend::instrumentation::ast_counters::{
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::cell::RefCell;
@@ -273,6 +273,46 @@ struct CrossStoreChildFixture {
     child_overlay_set_id: TemplateOverlaySetId,
 }
 
+fn finish_text_template(
+    store: &mut TemplateIrStore,
+    text: StringId,
+    byte_len: u32,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let text = builder.push_text_node(
+        text,
+        byte_len,
+        TemplateSegmentOrigin::Body,
+        empty_location(),
+    );
+    let root = builder.push_sequence_node(vec![text], empty_location());
+
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::default(),
+        empty_location(),
+    )
+}
+
+fn finish_single_child_template(
+    store: &mut TemplateIrStore,
+    child_reference: TemplateTirChildReference,
+) -> TemplateIrId {
+    let mut builder = TemplateIrBuilder::new(store);
+    let child = builder.push_child_template_node_with_reference(child_reference, empty_location());
+    let root = builder.push_sequence_node(vec![child], empty_location());
+
+    builder.finish_template(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::default(),
+        empty_location(),
+    )
+}
+
 fn build_cross_store_child_fixture(string_table: &mut StringTable) -> CrossStoreChildFixture {
     let mut registry = TemplateIrRegistry::new();
     let parent_store_id = registry.allocate_store();
@@ -288,22 +328,8 @@ fn build_cross_store_child_fixture(string_table: &mut StringTable) -> CrossStore
         let mut child_store = registry
             .store_mut(child_store_id)
             .expect("child store should be mutable");
-        let mut builder = TemplateIrBuilder::new(&mut child_store);
-        let text = builder.push_text_node(
-            child_text,
-            "child".len() as u32,
-            TemplateSegmentOrigin::Body,
-            empty_location(),
-        );
-        let root = builder.push_sequence_node(vec![text], empty_location());
 
-        builder.finish_template(
-            root,
-            Style::default(),
-            TemplateType::String,
-            TemplateIrSummary::default(),
-            empty_location(),
-        )
+        finish_text_template(&mut child_store, child_text, "child".len() as u32)
     };
 
     let parent_template_id = {
@@ -930,6 +956,90 @@ fn fold_tir_template_child_nodes_use_view_cache_when_registry_is_available() {
         fold_context.fold_cache.get(&child_cache_key).is_some(),
         "registry-backed child folding should populate the child TirView cache entry"
     );
+}
+
+/// Parsed child references are valid construction-time fold inputs. They must
+/// bypass the Composed `TirView` shortcut and fold from their structural roots
+/// in both the current store and a registered foreign store.
+#[test]
+fn fold_tir_template_accepts_parsed_same_and_cross_store_children() {
+    let mut string_table = StringTable::new();
+    let child_text_id = string_table.intern("child");
+
+    let mut registry = TemplateIrRegistry::new();
+    let parent_store_id = registry.allocate_store();
+    let foreign_store_id = registry.allocate_store();
+
+    let foreign_child_template_id = {
+        let mut foreign_store = registry
+            .store_mut(foreign_store_id)
+            .expect("foreign store should be mutable");
+
+        finish_text_template(&mut foreign_store, child_text_id, "child".len() as u32)
+    };
+
+    let (same_store_parent_id, cross_store_parent_id) = {
+        let mut parent_store = registry
+            .store_mut(parent_store_id)
+            .expect("parent store should be mutable");
+
+        let local_child_template_id =
+            finish_text_template(&mut parent_store, child_text_id, "child".len() as u32);
+
+        let same_store_parent_id = finish_single_child_template(
+            &mut parent_store,
+            TemplateTirChildReference::same_store(
+                local_child_template_id,
+                parent_store_id,
+                TemplateTirPhase::Parsed,
+                TemplateOverlaySetId::empty(),
+            ),
+        );
+
+        let cross_store_parent_id = finish_single_child_template(
+            &mut parent_store,
+            TemplateTirChildReference::new(
+                TemplateRef::new(foreign_store_id, foreign_child_template_id),
+                TemplateTirPhase::Parsed,
+                TemplateOverlaySetId::empty(),
+            ),
+        );
+
+        (same_store_parent_id, cross_store_parent_id)
+    };
+
+    let registry = Rc::new(RefCell::new(registry));
+    let parent_store = registry
+        .borrow()
+        .store_handle(parent_store_id)
+        .expect("parent store should exist")
+        .borrow()
+        .clone();
+
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let expected_output = TemplateEmission::Output(child_text_id);
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    let same_store_output =
+        fold_tir_template(&parent_store, same_store_parent_id, &mut fold_context)
+            .expect("Parsed same-store child should fold from its structural root");
+    let cross_store_output =
+        fold_tir_template(&parent_store, cross_store_parent_id, &mut fold_context)
+            .expect("Parsed cross-store child should fold from its structural root");
+
+    assert_eq!(same_store_output, expected_output);
+    assert_eq!(cross_store_output, expected_output);
 }
 
 #[test]

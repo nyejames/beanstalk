@@ -21,33 +21,31 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B6 - propagate folded-child handoff view failures (corrected)
-LAST_ACCEPTED_COMMIT: `671035c94` (`TIR: 3B6 (not reviewed fully yet)`)
+CURRENT_SLICE: Slice 3C - audit and consolidate TIR summary construction
+LAST_ACCEPTED_COMMIT: `0ce587f79` (`fixed errors from migrations`, corrected 3B6 implementation)
 BRANCH: `main`
-WORKTREE: `main`, corrected 3B6 regression plus pre-existing Clippy blockers from package naming migration
+WORKTREE: `main`, accepted 3B6 parent regression test and plan update pending checkpoint commit
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
-- The original 3B6 commit propagated `TirView::with_minimum_phase` phase errors for `Parsed`-phase child references, breaking the docs build and all folding of `Parsed`-phase children.
-- `Parsed`-phase child references are a genuine shortcut-unavailable state, not an authority failure: production composition paths (`schema.rs`, `child_wrappers.rs`, `head_chain.rs`, `subtree_copy.rs`, `render_unit.rs`) record children at `Parsed` before the parent advances.
-- The correction restores the `Parsed`-phase fallthrough to the non-view `fold_tir_template` path for both same-store and cross-store children while keeping the 3B6 authority-propagation improvements for `Composed`-or-later children.
-- The `materialize_folded_child_text` handoff path was already correct (early return for `Parsed`-phase) and needed no change.
-- Pre-existing Clippy blockers from the package naming migration (`module_inception` and unused `PackageBacking` import) were fixed to unblock `just validate`.
+- docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
+- code: `tir/summary.rs`, `tir/parser_builder_state.rs`, `tir/subtree_copy.rs`, `tir/construction.rs`, `tir/render_unit.rs` and focused summary/builder tests
+- 3B6 is parent-reviewed. One focused test now protects the restored same-store and cross-store `Parsed` child fold fallthrough.
 ACCEPTANCE_CRITERIA:
-- Require a registry for view-backed fold-context handoff materialization (preserved from 3B6).
-- Propagate malformed overlay-set authority failures as `CompilerError` for `Composed`-or-later children (preserved from 3B6).
-- Preserve the `Parsed`-phase shortcut-unavailable fallthrough for both same-store and cross-store child references (restored by correction).
-- Preserve genuine shortcut-unavailable states and ordinary non-const fold diagnostics as structural runtime handoff fallback.
-- Add focused hidden-invariant coverage without changing user-visible output or diagnostics.
+- Inventory every `TemplateIrSummary` construction/update owner before editing.
+- Share only identical update semantics through one narrow `tir/summary.rs` accumulator.
+- Keep runtime slot-site cursor state separate when its ownership differs.
+- Rename or delete current-state/materialization vocabulary without adding a parallel path.
+- Preserve text-byte, node-count, depth, slot, control-flow and reactivity facts with focused invariant coverage.
 VALIDATION_STATE:
-- Phase 3B5 `just validate`: passed cross-target Clippy, 3325 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 10 faster and 0 slower
-- Original 3B6 commit: broke docs build by propagating `Parsed`-phase as an authority failure
-- Corrected 3B6 `just validate`: passed cross-target Clippy, 3331 unit tests, 1756 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- 3B6 focused regression test: passed, 1 test
+- 3B6 final `just validate`: passed cross-target Clippy, 3414 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 12 faster and 0 slower
+- Slice 3C: not run
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: corrected in place by parent after 3B6 regression broke docs build
-NEXT_WORKER_ORDER: none for this corrected slice
+DELEGATION_DECISION: undecided - inspect exact 3C owners before launching the first implementation provider
+NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: review the correction, then mark Phase 3B6 checkpoint and continue to Slice 3C
+NEXT_RESUME_ACTION: commit the accepted 3B6 review checkpoint, reload the plan and inspect Slice 3C summary owners
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
