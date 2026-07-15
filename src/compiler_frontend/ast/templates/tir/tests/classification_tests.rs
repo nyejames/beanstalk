@@ -19,12 +19,12 @@ use super::super::{TemplateRef, TemplateTirPhase, TemplateTirReference, TirView}
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
 };
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     ReactiveSubscription, SlotKey, Style, TemplateConstValueKind, TemplateSegmentOrigin,
     TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::ids::SlotOccurrenceId;
 use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,

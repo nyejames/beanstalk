@@ -27,7 +27,7 @@ use crate::compiler_frontend::ast::statements::scoped_blocks::{
 use crate::compiler_frontend::ast::statements::value_production::{
     ProducedValues, ProducedValuesParseInput, ValueReceiverKind, parse_produced_values_typed,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{

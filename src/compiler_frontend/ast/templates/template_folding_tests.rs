@@ -17,6 +17,7 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
@@ -25,7 +26,6 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     FoldResolvedExpression, TemplateFoldContext, resolve_fold_bindings_in_expression,
     selected_option_capture_payload,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
     TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference, TirFoldCache,

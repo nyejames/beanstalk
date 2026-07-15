@@ -9,6 +9,7 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::statements::if_headers::{ParsedIfHeader, parse_if_header};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, SlotPlaceholder, Style, TemplateParsingMode, TemplateSegmentOrigin,
     TemplateType,
@@ -28,7 +29,6 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateIfBodyParseInput, TemplateLoopBodyParseInput, TemplateLoopControlKind,
     inline_source_consts_for_const_required_if_condition,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateConstructionContext, TemplateIrBranch, TemplateIrNodeId, TemplateIrNodeKind,
     TemplateTirPhase, TemplateWrapperReference,

@@ -6,10 +6,10 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Style, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
     TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference, TirView,

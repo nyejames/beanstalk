@@ -92,8 +92,7 @@
 //! | `template_body_parser.rs` | Template body parsing: text, nested templates, expression splices |
 //! | `template_body_sentinels.rs` | Body structural markers (`[else]`, `[break]`, `[continue]`) and diagnostics |
 //! | `create_template_node.rs` | Template construction orchestrator; starts/finishes parser-TIR builder state |
-//! | `template.rs` | Core data types: `Template`, `TemplateType`, `Style`, `SlotKey`, `SlotPlaceholder`, formatters |
-//! | `template_types.rs` | Central `Template` struct and const/renderability queries |
+//! | `template.rs` | Durable `Template` handle and shared vocabulary: `TemplateType`, `Style`, `SlotKey`, `SlotPlaceholder`, formatters |
 //! | `template_control_flow/` | Structured `if` / `loop` metadata, validation, const-eval helpers |
 //! | `template_slots/` | Slot schema, contribution bucketing, runtime plan construction |
 //! | `tir/slot_composition/` | TIR-native head-chain composition and `$children(..)` wrapper application |
@@ -150,7 +149,6 @@ pub(crate) mod template_head_parser;
 pub(crate) mod template_render_units;
 pub(crate) mod template_renderability;
 pub(crate) mod template_slots;
-pub(crate) mod template_types;
 pub(crate) mod top_level_templates;
 
 // -------------------------

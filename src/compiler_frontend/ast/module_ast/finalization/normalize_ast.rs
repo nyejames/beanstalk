@@ -57,8 +57,8 @@ use crate::compiler_frontend::ast::templates::runtime_handoff;
 use crate::compiler_frontend::ast::templates::runtime_handoff::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeTemplateHandoff, OwnedRuntimeTemplateNode,
 };
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrRegistry, TemplateIrStore, TemplateOverlaySet, TemplateTirPhase,
     TemplateTirReference, TirExpressionOverlay, TirTemplateClassification, TirView,

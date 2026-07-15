@@ -16,6 +16,7 @@ use crate::compiler_frontend::ast::ast_nodes::RangeLoopSpec;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     ConstRangeCursor, TemplateBranchSelector, TemplateFoldBinding, TemplateLoopControlKind,
@@ -28,7 +29,6 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     resolve_fold_bindings_in_expression, selected_option_capture_payload,
     template_emission_from_output_and_signal,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::TirFoldCacheKey;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, TemplateIrId, TemplateIrNodeId, TemplateWrapperSetId,

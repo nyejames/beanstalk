@@ -22,6 +22,7 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     TemplateConstValueKind, TemplateSegmentOrigin, TemplateType,
 };
@@ -31,7 +32,6 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     collect_option_capture_binding_path, loop_body_const_evaluation_bindings,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId,
 };

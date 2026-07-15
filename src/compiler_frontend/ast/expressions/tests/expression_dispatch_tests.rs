@@ -13,8 +13,8 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::expressions::parse_expression_dispatch::{
     ExpressionDispatchState, ExpressionTokenStep, dispatch_expression_token,
 };
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     RegisteredTemplateIrStore, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore,
     TemplateIrSummary, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateTirPhase,

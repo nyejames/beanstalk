@@ -12,8 +12,8 @@ use super::super::overlays::TemplateOverlaySetId;
 use super::super::registry::TemplateIrRegistry;
 use super::super::store::TemplateIrStore;
 use super::super::{TemplateRef, TemplateTirReference};
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, TemplateType};
-use crate::compiler_frontend::ast::templates::template_types::Template;
 
 use std::sync::Arc;
 

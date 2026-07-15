@@ -13,7 +13,7 @@
 //! and easy to audit without leaking store or registry internals into the
 //! template construction orchestrator.
 
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, TemplateIrNodeId,
 };

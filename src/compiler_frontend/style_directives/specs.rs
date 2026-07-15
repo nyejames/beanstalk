@@ -4,8 +4,8 @@
 //! compiler-owned behavior. Registry merge policy lives in `registry`; frontend-owned directive
 //! values live in `builtins`.
 
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{BodyWhitespacePolicy, Formatter};
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::style_directives::compatibility::TemplateHeadCompatibility;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 

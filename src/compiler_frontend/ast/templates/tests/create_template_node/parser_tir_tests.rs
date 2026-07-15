@@ -6,13 +6,13 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, ReactiveSubscription, SlotKey, Style, TemplateConstValueKind,
     TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopControlKind;
 use crate::compiler_frontend::ast::templates::template_render_units::install_formatted_tir_reference_for_linear_template;
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateIrStoreOwner,
     TemplateIrSummary, TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference,

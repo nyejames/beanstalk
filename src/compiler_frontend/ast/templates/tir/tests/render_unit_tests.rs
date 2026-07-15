@@ -38,7 +38,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::sync::Arc;
 
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 
 /// Constructs a `Template` directly from a real registry-qualified TIR reference.
 fn template_with_reference(

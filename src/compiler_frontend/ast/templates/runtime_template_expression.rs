@@ -9,7 +9,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 
 pub(crate) fn runtime_template_expression(expression: &Expression) -> Option<&Template> {
     match &expression.kind {

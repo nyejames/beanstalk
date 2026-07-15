@@ -7,11 +7,11 @@
 //! behavior across all normalization contexts.
 
 use crate::compiler_frontend::ast::module_ast::finalization::normalize_ast::TemplateNormalizationError;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrRegistry, TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView,
     classify_effective_tir_view_template, fold_tir_view, fold_tir_view_read_only,

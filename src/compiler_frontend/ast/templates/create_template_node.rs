@@ -18,6 +18,7 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, CommentDirectiveKind, Style, TemplateParsingMode, TemplateType,
 };
@@ -36,7 +37,6 @@ use crate::compiler_frontend::ast::templates::template_render_units::{
     ControlFlowRenderUnitRequest, install_formatted_tir_reference_for_linear_template,
     prepare_control_flow_render_units,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateConstructionContext, TemplateIr, TemplateRef, TemplateTirPhase, TemplateTirReference,
     TemplateWrapperReference, TirView, attach_wrapper_context_overlay,

@@ -17,8 +17,8 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
     ExpressionRpn, ExpressionRpnItem,
 };
 use crate::compiler_frontend::ast::expressions::expression_types::ConstValueKind;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::tir::{
     SlotOccurrenceId, TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
     TemplateOverlaySet, TemplateRef, TemplateTirPhase, TemplateTirReference, TirSlotResolution,

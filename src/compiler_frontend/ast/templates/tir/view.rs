@@ -58,7 +58,7 @@ use super::ids::ChildTemplateOccurrenceId;
 use super::ids::TemplateIrNodeId;
 use super::ids::{ExpressionSiteId, SlotOccurrenceId};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 #[cfg(test)]
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 

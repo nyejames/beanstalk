@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ReactiveTemplateMetadata,
 };
 use crate::compiler_frontend::ast::templates::reactive_template_metadata;
-use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;

@@ -21,31 +21,29 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E - final module/API ownership
-LAST_ACCEPTED_COMMIT: `af7ef8625` (`refactor: consolidate TIR summary construction`, prior checkpoint; Slice 3D is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E2 - finalize TIR copy-state naming and required-error APIs
+LAST_ACCEPTED_COMMIT: `10d5ca30c` (`perf: trim TIR formatter traversal clones`, prior checkpoint; Slice 3E1 is accepted in this plan-bearing commit)
 BRANCH: `main`
 WORKTREE: `main`, Slice 3D accepted and fully validated, no unrelated changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: final template/TIR module map, facades, long-lived types, stale migration vocabulary and focused owner tests
-- Slice 3D replaced formatter whole-node/kind clones with narrow borrowed facts, removed repeated effective-node reads and eliminated wrapper-context traversal vector clones.
+- code: `tir/construction.rs`, formatter/root authority, wrapper-reference normalization, runtime slot-node lookup and final module maps
+- exact 3E inventory confirmed that `finalize_sync.rs` is gone and the durable `Template` now lives with shared final vocabulary in `template.rs`; `template_render_units.rs`, `template_folding.rs`, `template_control_flow/**` and `template_slots/**` are real owners or real substage facades.
 ACCEPTANCE_CRITERIA:
-- Re-evaluate every module and facade named in Slice 3E against its final owner and current callers.
-- Delete test-only or forwarding-only files and rename migration-named owners without compatibility shims.
-- Keep thin facades only where they mark a real AST substage boundary.
-- Remove stale dead-code allowances and migration vocabulary while preserving diagnostics and source context.
-- Update `templates/mod.rs` and `tir/mod.rs` to describe the final module map.
+- Rename the vague `tir/construction.rs` owner to its final copy-state responsibility and update module maps without a forwarding module.
+- Convert the formatter's ignored root-template lookup and wrapper-reference normalization to explicit required errors.
+- Distinguish missing TIR nodes from genuine non-slot/non-sequence optional shapes in render-unit and runtime-slot helpers.
+- Preserve diagnostics and behavior, remove remaining local silent fallbacks and run formatting plus focused tests.
 VALIDATION_STATE:
-- Slice 3D worker `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
-- Slice 3D parent focused TIR suite: passed, 432 tests
-- Slice 3D parent `just bench-check`: passed 28/28 with a 2 ms average improvement, 12 faster and 0 slower
-DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
+- Slice 3E1 worker focused template suite: passed, 820 tests
+- Slice 3E1 parent `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 13 faster and 0 slower
+DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - inspect the final module map and split oversized ownership work into coherent owner slices before delegation
+DELEGATION_DECISION: undecided - split the copy-state rename from required-error changes if one worker envelope would broaden ownership
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: reload the plan and inventory Slice 3E files, callers, forwarding layers and stale vocabulary
+NEXT_RESUME_ACTION: reload current source and implement the smallest coherent TIR copy-state or required-error owner slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -423,13 +421,13 @@ Phase 3D checkpoint: formatter traversal now snapshots only child IDs, reference
 #### Slice 3E — Final module/API ownership
 
 - [ ] Re-evaluate final owners after deletion:
-  - [ ] `tir/finalize_sync.rs`
+  - [x] `tir/finalize_sync.rs`
   - [ ] `tir/construction.rs`
-  - [ ] `template_render_units.rs`
-  - [ ] `template_folding.rs`
-  - [ ] `template_control_flow/**`
-  - [ ] `template_slots/**`
-  - [ ] `template.rs` / `template_types.rs`
+  - [x] `template_render_units.rs`
+  - [x] `template_folding.rs`
+  - [x] `template_control_flow/**`
+  - [x] `template_slots/**`
+  - [x] `template.rs` / `template_types.rs`
 - [ ] Delete files whose remaining contents are test-only or forwarding-only.
 - [ ] Rename files whose names describe migration rather than final responsibility.
 - [ ] Keep a thin facade only where it marks a real AST substage boundary.
@@ -437,6 +435,8 @@ Phase 3D checkpoint: formatter traversal now snapshots only child IDs, reference
 - [ ] Replace redundant long argument lists with one named context only when the same values travel together across several functions.
 - [ ] Remove stale `#[allow(dead_code)]`, “legacy”, “mirror”, “current-state”, “sync”, and future-cutover comments.
 - [ ] Update `templates/mod.rs` and `tir/mod.rs` to describe the final module map.
+
+Slice 3E1 checkpoint: the durable `Template`, its cached-kind synchronization and its store/registry reads now live with the final shared template vocabulary in `template.rs`. The one-type `template_types.rs` owner and all direct import paths are deleted without a forwarding module. Source comments now keep the handle AST-local and name parser/TIR wrapper ownership accurately.
 
 #### Phase 3 acceptance
 
