@@ -532,8 +532,6 @@ pub(crate) fn parse_case_flags(
     for flag_name in flag_names {
         let parsed = match flag_name.as_str() {
             "release" => Flag::Release,
-            "hide_warnings" => Flag::DisableWarnings,
-            "hide_timers" => Flag::DisableTimers,
             "html_wasm" => Flag::HtmlWasm,
             other => {
                 if context.is_empty() {

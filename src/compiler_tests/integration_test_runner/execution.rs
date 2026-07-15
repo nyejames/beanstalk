@@ -6,15 +6,13 @@
 
 use super::{BackendId, CaseExecutionResult, ExpectedOutcome, FailureKind, TestCaseSpec};
 use crate::build_system::build::{ProjectBuilder, build_project};
-use crate::compiler_frontend::Flag;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use std::any::Any;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub(crate) fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
     let builder = backend_builder_for_case(case.backend_id);
-    let mut flags = vec![Flag::DisableTimers];
-    flags.extend(case.flags.iter().cloned());
+    let flags = case.flags.clone();
     let entry_path = case.entry_path.to_string_lossy().to_string();
 
     let execution = catch_unwind(AssertUnwindSafe(|| {

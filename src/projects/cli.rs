@@ -19,11 +19,17 @@ use saying::say;
 use std::time::Instant;
 use std::{env, process};
 
+/// Build-profile flags accepted by both `build` and `dev`.
+const BUILD_FLAGS: &[&str] = &["--release", "--html-wasm"];
+
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     NewHTMLProject(NewHtmlProjectOptions), // Creates a new HTML project template
 
-    Build(String), // Builds a file or project
+    Build {
+        path: String,
+        flags: Vec<Flag>,
+    }, // Builds a file or project
 
     Check {
         path: String,
@@ -35,6 +41,7 @@ enum Command {
     Dev {
         path: String,
         options: DevServerOptions,
+        flags: Vec<Flag>,
     },
 
     Help,
@@ -53,20 +60,15 @@ pub fn start_cli() {
     }
 
     if cli_args[0].starts_with("--") || cli_args[0].starts_with('-') {
-        if cli_args
-            .iter()
-            .all(|arg| arg.starts_with("--") || arg.starts_with('-'))
-        {
-            let standalone_flags = get_flags(cli_args);
-            if standalone_flags.contains(&Flag::Version) {
-                println!("bean {}", env!("CARGO_PKG_VERSION"));
-            } else {
-                print_help();
-            }
+        if is_standalone_version_request(cli_args) {
+            println!("bean {}", env!("CARGO_PKG_VERSION"));
             return;
         }
 
-        say!("Flags must come after a command, unless used on their own.");
+        say!(
+            "Invalid standalone flag input: '{}'. Only --version, -v, and -V can be used without a command.",
+            cli_args.join(" ")
+        );
         print_help();
         return;
     }
@@ -79,8 +81,6 @@ pub fn start_cli() {
             return;
         }
     };
-
-    let flags = get_flags(&cli_args[1..]);
 
     match command {
         Command::Help => {
@@ -101,7 +101,7 @@ pub fn start_cli() {
             }
         }
 
-        Command::Build(path) => {
+        Command::Build { path, flags } => {
             crate::timing::start_command_timing();
             let start = Instant::now();
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -163,7 +163,11 @@ pub fn start_cli() {
             check::run_check(&path, CheckOptions { terse });
         }
 
-        Command::Dev { path, options } => {
+        Command::Dev {
+            path,
+            options,
+            flags,
+        } => {
             say!("\nStarting dev server...");
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
             match dev_server::run_dev_server(project_builder, &path, &flags, options) {
@@ -228,6 +232,14 @@ fn integration_tests_exit_code(summary: IntegrationRunSummary) -> i32 {
     }
 }
 
+/// Returns true when every argument is a standalone version spelling (`--version`, `-v`, `-V`).
+fn is_standalone_version_request(args: &[String]) -> bool {
+    !args.is_empty()
+        && args
+            .iter()
+            .all(|arg| matches!(arg.as_str(), "--version" | "-v" | "-V"))
+}
+
 fn get_command(args: &[String]) -> Result<Command, String> {
     let command = args.first().map(String::as_str);
 
@@ -249,23 +261,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     }
 }
 
-fn get_flags(args: &[String]) -> Vec<Flag> {
-    let mut flags = Vec::new();
-
-    for arg in args {
-        match arg.as_str() {
-            "--version" | "-v" | "-V" => flags.push(Flag::Version),
-            "--release" => flags.push(Flag::Release),
-            "--hide-warnings" => flags.push(Flag::DisableWarnings),
-            "--hide-timers" => flags.push(Flag::DisableTimers),
-            "--html-wasm" => flags.push(Flag::HtmlWasm),
-            _ => {}
-        }
-    }
-
-    flags
-}
-
 fn parse_new_command(args: &[String]) -> Result<Command, String> {
     match args.get(1).map(String::as_str) {
         Some("html") => {
@@ -279,13 +274,9 @@ fn parse_new_command(args: &[String]) -> Result<Command, String> {
                         force = true;
                         index += 1;
                     }
-                    "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
-                    | "--html-wasm" => {
-                        index += 1;
-                    }
                     _ if arg.starts_with("--") => {
                         return Err(format!(
-                            "Unknown new flag: '{arg}'. Supported flags are --force."
+                            "Unknown new flag: '{arg}'. Supported flag is --force."
                         ));
                     }
                     _ => {
@@ -311,17 +302,23 @@ fn parse_new_command(args: &[String]) -> Result<Command, String> {
 
 fn parse_build_command(args: &[String]) -> Result<Command, String> {
     let mut path = String::new();
+    let mut flags = Vec::new();
     let mut index = 1usize;
 
     while let Some(arg) = args.get(index) {
         match arg.as_str() {
-            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
-            | "--html-wasm" => {
+            "--release" => {
+                flags.push(Flag::Release);
+                index += 1;
+            }
+            "--html-wasm" => {
+                flags.push(Flag::HtmlWasm);
                 index += 1;
             }
             _ if arg.starts_with("--") => {
                 return Err(format!(
-                    "Unknown build flag: '{arg}'. Supported build flags are --release, --hide-warnings, --hide-timers, and --html-wasm."
+                    "Unknown build flag: '{arg}'. Supported build flags are {}.",
+                    BUILD_FLAGS.join(", ")
                 ));
             }
             _ => {
@@ -337,7 +334,7 @@ fn parse_build_command(args: &[String]) -> Result<Command, String> {
         }
     }
 
-    Ok(Command::Build(path))
+    Ok(Command::Build { path, flags })
 }
 
 fn parse_tests_command(args: &[String]) -> Result<Command, String> {
@@ -418,6 +415,7 @@ fn parse_check_command(args: &[String]) -> Result<Command, String> {
 fn parse_dev_command(args: &[String]) -> Result<Command, String> {
     let mut path = String::new();
     let mut options = DevServerOptions::default();
+    let mut flags = Vec::new();
     let mut index = 1usize;
 
     while let Some(arg) = args.get(index) {
@@ -471,13 +469,17 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
                 };
                 index += 2;
             }
-            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
-            | "--html-wasm" => {
+            "--release" => {
+                flags.push(Flag::Release);
+                index += 1;
+            }
+            "--html-wasm" => {
+                flags.push(Flag::HtmlWasm);
                 index += 1;
             }
             _ if arg.starts_with("--") => {
                 return Err(format!(
-                    "Unknown dev flag: '{arg}'. Supported dev flags are --host, --port, --poll-interval-ms."
+                    "Unknown dev flag: '{arg}'. Supported dev flags are --host, --port, --poll-interval-ms, --release, and --html-wasm."
                 ));
             }
             _ => {
@@ -493,7 +495,19 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
         }
     }
 
-    Ok(Command::Dev { path, options })
+    Ok(Command::Dev {
+        path,
+        options,
+        flags,
+    })
+}
+
+/// Returns the flag entries shown in the help text for build and dev.
+fn help_build_flag_entries() -> &'static [&'static str] {
+    &[
+        "  --release               (selects the release build profile and output folder)",
+        "  --html-wasm             (uses the experimental HTML-Wasm backend)",
+    ]
 }
 
 fn print_help() {
@@ -506,16 +520,16 @@ fn print_help() {
     say!("  new html [path] [--force] - Creates an HTML project scaffold");
     say!("  tests [--backend <id>] - Runs the integration test suite");
 
-    say!(Green Bold "\nFlags:");
-    say!("  --release");
-    say!("  --hide-warnings");
-    say!("  --hide-timers");
-    say!("  --show-warnings");
-    say!("  --html-wasm");
+    say!(Green Bold "\nBuild and dev flags:");
+    for entry in help_build_flag_entries() {
+        say!(entry);
+    }
     say!("\nTests command options:");
     say!("  --backend <id>         (supported: html, html_wasm)");
     say!("\nCheck command options:");
     say!("  --terse                (compact one-line diagnostics)");
+    say!("\nNew command options:");
+    say!("  --force                (allows replacing existing scaffold files)");
     say!("\nDev command options:");
     say!("  --host <host>            (default: 127.0.0.1)");
     say!("  --port <port>            (default: 6342)");

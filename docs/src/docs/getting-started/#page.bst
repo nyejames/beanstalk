@@ -100,18 +100,6 @@ page_head #= language_theme_head
         ]
 
         [data:
-            [: [$html:<code>--hide-warnings</code>] ]
-            [: Build-style commands]
-            [: Hides warning output. Use sparingly while developing.]
-        ]
-
-        [data:
-            [: [$html:<code>--hide-timers</code>] ]
-            [: Build-style commands]
-            [: Hides timing output.]
-        ]
-
-        [data:
             [: [$html:<code>--html-wasm</code>] ]
             [: HTML builds]
             [: Uses the experimental HTML-Wasm backend path. The JavaScript HTML backend is the current Alpha target.]

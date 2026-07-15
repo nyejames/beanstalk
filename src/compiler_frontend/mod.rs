@@ -54,12 +54,9 @@ pub use pipeline::CompilerFrontend;
 pub(crate) use pipeline::{FrontendFilePrepareContext, FrontendFilePrepareInput};
 
 /// Flags change the behavior of the core `compiler_frontend` pipeline.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Flag {
-    Version,
     Release,
-    DisableWarnings,
-    DisableTimers,
     HtmlWasm,
 }
 

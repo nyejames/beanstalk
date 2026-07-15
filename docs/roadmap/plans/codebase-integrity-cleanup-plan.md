@@ -20,18 +20,18 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 5, remove dead CLI flag surface
-LAST_ACCEPTED_COMMIT: `a5651e93f`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4C accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 6A, scaffold portability
+LAST_ACCEPTED_COMMIT: `122d95cc5`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 5 accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: CLI help truthfulness and pre-release removal policy
-- code: CLI argument parsing, flag representation and direct tests for ignored accepted spellings
+- docs: cross-platform project scaffolding behavior
+- code: `.gitignore` rule detection and explicit home-directory expansion helpers
 ACCEPTANCE_CRITERIA:
-- parsed flags with no runtime behavior are removed from parser, enum and help text
-- removed spellings are rejected as invalid CLI input
-- no compatibility aliases, ignored variants or dead forwarding paths remain
-- affected direct CLI tests and help-output assertions cover the current surface
+- trimmed `/dev` and `/dev/` rules are recognized without substring matches
+- only bare `~`, `~/...` and Windows `~\...` expand to the current user's home
+- Windows home lookup follows `USERPROFILE`, then `HOMEDRIVE` plus `HOMEPATH`
+- environment lookup remains deterministic and testable without process-global races
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -55,12 +55,15 @@ VALIDATION_STATE:
 - Phase 4B `just validate`: passed, including cross-target Clippy, 3,384 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 4C focused tracked-asset tests: passed, 13 tests
 - Phase 4C `just validate`: passed, including cross-target Clippy, 3,388 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
+- Phase 5 focused CLI tests: passed, 42 tests
+- Phase 5 focused integration-runner tests: passed, 48 tests
+- Phase 5 `just validate`: passed, including cross-target Clippy, 3,400 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+DOCS_IMPACT: the getting-started flag table now matches the accepted CLI surface. No progress-matrix status change is needed.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 5 is a bounded dead CLI surface removal
+DELEGATION_DECISION: ollama implementation worker - Phase 6A is a bounded scaffold portability fix
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 4C, then delegate Phase 5 dead flag removal
+NEXT_RESUME_ACTION: commit accepted Phase 5, then delegate Phase 6A scaffold portability
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -519,6 +522,11 @@ Tests:
 - tracked asset paths cannot cross or silently clamp to the output root
 
 ## Phase 5: Remove dead CLI flag surface
+
+Status: Complete. Compiler-facing flags now contain only release and HTML-Wasm behavior. Build and
+dev parsing return their exact flags directly, standalone version handling no longer enters compiler
+state and every removed or command-irrelevant spelling is rejected. Help and getting-started docs
+match the accepted surface. Focused tests and `just validate` passed.
 
 Files:
 

@@ -1,7 +1,11 @@
 //! Tests for CLI command parsing and validation.
 
-use super::{Command, build_warnings_messages, get_command, integration_tests_exit_code};
+use super::{
+    Command, build_warnings_messages, get_command, help_build_flag_entries,
+    integration_tests_exit_code, is_standalone_version_request,
+};
 use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, DiagnosticSeverity, RuleDiagnosticKind,
 };
@@ -25,6 +29,7 @@ fn dev_command_uses_default_options() {
         Command::Dev {
             path: String::from("main.bst"),
             options: DevServerOptions::default(),
+            flags: Vec::new(),
         }
     );
 }
@@ -32,14 +37,26 @@ fn dev_command_uses_default_options() {
 #[test]
 fn build_command_uses_current_directory_when_path_is_missing() {
     let command = get_command(&args(&["build"])).expect("build command should parse");
-    assert_eq!(command, Command::Build(String::new()));
+    assert_eq!(
+        command,
+        Command::Build {
+            path: String::new(),
+            flags: Vec::new(),
+        }
+    );
 }
 
 #[test]
 fn build_command_supports_mixed_path_and_flag_ordering() {
     let command =
         get_command(&args(&["build", "--release", "main.bst"])).expect("command should parse");
-    assert_eq!(command, Command::Build(String::from("main.bst")));
+    assert_eq!(
+        command,
+        Command::Build {
+            path: String::from("main.bst"),
+            flags: vec![Flag::Release],
+        }
+    );
 }
 
 #[test]
@@ -47,6 +64,8 @@ fn build_command_rejects_unknown_flags() {
     let error =
         get_command(&args(&["build", "--wat"])).expect_err("unknown build flag should fail");
     assert!(error.contains("Unknown build flag"));
+    assert!(error.contains("--release"));
+    assert!(error.contains("--html-wasm"));
 }
 
 #[test]
@@ -96,6 +115,7 @@ fn dev_command_parses_custom_host_port_and_poll_interval() {
                 port: 7777,
                 poll_interval_ms: 120,
             },
+            flags: Vec::new(),
         }
     );
 }
@@ -153,6 +173,7 @@ fn dev_command_supports_path_and_flag_ordering() {
                 port: 6342,
                 poll_interval_ms: 900,
             },
+            flags: Vec::new(),
         }
     );
 }
@@ -290,6 +311,162 @@ fn check_command_rejects_multiple_paths() {
     let error = get_command(&args(&["check", "a.bst", "b.bst"]))
         .expect_err("multiple check paths should fail");
     assert!(error.contains("at most one path"));
+}
+
+#[test]
+fn build_command_returns_exact_flags() {
+    let release = get_command(&args(&["build", "--release"])).expect("release flag should parse");
+    assert_eq!(
+        release,
+        Command::Build {
+            path: String::new(),
+            flags: vec![Flag::Release],
+        }
+    );
+
+    let wasm = get_command(&args(&["build", "--html-wasm"])).expect("html-wasm flag should parse");
+    assert_eq!(
+        wasm,
+        Command::Build {
+            path: String::new(),
+            flags: vec![Flag::HtmlWasm],
+        }
+    );
+
+    let both = get_command(&args(&["build", "--release", "--html-wasm"]))
+        .expect("both flags should parse");
+    assert_eq!(
+        both,
+        Command::Build {
+            path: String::new(),
+            flags: vec![Flag::Release, Flag::HtmlWasm],
+        }
+    );
+}
+
+#[test]
+fn dev_command_returns_exact_flags() {
+    let release = get_command(&args(&["dev", "--release"])).expect("release flag should parse");
+    assert_eq!(
+        release,
+        Command::Dev {
+            path: String::new(),
+            options: DevServerOptions::default(),
+            flags: vec![Flag::Release],
+        }
+    );
+
+    let wasm = get_command(&args(&["dev", "--html-wasm"])).expect("html-wasm flag should parse");
+    assert_eq!(
+        wasm,
+        Command::Dev {
+            path: String::new(),
+            options: DevServerOptions::default(),
+            flags: vec![Flag::HtmlWasm],
+        }
+    );
+}
+
+#[test]
+fn build_command_rejects_removed_warning_flags() {
+    for removed in &["--hide-warnings", "--hide-timers", "--show-warnings"] {
+        let error = get_command(&args(&["build", removed]))
+            .expect_err("removed flag should be rejected by build");
+        assert!(
+            error.contains("Unknown build flag"),
+            "build should reject {removed} as unknown"
+        );
+    }
+}
+
+#[test]
+fn dev_command_rejects_removed_warning_flags() {
+    for removed in &["--hide-warnings", "--hide-timers", "--show-warnings"] {
+        let error = get_command(&args(&["dev", "main.bst", removed]))
+            .expect_err("removed flag should be rejected by dev");
+        assert!(
+            error.contains("Unknown dev flag"),
+            "dev should reject {removed} as unknown"
+        );
+    }
+}
+
+#[test]
+fn new_command_rejects_removed_warning_flags() {
+    for removed in &["--hide-warnings", "--hide-timers", "--show-warnings"] {
+        let error = get_command(&args(&["new", "html", removed]))
+            .expect_err("removed flag should be rejected by new");
+        assert!(
+            error.contains("Unknown new flag"),
+            "new should reject {removed} as unknown"
+        );
+    }
+}
+
+#[test]
+fn new_html_command_rejects_release_flag() {
+    let error = get_command(&args(&["new", "html", "--release"]))
+        .expect_err("release should be rejected by new");
+    assert!(error.contains("Unknown new flag"));
+}
+
+#[test]
+fn new_html_command_rejects_html_wasm_flag() {
+    let error = get_command(&args(&["new", "html", "--html-wasm"]))
+        .expect_err("html-wasm should be rejected by new");
+    assert!(error.contains("Unknown new flag"));
+}
+
+#[test]
+fn check_command_rejects_html_wasm_flag() {
+    let error =
+        get_command(&args(&["check", "--html-wasm"])).expect_err("html-wasm should be rejected");
+    assert!(error.contains("Unknown check flag"));
+}
+
+#[test]
+fn tests_command_rejects_build_flags() {
+    for flag in &["--release", "--html-wasm"] {
+        let error = get_command(&args(&["tests", flag]))
+            .expect_err("build flag should be rejected by tests");
+        assert!(
+            error.contains("Unknown tests flag"),
+            "tests should reject {flag}"
+        );
+    }
+}
+
+#[test]
+fn standalone_version_request_recognises_all_spellings() {
+    assert!(is_standalone_version_request(&args(&["--version"])));
+    assert!(is_standalone_version_request(&args(&["-v"])));
+    assert!(is_standalone_version_request(&args(&["-V"])));
+}
+
+#[test]
+fn standalone_version_request_rejects_non_version_flags() {
+    assert!(!is_standalone_version_request(&args(&["--release"])));
+    for removed in &["--hide-warnings", "--hide-timers", "--show-warnings"] {
+        assert!(!is_standalone_version_request(&args(&[removed])));
+    }
+    assert!(!is_standalone_version_request(&args(&[
+        "--version",
+        "--release"
+    ])));
+    assert!(!is_standalone_version_request(&args(&["build"])));
+    assert!(!is_standalone_version_request(&[]));
+}
+
+#[test]
+fn help_advertises_accepted_flags_but_not_removed_spelling() {
+    let entries = help_build_flag_entries();
+    let joined = entries.join("\n");
+
+    assert!(joined.contains("--release"));
+    assert!(joined.contains("--html-wasm"));
+    assert!(!joined.contains("--hide-warnings"));
+    assert!(!joined.contains("--hide-timers"));
+    assert!(!joined.contains("--show-warnings"));
 }
 
 #[test]
