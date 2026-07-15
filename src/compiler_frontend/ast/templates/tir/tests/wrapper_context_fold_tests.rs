@@ -553,7 +553,8 @@ fn view_native_fold_safety_accepts_safe_wrapper_context_overlay() {
         .borrow()
         .clone();
 
-    let reason = classify_view_native_fold_safety(&view, &store);
+    let reason = classify_view_native_fold_safety(&view, &store)
+        .expect("fold safety authority should resolve");
     assert!(
         reason.is_none(),
         "safe wrapper-context overlay should be foldable, got {:?}",
@@ -634,7 +635,8 @@ fn view_native_fold_safety_accepts_wrapper_context_with_if_child_emits_mode() {
         .borrow()
         .clone();
 
-    let reason = classify_view_native_fold_safety(&view, &store);
+    let reason = classify_view_native_fold_safety(&view, &store)
+        .expect("fold safety authority should resolve");
     assert!(
         reason.is_none(),
         "IfChildEmits mode should be accepted by the fold-safety gate, got {:?}",

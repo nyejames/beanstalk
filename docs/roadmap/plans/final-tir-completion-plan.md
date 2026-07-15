@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3c2c - distinguish fold fallback from malformed authority
-LAST_ACCEPTED_COMMIT: `9936aa48b` (prior checkpoint; Slice 3E3c2b is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3c2d - require handoff wrapper-target scan authority
+LAST_ACCEPTED_COMMIT: `31dbf08ed`; Slice 3E3c2c is validated and awaiting its checkpoint commit
 BRANCH: `main`
-WORKTREE: `main`; reviewed Slice 3E3c2b change pending commit, with no unrelated uncommitted changes
+WORKTREE: `main`; intended Slice 3E3c2c source, focused-test and plan changes only
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/fold_safety.rs`, finalization fold-path selection and focused fold-cache/wrapper-context tests
-- unsupported fold shapes are semantic fallback reasons. Wrong-store views and missing required templates, nodes, overlays or child-view authority must propagate as internal errors rather than selecting a fallback path.
+- code: `tir/handoff_materialization.rs::determine_wrapper_fill_target_key`, `find_fill_target_key_in_node`, their wrapper-handoff caller and focused HIR-handoff tests
+- absent positional/default targets and foreign child references are semantic outcomes. Missing wrapper templates, nodes and required same-store child authority must propagate as internal errors rather than silently returning no target.
 ACCEPTANCE_CRITERIA:
-- Make production fold-safety selection distinguish malformed authority from supported semantic fallback reasons through a narrow result type.
-- Propagate required view/store/overlay/node/template and wrapper-context lookup failures through the existing template/finalization error lane.
-- Preserve runtime-slot, reactive, cross-store, cycle, unsupported-wrapper and other genuine non-foldable shapes as explicit fallback reasons without changing valid output.
+- Give the wrapper fill-target scan a narrow result shape that distinguishes optional routing outcomes from malformed required authority.
+- Propagate missing template, node and same-store child authority through the existing HIR-handoff internal error lane.
+- Preserve positional-before-default selection, named-only/no-target outcomes and foreign-child behavior without changing valid handoff output.
 VALIDATION_STATE:
-- Slice 3E3c2b focused suites: passed 32 classification and 17 runtime-slot tests
-- Slice 3E3c2b parent `just validate`: passed cross-target Clippy, 3454 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 7 faster and 1 slower
+- Slice 3E3c2c focused suites: passed 37 fold-cache, 34 wrapper-context and 13 HIR-handoff tests
+- Slice 3E3c2c parent `just validate`: passed cross-target Clippy, 3456 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 13 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: Ollama was unreachable at `http://localhost:11434` for Slice 3E3c2b before edits; retry the default order for the next slice
-DELEGATION_DECISION: default implementation order - Ollama primary as requested, then codex-cli and parent-direct
+BLOCKERS_OR_OPEN_DECISIONS: none; the user has started the local Ollama server
+DELEGATION_DECISION: ollama implementation primary - user requested the default worker order after Slice 3E3c2c
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Slice 3E3c2b, then delegate strict fold-safety authority through Ollama
+NEXT_RESUME_ACTION: commit accepted Slice 3E3c2c, refresh its commit hash and delegate Slice 3E3c2d through Ollama
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -454,6 +454,8 @@ Slice 3E3c1 checkpoint: reactive annotation, flow refresh and raw structural met
 Slice 3E3c2a checkpoint: contribution-shape classification, loose-content routing, control-flow detection and wrapper-set composition now propagate missing node, same-store template and wrapper-set authority through the internal compiler diagnostic lane. Foreign child references, absent optional wrapper fields and genuinely empty combined wrapper sets remain semantic outcomes, with focused malformed-store coverage at the classification and slot-composition owners.
 
 Slice 3E3c2b checkpoint: effective unresolved-slot, resolved-slot and escaped-insert classification now propagates missing node and required same-store child or insert-template authority through `TemplateError`. Runtime slot-site planning carries the strict result through `TemplateSlotError`, while foreign references, cycle re-entry, uncovered slots, present no-slot wrappers and named-only wrapper routing remain semantic outcomes.
+
+Slice 3E3c2c checkpoint: fold-safety gates now distinguish malformed TIR authority from valid non-foldable shapes through `Result`. Wrong supplied-store identity and missing root, node, overlay dimension, wrapper-set or required same-store child authority propagate through finalization and HIR handoff, including non-empty child overlays, while runtime-slot, reactive, cross-store, cycle and unsupported-wrapper shapes remain semantic fallbacks.
 
 #### Phase 3 acceptance
 

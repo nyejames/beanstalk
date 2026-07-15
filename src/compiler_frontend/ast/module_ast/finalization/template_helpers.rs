@@ -136,7 +136,7 @@ fn fold_registry_backed_template_to_string(
     increment_ast_counter(AstCounter::TirReadOnlyFoldAttempts);
     let read_only_safe = {
         let store_borrow = fold_inputs.template_ir_store.borrow();
-        tir_view_is_read_only_fold_safe(&view, &store_borrow)
+        tir_view_is_read_only_fold_safe(&view, &store_borrow)?
     };
 
     if read_only_safe {

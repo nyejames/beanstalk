@@ -19,12 +19,16 @@ use crate::compiler_frontend::ast::templates::template_folding::{
 use crate::compiler_frontend::ast::templates::tir::builder::TemplateIrBuilder;
 use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
-use crate::compiler_frontend::ast::templates::tir::ids::{SlotOccurrenceId, TemplateIrId};
+use crate::compiler_frontend::ast::templates::tir::fold_safety::classify_view_native_fold_safety;
+use crate::compiler_frontend::ast::templates::tir::ids::{
+    SlotOccurrenceId, TemplateIrId, TemplateWrapperSetId,
+};
 use crate::compiler_frontend::ast::templates::tir::node::{
     TemplateIr, TemplateIrNode, TemplateIrNodeKind,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirSlotResolution, TirSlotResolutionOverlay,
+    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlayId, TirSlotResolution,
+    TirSlotResolutionOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateWrapperReference,
@@ -1213,7 +1217,8 @@ fn read_only_view_fold_uses_live_store_for_safe_text_root() {
     let store = store_handle.borrow();
 
     assert!(
-        tir_view_is_read_only_fold_safe(&view, &store),
+        tir_view_is_read_only_fold_safe(&view, &store)
+            .expect("fold safety authority should resolve"),
         "text-only view should be safe for read-only folding"
     );
 
@@ -1294,7 +1299,8 @@ fn read_only_view_fold_accepts_same_store_child_templates() {
     let store = store_handle.borrow();
 
     assert!(
-        tir_view_is_read_only_fold_safe(&view, &store),
+        tir_view_is_read_only_fold_safe(&view, &store)
+            .expect("fold safety authority should resolve"),
         "same-store child templates with empty overlays should be safe"
     );
 
@@ -1334,7 +1340,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
         .expect("slot store handle should exist");
     let slot_store = slot_store_handle.borrow();
     assert!(
-        !tir_view_is_read_only_fold_safe(&slot_view, &slot_store),
+        !tir_view_is_read_only_fold_safe(&slot_view, &slot_store)
+            .expect("fold safety authority should resolve"),
         "unresolved slots are rejected by the read-only gate; slot-overlay views use the overlay gate"
     );
     drop(slot_store);
@@ -1352,11 +1359,13 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     .expect("slot overlay view should construct");
     let slot_overlay_store = slot_store_handle.borrow();
     assert!(
-        !tir_view_is_read_only_fold_safe(&slot_overlay_view, &slot_overlay_store),
+        !tir_view_is_read_only_fold_safe(&slot_overlay_view, &slot_overlay_store)
+            .expect("fold safety authority should resolve"),
         "non-empty overlays are handled by the overlay fold-safety gate, not the read-only gate"
     );
     assert!(
-        tir_view_is_expression_overlay_linear_fold_safe(&slot_overlay_view, &slot_overlay_store),
+        tir_view_is_expression_overlay_linear_fold_safe(&slot_overlay_view, &slot_overlay_store)
+            .expect("fold safety authority should resolve"),
         "a plain resolved slot overlay can use the Phase 4 view-native fold path"
     );
     drop(slot_overlay_store);
@@ -1369,7 +1378,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     }
     let slot_wrapper_store = slot_store_handle.borrow();
     assert!(
-        !tir_view_is_expression_overlay_linear_fold_safe(&slot_overlay_view, &slot_wrapper_store),
+        !tir_view_is_expression_overlay_linear_fold_safe(&slot_overlay_view, &slot_wrapper_store)
+            .expect("fold safety authority should resolve"),
         "slot overlays with $children wrapper metadata stay on the fallback until Phase 5"
     );
     drop(slot_wrapper_store);
@@ -1425,7 +1435,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     }
     let slot_context_store = slot_context_store_handle.borrow();
     assert!(
-        !tir_view_is_expression_overlay_linear_fold_safe(&slot_context_view, &slot_context_store),
+        !tir_view_is_expression_overlay_linear_fold_safe(&slot_context_view, &slot_context_store)
+            .expect("fold safety authority should resolve"),
         "slot overlays with slot-local $children wrapper context stay on the fallback until Phase 5"
     );
 
@@ -1472,7 +1483,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     .expect("wrapper view should construct");
     let wrapper_store = wrapper_store_handle.borrow();
     assert!(
-        tir_view_is_read_only_fold_safe(&wrapper_view, &wrapper_store),
+        tir_view_is_read_only_fold_safe(&wrapper_view, &wrapper_store)
+            .expect("fold safety authority should resolve"),
         "simple same-store conditional child wrappers are safe for view-native folding"
     );
     drop(wrapper_store);
@@ -1548,7 +1560,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     .expect("unsafe wrapper view should construct");
     let unsafe_wrapper_store = unsafe_wrapper_store_handle.borrow();
     assert!(
-        !tir_view_is_read_only_fold_safe(&unsafe_wrapper_view, &unsafe_wrapper_store),
+        !tir_view_is_read_only_fold_safe(&unsafe_wrapper_view, &unsafe_wrapper_store)
+            .expect("fold safety authority should resolve"),
         "same-store wrappers with slot-local wrapper context must stay on fallback"
     );
 
@@ -1575,7 +1588,8 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
     .expect("runtime view should construct");
     let runtime_store = runtime_store_handle.borrow();
     assert!(
-        !tir_view_is_read_only_fold_safe(&runtime_view, &runtime_store),
+        !tir_view_is_read_only_fold_safe(&runtime_view, &runtime_store)
+            .expect("fold safety authority should resolve"),
         "runtime slot plans are HIR/runtime handoff data, not const-fold output"
     );
 
@@ -1611,11 +1625,13 @@ fn read_only_fold_safety_rejects_shapes_that_mutate_or_need_overlays() {
         .expect("aggregate store handle should exist");
     let aggregate_store = aggregate_store_handle.borrow();
     assert!(
-        !tir_view_is_read_only_fold_safe(&aggregate_view, &aggregate_store),
+        !tir_view_is_read_only_fold_safe(&aggregate_view, &aggregate_store)
+            .expect("fold safety authority should resolve"),
         "aggregate markers outside aggregate wrappers must not take the read-only fold path"
     );
     assert!(
-        !tir_view_is_expression_overlay_linear_fold_safe(&aggregate_view, &aggregate_store),
+        !tir_view_is_expression_overlay_linear_fold_safe(&aggregate_view, &aggregate_store)
+            .expect("fold safety authority should resolve"),
         "aggregate markers outside aggregate wrappers must not take the view-native fold path"
     );
 }
@@ -1689,8 +1705,172 @@ fn read_only_fold_safety_rejects_child_template_cycles() {
     let store = store_handle.borrow();
 
     assert!(
-        !tir_view_is_read_only_fold_safe(&view, &store),
+        !tir_view_is_read_only_fold_safe(&view, &store)
+            .expect("fold safety authority should resolve"),
         "read-only folding must reject child-template cycles because the fold walker has no cycle guard"
+    );
+}
+
+#[test]
+fn fold_safety_reports_malformed_authority_as_error() {
+    let mut string_table = StringTable::new();
+
+    let missing_node_fixture = build_text_template_registry(&mut string_table, "missing node");
+    let missing_node_view = TirView::new(
+        &missing_node_fixture.registry,
+        TemplateRef::new(
+            missing_node_fixture.store_id,
+            missing_node_fixture.template_id,
+        ),
+        TemplateTirPhase::Composed,
+        missing_node_fixture.overlay_set_id,
+    )
+    .expect("view should construct before the store is malformed");
+    let missing_node_store_handle = missing_node_fixture
+        .registry
+        .store_handle(missing_node_fixture.store_id)
+        .expect("store handle should exist");
+    missing_node_store_handle.borrow_mut().nodes.clear();
+    let missing_node_store = missing_node_store_handle.borrow();
+    let missing_node_error =
+        classify_view_native_fold_safety(&missing_node_view, &missing_node_store)
+            .expect_err("missing root node must be an authority error");
+    assert!(
+        format!("{missing_node_error:?}").contains("node"),
+        "missing-node error should identify the malformed node authority"
+    );
+    drop(missing_node_store);
+
+    let missing_template_fixture =
+        build_text_template_registry(&mut string_table, "missing template");
+    let missing_template_view = TirView::new(
+        &missing_template_fixture.registry,
+        TemplateRef::new(
+            missing_template_fixture.store_id,
+            missing_template_fixture.template_id,
+        ),
+        TemplateTirPhase::Composed,
+        missing_template_fixture.overlay_set_id,
+    )
+    .expect("view should construct before the store is malformed");
+    let missing_template_store_handle = missing_template_fixture
+        .registry
+        .store_handle(missing_template_fixture.store_id)
+        .expect("store handle should exist");
+    missing_template_store_handle.borrow_mut().templates.clear();
+    let missing_template_store = missing_template_store_handle.borrow();
+    let missing_template_error =
+        tir_view_is_read_only_fold_safe(&missing_template_view, &missing_template_store)
+            .expect_err("missing root template must be an authority error");
+    assert!(
+        format!("{missing_template_error:?}").contains("template"),
+        "missing-template error should identify the malformed template authority"
+    );
+    drop(missing_template_store);
+
+    let mut missing_overlay_fixture =
+        build_text_template_registry(&mut string_table, "missing overlay dimension");
+    let missing_dimension_overlay_set_id =
+        missing_overlay_fixture
+            .registry
+            .allocate_overlay_set(TemplateOverlaySet {
+                expression_overrides: Some(TirExpressionOverlayId::new(999)),
+                slot_resolution: None,
+                wrapper_context: None,
+            });
+    let missing_dimension_view = TirView::new(
+        &missing_overlay_fixture.registry,
+        TemplateRef::new(
+            missing_overlay_fixture.store_id,
+            missing_overlay_fixture.template_id,
+        ),
+        TemplateTirPhase::Finalized,
+        missing_dimension_overlay_set_id,
+    )
+    .expect("view should construct with an existing malformed overlay set");
+    let missing_dimension_store = missing_overlay_fixture
+        .registry
+        .store_handle(missing_overlay_fixture.store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let missing_dimension_error =
+        classify_view_native_fold_safety(&missing_dimension_view, &missing_dimension_store)
+            .expect_err("missing overlay dimension must be an authority error");
+    assert!(
+        format!("{missing_dimension_error:?}").contains("expression overlay"),
+        "overlay-dimension error should identify the missing expression entry"
+    );
+
+    let wrapper_fixture = build_text_template_registry(&mut string_table, "missing wrapper set");
+    let wrapper_store_handle = wrapper_fixture
+        .registry
+        .store_handle(wrapper_fixture.store_id)
+        .expect("store handle should exist");
+    let wrapper_view = TirView::new(
+        &wrapper_fixture.registry,
+        TemplateRef::new(wrapper_fixture.store_id, wrapper_fixture.template_id),
+        TemplateTirPhase::Composed,
+        wrapper_fixture.overlay_set_id,
+    )
+    .expect("view should construct before the store is malformed");
+    wrapper_store_handle.borrow_mut().templates[wrapper_fixture.template_id.index()]
+        .conditional_child_wrapper_set = Some(TemplateWrapperSetId::new(999));
+    let wrapper_store = wrapper_store_handle.borrow();
+    let missing_wrapper_error = tir_view_is_read_only_fold_safe(&wrapper_view, &wrapper_store)
+        .expect_err("missing wrapper set must be an authority error");
+    assert!(
+        format!("{missing_wrapper_error:?}").contains("wrapper set"),
+        "wrapper-set error should identify the malformed wrapper authority"
+    );
+}
+
+#[test]
+fn read_only_fold_safety_reports_missing_child_before_overlay_fallback() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let child_slot_overlay_id =
+        registry.allocate_slot_resolution_overlay(TirSlotResolutionOverlay {
+            resolutions: vec![],
+        });
+    let child_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: None,
+        slot_resolution: Some(child_slot_overlay_id),
+        wrapper_context: None,
+    });
+    let missing_child_template_id = TemplateIrId::new(999);
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let child_reference = TemplateTirChildReference::same_store(
+            missing_child_template_id,
+            store_id,
+            TemplateTirPhase::Composed,
+            child_overlay_set_id,
+        );
+        finish_single_child_template(&mut store, child_reference)
+    };
+
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Composed,
+        parent_overlay_set_id,
+    )
+    .expect("parent view should construct");
+    let store_handle = registry
+        .store_handle(store_id)
+        .expect("store handle should exist");
+    let store = store_handle.borrow();
+
+    let error = tir_view_is_read_only_fold_safe(&view, &store)
+        .expect_err("a non-empty child overlay must not hide missing child authority");
+    assert!(
+        error.msg.contains("template"),
+        "missing-child error should identify the missing template authority"
     );
 }
 

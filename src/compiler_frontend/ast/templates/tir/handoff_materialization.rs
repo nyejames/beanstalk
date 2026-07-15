@@ -1363,7 +1363,8 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
 
         // Unsafe fold shape: non-linear or overlay-bearing shapes that the
         // const-fold shortcut cannot handle fall through to structural handoff.
-        if !tir_view_is_empty_overlay_linear_fold_safe(&child_view, self.store) {
+        let fold_safe = tir_view_is_empty_overlay_linear_fold_safe(&child_view, self.store)?;
+        if !fold_safe {
             return Ok(None);
         }
 
