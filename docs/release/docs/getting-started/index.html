@@ -661,7 +661,7 @@ body {
             </a>
         </div>
     </nav>
-    <section class="container"><p><a href="../">Documentation</a> / Getting Started</p><h1>Getting Started with bean</h1><p><code>bean</code> is the Beanstalk compiler and project tool. It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.</p><p>The tooling is still early. Command names, generated project structure, config options, and backend flags may change at this stage in development.</p><p>Its main purpose right now is to create a project, check it, build it and run the hot-reloading dev server.</p><p>If you are running the compiler from the repository instead of an installed <code>bean</code> binary, use <code>cargo run --</code> before the same commands:</p><pre style="
+    <section class="container"><p><a href="../">Documentation</a> / Getting Started</p><h1>Getting Started with bean</h1><p><code>bean</code> is the Beanstalk compiler and project tool. You use it from the command-line to create new projects, check them, build them and run the hot-reloading dev server.</p><p>It has a bunch of other tooling that is under rapid developemnt.</p><p>If you are running the compiler from the repository instead of an installed <code>bean</code> binary, use <code>cargo run --</code> before the same commands:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -673,7 +673,7 @@ body {
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> check .
     cargo run <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span> build .
     </code></pre></section>
-    <section class="container"><h2>Current commands</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h2>Commands</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
 
         
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -722,7 +722,7 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>tests</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Runs the compiler integration test suite.</td>
+     <td style="padding: 0.2em 0.5em;  "> Runs the compiler integration test suite. (developer tool)</td>
      <td style="padding: 0.2em 0.5em;  "> Mainly useful when working on the compiler itself. Use <code>--backend html</code> or <code>--backend html_wasm</code> to focus one backend profile.</td>
         </tr>
             
@@ -743,18 +743,6 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <code>--release</code> </td>
      <td style="padding: 0.2em 0.5em;  "> <code>build</code>, <code>dev</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Selects the release build profile and release output folder where supported.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--hide-warnings</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Build-style commands</td>
-     <td style="padding: 0.2em 0.5em;  "> Hides warning output. Use sparingly while developing.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>--hide-timers</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Build-style commands</td>
-     <td style="padding: 0.2em 0.5em;  "> Hides timing output.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

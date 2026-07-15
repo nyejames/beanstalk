@@ -21,12 +21,9 @@ page_head #= language_theme_head
     # Getting Started with bean
 
     `bean` is the Beanstalk compiler and project tool.
-    It is the command-line entry point launched by the compiler binary, and it will eventually grow into the Cargo-like tool for Beanstalk projects.
+    You use it from the command-line to create new projects, check them, build them and run the hot-reloading dev server.
 
-    The tooling is still early.
-    Command names, generated project structure, config options, and backend flags may change at this stage in development.
-
-    Its main purpose right now is to create a project, check it, build it and run the hot-reloading dev server.
+    It has a bunch of other tooling that is under rapid developemnt.
 
     If you are running the compiler from the repository instead of an installed `bean` binary, use `cargo run --` before the same commands:
 
@@ -38,7 +35,7 @@ page_head #= language_theme_head
 ]
 
 #[section, $md:
-    ## Current commands
+    ## Commands
 
     [styled_table:
         [header: [: Command] [: Use] [: Notes] ]
@@ -81,7 +78,7 @@ page_head #= language_theme_head
 
         [data:
             [: [$html:<code>tests</code>] ]
-            [: Runs the compiler integration test suite.]
+            [: Runs the compiler integration test suite. (developer tool)]
             [: Mainly useful when working on the compiler itself. Use [$html:<code>--backend html</code>] or [$html:<code>--backend html_wasm</code>] to focus one backend profile.]
         ]
     ]

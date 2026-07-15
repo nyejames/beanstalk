@@ -49,9 +49,10 @@ page_head #= language_theme_head
 
     # Language basics
 
-    Beanstalk keeps the surface small, but it doesn't pretend punctuation is invisible. A colon opens a block, a semicolon closes it and every value has a clear shape.
+    Beanstalk is a language with a small semantic surface. 
+    Each bit of puncuation or keyword represents a single concept. 
 
-    Start here for the syntax you will see everywhere. The following pages take the same ideas further into bindings, numbers, casts and control flow.
+    This page is all about the syntax you will see all over Beanstalk codebases.
 ]
 
 #[section:

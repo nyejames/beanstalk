@@ -49,7 +49,7 @@ They are the main way you create strings, but are far more powerful than regular
 
 ![Beanstalk code snippet](./docs/assets/code-snippet.webp)
 
-Markdown can live inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
+Beanstalk's custom falvor of Markdown can live inside normal templates, so content can capture values, compose styles and fold straight into HTML at compile time.
 
 This makes content-heavy pages quick to build and easy to format. 
 
