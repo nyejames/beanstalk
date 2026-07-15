@@ -13,9 +13,9 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::tir::{
-    CurrentStateMaterializationSummary, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind,
-    TemplateIrStore, TemplateSlotPlanId, TemplateSlotSitePlan, TemplateSlotSiteRenderPiece,
-    TemplateSlotSiteRenderPlan, TemplateWrapperSetId, TirSlotPlaceholder, TirSlotSchema,
+    TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrStore, TemplateSlotPlanId,
+    TemplateSlotSitePlan, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
+    TemplateWrapperSetId, TirCopyState, TirSlotPlaceholder, TirSlotSchema,
     collect_tir_slot_placeholders_in_order, collect_tir_slot_schema,
     copy_tir_subtree_with_active_slot_plan, tir_subtree_has_unresolved_slots,
 };
@@ -29,14 +29,14 @@ pub(super) fn build_runtime_wrapper_site_plan(
     slot_plan_id: TemplateSlotPlanId,
     store: &mut TemplateIrStore,
     string_table: &StringTable,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<Vec<TemplateSlotSitePlan>, TemplateSlotError> {
     RuntimeWrapperSitePlanBuilder {
         sources,
         slot_plan_id,
         store,
         string_table,
-        summary,
+        copy_state,
     }
     .build_slot_sites(wrapper_tir_root)
 }
@@ -54,7 +54,7 @@ struct RuntimeWrapperSitePlanBuilder<'a> {
     slot_plan_id: TemplateSlotPlanId,
     store: &'a mut TemplateIrStore,
     string_table: &'a StringTable,
-    summary: &'a mut CurrentStateMaterializationSummary,
+    copy_state: &'a mut TirCopyState,
 }
 
 impl RuntimeWrapperSitePlanBuilder<'_> {
@@ -265,7 +265,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
                 wrapper_root,
                 None,
                 self.store,
-                self.summary,
+                self.copy_state,
             )
             .map_err(TemplateSlotError::from)?;
 
@@ -286,7 +286,7 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
             inner_plan,
             target_key,
             self.store,
-            self.summary,
+            self.copy_state,
         )
         .map_err(TemplateSlotError::from)?;
 
@@ -325,7 +325,7 @@ fn build_tir_wrapper_render_pieces(
     inner_plan: &TemplateSlotSiteRenderPlan,
     target_key: SlotKey,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<Vec<TemplateSlotSiteRenderPiece>, TemplateError> {
     let node = store.get_node(wrapper_root).cloned().ok_or_else(|| {
         CompilerError::compiler_error(
@@ -353,7 +353,7 @@ fn build_tir_wrapper_render_pieces(
                 }
 
                 let copied_child =
-                    copy_tir_subtree_with_active_slot_plan(child_id, None, store, summary)?;
+                    copy_tir_subtree_with_active_slot_plan(child_id, None, store, copy_state)?;
                 pieces.push(TemplateSlotSiteRenderPiece::Render(copied_child));
             }
 
@@ -369,11 +369,11 @@ fn build_tir_wrapper_render_pieces(
                     inner_plan,
                     target_key,
                     store,
-                    summary,
+                    copy_state,
                 )
             } else {
                 let copied_root =
-                    copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, summary)?;
+                    copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, copy_state)?;
                 Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
             }
         }
@@ -383,7 +383,7 @@ fn build_tir_wrapper_render_pieces(
             // wrapper) are copied whole without inserting the inner plan, just as
             // the atom fallback materializes the whole top-level content atom.
             let copied_root =
-                copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, summary)?;
+                copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, copy_state)?;
             Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
         }
     }

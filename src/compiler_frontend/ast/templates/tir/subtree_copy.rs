@@ -21,7 +21,7 @@ use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
-use crate::compiler_frontend::ast::templates::tir::construction::CurrentStateMaterializationSummary;
+use crate::compiler_frontend::ast::templates::tir::construction::TirCopyState;
 /// Copies a finalized TIR subtree into a fresh tree, applying an optional active
 /// slot-plan context to any unresolved `Slot` placeholders.
 ///
@@ -41,9 +41,9 @@ pub(crate) fn copy_tir_subtree_with_active_slot_plan(
     source_node_id: TemplateIrNodeId,
     active_slot_plan: Option<TemplateSlotPlanId>,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<TemplateIrNodeId, TemplateError> {
-    copy_tir_node_with_active_slot_plan(source_node_id, active_slot_plan, store, summary, false)
+    copy_tir_node_with_active_slot_plan(source_node_id, active_slot_plan, store, copy_state, false)
 }
 
 /// Recursively copies one TIR node, translating child-template references into
@@ -53,7 +53,7 @@ fn copy_tir_node_with_active_slot_plan(
     source_node_id: TemplateIrNodeId,
     active_slot_plan: Option<TemplateSlotPlanId>,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
     preserve_expression_site_ids: bool,
 ) -> Result<TemplateIrNodeId, TemplateError> {
     let source_node = store.get_node(source_node_id).cloned().ok_or_else(|| {
@@ -70,7 +70,7 @@ fn copy_tir_node_with_active_slot_plan(
             byte_len,
             origin,
         } => {
-            summary.record_text_node(byte_len as usize);
+            copy_state.record_text_node(byte_len as usize);
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::Text {
@@ -96,7 +96,7 @@ fn copy_tir_node_with_active_slot_plan(
             reactive_subscription,
             site_id,
         } => {
-            summary.record_dynamic_expression(reactive_subscription.is_some());
+            copy_state.record_dynamic_expression(reactive_subscription.is_some());
 
             let copied_site_id = if preserve_expression_site_ids {
                 site_id
@@ -117,7 +117,7 @@ fn copy_tir_node_with_active_slot_plan(
 
         TemplateIrNodeKind::Slot { mut placeholder } => {
             if let Some(plan_id) = active_slot_plan {
-                let site_id = summary
+                let site_id = copy_state
                     .next_runtime_slot_site_for_key(plan_id, &placeholder.key, store)
                     .ok_or_else(|| {
                         TemplateError::from(CompilerError::compiler_error(
@@ -126,11 +126,11 @@ fn copy_tir_node_with_active_slot_plan(
                     })?;
 
                 return Ok(convert_runtime_slot_site(
-                    plan_id, site_id, store, summary, &location,
+                    plan_id, site_id, store, copy_state, &location,
                 ));
             }
 
-            summary.record_slot();
+            copy_state.record_slot();
             placeholder.occurrence_id = store.next_slot_occurrence_id();
             placeholder.location = location.clone();
             let node_id = store.push_node(TemplateIrNode::new(
@@ -141,7 +141,7 @@ fn copy_tir_node_with_active_slot_plan(
         }
 
         TemplateIrNodeKind::RuntimeSlotSite { plan, site } => {
-            summary.record_existing_runtime_slot_site();
+            copy_state.record_existing_runtime_slot_site();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::RuntimeSlotSite { plan, site },
@@ -159,9 +159,9 @@ fn copy_tir_node_with_active_slot_plan(
                 })?,
                 active_slot_plan,
                 store,
-                summary,
+                copy_state,
             )?;
-            summary.record_child_template();
+            copy_state.record_child_template();
 
             let occurrence_id = store.next_child_template_occurrence_id();
             let reference = TemplateTirChildReference::same_store(
@@ -185,9 +185,9 @@ fn copy_tir_node_with_active_slot_plan(
                 template,
                 active_slot_plan,
                 store,
-                summary,
+                copy_state,
             )?;
-            summary.record_insert_contribution();
+            copy_state.record_insert_contribution();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::InsertContribution {
@@ -199,7 +199,7 @@ fn copy_tir_node_with_active_slot_plan(
         }
 
         TemplateIrNodeKind::Sequence { children } => {
-            summary.enter_depth();
+            copy_state.enter_depth();
             let new_children = children
                 .into_iter()
                 .map(|child_id| {
@@ -207,12 +207,12 @@ fn copy_tir_node_with_active_slot_plan(
                         child_id,
                         active_slot_plan,
                         store,
-                        summary,
+                        copy_state,
                         preserve_expression_site_ids,
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            summary.exit_depth();
+            copy_state.exit_depth();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::Sequence {
@@ -224,8 +224,8 @@ fn copy_tir_node_with_active_slot_plan(
         }
 
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            summary.record_control_flow();
-            summary.enter_depth();
+            copy_state.record_control_flow();
+            copy_state.enter_depth();
             let new_branches = branches
                 .into_iter()
                 .map(|branch| -> Result<TemplateIrBranch, TemplateError> {
@@ -233,7 +233,7 @@ fn copy_tir_node_with_active_slot_plan(
                         branch.body,
                         active_slot_plan,
                         store,
-                        summary,
+                        copy_state,
                         preserve_expression_site_ids,
                     )?;
 
@@ -249,12 +249,12 @@ fn copy_tir_node_with_active_slot_plan(
                         fallback_id,
                         active_slot_plan,
                         store,
-                        summary,
+                        copy_state,
                         preserve_expression_site_ids,
                     )
                 })
                 .transpose()?;
-            summary.exit_depth();
+            copy_state.exit_depth();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::BranchChain {
@@ -272,13 +272,13 @@ fn copy_tir_node_with_active_slot_plan(
             body,
             aggregate_wrapper,
         } => {
-            summary.record_control_flow();
-            summary.enter_depth();
+            copy_state.record_control_flow();
+            copy_state.enter_depth();
             let new_body = copy_tir_node_with_active_slot_plan(
                 body,
                 active_slot_plan,
                 store,
-                summary,
+                copy_state,
                 preserve_expression_site_ids,
             )?;
             let new_aggregate_wrapper = aggregate_wrapper
@@ -287,12 +287,12 @@ fn copy_tir_node_with_active_slot_plan(
                         wrapper_id,
                         active_slot_plan,
                         store,
-                        summary,
+                        copy_state,
                         preserve_expression_site_ids,
                     )
                 })
                 .transpose()?;
-            summary.exit_depth();
+            copy_state.exit_depth();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::Loop {
@@ -307,7 +307,7 @@ fn copy_tir_node_with_active_slot_plan(
         }
 
         TemplateIrNodeKind::LoopControl { kind } => {
-            summary.record_control_flow();
+            copy_state.record_control_flow();
 
             let node_id = store.push_node(TemplateIrNode::new(
                 TemplateIrNodeKind::LoopControl { kind },
@@ -341,7 +341,7 @@ fn copy_tir_template_with_active_slot_plan(
     source_template_id: TemplateIrId,
     active_slot_plan: Option<TemplateSlotPlanId>,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<TemplateIrId, TemplateError> {
     let source_template = store
         .get_template(source_template_id)
@@ -361,26 +361,26 @@ fn copy_tir_template_with_active_slot_plan(
         active_slot_plan
     };
 
-    let mut child_summary = CurrentStateMaterializationSummary::new();
-    child_summary.runtime_slot_site_cursors = summary.runtime_slot_site_cursors.clone();
+    let mut child_state = TirCopyState::new();
+    child_state.runtime_slot_site_cursor = copy_state.runtime_slot_site_cursor.clone();
 
     let new_root = copy_tir_node_with_active_slot_plan(
         source_template.root,
         effective_active_slot_plan,
         store,
-        &mut child_summary,
+        &mut child_state,
         false,
     )?;
 
-    // Propagate the cursor state for the active plan back to the parent summary.
+    // Propagate the cursor state for the active plan back to the parent copy.
     // The child template's own text/child/slot counts stay in its own summary.
-    summary.runtime_slot_site_cursors = child_summary.runtime_slot_site_cursors;
+    copy_state.runtime_slot_site_cursor = child_state.runtime_slot_site_cursor;
 
     let mut new_template = TemplateIr::new(
         new_root,
         source_template.style,
         source_template.kind,
-        child_summary.summary,
+        child_state.summary,
         source_template.location,
     );
     new_template.conditional_child_wrapper_set = source_template.conditional_child_wrapper_set;

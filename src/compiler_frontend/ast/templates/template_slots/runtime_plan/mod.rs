@@ -13,9 +13,9 @@ mod types;
 
 use super::error::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::tir::{
-    CurrentStateMaterializationSummary, TemplateIr, TemplateIrStore, TemplateSlotPlan,
+    TemplateIr, TemplateIrStore, TemplateSlotPlan, TirCopyState,
     convert_tir_tree_to_active_slot_plan, copy_tir_subtree_with_active_slot_plan,
-    record_materialization_counters,
+    record_tir_copy_counters,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
@@ -60,14 +60,14 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
             )
         })?;
 
-    let mut summary = CurrentStateMaterializationSummary::new();
-    let mut scratch_summary = CurrentStateMaterializationSummary::new();
+    let mut copy_state = TirCopyState::new();
+    let mut scratch_copy_state = TirCopyState::new();
 
     // Copy the wrapper's TIR root as a scratch tree. No active slot plan is
     // passed so Slot nodes stay as Slot nodes for site-draft collection, then
     // get converted to RuntimeSlotSite nodes after the site plan is built.
     let scratch_tir_root =
-        copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, &mut scratch_summary)
+        copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, &mut scratch_copy_state)
             .map_err(TemplateSlotError::from)?;
 
     let templates_before = store.template_count();
@@ -89,7 +89,7 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
         location,
         string_table,
         store,
-        &mut summary,
+        &mut copy_state,
     )
     .map_err(TemplateSlotError::from)?;
 
@@ -103,7 +103,7 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
         slot_plan_id,
         store,
         string_table,
-        &mut summary,
+        &mut copy_state,
     )?;
 
     let Some(slot_plan) = store.slot_plans.get_mut(slot_plan_id.index()) else {
@@ -117,23 +117,25 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
 
     // Convert the scratch tree's Slot nodes into RuntimeSlotSite nodes using
     // the active slot plan's cursor, matching the atom-based path's conversion.
-    summary.reset_runtime_slot_site_cursor(slot_plan_id);
-    convert_tir_tree_to_active_slot_plan(scratch_tir_root, slot_plan_id, store, &mut summary)
+    copy_state.reset_runtime_slot_site_cursor(slot_plan_id);
+    convert_tir_tree_to_active_slot_plan(scratch_tir_root, slot_plan_id, store, &mut copy_state)
         .map_err(TemplateSlotError::from)?;
 
-    summary.merge_converted_wrapper_tree_summary(&scratch_summary.summary);
+    copy_state
+        .summary
+        .merge_converted_wrapper_tree(&scratch_copy_state.summary);
 
     let mut tir_template = TemplateIr::new(
         scratch_tir_root,
         wrapper_style,
         wrapper_kind,
-        summary.summary.clone(),
+        copy_state.summary.clone(),
         location.clone(),
     );
     tir_template.runtime_slot_plan = Some(slot_plan_id);
 
     let template_id = store.push_template(tir_template);
-    record_materialization_counters(store, templates_before, nodes_before, &summary);
+    record_tir_copy_counters(store, templates_before, nodes_before, &copy_state);
     add_ast_counter(AstCounter::RuntimeSlotHandoffsMaterialized, 1);
 
     Ok(template_id)

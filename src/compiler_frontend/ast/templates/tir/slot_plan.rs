@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template_slots::{
     RuntimeSlotContributionSourceId, RuntimeSlotSiteId,
 };
-use crate::compiler_frontend::ast::templates::tir::construction::CurrentStateMaterializationSummary;
+use crate::compiler_frontend::ast::templates::tir::construction::TirCopyState;
 use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrNodeId, TemplateSlotPlanId};
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNode, TemplateIrNodeKind};
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
@@ -83,10 +83,10 @@ pub(super) fn convert_runtime_slot_site(
     plan: TemplateSlotPlanId,
     site: RuntimeSlotSiteId,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
     location: &SourceLocation,
 ) -> TemplateIrNodeId {
-    summary.record_runtime_slot_site(plan, site);
+    copy_state.record_runtime_slot_site(plan, site);
 
     store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::RuntimeSlotSite { plan, site },
@@ -102,7 +102,7 @@ pub(super) fn convert_runtime_slot_site(
 ///
 /// WHAT: walks the TIR tree starting at `root_node_id` in document order and
 /// replaces each `Slot` node in-place with a `RuntimeSlotSite` node. The
-/// matching site is found via the cursor in `summary`, which advances as each
+/// matching site is found via the cursor in `copy_state`, which advances as each
 /// slot is converted.
 ///
 /// `ChildTemplate` nodes are recursed into so nested slots inside child
@@ -121,7 +121,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
     root_node_id: TemplateIrNodeId,
     slot_plan_id: TemplateSlotPlanId,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<bool, TemplateError> {
     let node_kind = store
         .get_node(root_node_id)
@@ -135,7 +135,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
 
     let converted = match node_kind {
         TemplateIrNodeKind::Slot { placeholder } => {
-            let site_id = summary
+            let site_id = copy_state
                 .next_runtime_slot_site_for_key(slot_plan_id, &placeholder.key, store)
                 .ok_or_else(|| {
                     CompilerError::compiler_error(
@@ -155,8 +155,12 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
         TemplateIrNodeKind::Sequence { children } => {
             let mut any_converted = false;
             for child_id in children {
-                any_converted |=
-                    convert_tir_tree_to_active_slot_plan(child_id, slot_plan_id, store, summary)?;
+                any_converted |= convert_tir_tree_to_active_slot_plan(
+                    child_id,
+                    slot_plan_id,
+                    store,
+                    copy_state,
+                )?;
             }
             any_converted
         }
@@ -178,7 +182,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
                 .root;
 
             let child_converted =
-                convert_tir_tree_to_active_slot_plan(child_root, slot_plan_id, store, summary)?;
+                convert_tir_tree_to_active_slot_plan(child_root, slot_plan_id, store, copy_state)?;
 
             if child_converted {
                 let child_template = &mut store.templates[child_template_id.index()];
@@ -196,7 +200,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
                     branch.body,
                     slot_plan_id,
                     store,
-                    summary,
+                    copy_state,
                 )?;
             }
             if let Some(fallback_id) = fallback {
@@ -204,7 +208,7 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
                     fallback_id,
                     slot_plan_id,
                     store,
-                    summary,
+                    copy_state,
                 )?;
             }
             any_converted
@@ -216,13 +220,13 @@ pub(crate) fn convert_tir_tree_to_active_slot_plan(
             ..
         } => {
             let mut any_converted =
-                convert_tir_tree_to_active_slot_plan(body, slot_plan_id, store, summary)?;
+                convert_tir_tree_to_active_slot_plan(body, slot_plan_id, store, copy_state)?;
             if let Some(aggregate_wrapper_id) = aggregate_wrapper {
                 any_converted |= convert_tir_tree_to_active_slot_plan(
                     aggregate_wrapper_id,
                     slot_plan_id,
                     store,
-                    summary,
+                    copy_state,
                 )?;
             }
             any_converted

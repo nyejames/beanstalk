@@ -12,13 +12,14 @@
 //!      without introducing a new broad utility layer.
 
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
-use crate::compiler_frontend::ast::templates::tir::construction::CurrentStateMaterializationSummary;
+use crate::compiler_frontend::ast::templates::tir::construction::TirCopyState;
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateTirChildReference};
+use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_nodes;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBuilder, TemplateIrId, TemplateIrNode, TemplateIrNodeId, TemplateIrStore,
-    TemplateIrSummary, copy_tir_subtree_with_active_slot_plan,
+    copy_tir_subtree_with_active_slot_plan,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::compiler_errors::compiler_error_to_diagnostic;
@@ -294,6 +295,7 @@ pub(super) fn build_tir_fill_template(
             ))
         })?;
 
+    let summary = summarize_existing_nodes(store, &fill_node_ids);
     let mut builder = TemplateIrBuilder::new(store);
     let root = builder.push_sequence_node(fill_node_ids, location.to_owned());
 
@@ -301,7 +303,7 @@ pub(super) fn build_tir_fill_template(
         root,
         Style::default(),
         TemplateType::String,
-        TemplateIrSummary::default(),
+        summary,
         location,
     ))
 }
@@ -376,16 +378,16 @@ pub(super) fn copy_tir_wrapper_template_with_fresh_slot_occurrence_ids(
     let wrapper_set = wrapper_template.conditional_child_wrapper_set;
     let runtime_slot_plan = wrapper_template.runtime_slot_plan;
 
-    let mut summary = CurrentStateMaterializationSummary::new();
+    let mut copy_state = TirCopyState::new();
     let copied_root =
-        copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, &mut summary)
+        copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, &mut copy_state)
             .map_err(|error| error.into_diagnostic())?;
 
     let mut copied_template = TemplateIr::new(
         copied_root,
         wrapper_style,
         wrapper_kind,
-        summary.summary,
+        copy_state.summary,
         wrapper_location,
     );
     copied_template.conditional_child_wrapper_set = wrapper_set;

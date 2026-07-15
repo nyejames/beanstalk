@@ -438,11 +438,10 @@ fn build_tir_prepended_wrapper_template(
 
     // The combined template contains two child references, so it is not a plain
     // const-evaluable string even if both constituents happen to fold.
-    let summary = TemplateIrSummary {
-        child_template_count: 2,
-        is_const_evaluable_shape: false,
-        ..TemplateIrSummary::default()
-    };
+    let mut summary = TemplateIrSummary::default();
+    summary.record_child_template();
+    summary.record_child_template();
+    summary.is_const_evaluable_shape = false;
 
     Ok(store.push_template(TemplateIr::new(
         combined_root,

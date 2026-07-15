@@ -10,9 +10,9 @@
 use super::types::{RuntimeSlotContributionSourceDraft, RuntimeSlotContributionSourceId};
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::tir::{
-    CurrentStateMaterializationSummary, TemplateIrStore, TemplateSlotContributionSourcePlan,
-    TirSlotContributions, TirSlotSchema, classify_tir_contribution_node,
-    copy_tir_subtree_with_active_slot_plan, tir_node_is_const_evaluable_value,
+    TemplateIrStore, TemplateSlotContributionSourcePlan, TirCopyState, TirSlotContributions,
+    TirSlotSchema, classify_tir_contribution_node, copy_tir_subtree_with_active_slot_plan,
+    tir_node_is_const_evaluable_value,
 };
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -59,7 +59,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_tir_native_contributio
     location: &SourceLocation,
     string_table: &StringTable,
     store: &mut TemplateIrStore,
-    summary: &mut CurrentStateMaterializationSummary,
+    copy_state: &mut TirCopyState,
 ) -> Result<Vec<RuntimeSlotContributionSourceDraft>, TemplateError> {
     let mut sources = Vec::new();
 
@@ -72,7 +72,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_tir_native_contributio
             // own Slot nodes (if any) must survive as structural placeholders,
             // not be converted to RuntimeSlotSite nodes under the wrapper's plan.
             let render_root =
-                copy_tir_subtree_with_active_slot_plan(*node_id, None, store, summary)?;
+                copy_tir_subtree_with_active_slot_plan(*node_id, None, store, copy_state)?;
 
             let renders_wrapper_unconditionally =
                 tir_node_is_const_evaluable_value(store, render_root, string_table);

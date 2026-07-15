@@ -201,9 +201,7 @@ impl TemplateParserIrBuilderState {
         };
 
         self.children.push(node_id);
-        self.summary.estimated_output_bytes += byte_len;
-        self.summary.text_node_count += 1;
-        self.summary.text_byte_count += byte_len;
+        self.summary.record_text_node(byte_len);
         if reactive_subscription.is_some() {
             self.summary.has_reactivity = true;
         }
@@ -237,11 +235,8 @@ impl TemplateParserIrBuilderState {
         };
 
         self.children.push(node_id);
-        self.summary.dynamic_expression_count += 1;
-        self.summary.is_const_evaluable_shape = false;
-        if reactive_subscription.is_some() {
-            self.summary.has_reactivity = true;
-        }
+        self.summary
+            .record_dynamic_expression(reactive_subscription.is_some());
 
         if origin == TemplateSegmentOrigin::Head {
             self.head_node_count += 1;
@@ -274,7 +269,7 @@ impl TemplateParserIrBuilderState {
         };
 
         self.children.push(node_id);
-        self.summary.child_template_count += 1;
+        self.summary.record_child_template();
 
         if origin == TemplateSegmentOrigin::Head {
             self.head_node_count += 1;
@@ -295,8 +290,7 @@ impl TemplateParserIrBuilderState {
         };
 
         self.children.push(node_id);
-        self.summary.slot_count += 1;
-        self.summary.has_slots = true;
+        self.summary.record_slot();
 
         Ok(())
     }
@@ -314,11 +308,7 @@ impl TemplateParserIrBuilderState {
         };
 
         self.children.push(node_id);
-        self.summary.insert_contribution_count += 1;
-        self.summary.has_insert_contributions = true;
-        // Insert contributions are slot-insertion helpers that must be routed
-        // by composition before the template can fold to a const string.
-        self.summary.is_const_evaluable_shape = false;
+        self.summary.record_insert_contribution();
     }
 
     /// Records a conditional branch-chain node into this builder state.

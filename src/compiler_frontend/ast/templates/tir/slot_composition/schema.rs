@@ -17,10 +17,11 @@ use crate::compiler_frontend::ast::templates::tir::contribution_shape::{
 use crate::compiler_frontend::ast::templates::tir::node::TirSlotPlaceholder;
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::TemplateTirChildReference;
+use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_root;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrId, TemplateIrNode, TemplateIrNodeId,
-    TemplateIrNodeKind, TemplateIrStore, TemplateIrSummary, TemplateWrapperSetId,
+    TemplateIrNodeKind, TemplateIrStore, TemplateWrapperSetId,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -1002,16 +1003,16 @@ fn attach_conditional_wrapper_set(
         }
 
         TemplateIrNodeKind::BranchChain { .. } | TemplateIrNodeKind::Loop { .. } => {
+            let mut summary = summarize_existing_root(store, node_id);
+            summary.wrapper_count = wrapper_count;
             let mut template = TemplateIr::new(
                 node_id,
                 Style::default(),
                 TemplateType::String,
-                TemplateIrSummary::default(),
+                summary,
                 node.location.to_owned(),
             );
-            template.summary.has_control_flow = true;
             template.conditional_child_wrapper_set = Some(wrapper_set_id);
-            template.summary.wrapper_count = wrapper_count;
             let template_id = store.push_template(template);
 
             let new_reference = TemplateTirChildReference::same_store(

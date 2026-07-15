@@ -21,31 +21,30 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3C - audit and consolidate TIR summary construction
-LAST_ACCEPTED_COMMIT: `0ce587f79` (`fixed errors from migrations`, corrected 3B6 implementation)
+CURRENT_SLICE: Slice 3D - bounded clone/allocation audit
+LAST_ACCEPTED_COMMIT: `1ca82fefb` (`test: protect parsed TIR child folding`, prior checkpoint; Slice 3C is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`, accepted 3B6 parent regression test and plan update pending checkpoint commit
+WORKTREE: `main`, Slice 3C accepted and fully validated, no unrelated changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/summary.rs`, `tir/parser_builder_state.rs`, `tir/subtree_copy.rs`, `tir/construction.rs`, `tir/render_unit.rs` and focused summary/builder tests
-- 3B6 is parent-reviewed. One focused test now protects the restored same-store and cross-store `Parsed` child fold fallthrough.
+- code: `tir/formatter_view.rs`, `tir/wrapper_sets.rs`, final TIR walkers and focused formatter tests
+- Slice 3C consolidated identical summary updates on `TemplateIrSummary`, separated runtime slot cursor state and made derived TIR templates summarize their final nodes through the summary owner.
 ACCEPTANCE_CRITERIA:
-- Inventory every `TemplateIrSummary` construction/update owner before editing.
-- Share only identical update semantics through one narrow `tir/summary.rs` accumulator.
-- Keep runtime slot-site cursor state separate when its ownership differs.
-- Rename or delete current-state/materialization vocabulary without adding a parallel path.
-- Preserve text-byte, node-count, depth, slot, control-flow and reactivity facts with focused invariant coverage.
+- Remove classification-only whole-node or node-kind clones in `tir/formatter_view.rs` and adjacent final walkers.
+- Borrow effective nodes only long enough to derive cheap facts, then retain only required IDs and payloads.
+- Add transient formatter-run input state only if it removes verified duplicate reads without becoming another render plan.
+- Keep `$md` grammar and representation unchanged.
+- Retain only changes with neutral or improved `just bench-check` evidence.
 VALIDATION_STATE:
-- 3B6 focused regression test: passed, 1 test
-- 3B6 final `just validate`: passed cross-target Clippy, 3414 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 12 faster and 0 slower
-- Slice 3C: not run
+- Slice 3C focused TIR suite: passed, 432 tests
+- Slice 3C final `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 12 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - inspect exact 3C owners before launching the first implementation provider
+DELEGATION_DECISION: undecided - inspect exact 3D clone/read sites before launching the first implementation provider
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted 3B6 review checkpoint, reload the plan and inspect Slice 3C summary owners
+NEXT_RESUME_ACTION: reload the plan and inspect `tir/formatter_view.rs` for Slice 3D clone and repeated-read sites
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -400,11 +399,13 @@ Phase 3B6 checkpoint: view-backed fold-context handoff materialization requires 
 
 #### Slice 3C — Consolidate TIR summary construction
 
-- [ ] Audit duplicated manual updates to `TemplateIrSummary` in parser builder, subtree copy/materialization, derived wrapper construction, and summary walking.
-- [ ] Introduce one narrow summary accumulator in `tir/summary.rs` only where update semantics are identical.
-- [ ] Split runtime slot-site cursor state from summary accumulation if they have different callers.
-- [ ] Rename `CurrentStateMaterializationSummary` and `record_materialization_counters` to final TIR construction/copy terminology, or delete them if the shared accumulator replaces them.
-- [ ] Preserve existing text-byte, node-count, depth, slot, control-flow, and reactivity facts. Keep formatter presence as style data; do not preserve a redundant formatter-pending lifecycle bit.
+- [x] Audit duplicated manual updates to `TemplateIrSummary` in parser builder, subtree copy/materialization, derived wrapper construction, and summary walking.
+- [x] Introduce one narrow summary accumulator in `tir/summary.rs` only where update semantics are identical.
+- [x] Split runtime slot-site cursor state from summary accumulation if they have different callers.
+- [x] Rename `CurrentStateMaterializationSummary` and `record_materialization_counters` to final TIR construction/copy terminology, or delete them if the shared accumulator replaces them.
+- [x] Preserve existing text-byte, node-count, depth, slot, control-flow, and reactivity facts. Keep formatter presence as style data; do not preserve a redundant formatter-pending lifecycle bit.
+
+Phase 3C checkpoint: identical incremental updates now belong to `TemplateIrSummary`, while `TirCopyState` composes summary facts, depth and a separate runtime slot-site cursor for recursive copy passes. Derived render-unit, fill and conditional-wrapper templates summarize their final TIR nodes through the existing summary walker, preserving side-table reactivity and nested body facts without a parallel counter path.
 
 #### Slice 3D — Bounded clone/allocation audit
 

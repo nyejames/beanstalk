@@ -144,6 +144,96 @@ impl Default for TemplateIrSummary {
 }
 
 // -------------------------
+//  Incremental record helpers
+// -------------------------
+
+impl TemplateIrSummary {
+    /// Records a text node and updates byte/node counters.
+    ///
+    /// WHAT: increments text_node_count, adds byte_len to text_byte_count
+    ///       and estimated_output_bytes.
+    /// WHY: the text-byte and output-estimate updates are identical across
+    ///      parser builder, subtree copy, render-unit, and summary-walking
+    ///      paths. Centralizing them here avoids drifted copies.
+    pub(crate) fn record_text_node(&mut self, byte_len: usize) {
+        self.text_node_count += 1;
+        self.text_byte_count += byte_len;
+        self.estimated_output_bytes += byte_len;
+    }
+
+    /// Records a dynamic-expression node.
+    pub(crate) fn record_dynamic_expression(&mut self, has_reactive_subscription: bool) {
+        self.dynamic_expression_count += 1;
+        if has_reactive_subscription {
+            self.has_reactivity = true;
+        }
+        self.is_const_evaluable_shape = false;
+    }
+
+    /// Records a child-template reference.
+    pub(crate) fn record_child_template(&mut self) {
+        self.child_template_count += 1;
+    }
+
+    /// Records a slot placeholder.
+    ///
+    /// WHAT: increments slot_count and sets has_slots.
+    /// WHY: the construction/copy path does not set is_const_evaluable_shape
+    ///      to false here because an unresolved slot placeholder may be
+    ///      converted to a runtime slot site by a later pass.
+    pub(crate) fn record_slot(&mut self) {
+        self.slot_count += 1;
+        self.has_slots = true;
+    }
+
+    /// Records a control-flow node (branch, loop, or loop control).
+    pub(crate) fn record_control_flow(&mut self) {
+        self.has_control_flow = true;
+        self.is_const_evaluable_shape = false;
+    }
+
+    /// Records a runtime slot site.
+    pub(crate) fn record_runtime_slot_site(&mut self) {
+        self.has_slots = true;
+        self.is_const_evaluable_shape = false;
+    }
+
+    /// Records an insert-contribution node.
+    pub(crate) fn record_insert_contribution(&mut self) {
+        self.insert_contribution_count += 1;
+        self.has_insert_contributions = true;
+        self.is_const_evaluable_shape = false;
+    }
+
+    /// Merges a converted wrapper tree summary into this one.
+    ///
+    /// WHAT: adds copied-node and output counters, ORs feature flags, takes the
+    ///       maximum depth and forces `is_const_evaluable_shape` to false.
+    ///       `slot_count` is deliberately not merged because the scratch tree's
+    ///       slot placeholders have already become runtime slot sites.
+    /// WHY: runtime slot-plan materialization merges a scratch wrapper copy
+    ///      summary into the main construction summary. The merge is a pure
+    ///      summary operation, so it belongs on TemplateIrSummary rather than
+    ///      on the copy-state type that owns depth and cursor traversal state.
+    pub(crate) fn merge_converted_wrapper_tree(&mut self, other: &TemplateIrSummary) {
+        self.estimated_output_bytes += other.estimated_output_bytes;
+        self.text_node_count += other.text_node_count;
+        self.text_byte_count += other.text_byte_count;
+        self.dynamic_expression_count += other.dynamic_expression_count;
+        self.child_template_count += other.child_template_count;
+        self.head_node_count += other.head_node_count;
+        self.insert_contribution_count += other.insert_contribution_count;
+        self.wrapper_count += other.wrapper_count;
+        self.max_depth = self.max_depth.max(other.max_depth);
+        self.has_slots |= other.has_slots;
+        self.has_insert_contributions |= other.has_insert_contributions;
+        self.has_control_flow |= other.has_control_flow;
+        self.has_reactivity |= other.has_reactivity;
+        self.is_const_evaluable_shape = false;
+    }
+}
+
+// -------------------------
 //  Existing-node summary
 // -------------------------
 
@@ -165,6 +255,16 @@ pub(crate) fn summarize_existing_nodes(
 ) -> TemplateIrSummary {
     let mut summary = TemplateIrSummary::empty();
     accumulate_nodes(store, root_children, 1, &mut summary);
+    summary
+}
+
+/// Computes a summary for an existing node used directly as a template root.
+pub(crate) fn summarize_existing_root(
+    store: &TemplateIrStore,
+    root_node_id: TemplateIrNodeId,
+) -> TemplateIrSummary {
+    let mut summary = TemplateIrSummary::empty();
+    accumulate_nodes(store, std::slice::from_ref(&root_node_id), 0, &mut summary);
     summary
 }
 
@@ -191,9 +291,7 @@ fn accumulate_nodes(
 
             TemplateIrNodeKind::Text { byte_len, .. } => {
                 let len = *byte_len as usize;
-                summary.text_node_count += 1;
-                summary.text_byte_count += len;
-                summary.estimated_output_bytes += len;
+                summary.record_text_node(len);
 
                 // Text nodes can carry a reactive subscription in the TIR side
                 // table (set by reactive metadata traversal) even though the
@@ -208,15 +306,11 @@ fn accumulate_nodes(
                 reactive_subscription,
                 ..
             } => {
-                summary.dynamic_expression_count += 1;
-                if reactive_subscription.is_some() {
-                    summary.has_reactivity = true;
-                }
-                summary.is_const_evaluable_shape = false;
+                summary.record_dynamic_expression(reactive_subscription.is_some());
             }
 
             TemplateIrNodeKind::ChildTemplate { .. } => {
-                summary.child_template_count += 1;
+                summary.record_child_template();
             }
 
             TemplateIrNodeKind::Slot { .. } => {
@@ -226,14 +320,11 @@ fn accumulate_nodes(
             }
 
             TemplateIrNodeKind::InsertContribution { .. } => {
-                summary.insert_contribution_count += 1;
-                summary.has_insert_contributions = true;
-                summary.is_const_evaluable_shape = false;
+                summary.record_insert_contribution();
             }
 
             TemplateIrNodeKind::BranchChain { branches, fallback } => {
-                summary.has_control_flow = true;
-                summary.is_const_evaluable_shape = false;
+                summary.record_control_flow();
 
                 for branch in branches {
                     accumulate_nodes(
@@ -258,8 +349,7 @@ fn accumulate_nodes(
                 aggregate_wrapper,
                 ..
             } => {
-                summary.has_control_flow = true;
-                summary.is_const_evaluable_shape = false;
+                summary.record_control_flow();
 
                 accumulate_nodes(
                     store,
@@ -278,13 +368,11 @@ fn accumulate_nodes(
             }
 
             TemplateIrNodeKind::LoopControl { .. } => {
-                summary.has_control_flow = true;
-                summary.is_const_evaluable_shape = false;
+                summary.record_control_flow();
             }
 
             TemplateIrNodeKind::RuntimeSlotSite { .. } => {
-                summary.has_slots = true;
-                summary.is_const_evaluable_shape = false;
+                summary.record_runtime_slot_site();
             }
 
             // Leaf marker — no children or output bytes to accumulate.

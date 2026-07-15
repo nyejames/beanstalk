@@ -203,6 +203,7 @@ pub(crate) use store::TemplateIrStore;
 // re-export; production code imports it directly from `store`.
 #[cfg(test)]
 pub(crate) use store::TemplateIrStoreOwner;
+#[cfg(test)]
 pub(crate) use summary::TemplateIrSummary;
 
 // Registry-qualified handles used by production TIR registry and view consumers.
@@ -257,11 +258,9 @@ pub(crate) use parser_builder_state::TemplateTirReference;
 pub(crate) use construction_context::TemplateConstructionContext;
 
 // TIR construction and active-slot-plan helpers: atom-to-node conversion,
-// summary tracking, and subtree copying used by runtime slot planning and
+// copy-state tracking, and subtree copying used by runtime slot planning and
 // finalize-sync body roots.
-pub(crate) use construction::{
-    CurrentStateMaterializationSummary, record_materialization_counters,
-};
+pub(crate) use construction::{TirCopyState, record_tir_copy_counters};
 pub(crate) use subtree_copy::copy_tir_subtree_with_active_slot_plan;
 
 // Classification: store-aware TIR shape queries for template classification.

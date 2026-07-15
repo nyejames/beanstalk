@@ -28,7 +28,9 @@ use crate::compiler_frontend::ast::templates::tir::refs::{
 };
 use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
-use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
+use crate::compiler_frontend::ast::templates::tir::summary::{
+    TemplateIrSummary, summarize_existing_nodes, summarize_existing_root,
+};
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -61,13 +63,11 @@ pub(in crate::compiler_frontend::ast::templates) fn build_aggregate_wrapper_cand
     store: &mut TemplateIrStore,
     registry: &TemplateIrRegistry,
 ) -> Result<TemplateIrId, TemplateError> {
-    let mut summary = TemplateIrSummary::default();
     let mut children = Vec::with_capacity(head_prefix_nodes.len() + 1);
     let root_location = head_prefix_node_location(store, head_prefix_nodes);
 
     for &node_id in head_prefix_nodes {
-        let candidate_node =
-            convert_head_node_for_aggregate_wrapper(node_id, store, &mut summary, registry)?;
+        let candidate_node = convert_head_node_for_aggregate_wrapper(node_id, store, registry)?;
         children.push(candidate_node);
     }
 
@@ -76,7 +76,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_aggregate_wrapper_cand
         root_location.to_owned(),
     )));
 
-    summary.max_depth = u16::from(!children.is_empty());
+    let summary = summarize_existing_nodes(store, &children);
 
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children },
@@ -110,7 +110,6 @@ pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_
     store: &mut TemplateIrStore,
     registry: &TemplateIrRegistry,
 ) -> Result<TemplateIrId, TemplateError> {
-    let mut summary = TemplateIrSummary::default();
     let mut children = Vec::with_capacity(head_prefix_nodes.len() + body_children.len());
     let root_location = branch_body_candidate_location(store, head_prefix_nodes, body_children);
 
@@ -120,8 +119,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_
     // the loop aggregate-wrapper conversion so head-chain composition sees
     // resolvable ChildTemplate references.
     for &node_id in head_prefix_nodes {
-        let candidate_node =
-            convert_head_node_for_aggregate_wrapper(node_id, store, &mut summary, registry)?;
+        let candidate_node = convert_head_node_for_aggregate_wrapper(node_id, store, registry)?;
         children.push(candidate_node);
     }
 
@@ -131,7 +129,7 @@ pub(in crate::compiler_frontend::ast::templates) fn build_branch_body_candidate_
     // around them.
     children.extend_from_slice(body_children);
 
-    summary.max_depth = u16::from(!children.is_empty());
+    let summary = summarize_existing_nodes(store, &children);
 
     let root = store.push_node(TemplateIrNode::new(
         TemplateIrNodeKind::Sequence { children },
@@ -200,7 +198,6 @@ fn branch_body_candidate_location(
 fn convert_head_node_for_aggregate_wrapper(
     node_id: TemplateIrNodeId,
     store: &mut TemplateIrStore,
-    summary: &mut TemplateIrSummary,
     registry: &TemplateIrRegistry,
 ) -> Result<TemplateIrNodeId, TemplateError> {
     let Some(node) = store.get_node(node_id) else {
@@ -212,31 +209,13 @@ fn convert_head_node_for_aggregate_wrapper(
     let node_kind = node.kind.to_owned();
 
     match node_kind {
-        TemplateIrNodeKind::Text { byte_len, .. } => {
-            let byte_len = byte_len as usize;
-            summary.text_node_count += 1;
-            summary.text_byte_count += byte_len;
-            summary.estimated_output_bytes += byte_len;
-            Ok(node_id)
-        }
+        TemplateIrNodeKind::Text { .. } => Ok(node_id),
 
-        TemplateIrNodeKind::ChildTemplate { .. } => {
-            summary.child_template_count += 1;
-            Ok(node_id)
-        }
+        TemplateIrNodeKind::ChildTemplate { .. } => Ok(node_id),
 
-        TemplateIrNodeKind::InsertContribution { .. } => {
-            summary.insert_contribution_count += 1;
-            summary.has_insert_contributions = true;
-            summary.is_const_evaluable_shape = false;
-            Ok(node_id)
-        }
+        TemplateIrNodeKind::InsertContribution { .. } => Ok(node_id),
 
-        TemplateIrNodeKind::DynamicExpression {
-            expression,
-            reactive_subscription,
-            ..
-        } => {
+        TemplateIrNodeKind::DynamicExpression { expression, .. } => {
             // Cross-store child templates are recorded by the parser as
             // DynamicExpression nodes carrying a Template expression. Convert
             // them to same-store ChildTemplate (or InsertContribution) nodes
@@ -283,10 +262,6 @@ fn convert_head_node_for_aggregate_wrapper(
                         .unwrap_or_else(|| child_template.kind.clone());
 
                     if matches!(child_kind, TemplateType::SlotInsert(_)) {
-                        summary.insert_contribution_count += 1;
-                        summary.has_insert_contributions = true;
-                        summary.is_const_evaluable_shape = false;
-
                         let proxy_id = build_foreign_slot_insert_proxy(
                             store,
                             registry,
@@ -300,7 +275,6 @@ fn convert_head_node_for_aggregate_wrapper(
                         )));
                     }
 
-                    summary.child_template_count += 1;
                     let occurrence_id = store.next_child_template_occurrence_id();
                     return Ok(store.push_node(TemplateIrNode::new(
                         TemplateIrNodeKind::ChildTemplate {
@@ -340,10 +314,6 @@ fn convert_head_node_for_aggregate_wrapper(
                     })?;
 
                 if matches!(child_kind, TemplateType::SlotInsert(_)) {
-                    summary.insert_contribution_count += 1;
-                    summary.has_insert_contributions = true;
-                    summary.is_const_evaluable_shape = false;
-
                     return Ok(store.push_node(TemplateIrNode::new(
                         TemplateIrNodeKind::InsertContribution {
                             template: child_reference.root.template_id,
@@ -351,8 +321,6 @@ fn convert_head_node_for_aggregate_wrapper(
                         expression.location.to_owned(),
                     )));
                 }
-
-                summary.child_template_count += 1;
 
                 let occurrence_id = store.next_child_template_occurrence_id();
                 return Ok(store.push_node(TemplateIrNode::new(
@@ -366,9 +334,6 @@ fn convert_head_node_for_aggregate_wrapper(
 
             // Non-template dynamic expressions (scalar/reference/reactive head
             // values) are reused as-is.
-            summary.dynamic_expression_count += 1;
-            summary.has_reactivity |= reactive_subscription.is_some();
-            summary.is_const_evaluable_shape = false;
             Ok(node_id)
         }
 
@@ -455,12 +420,13 @@ pub(in crate::compiler_frontend::ast::templates) fn format_tir_body_root(
             .get_node(body_root)
             .map(|node| node.location.clone())
             .unwrap_or_default();
+        let summary = summarize_existing_root(&store, body_root);
 
         store.push_template(TemplateIr::new(
             body_root,
             style.clone(),
             TemplateType::String,
-            TemplateIrSummary::default(),
+            summary,
             location,
         ))
     };
@@ -810,12 +776,9 @@ fn wrap_control_flow_child_in_inherited_wrappers(
         location.to_owned(),
     ));
 
-    let summary = TemplateIrSummary {
-        child_template_count: 1,
-        has_control_flow: true,
-        is_const_evaluable_shape: false,
-        ..TemplateIrSummary::default()
-    };
+    let mut summary = TemplateIrSummary::default();
+    summary.record_child_template();
+    summary.record_control_flow();
 
     let wrapper_template = TemplateIr {
         root: child_node_id,

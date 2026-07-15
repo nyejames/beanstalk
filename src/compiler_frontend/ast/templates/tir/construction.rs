@@ -1,12 +1,15 @@
-//! TIR construction helpers: materialization summary and atom-to-TIR
-//! conversion utilities.
+//! TIR construction helpers: copy state, runtime slot-site cursor, and
+//! construction counters.
 //!
-//! WHAT: owns the materialization summary and atom-level materialization helpers
-//!       that control-flow body-root recovery and runtime slot planning still
-//!       depend on.
-//! WHY: these types and functions live here so that `control_flow_roots.rs`,
-//!      `render_unit.rs`, `slot_plan.rs`, and `subtree_copy.rs` can import
-//!      them without circular module dependencies.
+//! WHAT: owns `TirCopyState` (summary + depth + slot-site cursor) and
+//!       `RuntimeSlotSiteCursor` (slot-copy traversal progress), plus the
+//!       instrumentation counter helper that runtime slot planning calls after
+//!       a copy pass.
+//! WHY: these types live here so that `slot_plan.rs`, `subtree_copy.rs`, and
+//!      the runtime slot planner can import them without
+//!      circular module dependencies. Summary field updates live on
+//!      `TemplateIrSummary` in `summary.rs`; this module owns the traversal
+//!      state that wraps the summary during recursive copying.
 
 use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
@@ -19,61 +22,125 @@ use crate::compiler_frontend::instrumentation::{
 use rustc_hash::FxHashMap;
 
 // -------------------------
-//  CurrentStateMaterializationSummary
+//  RuntimeSlotSiteCursor
 // -------------------------
 
-/// Accumulates summary metadata and node depth during materialization.
-pub(crate) struct CurrentStateMaterializationSummary {
-    pub(crate) summary: TemplateIrSummary,
-    current_depth: u16,
-    pub(crate) runtime_slot_site_cursors: FxHashMap<usize, usize>,
+/// Traversal cursor for runtime slot-site resolution during TIR subtree copying.
+///
+/// WHAT: tracks the next slot-site index to try for each slot plan during
+///       active-context subtree copying and slot-to-runtime conversion.
+/// WHY: the cursor is runtime slot-copy traversal state, not summary metadata.
+///      Keeping it separate from `TemplateIrSummary` preserves the boundary
+///      between summary facts (cheap, computed once) and traversal progress
+///      (mutable, per-pass).
+#[derive(Clone, Default)]
+pub(crate) struct RuntimeSlotSiteCursor {
+    cursors: FxHashMap<usize, usize>,
 }
 
-impl CurrentStateMaterializationSummary {
-    /// Creates an empty materialization summary with zeroed counters.
+impl RuntimeSlotSiteCursor {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Finds the next matching runtime slot site for the given key and advances
+    /// the cursor past it.
+    pub(crate) fn next_site_for_key(
+        &mut self,
+        slot_plan_id: TemplateSlotPlanId,
+        key: &SlotKey,
+        store: &TemplateIrStore,
+    ) -> Option<RuntimeSlotSiteId> {
+        let slot_plan = store.slot_plans.get(slot_plan_id.index())?;
+        let start_index = self
+            .cursors
+            .get(&slot_plan_id.index())
+            .copied()
+            .unwrap_or(0);
+
+        for (index, site) in slot_plan.slot_sites.iter().enumerate().skip(start_index) {
+            if &site.key == key {
+                self.cursors.insert(slot_plan_id.index(), index + 1);
+                return Some(site.site);
+            }
+        }
+
+        None
+    }
+
+    /// Advances the cursor to at least the given site + 1.
+    pub(crate) fn advance_to(&mut self, plan: TemplateSlotPlanId, site: RuntimeSlotSiteId) {
+        let next_site_index = site.0.saturating_add(1);
+        let cursor = self.cursors.entry(plan.index()).or_default();
+        *cursor = (*cursor).max(next_site_index);
+    }
+
+    /// Clears the cursor for a given slot plan, starting a fresh traversal.
+    pub(crate) fn reset(&mut self, slot_plan_id: TemplateSlotPlanId) {
+        self.cursors.remove(&slot_plan_id.index());
+    }
+}
+
+// -------------------------
+//  TirCopyState
+// -------------------------
+
+/// Accumulates summary metadata and traversal state during TIR subtree copying.
+///
+/// WHAT: bundles a `TemplateIrSummary` (cheap shape facts), the current
+///       traversal depth, and a `RuntimeSlotSiteCursor` (slot-copy traversal
+///       progress) so subtree copy and runtime slot planning can thread one
+///       mutable state value through recursive calls.
+/// WHY: summary accumulation and slot-site cursor traversal are distinct
+///      concerns that share the same recursive call chain. Keeping them on
+///      one context struct avoids passing three separate mutable references
+///      through every recursion level. Summary field updates delegate to
+///      `TemplateIrSummary`; this struct owns only depth tracking and cursor
+///      state.
+pub(crate) struct TirCopyState {
+    pub(crate) summary: TemplateIrSummary,
+    current_depth: u16,
+    pub(crate) runtime_slot_site_cursor: RuntimeSlotSiteCursor,
+}
+
+impl TirCopyState {
+    /// Creates an empty copy state with zeroed counters.
     pub(crate) fn new() -> Self {
         Self {
             summary: TemplateIrSummary::empty(),
             current_depth: 0,
-            runtime_slot_site_cursors: FxHashMap::default(),
+            runtime_slot_site_cursor: RuntimeSlotSiteCursor::new(),
         }
     }
 
     /// Records a text node and updates the running summary.
     pub(crate) fn record_text_node(&mut self, byte_len: usize) {
-        self.summary.text_node_count += 1;
-        self.summary.text_byte_count += byte_len;
-        self.summary.estimated_output_bytes += byte_len;
+        self.summary.record_text_node(byte_len);
         self.update_depth();
     }
 
     /// Records a dynamic expression node.
     pub(crate) fn record_dynamic_expression(&mut self, has_reactive_subscription: bool) {
-        self.summary.dynamic_expression_count += 1;
-        if has_reactive_subscription {
-            self.summary.has_reactivity = true;
-        }
-        self.summary.is_const_evaluable_shape = false;
+        self.summary
+            .record_dynamic_expression(has_reactive_subscription);
         self.update_depth();
     }
 
     /// Records a child template reference.
     pub(crate) fn record_child_template(&mut self) {
-        self.summary.child_template_count += 1;
+        self.summary.record_child_template();
         self.update_depth();
     }
 
     /// Records a slot placeholder.
     pub(crate) fn record_slot(&mut self) {
-        self.summary.slot_count += 1;
-        self.summary.has_slots = true;
+        self.summary.record_slot();
         self.update_depth();
     }
 
     /// Records a control-flow node (branch, loop, or loop control).
     pub(crate) fn record_control_flow(&mut self) {
-        self.summary.has_control_flow = true;
-        self.summary.is_const_evaluable_shape = false;
+        self.summary.record_control_flow();
         self.update_depth();
     }
 
@@ -83,56 +150,34 @@ impl CurrentStateMaterializationSummary {
         plan: TemplateSlotPlanId,
         site: RuntimeSlotSiteId,
     ) {
-        self.summary.has_slots = true;
-        self.summary.is_const_evaluable_shape = false;
+        self.summary.record_runtime_slot_site();
         self.update_depth();
-
-        let next_site_index = site.0.saturating_add(1);
-        let cursor = self
-            .runtime_slot_site_cursors
-            .entry(plan.index())
-            .or_default();
-        *cursor = (*cursor).max(next_site_index);
+        self.runtime_slot_site_cursor.advance_to(plan, site);
     }
 
     /// Records an existing `RuntimeSlotSite` node that is being copied from a
     /// finalized subtree.
     pub(crate) fn record_existing_runtime_slot_site(&mut self) {
-        self.summary.has_slots = true;
-        self.summary.is_const_evaluable_shape = false;
+        self.summary.record_runtime_slot_site();
         self.update_depth();
     }
 
     /// Records an `$insert("name")` contribution node.
     pub(crate) fn record_insert_contribution(&mut self) {
-        self.summary.insert_contribution_count += 1;
-        self.summary.has_insert_contributions = true;
-        self.summary.is_const_evaluable_shape = false;
+        self.summary.record_insert_contribution();
         self.update_depth();
     }
 
+    /// Finds the next matching runtime slot site for the given key, advancing
+    /// the cursor past it.
     pub(crate) fn next_runtime_slot_site_for_key(
         &mut self,
         slot_plan_id: TemplateSlotPlanId,
         key: &SlotKey,
         store: &TemplateIrStore,
     ) -> Option<RuntimeSlotSiteId> {
-        let slot_plan = store.slot_plans.get(slot_plan_id.index())?;
-        let start_index = self
-            .runtime_slot_site_cursors
-            .get(&slot_plan_id.index())
-            .copied()
-            .unwrap_or(0);
-
-        for (index, site) in slot_plan.slot_sites.iter().enumerate().skip(start_index) {
-            if &site.key == key {
-                self.runtime_slot_site_cursors
-                    .insert(slot_plan_id.index(), index + 1);
-                return Some(site.site);
-            }
-        }
-
-        None
+        self.runtime_slot_site_cursor
+            .next_site_for_key(slot_plan_id, key, store)
     }
 
     /// Bumps depth tracking for the current node.
@@ -152,41 +197,22 @@ impl CurrentStateMaterializationSummary {
         self.current_depth = self.current_depth.saturating_sub(1);
     }
 
-    /// Clears the per-plan runtime slot-site cursor for a new materialization pass.
+    /// Clears the per-plan runtime slot-site cursor for a new copy pass.
     pub(crate) fn reset_runtime_slot_site_cursor(&mut self, slot_plan_id: TemplateSlotPlanId) {
-        self.runtime_slot_site_cursors.remove(&slot_plan_id.index());
-    }
-
-    /// Merges a converted scratch tree's summary into this summary.
-    pub(crate) fn merge_converted_wrapper_tree_summary(&mut self, scratch: &TemplateIrSummary) {
-        self.summary.estimated_output_bytes += scratch.estimated_output_bytes;
-        self.summary.text_node_count += scratch.text_node_count;
-        self.summary.text_byte_count += scratch.text_byte_count;
-        self.summary.dynamic_expression_count += scratch.dynamic_expression_count;
-        self.summary.child_template_count += scratch.child_template_count;
-        self.summary.head_node_count += scratch.head_node_count;
-        self.summary.insert_contribution_count += scratch.insert_contribution_count;
-        self.summary.wrapper_count += scratch.wrapper_count;
-        self.summary.max_depth = self.summary.max_depth.max(scratch.max_depth);
-        self.summary.has_slots |= scratch.has_slots;
-        self.summary.has_insert_contributions |= scratch.has_insert_contributions;
-        self.summary.has_control_flow |= scratch.has_control_flow;
-        self.summary.has_reactivity |= scratch.has_reactivity;
-        self.summary.is_const_evaluable_shape = false;
+        self.runtime_slot_site_cursor.reset(slot_plan_id);
     }
 }
 
 // -------------------------
-//  Materialization counters
+//  Construction counters
 // -------------------------
 
-/// Records the templates, nodes, text and depth produced by one TIR
-/// materialization pass.
-pub(crate) fn record_materialization_counters(
+/// Records the templates, nodes, text and depth produced by one TIR copy pass.
+pub(crate) fn record_tir_copy_counters(
     store: &TemplateIrStore,
     templates_before: usize,
     nodes_before: usize,
-    summary: &CurrentStateMaterializationSummary,
+    state: &TirCopyState,
 ) {
     let templates_created = store.template_count() - templates_before;
     let nodes_created = store.node_count() - nodes_before;
@@ -195,11 +221,11 @@ pub(crate) fn record_materialization_counters(
     add_ast_counter(AstCounter::TirNodesCreated, nodes_created);
     add_ast_counter(
         AstCounter::TirTextNodesCreated,
-        summary.summary.text_node_count as usize,
+        state.summary.text_node_count as usize,
     );
     add_ast_counter(
         AstCounter::TirTextBytesRecorded,
-        summary.summary.text_byte_count,
+        state.summary.text_byte_count,
     );
-    record_ast_counter_max(AstCounter::TirMaxDepth, summary.summary.max_depth as usize);
+    record_ast_counter_max(AstCounter::TirMaxDepth, state.summary.max_depth as usize);
 }
