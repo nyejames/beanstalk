@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4A, verify manifest extension ownership
-LAST_ACCEPTED_COMMIT: `4b8bbb5da`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 3B accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 4B, stop hiding watch timestamp failures
+LAST_ACCEPTED_COMMIT: `f6fabce60`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4A accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: backend output-writing ownership and conservative cleanup policy
-- code: `src/build_system/output_cleanup.rs` v2 manifest managed-extension validation
+- docs: dev-server watch ownership and infrastructure error propagation
+- code: `src/projects/dev_server/watch.rs` exact-file and recursive-directory fingerprints
 ACCEPTANCE_CRITERIA:
-- parsed managed extensions are normalized and retained
-- exact set equality with the active policy is required regardless of input order, dot or case
-- missing or extra extensions enter limited safe mode with a distinct mismatch reason
-- mismatch warnings identify both sets concisely and stale files are preserved
-- existing builder mismatch and malformed metadata behavior stays distinct
+- `metadata.modified()` failures propagate through the existing `io::Result`
+- exact-file and recursive-directory fingerprint paths add useful path context at the boundary
+- no Unix epoch sentinel can make same-length edits appear unchanged
+- exact-file, recursive-directory, extracted failure and same-length edit tests cover the policy
+- the intentional dev-server output-directory canonicalization fallback remains unchanged
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -50,12 +50,14 @@ VALIDATION_STATE:
 - Phase 3B focused config tests: passed, 68 tests
 - Phase 3B `just validate`: passed, including cross-target Clippy, 3,374 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 3 separate `just bench-check`: passed, 28/28 cases
+- Phase 4A focused cleanup tests: passed, 23 tests
+- Phase 4A `just validate`: passed, including cross-target Clippy, 3,380 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 4A is a bounded output-cleanup policy slice
+DELEGATION_DECISION: ollama implementation worker - Phase 4B is a bounded dev-watch fingerprint slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 3B, then delegate Phase 4A managed-extension ownership
+NEXT_RESUME_ACTION: commit accepted Phase 4A, then delegate Phase 4B timestamp error propagation
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -419,6 +421,11 @@ Do not alter the current imported support-file entry semantics. Imported config 
 - no fragment/TIR owner is changed
 
 ## Phase 4: Make output and watch policies conservative
+
+Progress: Slice 4A is complete. V2 manifests now require exact normalized managed-extension set
+equality after builder ownership matches. Missing and extra extensions enter limited safe mode with
+a distinct reason carrying both deterministic sets. Stale files remain untouched and the active
+manifest is rewritten for the next build. Focused tests and `just validate` passed.
 
 ### Slice 4A: Verify manifest extension ownership
 

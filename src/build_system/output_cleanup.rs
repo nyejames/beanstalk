@@ -99,11 +99,7 @@ impl CleanupPolicy {
     }
 
     fn manifest_extensions_csv(&self) -> String {
-        self.managed_extensions
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join(",")
+        join_extensions_csv(&self.managed_extensions)
     }
 }
 
@@ -137,6 +133,10 @@ pub(crate) enum ManifestLimitedSafeModeReason {
         manifest_builder_kind: BuilderKind,
         active_builder_kind: BuilderKind,
     },
+    ManagedExtensionsMismatch {
+        manifest_extensions: BTreeSet<String>,
+        active_extensions: BTreeSet<String>,
+    },
 }
 
 impl ManifestLimitedSafeModeReason {
@@ -154,6 +154,15 @@ impl ManifestLimitedSafeModeReason {
                 "build manifest builder '{}' does not match active builder '{}'",
                 manifest_builder_kind.manifest_name(),
                 active_builder_kind.manifest_name()
+            ),
+
+            Self::ManagedExtensionsMismatch {
+                manifest_extensions,
+                active_extensions,
+            } => format!(
+                "build manifest managed extensions {} do not match active extensions {}",
+                describe_extension_set(manifest_extensions),
+                describe_extension_set(active_extensions)
             ),
         }
     }
@@ -524,7 +533,7 @@ where
         return invalid_manifest_metadata();
     };
 
-    // 2. Parse managed extensions
+    // 2. Parse managed extensions (normalized so order, leading dot and ASCII case do not matter).
     let Some(managed_extensions_line) = manifest_lines.next() else {
         return invalid_manifest_metadata();
     };
@@ -533,16 +542,29 @@ where
     else {
         return invalid_manifest_metadata();
     };
-    if parse_manifest_managed_extensions(raw_managed_extensions).is_none() {
+    let Some(manifest_managed_extensions) =
+        parse_manifest_managed_extensions(raw_managed_extensions)
+    else {
         return invalid_manifest_metadata();
-    }
+    };
 
-    // 3. Verify builder mismatch
+    // 3. Verify builder ownership before extension ownership.
     if manifest_builder_kind != active_policy.builder_kind {
         return ManifestLoadResult::LimitedSafeMode {
             reason: ManifestLimitedSafeModeReason::BuilderMismatch {
                 manifest_builder_kind,
                 active_builder_kind: active_policy.builder_kind.clone(),
+            },
+        };
+    }
+
+    // 4. Require exact managed-extension ownership. Any set difference enters limited safe mode
+    //    so stale files are preserved instead of being deleted under a mismatched ownership set.
+    if manifest_managed_extensions != active_policy.managed_extensions {
+        return ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::ManagedExtensionsMismatch {
+                manifest_extensions: manifest_managed_extensions,
+                active_extensions: active_policy.managed_extensions.clone(),
             },
         };
     }
@@ -596,6 +618,28 @@ fn normalize_managed_extension(raw_extension: &str) -> String {
     };
 
     dotted_extension.to_ascii_lowercase()
+}
+
+/// Join a normalized managed-extension set into a deterministic CSV string.
+///
+/// WHAT: renders a `BTreeSet<String>` of extensions as a comma-separated list.
+/// WHY: the manifest file format and the limited-safe-mode diagnostic both need a stable
+/// rendering of an extension set, so the shared join lives here to avoid duplicating the logic.
+fn join_extensions_csv(extensions: &BTreeSet<String>) -> String {
+    extensions
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Render a managed-extension set for a diagnostic description, using `(none)` for the empty set.
+fn describe_extension_set(extensions: &BTreeSet<String>) -> String {
+    if extensions.is_empty() {
+        String::from("(none)")
+    } else {
+        join_extensions_csv(extensions)
+    }
 }
 
 fn relative_path_extension(path: &Path) -> Option<String> {

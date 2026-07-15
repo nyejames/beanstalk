@@ -9,14 +9,14 @@ use crate::build_system::output_cleanup::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::build_system::output_cleanup::{
     BUILD_MANIFEST_FILENAME, read_build_manifest, validate_output_root_is_safe,
     write_build_manifest,
 };
 use crate::compiler_tests::test_support::temp_dir;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 #[test]
 fn cleanup_manifest_diff_removes_stale_managed_files() {
@@ -742,6 +742,219 @@ fn read_build_manifest_rejects_builder_mismatch_in_v2_manifest() {
                 manifest_builder_kind: BuilderKind::Generic,
                 active_builder_kind: BuilderKind::Html,
             },
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+/// Write a v2 manifest directly so extension-mismatch cases can vary metadata without reusing the
+/// active policy's writer.
+fn write_v2_manifest_text(root: &Path, builder: &str, extensions_csv: &str, paths: &[&str]) {
+    let mut lines = vec![
+        String::from("# beanstalk-manifest v2"),
+        format!("# builder: {builder}"),
+        format!("# managed_extensions: {extensions_csv}"),
+    ];
+    for path in paths {
+        lines.push((*path).to_string());
+    }
+    fs::write(root.join(BUILD_MANIFEST_FILENAME), lines.join("\n"))
+        .expect("should write v2 manifest");
+}
+
+fn html_active_extensions() -> BTreeSet<String> {
+    [".html", ".js", ".wasm"]
+        .iter()
+        .map(|extension| (*extension).to_string())
+        .collect()
+}
+
+#[test]
+fn read_build_manifest_accepts_equivalent_managed_extensions_in_different_order() {
+    let root = temp_dir("cleanup_ext_order");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    write_v2_manifest_text(&root, "html", ".wasm,.html,.js", &["index.html"]);
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidV2 {
+            paths: vec![PathBuf::from("index.html")],
+            builder_kind: BuilderKind::Html,
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn read_build_manifest_normalizes_managed_extension_case_and_leading_dot() {
+    let root = temp_dir("cleanup_ext_normalize");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    // Uppercase and dotless forms must normalize to the active lowercased dotted set.
+    write_v2_manifest_text(&root, "html", "HTML,js,.WASM", &["index.html"]);
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidV2 {
+            paths: vec![PathBuf::from("index.html")],
+            builder_kind: BuilderKind::Html,
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn read_build_manifest_rejects_missing_managed_extension() {
+    let root = temp_dir("cleanup_ext_missing");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    let manifest_extensions: BTreeSet<String> = [".html", ".js"]
+        .iter()
+        .map(|ext| (*ext).to_string())
+        .collect();
+
+    write_v2_manifest_text(&root, "html", ".html,.js", &["index.html"]);
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::ManagedExtensionsMismatch {
+                manifest_extensions,
+                active_extensions: html_active_extensions(),
+            },
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn read_build_manifest_rejects_extra_managed_extension() {
+    let root = temp_dir("cleanup_ext_extra");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    let manifest_extensions: BTreeSet<String> = [".css", ".html", ".js", ".wasm"]
+        .iter()
+        .map(|ext| (*ext).to_string())
+        .collect();
+
+    write_v2_manifest_text(&root, "html", ".html,.js,.wasm,.css", &["index.html"]);
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::ManagedExtensionsMismatch {
+                manifest_extensions,
+                active_extensions: html_active_extensions(),
+            },
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn read_build_manifest_rejects_malformed_v2_metadata() {
+    let root = temp_dir("cleanup_ext_malformed_metadata");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    // A v2 header with an unknown builder name is invalid metadata, distinct from an extension
+    // mismatch or builder mismatch between known builders.
+    write_v2_manifest_text(&root, "unknown", ".html,.js,.wasm", &["index.html"]);
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::InvalidMetadata,
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn cleanup_extension_mismatch_preserves_stale_files_and_rewrites_manifest() {
+    let root = temp_dir("cleanup_ext_mismatch_stale");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("about")).expect("should create about output dir");
+    fs::create_dir_all(output_root.join("scripts")).expect("should create scripts output dir");
+
+    fs::write(
+        output_root.join("about/index.html"),
+        "<html>stale about</html>",
+    )
+    .expect("should write stale html file");
+    fs::write(output_root.join("scripts/page.js"), "console.log('stale');")
+        .expect("should write stale js file");
+    fs::write(output_root.join("notes.txt"), "keep me").expect("should write notes file");
+
+    // The manifest claims a different managed-extension set, so cleanup must enter limited safe
+    // mode rather than delete files under a mismatched ownership contract.
+    write_v2_manifest_text(
+        &output_root,
+        "html",
+        ".html,.js",
+        &[
+            "about/index.html",
+            "scripts/page.js",
+            "notes.txt",
+            "index.html",
+        ],
+    );
+
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::ManagedExtensionsMismatch {
+                manifest_extensions: [".html", ".js"]
+                    .iter()
+                    .map(|ext| (*ext).to_string())
+                    .collect(),
+                active_extensions: html_active_extensions(),
+            },
+        }
+    );
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>Home</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
+    )
+    .expect("build should succeed");
+
+    // Limited safe mode preserves stale files while the extension ownership differs.
+    assert!(
+        output_root.join("about/index.html").exists(),
+        "extension mismatch must preserve stale html files"
+    );
+    assert!(
+        output_root.join("scripts/page.js").exists(),
+        "extension mismatch must preserve stale js files"
+    );
+    assert!(
+        output_root.join("notes.txt").exists(),
+        "limited safe mode must preserve non-managed file types"
+    );
+
+    // The finalize path rewrites the manifest using the active policy, so the next read is valid.
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidV2 {
+            paths: vec![PathBuf::from("index.html")],
+            builder_kind: BuilderKind::Html,
         }
     );
 
