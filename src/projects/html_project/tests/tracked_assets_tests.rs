@@ -1,6 +1,9 @@
 //! Unit tests for HTML tracked-asset planning and passthrough emission.
 
 use super::*;
+use crate::compiler_frontend::compiler_messages::{
+    DiagnosticKind, DiagnosticPayload, InvalidCompileTimePathReason, RuleDiagnosticKind,
+};
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePathBase, CompileTimePathKind,
 };
@@ -46,6 +49,180 @@ fn entry_root_asset_emits_site_relative_output_path() {
         planned.assets[0].reference_kind,
         HtmlTrackedAssetReferenceKind::SiteRelative
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+// ------------------------------------------------------------------
+//  RelativeToFile traversal floor
+// ------------------------------------------------------------------
+
+#[test]
+fn relative_asset_at_root_page_emits_page_local_output() {
+    let root = temp_dir("tracked_assets_relative_root");
+    fs::create_dir_all(root.join("src/img")).expect("should create img dir");
+    fs::write(root.join("src/img/logo.png"), [1_u8, 2, 3]).expect("should write asset");
+
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
+    module.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut string_table,
+        RenderedPathUsageInput {
+            source_path_components: &[".", "img", "logo.png"],
+            public_path_components: &[".", "img", "logo.png"],
+            filesystem_path: root.join("src/img/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "#page.bst"],
+            line_number: 1,
+        },
+    ));
+
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
+
+    assert_eq!(planned.assets.len(), 1);
+    assert_eq!(
+        planned.assets[0].emitted_output_path,
+        PathBuf::from("img/logo.png")
+    );
+    assert_eq!(
+        planned.assets[0].reference_kind,
+        HtmlTrackedAssetReferenceKind::RelativeToPage
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn relative_traversal_back_to_output_root_remains_valid() {
+    let root = temp_dir("tracked_assets_traversal_to_root");
+    fs::create_dir_all(root.join("src/img")).expect("should create img dir");
+    fs::write(root.join("src/img/logo.png"), [4_u8, 5, 6]).expect("should write asset");
+
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
+    module.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut string_table,
+        RenderedPathUsageInput {
+            source_path_components: &["..", "..", "img", "logo.png"],
+            public_path_components: &["..", "..", "img", "logo.png"],
+            filesystem_path: root.join("src/img/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
+            line_number: 3,
+        },
+    ));
+
+    let planned = plan_module_tracked_assets(
+        &module,
+        Path::new("docs/guide/index.html"),
+        &mut string_table,
+    )
+    .expect("planning succeeds");
+
+    assert_eq!(planned.assets.len(), 1);
+    assert_eq!(
+        planned.assets[0].emitted_output_path,
+        PathBuf::from("img/logo.png")
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn relative_one_segment_underflow_returns_escapes_project_root() {
+    let root = temp_dir("tracked_assets_underflow_one");
+    fs::create_dir_all(root.join("img")).expect("should create img dir");
+    fs::write(root.join("img/logo.png"), [7_u8, 8, 9]).expect("should write asset");
+
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
+    let usage = rendered_path_usage(
+        &mut string_table,
+        RenderedPathUsageInput {
+            source_path_components: &["..", "..", "..", "img", "logo.png"],
+            public_path_components: &["..", "..", "..", "img", "logo.png"],
+            filesystem_path: root.join("img/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
+            line_number: 5,
+        },
+    );
+    let expected_source_path = usage.source_path.clone();
+    let expected_render_location = usage.render_location.clone();
+    module.hir.rendered_path_usages.push(usage);
+
+    let error = plan_module_tracked_assets(
+        &module,
+        Path::new("docs/guide/index.html"),
+        &mut string_table,
+    )
+    .expect_err("one-segment underflow should produce error");
+
+    let diagnostic = error
+        .first_error()
+        .expect("should have an error-severity diagnostic");
+    assert!(matches!(
+        diagnostic.kind,
+        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidCompileTimePath)
+    ));
+    match &diagnostic.payload {
+        DiagnosticPayload::InvalidCompileTimePath { path, reason } => {
+            assert_eq!(path, &expected_source_path);
+            assert_eq!(*reason, InvalidCompileTimePathReason::EscapesProjectRoot);
+        }
+        payload => panic!("expected invalid compile-time path payload, got {payload:?}"),
+    }
+    assert_eq!(diagnostic.primary_location, expected_render_location);
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn relative_repeated_underflow_returns_escapes_project_root() {
+    let root = temp_dir("tracked_assets_underflow_repeated");
+    fs::create_dir_all(root.join("img")).expect("should create img dir");
+    fs::write(root.join("img/logo.png"), [10_u8, 11, 12]).expect("should write asset");
+
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
+    let usage = rendered_path_usage(
+        &mut string_table,
+        RenderedPathUsageInput {
+            source_path_components: &["..", "..", "..", "img", "logo.png"],
+            public_path_components: &["..", "..", "..", "img", "logo.png"],
+            filesystem_path: root.join("img/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "#page.bst"],
+            line_number: 7,
+        },
+    );
+    let expected_source_path = usage.source_path.clone();
+    let expected_render_location = usage.render_location.clone();
+    module.hir.rendered_path_usages.push(usage);
+
+    let error = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect_err("repeated underflow should produce error");
+
+    let diagnostic = error
+        .first_error()
+        .expect("should have an error-severity diagnostic");
+    assert!(matches!(
+        diagnostic.kind,
+        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidCompileTimePath)
+    ));
+    match &diagnostic.payload {
+        DiagnosticPayload::InvalidCompileTimePath { path, reason } => {
+            assert_eq!(path, &expected_source_path);
+            assert_eq!(*reason, InvalidCompileTimePathReason::EscapesProjectRoot);
+        }
+        payload => panic!("expected invalid compile-time path payload, got {payload:?}"),
+    }
+    assert_eq!(diagnostic.primary_location, expected_render_location);
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

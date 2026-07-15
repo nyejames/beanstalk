@@ -12,7 +12,9 @@ use crate::build_system::build::{FileKind, Module, OutputFile};
 use crate::build_system::output_cleanup::validate_relative_output_path;
 use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidCompileTimePathReason,
+};
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePathBase, CompileTimePathKind,
 };
@@ -228,7 +230,20 @@ fn derive_emitted_output_path(
                 match string_table.resolve(*component) {
                     "." => {}
                     ".." => {
-                        emitted_output_path.pop();
+                        if !emitted_output_path.pop() {
+                            // No route component remains above the output-root floor.
+                            // Each `..` may pop one existing component; extra segments
+                            // must not be silently discarded.
+                            let diagnostic = CompilerDiagnostic::invalid_compile_time_path(
+                                usage.source_path.clone(),
+                                InvalidCompileTimePathReason::EscapesProjectRoot,
+                                usage.render_location.clone(),
+                            );
+                            return Err(CompilerMessages::from_diagnostic_ref(
+                                diagnostic,
+                                string_table,
+                            ));
+                        }
                     }
                     segment => emitted_output_path.push(segment),
                 }

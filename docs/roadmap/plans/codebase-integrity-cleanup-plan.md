@@ -20,19 +20,18 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 4C, reject tracked-asset traversal underflow
-LAST_ACCEPTED_COMMIT: `2a1029cad`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4B accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 5, remove dead CLI flag surface
+LAST_ACCEPTED_COMMIT: `a5651e93f`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 4C accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: tracked-asset output-root ownership and authored compile-time path diagnostics
-- code: `src/projects/html_project/tracked_assets.rs` relative asset route traversal
+- docs: CLI help truthfulness and pre-release removal policy
+- code: CLI argument parsing, flag representation and direct tests for ignored accepted spellings
 ACCEPTANCE_CRITERIA:
-- `..` pops only real route components above the output-root floor
-- traversal exactly back to the output root remains valid
-- one or repeated segments crossing above the root return a typed invalid compile-time path diagnostic
-- diagnostics use `RenderedPathUsage::render_location`
-- final output-path validation remains defense in depth
+- parsed flags with no runtime behavior are removed from parser, enum and help text
+- removed spellings are rejected as invalid CLI input
+- no compatibility aliases, ignored variants or dead forwarding paths remain
+- affected direct CLI tests and help-output assertions cover the current surface
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -54,12 +53,14 @@ VALIDATION_STATE:
 - Phase 4A `just validate`: passed, including cross-target Clippy, 3,380 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 4B focused watch tests: passed, 13 tests
 - Phase 4B `just validate`: passed, including cross-target Clippy, 3,384 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 4C focused tracked-asset tests: passed, 13 tests
+- Phase 4C `just validate`: passed, including cross-target Clippy, 3,388 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 4C is a bounded tracked-asset path slice
+DELEGATION_DECISION: ollama implementation worker - Phase 5 is a bounded dead CLI surface removal
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 4B, then delegate Phase 4C traversal underflow rejection
+NEXT_RESUME_ACTION: commit accepted Phase 4C, then delegate Phase 5 dead flag removal
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -424,12 +425,11 @@ Do not alter the current imported support-file entry semantics. Imported config 
 
 ## Phase 4: Make output and watch policies conservative
 
-Progress: Slice 4A is complete. V2 manifests now require exact normalized managed-extension set
-equality after builder ownership matches. Missing and extra extensions enter limited safe mode with
-a distinct reason carrying both deterministic sets. Stale files remain untouched and the active
-manifest is rewritten for the next build. Slice 4B is complete. Dev-watch fingerprints propagate
-modified-time failures with path context and preserve error kinds. Exact and recursive collection,
-synthetic failure and deterministic same-length edits have focused coverage. `just validate` passed.
+Status: Complete. V2 manifests require exact normalized managed-extension set equality and preserve
+stale files on mismatch. Dev-watch fingerprints propagate modified-time failures with path context
+and preserve error kinds. Relative tracked assets reject route traversal above the output root with
+an authored compile-time path diagnostic while exact-root traversal remains valid. Focused tests and
+`just validate` passed after each slice.
 
 ### Slice 4A: Verify manifest extension ownership
 
