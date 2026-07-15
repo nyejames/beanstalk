@@ -238,32 +238,6 @@ pub(crate) fn attach_wrapper_context_overlay(
     Ok(())
 }
 
-/// Cheap structural facts extracted from a TIR node for wrapper-context
-/// traversal.
-///
-/// WHAT: carries only the IDs and references needed to continue traversal or
-///       record wrapper context, without cloning the entire `TemplateIrNode`.
-/// WHY: the traversal alternates between reading nodes (immutable store borrow)
-///      and pushing wrapper sets (mutable store borrow). Extracting cheap facts
-///      while the node is borrowed and acting after the borrow ends avoids
-///      whole-node clones.
-enum WrapperContextNodeFact {
-    ChildTemplate {
-        reference: TemplateTirChildReference,
-        occurrence_id: ChildTemplateOccurrenceId,
-    },
-    Sequence(Vec<TemplateIrNodeId>),
-    BranchChain {
-        branch_bodies: Vec<TemplateIrNodeId>,
-        fallback: Option<TemplateIrNodeId>,
-    },
-    Loop {
-        body: TemplateIrNodeId,
-        aggregate_wrapper: Option<TemplateIrNodeId>,
-    },
-    Other,
-}
-
 /// Validated occurrence context collected before wrapper-set allocation.
 struct PendingWrapperContext {
     occurrence_id: ChildTemplateOccurrenceId,
@@ -283,7 +257,10 @@ struct PendingWrapperContext {
 /// WHY: wrapper context belongs to the occurrence in the owning structural
 ///      tree. This traversal does not recurse into a child's own root — it only
 ///      walks the structural containers that surround child-template
-///      occurrences.
+///      occurrences. The store is borrowed immutably for the entire traversal
+///      and no mutation occurs until `collect_wrapper_contexts` returns, so the
+///      node kind can be matched directly without cloning child vectors into a
+///      transient fact enum.
 fn collect_wrapper_contexts(
     store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
@@ -291,25 +268,22 @@ fn collect_wrapper_contexts(
     inherited_wrapper_refs: &[TemplateWrapperReference],
     contexts: &mut Vec<PendingWrapperContext>,
 ) -> Result<(), CompilerError> {
-    let fact = {
-        let node = store.get_node(node_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "wrapper-context overlay: traversed TIR node {} not found in store.",
-                node_id
-            ))
-        })?;
-        extract_wrapper_context_node_fact(&node.kind)
-    };
+    let node = store.get_node(node_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "wrapper-context overlay: traversed TIR node {} not found in store.",
+            node_id
+        ))
+    })?;
 
-    match fact {
-        WrapperContextNodeFact::ChildTemplate {
+    match &node.kind {
+        TemplateIrNodeKind::ChildTemplate {
             reference,
             occurrence_id,
         } => {
-            let metadata = resolve_child_wrapper_metadata(store, registry, &reference)?;
+            let metadata = resolve_child_wrapper_metadata(store, registry, reference)?;
             if metadata.skip_parent_child_wrappers {
                 contexts.push(PendingWrapperContext {
-                    occurrence_id,
+                    occurrence_id: *occurrence_id,
                     skip_parent_child_wrappers: true,
                     application_mode: TirWrapperApplicationMode::Always,
                 });
@@ -320,32 +294,29 @@ fn collect_wrapper_contexts(
                     TirWrapperApplicationMode::Always
                 };
                 contexts.push(PendingWrapperContext {
-                    occurrence_id,
+                    occurrence_id: *occurrence_id,
                     skip_parent_child_wrappers: false,
                     application_mode,
                 });
             }
         }
-        WrapperContextNodeFact::Sequence(children) => {
+        TemplateIrNodeKind::Sequence { children } => {
             for child_id in children {
                 collect_wrapper_contexts(
                     store,
                     registry,
-                    child_id,
+                    *child_id,
                     inherited_wrapper_refs,
                     contexts,
                 )?;
             }
         }
-        WrapperContextNodeFact::BranchChain {
-            branch_bodies,
-            fallback,
-        } => {
-            for body_id in branch_bodies {
+        TemplateIrNodeKind::BranchChain { branches, fallback } => {
+            for branch in branches {
                 collect_wrapper_contexts(
                     store,
                     registry,
-                    body_id,
+                    branch.body,
                     inherited_wrapper_refs,
                     contexts,
                 )?;
@@ -354,62 +325,31 @@ fn collect_wrapper_contexts(
                 collect_wrapper_contexts(
                     store,
                     registry,
-                    fallback_id,
+                    *fallback_id,
                     inherited_wrapper_refs,
                     contexts,
                 )?;
-            }
-        }
-        WrapperContextNodeFact::Loop {
-            body,
-            aggregate_wrapper,
-        } => {
-            collect_wrapper_contexts(store, registry, body, inherited_wrapper_refs, contexts)?;
-            if let Some(wrapper_id) = aggregate_wrapper {
-                collect_wrapper_contexts(
-                    store,
-                    registry,
-                    wrapper_id,
-                    inherited_wrapper_refs,
-                    contexts,
-                )?;
-            }
-        }
-        WrapperContextNodeFact::Other => {}
-    }
-    Ok(())
-}
-
-/// Extracts the cheap structural facts needed for wrapper-context traversal
-/// from a node kind, without cloning the entire node.
-fn extract_wrapper_context_node_fact(kind: &TemplateIrNodeKind) -> WrapperContextNodeFact {
-    match kind {
-        TemplateIrNodeKind::ChildTemplate {
-            reference,
-            occurrence_id,
-        } => WrapperContextNodeFact::ChildTemplate {
-            reference: *reference,
-            occurrence_id: *occurrence_id,
-        },
-        TemplateIrNodeKind::Sequence { children } => {
-            WrapperContextNodeFact::Sequence(children.clone())
-        }
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            WrapperContextNodeFact::BranchChain {
-                branch_bodies: branches.iter().map(|branch| branch.body).collect(),
-                fallback: *fallback,
             }
         }
         TemplateIrNodeKind::Loop {
             body,
             aggregate_wrapper,
             ..
-        } => WrapperContextNodeFact::Loop {
-            body: *body,
-            aggregate_wrapper: *aggregate_wrapper,
-        },
-        _ => WrapperContextNodeFact::Other,
+        } => {
+            collect_wrapper_contexts(store, registry, *body, inherited_wrapper_refs, contexts)?;
+            if let Some(wrapper_id) = aggregate_wrapper {
+                collect_wrapper_contexts(
+                    store,
+                    registry,
+                    *wrapper_id,
+                    inherited_wrapper_refs,
+                    contexts,
+                )?;
+            }
+        }
+        _ => {}
     }
+    Ok(())
 }
 
 /// Wrapper-relevant metadata for a child-template occurrence, resolved from the

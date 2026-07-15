@@ -21,30 +21,31 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3D - bounded clone/allocation audit
-LAST_ACCEPTED_COMMIT: `1ca82fefb` (`test: protect parsed TIR child folding`, prior checkpoint; Slice 3C is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E - final module/API ownership
+LAST_ACCEPTED_COMMIT: `af7ef8625` (`refactor: consolidate TIR summary construction`, prior checkpoint; Slice 3D is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`, Slice 3C accepted and fully validated, no unrelated changes
+WORKTREE: `main`, Slice 3D accepted and fully validated, no unrelated changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/formatter_view.rs`, `tir/wrapper_sets.rs`, final TIR walkers and focused formatter tests
-- Slice 3C consolidated identical summary updates on `TemplateIrSummary`, separated runtime slot cursor state and made derived TIR templates summarize their final nodes through the summary owner.
+- code: final template/TIR module map, facades, long-lived types, stale migration vocabulary and focused owner tests
+- Slice 3D replaced formatter whole-node/kind clones with narrow borrowed facts, removed repeated effective-node reads and eliminated wrapper-context traversal vector clones.
 ACCEPTANCE_CRITERIA:
-- Remove classification-only whole-node or node-kind clones in `tir/formatter_view.rs` and adjacent final walkers.
-- Borrow effective nodes only long enough to derive cheap facts, then retain only required IDs and payloads.
-- Add transient formatter-run input state only if it removes verified duplicate reads without becoming another render plan.
-- Keep `$md` grammar and representation unchanged.
-- Retain only changes with neutral or improved `just bench-check` evidence.
+- Re-evaluate every module and facade named in Slice 3E against its final owner and current callers.
+- Delete test-only or forwarding-only files and rename migration-named owners without compatibility shims.
+- Keep thin facades only where they mark a real AST substage boundary.
+- Remove stale dead-code allowances and migration vocabulary while preserving diagnostics and source context.
+- Update `templates/mod.rs` and `tir/mod.rs` to describe the final module map.
 VALIDATION_STATE:
-- Slice 3C focused TIR suite: passed, 432 tests
-- Slice 3C final `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 12 faster and 0 slower
+- Slice 3D worker `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 15 faster and 0 slower
+- Slice 3D parent focused TIR suite: passed, 432 tests
+- Slice 3D parent `just bench-check`: passed 28/28 with a 2 ms average improvement, 12 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only slice. Phase 5 owns final docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - inspect exact 3D clone/read sites before launching the first implementation provider
+DELEGATION_DECISION: undecided - inspect the final module map and split oversized ownership work into coherent owner slices before delegation
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: reload the plan and inspect `tir/formatter_view.rs` for Slice 3D clone and repeated-read sites
+NEXT_RESUME_ACTION: reload the plan and inventory Slice 3E files, callers, forwarding layers and stale vocabulary
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -409,13 +410,15 @@ Phase 3C checkpoint: identical incremental updates now belong to `TemplateIrSumm
 
 #### Slice 3D — Bounded clone/allocation audit
 
-- [ ] In `tir/formatter_view.rs`, remove whole `TemplateIrNode` / `TemplateIrNodeKind` clones used only for eligibility, discriminant checks, or anchor classification.
-- [ ] Derive cheap facts while the effective node is borrowed; snapshot only IDs, locations, subscriptions, and anchor kind needed after the borrow ends.
-- [ ] Apply the same rule to wrapper-context collection and other final TIR walkers.
-- [ ] Measure repeated effective-node reads in formatter-run preparation.
-- [ ] Add a transient `FormatterRunInput` (or equivalent) only if it removes duplicate reads without becoming a second render plan.
-- [ ] Do not change `$md` grammar, per-character atom representation, link/code parsing, or list rendering in this slice.
-- [ ] Run `just bench-check` and retain only neutral/improved changes.
+- [x] In `tir/formatter_view.rs`, remove whole `TemplateIrNode` / `TemplateIrNodeKind` clones used only for eligibility, discriminant checks, or anchor classification.
+- [x] Derive cheap facts while the effective node is borrowed; snapshot only IDs, locations, subscriptions, and anchor kind needed after the borrow ends.
+- [x] Apply the same rule to wrapper-context collection and other final TIR walkers.
+- [x] Measure repeated effective-node reads in formatter-run preparation.
+- [x] Add a transient `FormatterRunInput` (or equivalent) only if it removes duplicate reads without becoming a second render plan.
+- [x] Do not change `$md` grammar, per-character atom representation, link/code parsing, or list rendering in this slice.
+- [x] Run `just bench-check` and retain only neutral/improved changes.
+
+Phase 3D checkpoint: formatter traversal now snapshots only child IDs, references and source locations when a view borrow must end before writeback. Run eligibility and opaque classification reuse the active node borrow, representative locations use one pass and wrapper-context traversal recurses over borrowed structural nodes without transient child-vector clones. No second render plan was needed.
 
 #### Slice 3E — Final module/API ownership
 

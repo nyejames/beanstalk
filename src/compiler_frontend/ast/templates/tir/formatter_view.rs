@@ -26,7 +26,7 @@ use crate::compiler_frontend::ast::templates::styles::whitespace::{
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, ReactiveSubscription, Style, TemplateSegmentOrigin,
 };
-use crate::compiler_frontend::ast::templates::tir::ids::TemplateIrNodeId;
+use crate::compiler_frontend::ast::templates::tir::ids::{TemplateIrId, TemplateIrNodeId};
 use crate::compiler_frontend::ast::templates::tir::node::{TemplateIrNode, TemplateIrNodeKind};
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::{
@@ -127,6 +127,63 @@ pub(crate) fn format_tir_template(
     Ok(result)
 }
 
+/// Cheap structural facts extracted from a TIR node for child-template
+/// formatting traversal.
+///
+/// WHAT: carries only the IDs and references needed to continue recursion or
+///       format a referenced child template, without cloning the entire
+///       `TemplateIrNode`.
+/// WHY: the `TirView` `RefCell` borrow must end before recursive calls that may
+///      mutate the store. Extracting cheap facts while the node is borrowed and
+///      acting after the borrow ends avoids whole-node clones.
+enum FormatterChildFact {
+    ChildTemplate {
+        reference: TemplateTirChildReference,
+    },
+    Sequence(Vec<TemplateIrNodeId>),
+    BranchChain {
+        branch_bodies: Vec<TemplateIrNodeId>,
+        fallback: Option<TemplateIrNodeId>,
+    },
+    Loop {
+        body: TemplateIrNodeId,
+        aggregate_wrapper: Option<TemplateIrNodeId>,
+    },
+    InsertContribution {
+        template: TemplateIrId,
+    },
+    Other,
+}
+
+/// Extracts the cheap structural facts needed for child-template formatting
+/// traversal from a node kind, without cloning the entire node.
+fn extract_formatter_child_fact(kind: &TemplateIrNodeKind) -> FormatterChildFact {
+    match kind {
+        TemplateIrNodeKind::ChildTemplate { reference, .. } => FormatterChildFact::ChildTemplate {
+            reference: *reference,
+        },
+        TemplateIrNodeKind::Sequence { children } => FormatterChildFact::Sequence(children.clone()),
+        TemplateIrNodeKind::BranchChain { branches, fallback } => FormatterChildFact::BranchChain {
+            branch_bodies: branches.iter().map(|branch| branch.body).collect(),
+            fallback: *fallback,
+        },
+        TemplateIrNodeKind::Loop {
+            body,
+            aggregate_wrapper,
+            ..
+        } => FormatterChildFact::Loop {
+            body: *body,
+            aggregate_wrapper: *aggregate_wrapper,
+        },
+        TemplateIrNodeKind::InsertContribution { template } => {
+            FormatterChildFact::InsertContribution {
+                template: *template,
+            }
+        }
+        _ => FormatterChildFact::Other,
+    }
+}
+
 /// Recursively formats child templates reachable from a TIR subtree.
 ///
 /// WHAT: walks the formatted tree under `node_id` and calls `format_tir_template`
@@ -140,15 +197,15 @@ fn format_child_templates_in_subtree(
     visited: &mut HashSet<TemplateRef>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let node = {
+    let fact = {
         let node = view
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
-        node.clone()
+        extract_formatter_child_fact(&node.kind)
     };
 
-    match &node.kind {
-        TemplateIrNodeKind::ChildTemplate { reference, .. } if visited.insert(reference.root) => {
+    match fact {
+        FormatterChildFact::ChildTemplate { reference } if visited.insert(reference.root) => {
             format_referenced_child_template(
                 view,
                 reference.root,
@@ -158,43 +215,45 @@ fn format_child_templates_in_subtree(
             )?;
         }
 
-        TemplateIrNodeKind::Sequence { children } => {
-            for &child_id in children {
+        FormatterChildFact::Sequence(children) => {
+            for child_id in children {
                 let child_ref = TemplateNodeRef::new(node_ref.store_id, child_id);
                 format_child_templates_in_subtree(view, child_ref, visited, string_table)?;
             }
         }
 
-        TemplateIrNodeKind::BranchChain { branches, fallback } => {
-            for branch in branches {
-                let branch_ref = TemplateNodeRef::new(node_ref.store_id, branch.body);
+        FormatterChildFact::BranchChain {
+            branch_bodies,
+            fallback,
+        } => {
+            for body_id in branch_bodies {
+                let branch_ref = TemplateNodeRef::new(node_ref.store_id, body_id);
                 format_child_templates_in_subtree(view, branch_ref, visited, string_table)?;
             }
 
             if let Some(fallback_id) = fallback {
-                let fallback_ref = TemplateNodeRef::new(node_ref.store_id, *fallback_id);
+                let fallback_ref = TemplateNodeRef::new(node_ref.store_id, fallback_id);
                 format_child_templates_in_subtree(view, fallback_ref, visited, string_table)?;
             }
         }
 
-        TemplateIrNodeKind::Loop {
+        FormatterChildFact::Loop {
             body,
             aggregate_wrapper,
-            ..
         } => {
-            let body_ref = TemplateNodeRef::new(node_ref.store_id, *body);
+            let body_ref = TemplateNodeRef::new(node_ref.store_id, body);
             format_child_templates_in_subtree(view, body_ref, visited, string_table)?;
 
             if let Some(aggregate_id) = aggregate_wrapper {
-                let aggregate_ref = TemplateNodeRef::new(node_ref.store_id, *aggregate_id);
+                let aggregate_ref = TemplateNodeRef::new(node_ref.store_id, aggregate_id);
                 format_child_templates_in_subtree(view, aggregate_ref, visited, string_table)?;
             }
         }
 
-        TemplateIrNodeKind::InsertContribution { template }
-            if visited.insert(TemplateRef::new(node_ref.store_id, *template)) =>
+        FormatterChildFact::InsertContribution { template }
+            if visited.insert(TemplateRef::new(node_ref.store_id, template)) =>
         {
-            let child_ref = TemplateRef::new(node_ref.store_id, *template);
+            let child_ref = TemplateRef::new(node_ref.store_id, template);
             // InsertContribution nodes reference SlotInsert templates that are
             // always at Formatted phase: create_template_node formats every
             // same-store linear template before the parser records the insert
@@ -274,6 +333,39 @@ fn format_referenced_child_template(
 //  Recursive node formatting
 // -------------------------
 
+/// Cheap structural facts extracted from a TIR node for formatter dispatch.
+///
+/// WHAT: carries only the children IDs and source location needed to format a
+///       single node, without cloning the entire `TemplateIrNode`.
+/// WHY: the `TirView` `RefCell` borrow must end before formatting calls that
+///      may mutate the store. Extracting cheap facts while the node is borrowed
+///      and acting after the borrow ends avoids whole-node clones.
+enum FormatterNodeFact {
+    Sequence {
+        children: Vec<TemplateIrNodeId>,
+        location: SourceLocation,
+    },
+    BodyEligible {
+        location: SourceLocation,
+    },
+    Passthrough,
+}
+
+/// Extracts the cheap structural facts needed for formatter dispatch from a
+/// node, without cloning the entire node.
+fn extract_formatter_node_fact(node: &TemplateIrNode) -> FormatterNodeFact {
+    match &node.kind {
+        TemplateIrNodeKind::Sequence { children } => FormatterNodeFact::Sequence {
+            children: children.clone(),
+            location: node.location.clone(),
+        },
+        _ if is_body_eligible_kind(&node.kind) => FormatterNodeFact::BodyEligible {
+            location: node.location.clone(),
+        },
+        _ => FormatterNodeFact::Passthrough,
+    }
+}
+
 /// Formats a single TIR node and returns the formatted root for that subtree.
 ///
 /// WHAT: sequences are scanned for body runs; single body-eligible nodes are
@@ -289,15 +381,15 @@ fn format_tir_node(
     formatter: Option<&crate::compiler_frontend::ast::templates::template::Formatter>,
     string_table: &mut StringTable,
 ) -> Result<TirFormatterResult, CompilerMessages> {
-    let node = {
+    let fact = {
         let node = view
             .effective_node(node_ref)
             .map_err(|error| compiler_error_messages(error, string_table))?;
-        node.clone()
+        extract_formatter_node_fact(&node)
     };
 
-    match &node.kind {
-        TemplateIrNodeKind::Sequence { children } => {
+    match fact {
+        FormatterNodeFact::Sequence { children, location } => {
             let head_node_count = view
                 .root_template()
                 .ok()
@@ -307,8 +399,8 @@ fn format_tir_node(
             format_tir_sequence(
                 view,
                 node_ref,
-                children,
-                node.location.clone(),
+                &children,
+                location,
                 head_node_count,
                 pre_format_passes,
                 post_format_passes,
@@ -317,7 +409,7 @@ fn format_tir_node(
             )
         }
 
-        _ if is_body_eligible_kind(&node.kind) => {
+        FormatterNodeFact::BodyEligible { location } => {
             // A single body-eligible node is treated as a run of one. It is not
             // wrapped in a sequence unless the formatter expands it.
             let representative_location =
@@ -344,7 +436,7 @@ fn format_tir_node(
                         TemplateIrNodeKind::Sequence {
                             children: replacement_nodes,
                         },
-                        node.location.clone(),
+                        location,
                     ),
                     None,
                     string_table,
@@ -355,11 +447,21 @@ fn format_tir_node(
         }
 
         // Structural nodes that are not body-eligible pass through unchanged.
-        _ => Ok(TirFormatterResult {
+        FormatterNodeFact::Passthrough => Ok(TirFormatterResult {
             root: node_ref.node_id,
             warnings: Vec::new(),
         }),
     }
+}
+
+/// Cheap eligibility facts for a child node during sequence formatting.
+///
+/// WHAT: carries only the two boolean facts needed for run-membership decisions,
+///       extracted while the node is borrowed so the `TemplateIrNodeKind` clone
+///       is avoided.
+struct ChildRunEligibility {
+    is_child_template: bool,
+    is_body_eligible: bool,
 }
 
 /// Formats a sequence node by scanning its children for contiguous body runs.
@@ -389,16 +491,19 @@ fn format_tir_sequence(
 
     for (child_index, &child_id) in children.iter().enumerate() {
         let child_ref = TemplateNodeRef::new(original_node_ref.store_id, child_id);
-        let child_kind = {
+        let child_eligibility = {
             let child = view
                 .effective_node(child_ref)
                 .map_err(|error| compiler_error_messages(error, string_table))?;
-            child.kind.clone()
+            ChildRunEligibility {
+                is_child_template: matches!(child.kind, TemplateIrNodeKind::ChildTemplate { .. }),
+                is_body_eligible: is_body_eligible_kind(&child.kind),
+            }
         };
 
-        let is_head_child_template = child_index < head_node_count
-            && matches!(child_kind, TemplateIrNodeKind::ChildTemplate { .. });
-        let is_eligible = is_body_eligible_kind(&child_kind) && !is_head_child_template;
+        let is_head_child_template =
+            child_index < head_node_count && child_eligibility.is_child_template;
+        let is_eligible = child_eligibility.is_body_eligible && !is_head_child_template;
 
         if is_eligible {
             current_run.push(child_id);
@@ -556,7 +661,7 @@ fn child_template_is_head_expression_insert_in_tir(
     Ok(true)
 }
 
-/// Classifies a body-eligible node into the opaque anchor kind used by the
+/// Classifies a body-eligible node kind into the opaque anchor kind used by the
 /// formatter pipeline.
 ///
 /// WHAT: child-template nodes become `ChildTemplate` anchors unless they are
@@ -564,14 +669,13 @@ fn child_template_is_head_expression_insert_in_tir(
 /// dynamic expressions become `DynamicExpression` anchors.
 /// WHY: the `$md` inline-code pass distinguishes these two kinds without
 /// inspecting its content, and head-expression inserts must pair like direct
-/// dynamic-expression anchors.
-fn opaque_kind_for_node(
+/// dynamic-expression anchors. Accepting the kind directly avoids a repeated
+/// `effective_node` read when the caller already holds the node borrow.
+fn opaque_kind_for_kind(
     view: &TirView<'_>,
-    node_ref: TemplateNodeRef,
+    kind: &TemplateIrNodeKind,
 ) -> Result<FormatterOpaqueKind, CompilerError> {
-    let node = view.effective_node(node_ref)?;
-
-    match &node.kind {
+    match kind {
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             if child_template_is_head_expression_insert_in_tir(view, reference)? {
                 Ok(FormatterOpaqueKind::DynamicExpression)
@@ -583,7 +687,7 @@ fn opaque_kind_for_node(
 
         _ => Err(CompilerError::compiler_error(format!(
             "TIR formatter view attempted to anchor unsupported node kind: {:?}",
-            node.kind
+            kind
         ))),
     }
 }
@@ -646,7 +750,7 @@ fn process_formatter_run(
 
                 input_pieces.push(FormatterInputPiece::Opaque(FormatterOpaquePiece {
                     id: anchor_id,
-                    kind: opaque_kind_for_node(view, node_ref)
+                    kind: opaque_kind_for_kind(view, &node.kind)
                         .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?,
                 }));
             }
@@ -812,7 +916,8 @@ fn run_position_for_run(is_first_run: bool, is_last_run: bool) -> TemplateBodyRu
 /// Derives a coarse representative source location for a run of TIR nodes.
 ///
 /// WHAT: aggregates body-text node locations when possible; falls back to the
-/// location of the first text/child/dynamic node in the run.
+/// location of the first text/child/dynamic node in the run. Both phases share
+/// a single pass to avoid reading each node twice.
 /// WHY: formatter output can rewrite arbitrary text, so exact per-character
 /// provenance is not feasible. A representative span preserves useful
 /// diagnostics locations without pretending to be precise.
@@ -822,9 +927,9 @@ fn representative_location_for_run(
     run: &[TemplateIrNodeId],
     string_table: &StringTable,
 ) -> Result<SourceLocation, CompilerMessages> {
-    if let Some(aggregated) = aggregate_text_node_location(view, store_id, run, string_table)? {
-        return Ok(aggregated);
-    }
+    let mut first_text_location: Option<SourceLocation> = None;
+    let mut last_text_location: Option<SourceLocation> = None;
+    let mut fallback_location: Option<SourceLocation> = None;
 
     for &node_id in run {
         let node_ref = TemplateNodeRef::new(store_id, node_id);
@@ -833,14 +938,45 @@ fn representative_location_for_run(
             .map_err(|error| compiler_error_messages(error, string_table))?;
 
         match &node.kind {
-            TemplateIrNodeKind::Text { .. } => return Ok(node.location.clone()),
+            TemplateIrNodeKind::Text { origin, .. } => {
+                if *origin == TemplateSegmentOrigin::Body {
+                    if first_text_location.is_none() {
+                        first_text_location = Some(node.location.clone());
+                    }
+                    last_text_location = Some(node.location.clone());
+                }
+
+                if fallback_location.is_none() {
+                    fallback_location = Some(node.location.clone());
+                }
+            }
+
             TemplateIrNodeKind::ChildTemplate { .. }
-            | TemplateIrNodeKind::DynamicExpression { .. } => return Ok(node.location.clone()),
+            | TemplateIrNodeKind::DynamicExpression { .. }
+                if fallback_location.is_none() =>
+            {
+                fallback_location = Some(node.location.clone());
+            }
+
             _ => {}
         }
     }
 
-    Ok(SourceLocation::default())
+    // Prefer the aggregated body-text span when body-text nodes exist.
+    if let (Some(start), Some(end)) = (first_text_location, last_text_location) {
+        if start.scope != end.scope {
+            return Ok(start);
+        }
+
+        return Ok(SourceLocation {
+            scope: start.scope,
+            start_pos: start.start_pos,
+            end_pos: end.end_pos,
+        });
+    }
+
+    // Fall back to the first text/child/dynamic node location.
+    Ok(fallback_location.unwrap_or_default())
 }
 
 /// Derives a representative location for a single body-eligible node.
@@ -855,52 +991,6 @@ fn representative_location_for_single_node(
         std::slice::from_ref(&node_ref.node_id),
         string_table,
     )
-}
-
-/// Aggregates the span across body-text nodes in a run.
-fn aggregate_text_node_location(
-    view: &TirView<'_>,
-    store_id: TemplateStoreId,
-    run: &[TemplateIrNodeId],
-    string_table: &StringTable,
-) -> Result<Option<SourceLocation>, CompilerMessages> {
-    let mut first_location: Option<SourceLocation> = None;
-    let mut last_location: Option<SourceLocation> = None;
-
-    for &node_id in run {
-        let node_ref = TemplateNodeRef::new(store_id, node_id);
-        let node = view
-            .effective_node(node_ref)
-            .map_err(|error| compiler_error_messages(error, string_table))?;
-
-        if let TemplateIrNodeKind::Text { origin, .. } = &node.kind {
-            if *origin != TemplateSegmentOrigin::Body {
-                continue;
-            }
-
-            if first_location.is_none() {
-                first_location = Some(node.location.clone());
-            }
-            last_location = Some(node.location.clone());
-        }
-    }
-
-    let Some(start) = first_location else {
-        return Ok(None);
-    };
-    let Some(end) = last_location else {
-        return Ok(None);
-    };
-
-    if start.scope != end.scope {
-        return Ok(Some(start));
-    }
-
-    Ok(Some(SourceLocation {
-        scope: start.scope,
-        start_pos: start.start_pos,
-        end_pos: end.end_pos,
-    }))
 }
 
 // -------------------------
