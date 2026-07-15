@@ -40,6 +40,7 @@ mod slot_composition_tests;
 mod store_tests;
 mod summary_tests;
 mod template_reference_tests;
+mod validation_support;
 mod validation_tests;
 mod view_tests;
 mod wrapper_context_fold_tests;

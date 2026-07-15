@@ -67,7 +67,6 @@
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
 //! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |
-//! | `tir/validation.rs` | Structural integrity checks for the store |
 //! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
 //! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
@@ -109,7 +108,6 @@
 //! | `tir/store.rs` | `TemplateIrStore` — central contiguous storage |
 //! | `tir/node.rs` | `TemplateIr`, `TemplateIrNode`, `TemplateIrNodeKind` |
 //! | `tir/summary.rs` | `TemplateIrSummary` — cheap shape metadata |
-//! | `tir/validation.rs` | Structural integrity checks for the TIR store |
 //! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
 //! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |

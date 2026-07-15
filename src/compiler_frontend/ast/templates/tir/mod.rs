@@ -47,7 +47,6 @@
 //! ├── store.rs                         TemplateIrStore — central owned storage
 //! ├── node.rs                          TemplateIr, TemplateIrNode, TemplateIrNodeKind
 //! ├── summary.rs                       TemplateIrSummary — shape metadata for capacity planning
-//! ├── validation.rs                    Structural validation after conversion
 //! ├── builder.rs                       Parser-facing mutable facade for direct TIR emission
 //! ├── parser_builder_state.rs          In-progress parser TIR accumulator
 //! ├── expression_payload_walker.rs     Shared read-only expression-payload traversal
@@ -89,8 +88,8 @@ mod subtree_copy;
 mod refs;
 
 // `registry` owns AST-local TIR stores plus overlay storage. Production
-// construction, finalization, view, folding, formatting, metadata, validation,
-// and slot-composition paths use the active registry surface, while focused
+// construction, finalization, view, folding, formatting, metadata, and
+// slot-composition paths use the active registry surface, while focused
 // tests keep currently-unused freeze/domain helpers gated to test builds.
 mod registry;
 
@@ -116,12 +115,6 @@ mod node;
 mod store;
 
 mod summary;
-
-// `validation` is exercised only by focused TIR tests via direct submodule
-// imports and is not called in production builds. Gate it under cfg(test) so
-// the unused helpers no longer trigger dead-code warnings in normal builds.
-#[cfg(test)]
-mod validation;
 
 mod builder;
 mod construction_context;

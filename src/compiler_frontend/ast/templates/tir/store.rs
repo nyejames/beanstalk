@@ -166,8 +166,8 @@ impl TemplateIrStoreOwner {
 /// - Every `TemplateWrapperSetId` indexes a valid entry in `wrapper_sets`.
 /// - `TemplateIr::root` always points to a valid node in `nodes`.
 ///
-/// These invariants are enforced by the converter and validated by
-/// `validation::validate_tir_store`.
+/// Construction APIs preserve these invariants. Focused malformed-store tests
+/// exercise them through `tests/validation_support.rs`.
 #[derive(Clone, Debug)]
 pub(crate) struct TemplateIrStore {
     /// Document-order counter for `Slot` node occurrences.

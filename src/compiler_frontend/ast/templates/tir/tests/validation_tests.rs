@@ -2,8 +2,8 @@
 //!
 //! WHAT: exercises `validate_tir_store` with well-formed and malformed TIR stores
 //! to confirm that structural invariants are enforced.
-//! WHY: validation is the safety net that catches construction bugs before downstream
-//! passes trust the TIR data.
+//! WHY: focused tests protect the malformed-store invariants that downstream
+//! TIR consumers rely on.
 
 use super::super::ids::{
     ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
@@ -16,8 +16,8 @@ use super::super::slot_plan::{
 };
 use super::super::store::{TemplateIrStore, TemplateWrapperSet};
 use super::super::summary::TemplateIrSummary;
-use super::super::validation::validate_tir_store;
 use super::super::{TemplateOverlaySetId, TemplateTirChildReference, TemplateTirPhase};
+use super::validation_support::validate_tir_store;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ExpressionValueShape,
 };

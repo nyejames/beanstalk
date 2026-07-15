@@ -1,21 +1,20 @@
-//! TIR store validation.
+//! Test-only TIR store validation support.
 //!
-//! WHAT: structural validation for `TemplateIrStore` after conversion. Checks
+//! WHAT: structural validation for `TemplateIrStore` in focused TIR tests. Checks
 //! for impossible IDs, missing roots, malformed ranges, invalid side-table
 //! references, occurrence/site ID uniqueness and correspondence, and recursive
 //! cycles within a reasonable depth bound.
 //!
-//! WHY: TIR is an internal representation that must be well-formed before any
-//! downstream pass (fold, format, HIR) can trust it. Validating at the
-//! conversion boundary catches converter bugs early and prevents cascading
-//! failures in later phases.
+//! WHY: focused TIR tests need one structural invariant checker for malformed
+//! stores so individual test cases can assert the relevant failure without
+//! duplicating validation logic.
 //!
 //! ## Ownership contract
 //!
 //! Validation reads the store without mutating it. It reports problems through
 //! `CompilerDiagnostic` so the diagnostic system stays unified. Validation is
-//! not a user-facing feature — it protects internal invariants during TIR
-//! development and testing.
+//! not a user-facing feature. It protects internal invariants in the focused
+//! TIR tests.
 
 use crate::compiler_frontend::ast::templates::tir::ids::{
     ChildTemplateOccurrenceId, ExpressionSiteId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
@@ -60,8 +59,8 @@ const MAX_CYCLE_DEPTH: usize = 1024;
 /// exists, side-table references from nodes are in bounds, and no node tree
 /// contains cycles within `MAX_CYCLE_DEPTH`.
 ///
-/// WHY: validation catches converter bugs at the boundary rather than letting
-/// malformed TIR propagate into folding, formatting, or HIR lowering.
+/// WHY: validation catches construction defects before malformed TIR reaches
+/// folding, formatting, or HIR lowering.
 ///
 /// Returns `Some(CompilerDiagnostic)` describing the first problem found,
 /// or `None` when the store is structurally valid.
@@ -106,8 +105,8 @@ pub(crate) fn validate_tir_store(store: &TemplateIrStore) -> Option<CompilerDiag
         return Some(diagnostic);
     }
 
-    // Populated slot-plan side tables should mirror the AST-prepared
-    // `RuntimeSlotApplicationPlan` until HIR handoff reads TIR directly.
+    // Populated slot-plan side tables must keep source and site IDs indexed
+    // consistently for runtime handoff consumers.
     if let Some(diagnostic) = validate_slot_plans(store) {
         return Some(diagnostic);
     }
@@ -150,7 +149,7 @@ pub(crate) fn validate_tir_store(store: &TemplateIrStore) -> Option<CompilerDiag
 ///
 /// WHAT: for each entry in the wrapper-set side table, checks that the
 /// store-local `template_id` of each `TemplateRef` is in bounds and that the
-/// `store_id` matches the owning store. This catches converter bugs where a
+/// `store_id` matches the owning store. This catches construction defects where a
 /// wrapper set references a template from the wrong store or a stale ID.
 fn validate_wrapper_sets(store: &TemplateIrStore) -> Option<CompilerDiagnostic> {
     let store_id = store.store_id();
@@ -188,9 +187,8 @@ fn validate_wrapper_sets(store: &TemplateIrStore) -> Option<CompilerDiagnostic> 
 ///
 /// WHAT: checks that TIR-rendered contribution sources and slot-site plans are
 /// internally coherent and reference valid TIR nodes.
-/// WHY: TIR now owns the runtime slot application handoff. Validation protects
-/// the source/site ID contract that HIR lowering will depend on instead of
-/// comparing against a cloned legacy runtime plan.
+/// WHY: validation protects the source/site ID contract consumed by runtime
+/// handoff materialization.
 fn validate_slot_plans(store: &TemplateIrStore) -> Option<CompilerDiagnostic> {
     for (index, slot_plan) in store.slot_plans.iter().enumerate() {
         let slot_plan_id = TemplateSlotPlanId::new(index);
@@ -553,7 +551,7 @@ fn validate_occurrence_and_site_ids_from_node(
 
 /// Collects every `ExpressionSiteId` carried by a `TemplateLoopHeaderExpressionSites`.
 ///
-/// WHAT: mirrors the loop-header variant shape, yielding one site ID per
+/// WHAT: matches the loop-header variant shape, yielding one site ID per
 ///       expression-bearing position (condition, range start/end/optional step,
 ///       collection iterable).
 /// WHY: validation needs to check all loop-header site IDs for uniqueness
