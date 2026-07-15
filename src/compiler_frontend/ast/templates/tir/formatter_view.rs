@@ -390,11 +390,21 @@ fn format_tir_node(
 
     match fact {
         FormatterNodeFact::Sequence { children, location } => {
-            let head_node_count = view
-                .root_template()
-                .ok()
-                .filter(|template| template.root == node_ref.node_id)
-                .map_or(0, |template| template.summary.head_node_count as usize);
+            // The root template carries the authoritative head-prefix count
+            // for its own root sequence. A sequence that is not the template
+            // root (for example a nested body run) has no head prefix, so its
+            // head count is zero. The root-template lookup is required internal
+            // authority: a missing root is a compiler bug, not a silent skip.
+            let head_node_count = {
+                let root_template = view
+                    .root_template()
+                    .map_err(|error| compiler_error_messages(error, string_table))?;
+                if root_template.root == node_ref.node_id {
+                    root_template.summary.head_node_count as usize
+                } else {
+                    0
+                }
+            };
 
             format_tir_sequence(
                 view,

@@ -3,11 +3,9 @@
 //!
 //! WHAT: exercises `apply_inherited_child_wrappers_to_body_root` directly to
 //!       prove that branch/fallback body roots can inherit `$children(..)`
-//!       wrappers without falling back to the atom-level content mirror.
-//! WHY: the render-unit TIR path previously bailed out whenever the owning
-//!      template carried inherited wrappers; these tests pin the replacement
-//!      behavior for direct children, `$fresh` suppression, and control-flow
-//!      children.
+//!       wrappers through the authoritative body-root TIR.
+//! WHY: these tests protect direct children, `$fresh` suppression and
+//!      control-flow children at the render-unit boundary.
 
 use super::super::builder::TemplateIrBuilder;
 use super::super::ids::{TemplateIrId, TemplateIrNodeId};
@@ -587,4 +585,51 @@ fn body_root_foreign_child_missing_template_returns_precise_error() {
     );
 
     assert_infrastructure_error(result, "missing in store");
+}
+
+// ---------------------
+//  Body-root authority
+// ---------------------
+
+#[test]
+fn apply_inherited_wrappers_rejects_missing_body_root_with_empty_wrappers() {
+    let string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let missing_root = TemplateIrNodeId::new(99);
+    let registry = TemplateIrRegistry::new();
+
+    let result = apply_inherited_child_wrappers_to_body_root(
+        missing_root,
+        &[],
+        &registry,
+        &mut store,
+        &string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "missing body root should be rejected even with empty wrappers"
+    );
+}
+
+#[test]
+fn apply_inherited_wrappers_rejects_non_sequence_body_root_with_empty_wrappers() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let text = build_single_text_tir_template(&mut store, &mut string_table, "leaf");
+    let registry = TemplateIrRegistry::new();
+
+    // A bare template root node is a Text node, not a Sequence.
+    let result = apply_inherited_child_wrappers_to_body_root(
+        store.get_template(text).expect("template exists").root,
+        &[],
+        &registry,
+        &mut store,
+        &string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "non-sequence body root should be rejected even with empty wrappers"
+    );
 }

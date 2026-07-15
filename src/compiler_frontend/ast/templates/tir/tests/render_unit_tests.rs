@@ -1,7 +1,7 @@
 //! TIR render-unit construction tests.
 //!
-//! WHAT: exercises wrapper-reference normalization and TIR-native
-//! aggregate-wrapper candidate construction.
+//! WHAT: exercises wrapper-reference normalization, aggregate-wrapper
+//! candidate construction and required render-unit node authority.
 //!
 //! WHY: these focused tests protect store-qualified wrapper and child identity
 //! without reconstructing obsolete aggregate-wrapper source mirrors.
@@ -29,7 +29,10 @@ use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::ast::templates::tir::wrapper_sets::wrapper_reference_for_template;
-use crate::compiler_frontend::ast::templates::tir::{TemplateIrStoreOwner, TemplateTirReference};
+use crate::compiler_frontend::ast::templates::tir::{
+    TemplateIrStoreOwner, TemplateTirReference, head_prefix_tir_nodes, sequence_children,
+    trim_whitespace_before_loop_control_boundary,
+};
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -270,7 +273,7 @@ fn foreign_wrapper_reference_preserves_identity_without_copying() {
 }
 
 #[test]
-fn wrapper_with_mismatched_store_owner_returns_none() {
+fn wrapper_with_mismatched_store_owner_returns_error() {
     let (registry, current_store_id, _, _) = wrapper_test_registry();
     let current_handle = registry
         .store_handle(current_store_id)
@@ -280,13 +283,13 @@ fn wrapper_with_mismatched_store_owner_returns_none() {
     let store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &store, &registry);
     assert!(
-        refs.is_none(),
-        "wrapper whose TIR reference belongs to a different store should yield None"
+        refs.is_err(),
+        "wrapper whose TIR reference belongs to a different store should be rejected"
     );
 }
 
 #[test]
-fn wrapper_with_missing_overlay_set_returns_none() {
+fn wrapper_with_missing_overlay_set_returns_error() {
     let (registry, current_store_id, _, _) = wrapper_test_registry();
     let current_handle = registry
         .store_handle(current_store_id)
@@ -304,11 +307,11 @@ fn wrapper_with_missing_overlay_set_returns_none() {
 
     let store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &store, &registry);
-    assert!(refs.is_none(), "missing overlay set should yield None");
+    assert!(refs.is_err(), "missing overlay set should be rejected");
 }
 
 #[test]
-fn wrapper_with_missing_store_returns_none() {
+fn wrapper_with_missing_store_returns_error() {
     let (registry, current_store_id, _, _) = wrapper_test_registry();
     let current_handle = registry
         .store_handle(current_store_id)
@@ -326,11 +329,11 @@ fn wrapper_with_missing_store_returns_none() {
 
     let store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &store, &registry);
-    assert!(refs.is_none(), "missing store should yield None");
+    assert!(refs.is_err(), "missing store should be rejected");
 }
 
 #[test]
-fn wrapper_with_missing_template_returns_none() {
+fn wrapper_with_missing_template_returns_error() {
     let (registry, current_store_id, _, empty_overlay) = wrapper_test_registry();
     let current_handle = registry
         .store_handle(current_store_id)
@@ -348,13 +351,38 @@ fn wrapper_with_missing_template_returns_none() {
     let store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &store, &registry);
     assert!(
-        refs.is_none(),
-        "missing template in the current store should yield None"
+        refs.is_err(),
+        "missing template in the current store should be rejected"
     );
 }
 
 #[test]
-fn foreign_wrapper_with_mismatched_owner_token_returns_none() {
+fn foreign_wrapper_with_missing_template_returns_error() {
+    let (registry, current_store_id, foreign_store_id, empty_overlay) = wrapper_test_registry();
+    let current_handle = registry
+        .store_handle(current_store_id)
+        .expect("current store");
+    let foreign_handle = registry
+        .store_handle(foreign_store_id)
+        .expect("foreign store");
+
+    let wrapper = wrapper_template_with_reference(
+        TemplateRef::new(foreign_store_id, TemplateIrId::new(0)),
+        foreign_handle.borrow().owner(),
+        TemplateTirPhase::Parsed,
+        empty_overlay,
+    );
+
+    let current_store = current_handle.borrow();
+    let reference = wrapper_reference_for_template(&wrapper, &current_store, &registry);
+    assert!(
+        reference.is_err(),
+        "missing template in a foreign store should be rejected"
+    );
+}
+
+#[test]
+fn foreign_wrapper_with_mismatched_owner_token_returns_error() {
     let (registry, current_store_id, foreign_store_id, empty_overlay) = wrapper_test_registry();
 
     let foreign_handle = registry
@@ -379,7 +407,7 @@ fn foreign_wrapper_with_mismatched_owner_token_returns_none() {
         .expect("current store");
     let current_store = current_handle.borrow();
     let refs = wrapper_reference_for_template(&wrapper, &current_store, &registry);
-    assert!(refs.is_none(), "owner-token mismatch should yield None");
+    assert!(refs.is_err(), "owner-token mismatch should be rejected");
 }
 
 #[test]
@@ -401,10 +429,10 @@ fn same_store_owner_mismatch_does_not_reborrow_current_store() {
     );
 
     // Production holds this mutable borrow while normalizing wrapper refs. An
-    // invalid owner token must return `None` without re-entering the RefCell.
+    // invalid owner token must return `Err` without re-entering the RefCell.
     let current_store = current_handle.borrow_mut();
     let refs = wrapper_reference_for_template(&wrapper, &current_store, &registry);
-    assert!(refs.is_none(), "owner-token mismatch should yield None");
+    assert!(refs.is_err(), "owner-token mismatch should be rejected");
 }
 
 // ---------------------------------------------------------------------------
@@ -612,6 +640,38 @@ fn aggregate_wrapper_preserves_foreign_child_as_store_qualified_reference() {
 }
 
 #[test]
+fn aggregate_wrapper_rejects_missing_foreign_template_instead_of_using_cached_kind() {
+    let mut registry = TemplateIrRegistry::new();
+    let current_store_id = registry.allocate_store();
+    let foreign_store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let foreign_owner = registry
+        .store_handle(foreign_store_id)
+        .expect("foreign store handle")
+        .borrow()
+        .owner();
+
+    let mut current_store = registry
+        .store_mut(current_store_id)
+        .expect("current store should be mutable");
+    let child_expression = foreign_template_expression(
+        foreign_store_id,
+        TemplateIrId::new(0),
+        foreign_owner,
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    );
+    let dynamic_node = push_dynamic_expression(&mut current_store, child_expression);
+
+    build_aggregate_wrapper_candidate_from_tir_nodes(
+        &[dynamic_node],
+        &mut current_store,
+        &registry,
+    )
+    .expect_err("a durable kind cache must not replace a missing foreign TIR template");
+}
+
+#[test]
 fn aggregate_wrapper_preserves_foreign_child_expression_overlay_identity() {
     let mut registry = TemplateIrRegistry::new();
     let current_store_id = registry.allocate_store();
@@ -753,5 +813,93 @@ fn aggregate_wrapper_foreign_child_not_flattened_to_local_id() {
     assert_ne!(
         reference.root.store_id, current_store_id,
         "foreign child must not be flattened to a local (same-store) reference"
+    );
+}
+
+// -----------------------
+//  Render-unit authority
+// -----------------------
+
+#[test]
+fn sequence_children_rejects_missing_node() {
+    let store = TemplateIrStore::new();
+    let result = sequence_children(&store, TemplateIrNodeId::new(99));
+    assert!(
+        result.is_err(),
+        "missing sequence-children node should be rejected"
+    );
+}
+
+#[test]
+fn sequence_children_rejects_non_sequence_root() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let text_node = push_text_node(&mut store, &mut string_table, "leaf");
+
+    let result = sequence_children(&store, text_node);
+    assert!(result.is_err(), "non-sequence root should be rejected");
+}
+
+#[test]
+fn head_prefix_tir_nodes_rejects_missing_root_child() {
+    let store = TemplateIrStore::new();
+    let result = head_prefix_tir_nodes(&store, &[TemplateIrNodeId::new(99)]);
+    assert!(
+        result.is_err(),
+        "missing root child should be rejected during head-prefix extraction"
+    );
+}
+
+#[test]
+fn head_prefix_tir_nodes_accepts_empty_prefix() {
+    let store = TemplateIrStore::new();
+    let prefix = head_prefix_tir_nodes(&store, &[]).expect("empty prefix should be valid");
+    assert!(
+        prefix.is_empty(),
+        "empty root-children list should yield an empty prefix"
+    );
+}
+
+#[test]
+fn trim_whitespace_rejects_missing_body_root() {
+    let string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let result = trim_whitespace_before_loop_control_boundary(
+        TemplateIrNodeId::new(99),
+        &mut store,
+        &string_table,
+    );
+    assert!(result.is_err(), "missing loop body root should be rejected");
+}
+
+#[test]
+fn trim_whitespace_rejects_non_sequence_body_root() {
+    let mut string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let text_node = push_text_node(&mut store, &mut string_table, "leaf");
+
+    let result = trim_whitespace_before_loop_control_boundary(text_node, &mut store, &string_table);
+    assert!(
+        result.is_err(),
+        "non-sequence loop body root should be rejected"
+    );
+}
+
+#[test]
+fn trim_whitespace_rejects_missing_child_in_sequence() {
+    let string_table = StringTable::new();
+    let mut store = TemplateIrStore::new();
+    let missing_child = TemplateIrNodeId::new(99);
+    let body_root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: vec![missing_child],
+        },
+        empty_location(),
+    ));
+
+    let result = trim_whitespace_before_loop_control_boundary(body_root, &mut store, &string_table);
+    assert!(
+        result.is_err(),
+        "a sequence child missing from the store should be rejected"
     );
 }

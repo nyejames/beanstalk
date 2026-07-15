@@ -66,32 +66,64 @@ pub(crate) fn wrapper_sets_are_equivalent(
 ///      normalization step that converts AST `Template` values into the
 ///      wrapper-ref shape before they enter a wrapper set.
 ///
-/// Returns `None` when the wrapper has no valid registry-backed TIR identity,
-/// including a wrong store, missing template, owner mismatch or missing overlay.
-/// Callers must not recover through an intermediate content representation.
+/// Returns `Err` when the wrapper has no valid registry-backed TIR identity,
+/// including a wrong store, missing template, owner mismatch or missing
+/// overlay. These are internal invariant failures; callers must not recover
+/// through an intermediate content representation.
 pub(crate) fn wrapper_reference_for_template(
     template: &Template,
     current_store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
-) -> Option<TemplateWrapperReference> {
+) -> Result<TemplateWrapperReference, CompilerError> {
     let reference = &template.tir_reference;
-    registry.overlay_set(reference.overlay_set_id)?;
+    registry
+        .overlay_set(reference.overlay_set_id)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "wrapper-reference normalization: TIR reference used missing overlay set {}.",
+                reference.overlay_set_id
+            ))
+        })?;
 
     if reference.root.store_id == current_store.store_id() {
         if !Arc::ptr_eq(&reference.store_owner, &current_store.owner()) {
-            return None;
+            return Err(CompilerError::compiler_error(
+                "wrapper-reference normalization: same-store reference owner did not match the current store.",
+            ));
         }
-        current_store.get_template(reference.root.template_id)?;
+        current_store.get_template(reference.root.template_id).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "wrapper-reference normalization: same-store template {} was missing from the current store.",
+                reference.root.template_id
+            ))
+        })?;
     } else {
-        let foreign_store_handle = registry.store_handle(reference.root.store_id)?;
+        let foreign_store_handle = registry
+            .store_handle(reference.root.store_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "wrapper-reference normalization: foreign store {} was not found in the module-local TIR registry.",
+                    reference.root.store_id
+                ))
+            })?;
         let foreign_store = foreign_store_handle.borrow();
         if !Arc::ptr_eq(&reference.store_owner, &foreign_store.owner()) {
-            return None;
+            return Err(CompilerError::compiler_error(format!(
+                "wrapper-reference normalization: foreign store {} owner did not match the reference owner.",
+                reference.root.store_id
+            )));
         }
-        foreign_store.get_template(reference.root.template_id)?;
+        foreign_store
+            .get_template(reference.root.template_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "wrapper-reference normalization: foreign template {} was missing from store {}.",
+                    reference.root.template_id, reference.root.store_id
+                ))
+            })?;
     }
 
-    Some(TemplateWrapperReference::new(
+    Ok(TemplateWrapperReference::new(
         reference.root,
         reference.phase,
         reference.overlay_set_id,

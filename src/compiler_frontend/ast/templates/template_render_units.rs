@@ -146,7 +146,7 @@ fn prepare_branch_body_tir_root(
     // the formatted TIR root.
     let head_prefix_nodes = {
         let store = context.registered_template_ir_store.store().borrow();
-        head_prefix_tir_nodes(&store, root_children)
+        head_prefix_tir_nodes(&store, root_children).map_err(TemplateError::from)?
     };
 
     // The body is already a parser-emitted TIR sequence node. Formatting,
@@ -170,13 +170,10 @@ fn prepare_branch_body_tir_root(
         string_table,
     )?;
 
-    let body_children = sequence_children(&store, body_root).ok_or_else(|| {
-        CompilerError::compiler_error("Branch body preparation produced a non-sequence body root.")
-    })?;
+    let body_children = sequence_children(&store, body_root).map_err(TemplateError::from)?;
 
-    // Build a temporary template combining the converted head-prefix nodes with
-    // the body children, then compose so head-chain wrappers apply to the body
-    // exactly as the atom-level path did.
+    // Build a temporary template combining the head-prefix nodes with the body
+    // children, then compose so head-chain wrappers apply to the body.
     let candidate_id = build_branch_body_candidate_from_tir_nodes(
         &head_prefix_nodes,
         &body_children,
@@ -198,8 +195,7 @@ fn prepare_branch_body_tir_root(
 ///       Non-control-flow direct children are wrapped through
 ///       `wrap_tir_node_in_wrappers`; control-flow direct children receive the
 ///       inherited wrappers through a derived wrapper template whose
-///       `conditional_child_wrapper_set` carries the inherited wrappers, matching
-///       the atom-level `attach_conditional_child_wrappers` behavior.
+///       `conditional_child_wrapper_set` carries the inherited wrappers.
 /// WHY: lets `prepare_branch_body_tir_root` keep inherited
 ///      `$children(...)` wrapper handling inside the TIR owner.
 struct ControlFlowBodyPreparationContext<'a> {
@@ -283,7 +279,8 @@ fn prepare_loop_body_tir_root(
 
     let mut store = context.registered_template_ir_store.store().borrow_mut();
     let body_root =
-        trim_whitespace_before_loop_control_boundary(body_root, &mut store, string_table);
+        trim_whitespace_before_loop_control_boundary(body_root, &mut store, string_table)
+            .map_err(TemplateError::from)?;
 
     let registry = context.registered_template_ir_store.registry().borrow();
     let body_root = apply_inherited_child_wrappers_to_body_root(

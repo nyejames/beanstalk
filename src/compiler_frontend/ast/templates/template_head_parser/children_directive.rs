@@ -21,7 +21,6 @@ use crate::compiler_frontend::ast::templates::tir::{
     wrapper_reference_for_template,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateDirectiveReason,
 };
@@ -115,14 +114,14 @@ pub(super) fn parse_children_style_directive(
 
             let current_store = context.registered_template_ir_store.store().borrow();
             let registry = context.registered_template_ir_store.registry().borrow();
-            wrapper_reference_for_template(&child_template, &current_store, &registry).ok_or_else(
-                || {
-                    TemplateError::from(CompilerError::compiler_error(
-                        "$children template wrapper was missing a valid registry-backed TIR reference.",
-                    ))
-                    .into_diagnostic()
-                },
-            )?
+            // The wrapper-reference helper reports internal authority failures
+            // as `CompilerError`; carry them through `TemplateError` so the
+            // diagnostic lane stays the infrastructure lane rather than a
+            // fabricated user-facing directive diagnostic.
+            wrapper_reference_for_template(&child_template, &current_store, &registry)
+                .map_err(TemplateError::from)
+                .map_err(TemplateError::into_diagnostic)
+                .map_err(Box::new)?
         }
 
         ExpressionKind::StringSlice(value) => normalize_string_child_wrapper_reference(
@@ -149,7 +148,7 @@ pub(super) fn parse_children_style_directive(
 /// Builds a TIR wrapper reference around a literal string id.
 ///
 /// The resulting wrapper records its literal body directly in the module-scoped
-/// parser TIR store. Its compatibility content remains empty.
+/// parser TIR store and returns the durable store-qualified reference.
 fn normalize_string_child_wrapper_reference(
     value: StringId,
     argument_location: SourceLocation,

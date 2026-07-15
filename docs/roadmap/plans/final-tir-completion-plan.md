@@ -21,29 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E2b - make remaining required authority explicit
-LAST_ACCEPTED_COMMIT: `92fe10344` (`refactor: consolidate the durable template owner`, prior checkpoint; Slice 3E2a is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E2b2 - make runtime slot-node authority explicit
+LAST_ACCEPTED_COMMIT: `829317500` (prior checkpoint; Slice 3E2b1 is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`, clean after Slice 3E1, no unrelated changes
+WORKTREE: `main`, reviewed Slice 3E2b1 change pending commit, no unrelated changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: formatter/root authority, wrapper-reference normalization, render-unit sequence reads and runtime slot-node lookup
-- the final copy-pass state and counters now live in `tir/copy_state.rs`; `finalize_sync.rs`, `tir/construction.rs` and `template_types.rs` are gone without forwarding modules.
+- code: `template_slots/runtime_plan/sites.rs`, its owning runtime-plan module and focused malformed-plan tests
+- exact caller audit found `slot_key_for_node` treats a missing node as a non-slot and the child-template branch treats a missing same-store template like a legitimate foreign child.
 ACCEPTANCE_CRITERIA:
-- Convert the formatter's ignored root-template lookup and wrapper-reference normalization to explicit required errors.
-- Distinguish missing TIR nodes from genuine non-slot/non-sequence optional shapes in render-unit and runtime-slot helpers.
-- Keep semantic absence optional, propagate missing store/root/template/node/overlay authority through `CompilerError` and preserve user diagnostics.
-- Remove local silent fallbacks found by the exact audit and run formatting plus focused malformed-authority tests.
+- Make node lookup return `Result<Option<SlotKey>, CompilerError>` so only a present non-slot node is optional.
+- Distinguish same-store and foreign child references explicitly. Require a same-store template before recursive wrapper traversal and preserve intentional whole-subtree copying for foreign children.
+- Remove directly owned atom/fallback migration comments, add focused malformed-authority coverage and preserve valid slot routing/output.
 VALIDATION_STATE:
-- Slice 3E2a worker focused template suite: passed, 820 tests
-- Slice 3E2a parent `just validate`: passed cross-target Clippy, 3416 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 13 faster and 0 slower
+- Slice 3E2b1 focused template suite: passed, 831 tests
+- Slice 3E2b1 parent `just validate`: passed cross-target Clippy, 3427 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 5 faster and 1 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: undecided - finish exact caller audit and bound the required-error API changes before delegation
+DELEGATION_DECISION: ollama - one runtime slot-site owner with a bounded lookup/traversal correction and focused invariant tests
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: finalize the required-authority caller set and delegate the smallest coherent error-path slice
+NEXT_RESUME_ACTION: implement and review runtime slot-node required errors, then continue the final module/comment ownership audit
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -439,6 +438,8 @@ Phase 3D checkpoint: formatter traversal now snapshots only child IDs, reference
 Slice 3E1 checkpoint: the durable `Template`, its cached-kind synchronization and its store/registry reads now live with the final shared template vocabulary in `template.rs`. The one-type `template_types.rs` owner and all direct import paths are deleted without a forwarding module. Source comments now keep the handle AST-local and name parser/TIR wrapper ownership accurately.
 
 Slice 3E2a checkpoint: recursive TIR copy-pass state, runtime slot-site cursor state and copy instrumentation now live in `tir/copy_state.rs`. The vague `tir/construction.rs` name, its stale atom/materialization wording and every old private import are deleted without changing copy algorithms or counters.
+
+Slice 3E2b1 checkpoint: formatter, wrapper normalization and render-unit preparation now propagate missing root, overlay, store, template and node authority through explicit internal errors. Body and loop helpers require sequence roots, foreign child conversion requires registry-backed kind ownership and focused malformed-store tests protect the final error boundaries without changing valid template output.
 
 #### Phase 3 acceptance
 
