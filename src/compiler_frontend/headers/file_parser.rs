@@ -364,7 +364,7 @@ fn handle_symbol_item_with_export_mode(
         {
             return Err(Box::new(CompilerDiagnostic::duplicate_declaration(
                 name_id,
-                first_location.clone(),
+                Some(first_location.clone()),
                 token_stream.current_location(),
             )));
         }

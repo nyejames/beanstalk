@@ -180,7 +180,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         };
 
-        registry.register(local_name, binding, import.location.clone())?;
+        registry.register(local_name, binding, Some(import.location.clone()))?;
 
         if is_type_alias {
             file_visibility

@@ -173,10 +173,11 @@ pub(crate) struct FileVisibility {
     /// Populated by explicit virtual-package imports and prelude symbols.
     pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,
 
-    /// Source locations that made each external symbol visible in this file.
+    /// Authored source locations that made explicit external symbols visible in this file.
     ///
     /// WHY: AST needs the original import location for duplicate-declaration
-    /// diagnostics so the secondary label can point to the import site.
+    /// diagnostics so the secondary label can point to the import site. Prelude symbols
+    /// have no authored location and therefore have no entry in this map.
     pub(crate) visible_external_symbol_locations: FxHashMap<StringId, SourceLocation>,
 
     /// Namespace import records visible in this file.

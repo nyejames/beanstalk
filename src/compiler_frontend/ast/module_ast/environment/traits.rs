@@ -100,7 +100,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 return Err(self.diagnostic_messages(
                     CompilerDiagnostic::duplicate_declaration(
                         declaration.name,
-                        existing_definition.declaration_location.clone(),
+                        Some(existing_definition.declaration_location.clone()),
                         declaration.name_location.clone(),
                     ),
                     string_table,

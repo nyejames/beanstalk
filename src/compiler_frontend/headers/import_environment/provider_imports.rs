@@ -128,7 +128,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             super::VisibleNameBinding::NamespaceRecord {
                 record_source: super::NamespaceRecordSource::ExternalPackage(package_path_id),
             },
-            import.location.clone(),
+            Some(import.location.clone()),
         )?;
 
         file_visibility

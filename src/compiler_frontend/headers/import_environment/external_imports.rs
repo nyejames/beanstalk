@@ -34,7 +34,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         registry.register(
             local_name,
             VisibleNameBinding::ExternalImport { symbol_id },
-            import.location.clone(),
+            Some(import.location.clone()),
         )?;
 
         file_visibility

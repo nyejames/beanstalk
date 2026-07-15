@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2D, stop manufacturing a prelude source location
-LAST_ACCEPTED_COMMIT: `fc138aae3`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2C accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 3A, validate file-preparation chunk order in release builds
+LAST_ACCEPTED_COMMIT: `37cd80e6b`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2D accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: diagnostics, paths, import visibility and duplicate declaration label ownership
-- code: scope lookup, body declarations and duplicate-declaration diagnostic payload/remap/render owners
+- docs: build-system/frontend boundary, diagnostics and release-safe infrastructure invariants
+- code: `src/build_system/create_project_modules/frontend_orchestration.rs` file-preparation chunk assembly
 ACCEPTANCE_CRITERIA:
-- explicit imports retain a secondary duplicate-declaration label at the authored import site
-- prelude-injected symbols omit the secondary label entirely
-- no default source location enters a user-facing label
-- the new declaration remains primary in both forms
-- payload remapping and diagnostic model tests cover optional previous locations
+- chunk ranges start at the next expected file index and never overlap
+- prepared records match their expected file indexes
+- final coverage matches the module input length
+- malformed scheduler payloads return `CompilerError` through `CompilerMessages`
+- gap, overlap, wrong-index, missing-tail and valid strategy tests cover the invariant
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -43,13 +43,14 @@ VALIDATION_STATE:
 - Phase 2B `just validate`: passed, including cross-target Clippy, 3,360 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 2C focused constant, header and module dependency tests: passed
 - Phase 2C `just validate`: passed, including cross-target Clippy, 3,362 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-- Phase 2D validation: not run
+- Phase 2D focused import-environment and diagnostic-model tests: passed
+- Phase 2D `just validate`: passed, including cross-target Clippy, 3,366 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 2D is a bounded diagnostic location slice
+DELEGATION_DECISION: ollama implementation worker - Phase 3A is a bounded build-system invariant slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2C, then delegate Phase 2D
+NEXT_RESUME_ACTION: commit accepted Phase 2D, then delegate Phase 3A release-safe chunk validation
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -229,13 +230,11 @@ Add platform-independent tests for:
 
 ## Phase 2: Preserve frontend semantic and diagnostic facts
 
-Progress: Slice 2A is complete. Generic nominal inference now preserves repeated binding conflicts,
-shares one typed conflict payload with generic function inference and retains current plus first
-evidence locations. Matching evidence and structural mismatch behavior have focused coverage.
-Slice 2B is complete. Declaration-initializer EOF diagnostics now track the actual open-construct
-stack for templates, parentheses, collections, catch blocks and value-producing if blocks.
-Slice 2C is complete. Constant classification and canonical source/header position metadata now
-share one map, with missing compiler-owned position facts reported as an infrastructure invariant.
+Status: Complete. Generic nominal inference preserves repeated binding conflicts and both evidence
+locations. Declaration-initializer EOF diagnostics track the actual open-construct stack. Constant
+classification and canonical source/header positions share one total map. Prelude-injected symbols
+no longer manufacture authored source locations, while explicit imports retain theirs. Focused
+coverage and `just validate` passed after each slice.
 
 ### Slice 2A: Propagate generic nominal binding conflicts
 

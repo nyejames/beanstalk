@@ -522,25 +522,27 @@ impl CompilerDiagnostic {
 
     pub(crate) fn duplicate_declaration(
         name: StringId,
-        first_location: SourceLocation,
+        first_location: Option<SourceLocation>,
         duplicate_location: SourceLocation,
     ) -> Self {
-        let payload_first_location = first_location.clone();
+        // Prelude-injected symbols have no authored previous location. Omit the secondary
+        // label in that case so no fabricated empty location enters a user-facing label.
+        let mut labels = vec![DiagnosticLabel::primary(duplicate_location.clone())];
+        if let Some(location) = &first_location {
+            labels.push(DiagnosticLabel::secondary(
+                location.clone(),
+                Some(DiagnosticLabelMessage::PreviousDeclaration),
+            ));
+        }
         Self::new(
             DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateDeclaration),
-            duplicate_location.clone(),
+            duplicate_location,
             DiagnosticPayload::DuplicateDeclaration {
                 name,
-                first_location: payload_first_location,
+                first_location,
             },
         )
-        .with_labels(vec![
-            DiagnosticLabel::primary(duplicate_location),
-            DiagnosticLabel::secondary(
-                first_location,
-                Some(DiagnosticLabelMessage::PreviousDeclaration),
-            ),
-        ])
+        .with_labels(labels)
     }
 
     pub(crate) fn invalid_compile_time_path(

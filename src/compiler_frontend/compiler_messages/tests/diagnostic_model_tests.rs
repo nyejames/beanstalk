@@ -449,7 +449,7 @@ fn remap_string_ids_updates_locations_payloads_labels_and_tokens() {
     );
     let duplicate = CompilerDiagnostic::duplicate_declaration(
         name,
-        first_location.clone(),
+        Some(first_location.clone()),
         primary_location.clone(),
     );
     let import = CompilerDiagnostic::import_name_collision(
@@ -499,8 +499,11 @@ fn remap_string_ids_updates_locations_payloads_labels_and_tokens() {
             first_location,
         } => {
             assert_eq!(merged_table.resolve(*name), "Button");
+            let previous_location = first_location
+                .as_ref()
+                .expect("explicit import should carry a previous location");
             assert_eq!(
-                first_location.scope.to_string(&merged_table),
+                previous_location.scope.to_string(&merged_table),
                 String::from("lib.bst")
             );
         }
@@ -532,6 +535,87 @@ fn remap_string_ids_updates_locations_payloads_labels_and_tokens() {
         } => assert_eq!(merged_table.resolve(*name), "Button"),
         payload => panic!("unexpected borrow payload: {payload:?}"),
     }
+}
+
+#[test]
+fn duplicate_declaration_with_previous_location_keeps_secondary_label() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let declaration_name = string_table.intern("Button");
+    let previous_location = location(source_path);
+    let duplicate_location = location(InternedPath::from_single_str(
+        "other.bst",
+        &mut string_table,
+    ));
+
+    let diagnostic = CompilerDiagnostic::duplicate_declaration(
+        declaration_name,
+        Some(previous_location),
+        duplicate_location,
+    );
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateDeclaration)
+    );
+    match &diagnostic.payload {
+        DiagnosticPayload::DuplicateDeclaration {
+            name,
+            first_location,
+        } => {
+            assert_eq!(string_table.resolve(*name), "Button");
+            assert!(
+                first_location.is_some(),
+                "explicit import carries a previous location"
+            );
+        }
+        payload => panic!("unexpected payload: {payload:?}"),
+    }
+    assert_eq!(diagnostic.labels.len(), 2, "primary and secondary labels");
+    assert!(
+        diagnostic
+            .labels
+            .iter()
+            .any(|label| label.message == Some(DiagnosticLabelMessage::PreviousDeclaration))
+    );
+}
+
+#[test]
+fn duplicate_declaration_without_previous_location_omits_secondary_label() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let declaration_name = string_table.intern("print");
+    let duplicate_location = location(source_path);
+
+    // Prelude-injected symbols have no authored previous location.
+    let diagnostic =
+        CompilerDiagnostic::duplicate_declaration(declaration_name, None, duplicate_location);
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateDeclaration)
+    );
+    match &diagnostic.payload {
+        DiagnosticPayload::DuplicateDeclaration {
+            name,
+            first_location,
+        } => {
+            assert_eq!(string_table.resolve(*name), "print");
+            assert!(
+                first_location.is_none(),
+                "prelude symbol has no previous location"
+            );
+        }
+        payload => panic!("unexpected payload: {payload:?}"),
+    }
+    assert_eq!(diagnostic.labels.len(), 1, "only the primary label is kept");
+    assert!(
+        !diagnostic
+            .labels
+            .iter()
+            .any(|label| label.message == Some(DiagnosticLabelMessage::PreviousDeclaration)),
+        "no secondary label for prelude symbols"
+    );
 }
 
 #[test]
@@ -790,7 +874,7 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
         (
             CompilerDiagnostic::duplicate_declaration(
                 declaration_name,
-                location(source_path.clone()),
+                Some(location(source_path.clone())),
                 location(source_path.clone()),
             ),
             "There is already a top-level declaration using the name 'Card'",

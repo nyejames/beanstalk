@@ -176,7 +176,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     }
                 };
 
-                registry.register(name, binding, SourceLocation::default())?;
+                registry.register(name, binding, Some(SourceLocation::default()))?;
 
                 if is_type_alias {
                     file_visibility
@@ -200,7 +200,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .visible_declaration_paths
                 .insert(path.clone());
             if let Some(name) = path.name() {
-                registry.register(name, VisibleNameBinding::Builtin, SourceLocation::default())?;
+                registry.register(
+                    name,
+                    VisibleNameBinding::Builtin,
+                    Some(SourceLocation::default()),
+                )?;
                 file_visibility
                     .visible_source_names
                     .insert(name, path.clone());
@@ -216,7 +220,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 VisibleNameBinding::Prelude {
                     symbol_id: *symbol_id,
                 },
-                SourceLocation::default(),
+                None,
             )?;
         }
 
@@ -235,7 +239,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 VisibleNameBinding::NamespaceRecord {
                     record_source: NamespaceRecordSource::ExternalPackage(package_path_id),
                 },
-                SourceLocation::default(),
+                None,
             )?;
         }
 
@@ -293,12 +297,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 file_visibility
                     .visible_external_symbols
                     .insert(prelude_name_id, *symbol_id);
-
-                // Prelude symbols have no authored source location, so we record
-                // a default location as a documented fallback.
-                file_visibility
-                    .visible_external_symbol_locations
-                    .insert(prelude_name_id, SourceLocation::default());
             }
         }
 

@@ -43,7 +43,9 @@ impl DiagnosticPayload {
                 first_location,
             } => {
                 *name = remap.get(*name);
-                first_location.remap_string_ids(remap);
+                if let Some(location) = first_location {
+                    location.remap_string_ids(remap);
+                }
             }
 
             DiagnosticPayload::MissingImportTarget { path }

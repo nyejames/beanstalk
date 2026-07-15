@@ -357,24 +357,22 @@ impl ScopeContext {
         Some((function_id, definition))
     }
 
-    /// Look up the source location that made an external symbol visible in this file.
+    /// Look up the authored source location that made an external symbol visible in this file.
     ///
-    /// WHAT: returns the import-site location for an explicit external import, or
-    /// `SourceLocation::default()` for prelude-injected symbols that have no authored source.
-    /// WHY: AST duplicate-declaration diagnostics need a meaningful secondary label
-    /// pointing to the import that made the symbol visible.
+    /// WHAT: returns the import-site location for an explicit external import. Prelude-injected
+    /// symbols have no authored source location, so this returns `None` for them.
+    /// WHY: AST duplicate-declaration diagnostics use the authored import location as the
+    /// secondary label. Returning `None` for prelude symbols lets the diagnostic omit the
+    /// secondary label instead of fabricating an empty `SourceLocation::default()`.
     pub(crate) fn lookup_visible_external_function_location(
         &self,
         name: StringId,
     ) -> Option<SourceLocation> {
         let file_visibility = self.file_visibility.as_ref()?;
-        Some(
-            file_visibility
-                .visible_external_symbol_locations
-                .get(&name)
-                .cloned()
-                .unwrap_or_default(),
-        )
+        file_visibility
+            .visible_external_symbol_locations
+            .get(&name)
+            .cloned()
     }
 
     /// Look up a visible external type by its source-level name.

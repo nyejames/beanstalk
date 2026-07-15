@@ -201,7 +201,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             VisibleNameBinding::NamespaceRecord {
                 record_source: record_source.clone(),
             },
-            import.location.clone(),
+            Some(import.location.clone()),
         )?;
 
         file_visibility

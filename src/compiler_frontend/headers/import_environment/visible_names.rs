@@ -58,7 +58,7 @@ pub(crate) enum VisibleNameBinding {
 /// pointing to the first declaration or import.
 struct VisibleNameEntry {
     binding: VisibleNameBinding,
-    location: SourceLocation,
+    location: Option<SourceLocation>,
 }
 
 /// Per-file registry of visible names.
@@ -90,7 +90,7 @@ impl VisibleNameRegistry {
                 name_id,
                 VisibleNameEntry {
                     binding: VisibleNameBinding::ReservedCoreCastTraitName,
-                    location: SourceLocation::default(),
+                    location: None,
                 },
             );
         });
@@ -111,23 +111,32 @@ impl VisibleNameRegistry {
         &mut self,
         local_name: StringId,
         binding: VisibleNameBinding,
-        location: SourceLocation,
+        location: Option<SourceLocation>,
     ) -> Result<(), Box<CompilerDiagnostic>> {
         if let Some(entry) = self.names.get(&local_name) {
             if can_coexist(&entry.binding, &binding) {
                 return Ok(());
             }
+            let current_location = location
+                .clone()
+                .or_else(|| entry.location.clone())
+                .unwrap_or_default();
             if matches!(entry.binding, VisibleNameBinding::ReservedCoreCastTraitName) {
                 return Err(Box::new(CompilerDiagnostic::reserved_name_collision(
                     local_name,
                     ReservedNameOwner::CoreTrait,
-                    location,
+                    current_location,
                 )));
             }
+            let previous_location = if location.is_some() {
+                entry.location.clone()
+            } else {
+                None
+            };
             return Err(Box::new(diagnostics::import_name_collision(
                 local_name,
-                location,
-                Some(entry.location.clone()),
+                current_location,
+                previous_location,
             )));
         }
         self.names

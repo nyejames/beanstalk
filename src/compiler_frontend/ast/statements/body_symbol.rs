@@ -333,9 +333,10 @@ pub(crate) fn parse_symbol_statement(
         context.lookup_visible_external_function(symbol_id)
     {
         if token_stream.peek_next_token() == Some(&TokenKind::TypeParameterBracket) {
-            let previous_location = context
-                .lookup_visible_external_function_location(symbol_id)
-                .unwrap_or_default();
+            // The previous location is the authored import site for an explicit import,
+            // or `None` for a prelude-injected symbol. `None` omits the secondary label so
+            // no fabricated empty location reaches the user-facing diagnostic.
+            let previous_location = context.lookup_visible_external_function_location(symbol_id);
             return Err(Box::new(CompilerDiagnostic::duplicate_declaration(
                 symbol_id,
                 previous_location,

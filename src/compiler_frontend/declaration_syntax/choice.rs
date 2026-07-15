@@ -158,7 +158,7 @@ pub(crate) fn parse_choice_shell(
                 if let Some(first_location) = seen_variants.get(&variant_name) {
                     bag.push(CompilerDiagnostic::duplicate_declaration(
                         variant_name,
-                        first_location.clone(),
+                        Some(first_location.clone()),
                         current_location.clone(),
                     ));
                 } else {
@@ -220,7 +220,7 @@ pub(crate) fn parse_choice_shell(
                                 if let Some(first_loc) = seen_field_names.get(&field_name) {
                                     return Err(CompilerDiagnostic::duplicate_declaration(
                                         field_name,
-                                        first_loc.clone(),
+                                        Some(first_loc.clone()),
                                         field.location.clone(),
                                     )
                                     .into());

@@ -383,6 +383,113 @@ fn module_root_namespace_uses_prepared_root_file_identity() {
     assert_eq!(path, root_file);
 }
 
+#[test]
+fn prelude_symbol_visibility_has_no_authored_location() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package(
+            "@test/prelude_symbols",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package registration should not collide");
+    let function_id = ExternalFunctionId::Synthetic(4_900);
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("prelude_fn"),
+            function_id,
+            empty_void_function("prelude_fn"),
+        )
+        .expect("test function registration should not collide");
+    registry
+        .register_prelude_symbol("prelude_fn", ExternalSymbolId::Function(function_id))
+        .expect("prelude symbol registration should not collide");
+
+    let mut string_table = StringTable::new();
+    let source_file = intern_path(&["src", "#page.bst"], &mut string_table);
+    let mut module_symbols = ModuleSymbols::empty();
+    module_symbols.module_file_paths.insert(source_file.clone());
+
+    let environment = prepare_import_environment(ImportEnvironmentInput {
+        module_symbols: &mut module_symbols,
+        external_package_registry: &registry,
+        external_import_resolution_table: &ExternalImportResolutionTable::new(),
+        string_table: &mut string_table,
+    })
+    .expect("prelude symbol visibility should prepare");
+
+    let prelude_name = string_table.intern("prelude_fn");
+    let visibility = environment
+        .visibility_for(&source_file)
+        .expect("source file visibility should exist");
+    assert_eq!(
+        visibility.visible_external_symbols.get(&prelude_name),
+        Some(&ExternalSymbolId::Function(function_id))
+    );
+    assert!(
+        !visibility
+            .visible_external_symbol_locations
+            .contains_key(&prelude_name),
+        "compiler-injected prelude symbols must not manufacture authored locations"
+    );
+}
+
+#[test]
+fn explicit_external_symbol_import_retains_authored_location() {
+    let mut registry = ExternalPackageRegistry::new();
+    let package_id = registry
+        .register_package(
+            "@test/explicit_symbols",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package registration should not collide");
+    let function_id = ExternalFunctionId::Synthetic(4_901);
+    registry
+        .register_function_at_path(
+            package_id,
+            ExternalSymbolPath::from_single("run"),
+            function_id,
+            empty_void_function("run"),
+        )
+        .expect("test function registration should not collide");
+
+    let mut string_table = StringTable::new();
+    let source_file = intern_path(&["src", "#page.bst"], &mut string_table);
+    let import_location = location_for(&["src", "#page.bst"], &mut string_table);
+    let import = FileImport {
+        header_path: intern_path(&["test", "explicit_symbols", "run"], &mut string_table),
+        alias: None,
+        location: import_location.clone(),
+        path_location: import_location.clone(),
+        alias_location: None,
+        from_grouped: true,
+        export_mode: HeaderExportMode::Private,
+    };
+
+    let mut module_symbols = ModuleSymbols::empty();
+    module_symbols.module_file_paths.insert(source_file.clone());
+    module_symbols
+        .file_imports_by_source
+        .insert(source_file.clone(), vec![import]);
+
+    let environment = prepare_import_environment(ImportEnvironmentInput {
+        module_symbols: &mut module_symbols,
+        external_package_registry: &registry,
+        external_import_resolution_table: &ExternalImportResolutionTable::new(),
+        string_table: &mut string_table,
+    })
+    .expect("explicit external symbol visibility should prepare");
+
+    let run_name = string_table.intern("run");
+    let visibility = environment
+        .visibility_for(&source_file)
+        .expect("source file visibility should exist");
+    assert_eq!(
+        visibility.visible_external_symbol_locations.get(&run_name),
+        Some(&import_location)
+    );
+}
+
 // ------------------------------------------------------------------
 // Prelude namespace alias tests
 // ------------------------------------------------------------------
