@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2C, remove the constant-header index fallback
-LAST_ACCEPTED_COMMIT: `26fdc6b7d`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2B accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 2D, stop manufacturing a prelude source location
+LAST_ACCEPTED_COMMIT: `fc138aae3`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2C accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: header parsing, constant dependency sorting and internal invariant diagnostics
-- code: `headers/constant_dependencies.rs`, constant position metadata and focused dependency tests
+- docs: diagnostics, paths, import visibility and duplicate declaration label ownership
+- code: scope lookup, body declarations and duplicate-declaration diagnostic payload/remap/render owners
 ACCEPTANCE_CRITERIA:
-- source constants carry their canonical source file and header index in one position record
-- a classified source constant cannot silently fall back to header index zero
-- missing compiler-owned position metadata produces a precise internal compiler error
-- backward, forward, cross-file, self-reference and corrupted-map cases retain their distinct behavior
-- focused constant dependency tests pass without touching TIR-owned files
+- explicit imports retain a secondary duplicate-declaration label at the authored import site
+- prelude-injected symbols omit the secondary label entirely
+- no default source location enters a user-facing label
+- the new declaration remains primary in both forms
+- payload remapping and diagnostic model tests cover optional previous locations
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -41,13 +41,15 @@ VALIDATION_STATE:
 - Phase 2A `just validate`: passed, including cross-target Clippy, 3,350 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 2B focused scanner and delimiter tests: passed, including both mixed nesting orders
 - Phase 2B `just validate`: passed, including cross-target Clippy, 3,360 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-- Phase 2C validation: not run
+- Phase 2C focused constant, header and module dependency tests: passed
+- Phase 2C `just validate`: passed, including cross-target Clippy, 3,362 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 2D validation: not run
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 2C is a bounded header dependency invariant slice
+DELEGATION_DECISION: ollama implementation worker - Phase 2D is a bounded diagnostic location slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2B, then delegate Phase 2C
+NEXT_RESUME_ACTION: commit accepted Phase 2C, then delegate Phase 2D
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -232,6 +234,8 @@ shares one typed conflict payload with generic function inference and retains cu
 evidence locations. Matching evidence and structural mismatch behavior have focused coverage.
 Slice 2B is complete. Declaration-initializer EOF diagnostics now track the actual open-construct
 stack for templates, parentheses, collections, catch blocks and value-producing if blocks.
+Slice 2C is complete. Constant classification and canonical source/header position metadata now
+share one map, with missing compiler-owned position facts reported as an infrastructure invariant.
 
 ### Slice 2A: Propagate generic nominal binding conflicts
 

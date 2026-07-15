@@ -5,6 +5,7 @@
 //! WHY: dependency sorting must order constants before AST folds their initializer expressions.
 //! MUST NOT: type-check expressions or decide whether a full initializer is foldable.
 
+use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, DiagnosticBag,
 };
@@ -32,29 +33,26 @@ pub(crate) struct ConstantDependencyReport {
     pub(crate) cross_file_edges: usize,
 }
 
+/// Canonical source file and header index for one source constant.
+///
+/// WHY: dependency ordering needs both the canonical source file (to distinguish same-file
+/// from cross-file references) and the header index (to enforce source order within a file).
+/// Building both in one inventory pass avoids a separate lookup that could silently fall back
+/// to header index zero when compiler-owned metadata is missing.
+#[derive(Clone, Debug)]
+struct ConstantPosition {
+    source_file: InternedPath,
+    header_index: usize,
+}
+
 pub(crate) enum ConstantReferenceResolution {
-    SourceConstant {
-        path: InternedPath,
-        source_file: InternedPath,
-    },
-    SourceNonConstant {
-        _path: InternedPath,
-    },
-    SourceTypeAlias {
-        _path: InternedPath,
-    },
-    ExternalConstant {
-        _symbol_id: ExternalSymbolId,
-    },
-    ExternalNonConstant {
-        _symbol_id: ExternalSymbolId,
-    },
-    ConstructorLikeSource {
-        _path: InternedPath,
-    },
-    NotVisible {
-        name: StringId,
-    },
+    SourceConstant { path: InternedPath },
+    SourceNonConstant { _path: InternedPath },
+    SourceTypeAlias { _path: InternedPath },
+    ExternalConstant { _symbol_id: ExternalSymbolId },
+    ExternalNonConstant { _symbol_id: ExternalSymbolId },
+    ConstructorLikeSource { _path: InternedPath },
+    NotVisible { name: StringId },
 }
 
 pub(crate) fn add_constant_initializer_dependencies(
@@ -75,17 +73,21 @@ pub(crate) fn add_constant_initializer_dependencies(
     };
 
     // Build indexes for fast constant and struct/choice lookups.
-    let mut constant_paths: FxHashSet<InternedPath> = FxHashSet::default();
     let mut constants_by_name: FxHashMap<StringId, Vec<InternedPath>> = FxHashMap::default();
-    let mut constant_header_indices: FxHashMap<InternedPath, usize> = FxHashMap::default();
+    let mut constant_positions: FxHashMap<InternedPath, ConstantPosition> = FxHashMap::default();
     let mut struct_or_choice_paths: FxHashSet<InternedPath> = FxHashSet::default();
 
     for (header_index, header) in headers.iter().enumerate() {
         match &header.kind {
             HeaderKind::Constant { .. } => {
                 let path = header.tokens.src_path.clone();
-                constant_paths.insert(path.clone());
-                constant_header_indices.insert(path.clone(), header_index);
+                constant_positions.insert(
+                    path.clone(),
+                    ConstantPosition {
+                        source_file: header.canonical_source_file(string_table),
+                        header_index,
+                    },
+                );
                 if let Some(name) = path.name() {
                     constants_by_name.entry(name).or_default().push(path);
                 }
@@ -125,9 +127,7 @@ pub(crate) fn add_constant_initializer_dependencies(
         let visibility = match import_environment.visibility_for(&header.source_file) {
             Ok(v) => v,
             Err(error) => {
-                diagnostic_bag.push(
-                    crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic(&error),
-                );
+                diagnostic_bag.push(compiler_error_to_diagnostic(&error));
                 continue;
             }
         };
@@ -139,26 +139,32 @@ pub(crate) fn add_constant_initializer_dependencies(
             let resolution = classify_reference(
                 reference,
                 visibility,
-                &constant_paths,
+                &constant_positions,
                 &struct_or_choice_paths,
                 module_symbols,
             );
 
             match resolution {
                 // Constants create ordering edges. Same-file edges are still constrained by source order.
-                ConstantReferenceResolution::SourceConstant { path, source_file } => {
+                ConstantReferenceResolution::SourceConstant { path } => {
                     if path == current_path {
                         diagnostic_bag.push(self_reference_error(reference));
                         continue;
                     }
 
-                    // Compare canonical source files because module_symbols stores canonical paths
-                    // while header.source_file may be a logical/relative path.
+                    // The position record was built in the same inventory pass that classified
+                    // this path as a constant, so a missing record is a compiler invariant
+                    // violation - not a user-facing source diagnostic.
+                    let Some(position) = constant_positions.get(&path) else {
+                        diagnostic_bag.push(missing_constant_position_error(&path, string_table));
+                        continue;
+                    };
+
+                    // Compare canonical source files to distinguish same-file from cross-file
+                    // references. Both sides use canonical OS paths, not logical source paths.
                     let current_canonical_source = header.canonical_source_file(string_table);
-                    if source_file == current_canonical_source {
-                        let target_header_index =
-                            constant_header_indices.get(&path).copied().unwrap_or(0);
-                        if target_header_index > reference_header_index {
+                    if position.source_file == current_canonical_source {
+                        if position.header_index > reference_header_index {
                             diagnostic_bag.push(same_file_forward_reference_error(
                                 &current_path,
                                 &path,
@@ -218,7 +224,7 @@ pub(crate) fn add_constant_initializer_dependencies(
 fn classify_reference(
     reference: &InitializerReference,
     visibility: &FileVisibility,
-    constant_paths: &FxHashSet<InternedPath>,
+    constant_positions: &FxHashMap<InternedPath, ConstantPosition>,
     struct_or_choice_paths: &FxHashSet<InternedPath>,
     module_symbols: &ModuleSymbols,
 ) -> ConstantReferenceResolution {
@@ -254,7 +260,7 @@ fn classify_reference(
         if let Some(member) = record.value_members.get(&member_name) {
             return classify_namespace_value_member(
                 member,
-                constant_paths,
+                constant_positions,
                 struct_or_choice_paths,
                 module_symbols,
                 reference,
@@ -281,7 +287,7 @@ fn classify_reference(
 
     classify_source_declaration_reference(
         target_path,
-        constant_paths,
+        constant_positions,
         struct_or_choice_paths,
         module_symbols,
         reference,
@@ -290,7 +296,7 @@ fn classify_reference(
 
 fn classify_namespace_value_member(
     member: &NamespaceValueMember,
-    constant_paths: &FxHashSet<InternedPath>,
+    constant_positions: &FxHashMap<InternedPath, ConstantPosition>,
     struct_or_choice_paths: &FxHashSet<InternedPath>,
     module_symbols: &ModuleSymbols,
     reference: &InitializerReference,
@@ -299,7 +305,7 @@ fn classify_namespace_value_member(
         NamespaceValueMember::SourceDeclaration(target_path) => {
             classify_source_declaration_reference(
                 target_path,
-                constant_paths,
+                constant_positions,
                 struct_or_choice_paths,
                 module_symbols,
                 reference,
@@ -322,12 +328,12 @@ fn classify_namespace_value_member(
 
 fn classify_source_declaration_reference(
     target_path: &InternedPath,
-    constant_paths: &FxHashSet<InternedPath>,
+    constant_positions: &FxHashMap<InternedPath, ConstantPosition>,
     struct_or_choice_paths: &FxHashSet<InternedPath>,
     module_symbols: &ModuleSymbols,
     reference: &InitializerReference,
 ) -> ConstantReferenceResolution {
-    let is_constant = constant_paths.contains(target_path);
+    let is_constant = constant_positions.contains_key(target_path);
 
     if is_constant {
         // Even if the target is a constant, it might be used as a constructor-like
@@ -342,11 +348,6 @@ fn classify_source_declaration_reference(
 
         return ConstantReferenceResolution::SourceConstant {
             path: target_path.clone(),
-            source_file: module_symbols
-                .canonical_source_by_symbol_path
-                .get(target_path)
-                .cloned()
-                .unwrap_or_else(|| target_path.clone()),
         };
     }
 
@@ -430,3 +431,24 @@ fn same_file_forward_reference_error(
         reference.location.clone(),
     )
 }
+
+/// Produce an internal compiler error for a classified source constant whose position record
+/// is missing from the inventory map.
+///
+/// WHY: constant classification reads `constant_positions` directly, so a classified
+/// `SourceConstant` must always have a position record. A missing record means the map is
+/// corrupted, which is a compiler bug rather than a user source error.
+fn missing_constant_position_error(
+    constant_path: &InternedPath,
+    string_table: &StringTable,
+) -> CompilerDiagnostic {
+    compiler_error_to_diagnostic(&CompilerError::compiler_error(format!(
+        "Missing constant position metadata for classified source constant '{}' - \
+         the constant inventory map is corrupted",
+        constant_path.to_portable_string(string_table),
+    )))
+}
+
+#[cfg(test)]
+#[path = "tests/constant_dependencies_tests.rs"]
+mod constant_dependencies_tests;

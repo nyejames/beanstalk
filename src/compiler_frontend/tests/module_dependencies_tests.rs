@@ -208,6 +208,32 @@ fn constant_initializer_creates_dependency_sort_edge() {
 }
 
 #[test]
+fn same_file_backward_constant_reference_is_accepted() {
+    // WHY: a constant that references an earlier constant in the same file is a backward
+    // reference and must be accepted in source order.
+    let (headers, mut string_table) = parse_module_headers(
+        &[("src/a.bst", "Value #Int = 42\nConfig #= Value\n")],
+        "src/a.bst",
+    );
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("same-file backward constant reference should be accepted");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["Value", "Config"],
+        "same-file backward constant reference should preserve source order"
+    );
+}
+
+#[test]
 fn function_body_references_do_not_influence_header_provided_sort_order() {
     // WHY: function body references are AST/body-phase concerns, not
     // header-provided top-level dependency edges. Sorting should preserve source order
