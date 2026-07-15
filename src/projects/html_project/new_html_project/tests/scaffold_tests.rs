@@ -1,6 +1,7 @@
 use crate::projects::html_project::new_html_project::prompt_tests::ScriptedPrompt;
 use crate::projects::html_project::new_html_project::scaffold::{
-    SCAFFOLD_DIRECTORIES, find_scaffold_conflicts, run_preflight_checks, write_scaffold,
+    SCAFFOLD_DIRECTORIES, existing_contains_dev_block, find_scaffold_conflicts,
+    run_preflight_checks, write_scaffold,
 };
 use crate::projects::html_project::new_html_project::target::ResolvedProjectTarget;
 use crate::projects::html_project::new_html_project::{
@@ -509,4 +510,43 @@ fn write_failure_returns_precise_error() {
 
     let error = write_scaffold(&target, false, &mut prompt).unwrap_err();
     assert!(error.contains("Project creation failed"));
+}
+
+#[test]
+fn dev_block_recognizes_exact_rules() {
+    assert!(existing_contains_dev_block("/dev\n"));
+    assert!(existing_contains_dev_block("/dev/\n"));
+    assert!(existing_contains_dev_block("  /dev  \n"));
+    assert!(existing_contains_dev_block("noise\n/dev\nmore\n"));
+}
+
+#[test]
+fn dev_block_rejects_near_matches() {
+    assert!(!existing_contains_dev_block("/device\n"));
+    assert!(!existing_contains_dev_block("prefix/dev\n"));
+    assert!(!existing_contains_dev_block("/dev/**\n"));
+    assert!(!existing_contains_dev_block("# /dev\n"));
+    assert!(!existing_contains_dev_block("/dev/foo\n"));
+    assert!(!existing_contains_dev_block("dev\n"));
+}
+
+#[test]
+fn existing_gitignore_with_trailing_slash_dev_is_not_duplicated() {
+    let temp = tempfile::tempdir().unwrap();
+    let project_dir = temp.path().join("project");
+    fs::create_dir(&project_dir).unwrap();
+    fs::write(project_dir.join(".gitignore"), "/dev/\n").unwrap();
+
+    let target = ResolvedProjectTarget {
+        project_dir: project_dir.clone(),
+        project_name: String::from("Test Site"),
+        target_was_non_empty: true,
+    };
+    let mut prompt = ScriptedPrompt::new(Vec::new());
+
+    let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+    let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+    assert_eq!(content, "/dev/\n");
+    assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
 }

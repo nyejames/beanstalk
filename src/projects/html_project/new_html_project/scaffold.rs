@@ -275,7 +275,15 @@ fn handle_gitignore(
     })
 }
 
-/// Check whether an existing `.gitignore` already contains the `/dev` Beanstalk rule.
-fn existing_contains_dev_block(content: &str) -> bool {
-    content.lines().any(|line| line.trim() == "/dev")
+/// Check whether an existing `.gitignore` already contains the Beanstalk `/dev` rule.
+///
+/// Recognizes a trimmed line equal to `/dev` or `/dev/` so that a trailing
+/// slash does not cause a duplicate append. Uses exact line equality after
+/// trimming, not substring matching, so near matches such as `/device`,
+/// `prefix/dev`, `/dev/**` and commented rules are not treated as present.
+pub(super) fn existing_contains_dev_block(content: &str) -> bool {
+    content.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed == "/dev" || trimmed == "/dev/"
+    })
 }

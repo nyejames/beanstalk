@@ -20,18 +20,17 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 6A, scaffold portability
-LAST_ACCEPTED_COMMIT: `122d95cc5`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 5 accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 6B, exact Wasm prose and internal error fixes
+LAST_ACCEPTED_COMMIT: `ca0477ccb`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 6A accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: cross-platform project scaffolding behavior
-- code: `.gitignore` rule detection and explicit home-directory expansion helpers
+- docs: Wasm lowering ownership and internal invariant wording
+- code: runtime string module prose and unsupported HIR terminator reporting
 ACCEPTANCE_CRITERIA:
-- trimmed `/dev` and `/dev/` rules are recognized without substring matches
-- only bare `~`, `~/...` and Windows `~\...` expand to the current user's home
-- Windows home lookup follows `USERPROFILE`, then `HOMEDRIVE` plus `HOMEPATH`
-- environment lookup remains deterministic and testable without process-global races
+- the runtime string module documentation contains no em dash
+- unsupported Wasm lowering reports name `HirTerminator::Match` precisely
+- the change stays inside the two named Wasm files and focused owner tests
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -58,12 +57,14 @@ VALIDATION_STATE:
 - Phase 5 focused CLI tests: passed, 42 tests
 - Phase 5 focused integration-runner tests: passed, 48 tests
 - Phase 5 `just validate`: passed, including cross-target Clippy, 3,400 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-DOCS_IMPACT: the getting-started flag table now matches the accepted CLI surface. No progress-matrix status change is needed.
+- Phase 6A focused scaffold tests: passed, 71 tests
+- Phase 6A `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+DOCS_IMPACT: no Phase 6A docs or progress-matrix change is needed.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 6A is a bounded scaffold portability fix
+DELEGATION_DECISION: ollama implementation worker - Phase 6B is a bounded two-file Wasm cleanup
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 5, then delegate Phase 6A scaffold portability
+NEXT_RESUME_ACTION: commit accepted Phase 6A, then delegate Phase 6B Wasm cleanup
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -567,6 +568,11 @@ Tests:
 ## Phase 6: Finish small verified cleanup
 
 ### Slice 6A: Scaffold portability
+
+Status: Complete. Existing `.gitignore` detection recognizes exact trimmed `/dev` and `/dev/`
+rules without near matches. Tilde expansion is limited to current-user forms, uses Windows-only
+fallbacks after `HOME` and is covered through injected environment tests without global mutation.
+Focused tests and `just validate` passed.
 
 Files:
 

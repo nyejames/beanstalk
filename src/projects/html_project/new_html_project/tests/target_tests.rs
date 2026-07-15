@@ -2,10 +2,62 @@
 
 use crate::projects::html_project::new_html_project::prompt_tests::ScriptedPrompt;
 use crate::projects::html_project::new_html_project::target::{
-    expand_tilde, normalize_path, resolve_project_target,
+    HomeEnv, expand_tilde, normalize_path, resolve_project_target,
 };
 use std::fs;
 use std::path::PathBuf;
+
+use std::collections::HashMap;
+
+/// In-process mock environment for platform-independent home-resolution tests.
+///
+/// WHAT: Holds a fixed set of environment-variable values so tests can exercise
+/// the `HOME`, `USERPROFILE` and `HOMEDRIVE`/`HOMEPATH` fallback chain without
+/// mutating the process-global environment.
+/// WHY: Direct `std::env::set_var` races under parallel test execution and
+/// cannot simulate Windows variables on a Unix host.
+struct MockHomeEnv {
+    values: HashMap<String, String>,
+    windows: bool,
+}
+
+impl MockHomeEnv {
+    fn empty() -> Self {
+        Self {
+            values: HashMap::new(),
+            windows: false,
+        }
+    }
+
+    fn with(key: &str, value: &str) -> Self {
+        let mut values = HashMap::new();
+        values.insert(key.to_owned(), value.to_owned());
+        Self {
+            values,
+            windows: false,
+        }
+    }
+
+    fn and(mut self, key: &str, value: &str) -> Self {
+        self.values.insert(key.to_owned(), value.to_owned());
+        self
+    }
+
+    fn windows(mut self) -> Self {
+        self.windows = true;
+        self
+    }
+}
+
+impl HomeEnv for MockHomeEnv {
+    fn get(&self, key: &str) -> Option<String> {
+        self.values.get(key).cloned()
+    }
+
+    fn is_windows(&self) -> bool {
+        self.windows
+    }
+}
 
 #[test]
 fn normalize_path_collapses_dot_and_dotdot() {
@@ -32,33 +84,146 @@ fn normalize_path_does_not_escape_root() {
 }
 
 #[test]
-fn expand_tilde_replaces_with_home() {
-    let original = std::env::var("HOME").ok();
-    unsafe { std::env::set_var("HOME", "/mock/home") };
+fn expand_tilde_bare_and_slash_separated_expand_to_home() {
+    let env = MockHomeEnv::with("HOME", "/mock/home");
 
     assert_eq!(
-        expand_tilde("~/site").unwrap(),
+        expand_tilde("~", &env).unwrap(),
+        PathBuf::from("/mock/home")
+    );
+    assert_eq!(
+        expand_tilde("~/site", &env).unwrap(),
         PathBuf::from("/mock/home/site")
     );
-    assert_eq!(expand_tilde("~").unwrap(), PathBuf::from("/mock/home"));
+    assert_eq!(
+        expand_tilde("~/nested/deep", &env).unwrap(),
+        PathBuf::from("/mock/home/nested/deep")
+    );
+}
 
-    unsafe {
-        match original {
-            Some(value) => std::env::set_var("HOME", value),
-            None => std::env::remove_var("HOME"),
-        }
-    }
+#[test]
+fn expand_tilde_windows_backslash_separated_expands() {
+    let env = MockHomeEnv::with("HOME", "/mock/home");
+
+    assert_eq!(
+        expand_tilde("~\\site", &env).unwrap(),
+        PathBuf::from("/mock/home/site")
+    );
+    assert_eq!(
+        expand_tilde("~\\nested\\deep", &env).unwrap(),
+        PathBuf::from("/mock/home/nested/deep")
+    );
+}
+
+#[test]
+fn expand_tilde_named_user_forms_are_unchanged() {
+    let env = MockHomeEnv::with("HOME", "/mock/home");
+
+    assert_eq!(
+        expand_tilde("~other", &env).unwrap(),
+        PathBuf::from("~other")
+    );
+    assert_eq!(
+        expand_tilde("~other/site", &env).unwrap(),
+        PathBuf::from("~other/site")
+    );
+    assert_eq!(
+        expand_tilde("~other\\site", &env).unwrap(),
+        PathBuf::from("~other\\site")
+    );
 }
 
 #[test]
 fn expand_tilde_passes_through_non_tilde_paths() {
+    let env = MockHomeEnv::with("HOME", "/mock/home");
+
     assert_eq!(
-        expand_tilde("/absolute/path").unwrap(),
+        expand_tilde("/absolute/path", &env).unwrap(),
         PathBuf::from("/absolute/path")
     );
     assert_eq!(
-        expand_tilde("relative/path").unwrap(),
+        expand_tilde("relative/path", &env).unwrap(),
         PathBuf::from("relative/path")
+    );
+}
+
+#[test]
+fn expand_tilde_home_success_and_missing_home_failure() {
+    let present = MockHomeEnv::with("HOME", "/mock/home");
+    assert_eq!(
+        expand_tilde("~/site", &present).unwrap(),
+        PathBuf::from("/mock/home/site")
+    );
+
+    let absent = MockHomeEnv::empty();
+    let error = expand_tilde("~/site", &absent).unwrap_err();
+    assert_eq!(
+        error,
+        "Could not determine home directory for '~' expansion."
+    );
+}
+
+#[test]
+fn expand_tilde_userprofile_fallback_when_home_absent() {
+    let env = MockHomeEnv::with("USERPROFILE", "C:\\Users\\test").windows();
+
+    assert_eq!(
+        expand_tilde("~/site", &env).unwrap(),
+        PathBuf::from("C:\\Users\\test/site")
+    );
+}
+
+#[test]
+fn expand_tilde_homedrive_plus_homepath_fallback() {
+    let env = MockHomeEnv::with("HOMEDRIVE", "C:")
+        .and("HOMEPATH", "\\Users\\test")
+        .windows();
+
+    assert_eq!(
+        expand_tilde("~/site", &env).unwrap(),
+        PathBuf::from("C:\\Users\\test/site")
+    );
+}
+
+#[test]
+fn expand_tilde_incomplete_homedrive_pair_is_rejected() {
+    let drive_only = MockHomeEnv::with("HOMEDRIVE", "C:").windows();
+    let error = expand_tilde("~/site", &drive_only).unwrap_err();
+    assert_eq!(
+        error,
+        "Could not determine home directory for '~' expansion."
+    );
+
+    let path_only = MockHomeEnv::with("HOMEPATH", "\\Users\\test").windows();
+    let error = expand_tilde("~/site", &path_only).unwrap_err();
+    assert_eq!(
+        error,
+        "Could not determine home directory for '~' expansion."
+    );
+}
+
+#[test]
+fn expand_tilde_empty_home_falls_through_to_userprofile() {
+    let env = MockHomeEnv::with("HOME", "")
+        .and("USERPROFILE", "C:\\Users\\test")
+        .windows();
+
+    assert_eq!(
+        expand_tilde("~/site", &env).unwrap(),
+        PathBuf::from("C:\\Users\\test/site")
+    );
+}
+
+#[test]
+fn expand_tilde_non_windows_does_not_use_windows_home_variables() {
+    let env = MockHomeEnv::with("USERPROFILE", "C:\\Users\\test")
+        .and("HOMEDRIVE", "C:")
+        .and("HOMEPATH", "\\Users\\test");
+
+    let error = expand_tilde("~/site", &env).unwrap_err();
+    assert_eq!(
+        error,
+        "Could not determine home directory for '~' expansion."
     );
 }
 
@@ -128,26 +293,6 @@ fn absolute_path_is_accepted() {
     .unwrap();
 
     assert_eq!(resolved.project_dir, target);
-}
-
-#[test]
-fn tilde_expands_to_home_directory() {
-    let original_home = std::env::var("HOME").ok();
-    let temp = tempfile::tempdir().unwrap();
-    unsafe { std::env::set_var("HOME", temp.path().to_string_lossy().to_string()) };
-
-    let current = PathBuf::from("/tmp");
-    let mut prompt = ScriptedPrompt::new(vec![String::from("y"), String::from("")]);
-
-    let resolved =
-        resolve_project_target(Some(String::from("~/site")), &current, &mut prompt).unwrap();
-
-    assert_eq!(resolved.project_dir, temp.path().join("site"));
-
-    match original_home {
-        Some(value) => unsafe { std::env::set_var("HOME", value) },
-        None => unsafe { std::env::remove_var("HOME") },
-    }
 }
 
 #[test]

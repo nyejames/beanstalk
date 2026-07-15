@@ -23,7 +23,7 @@ pub fn resolve_project_target(
     current_dir: &Path,
     prompt: &mut impl Prompt,
 ) -> Result<ResolvedProjectTarget, String> {
-    let resolved_dir = resolve_project_dir(raw_path, current_dir, prompt)?;
+    let resolved_dir = resolve_project_dir(raw_path, current_dir, prompt, &ProcessEnv)?;
 
     let target_exists = resolved_dir.exists();
     let target_was_non_empty = target_exists && is_directory_non_empty(&resolved_dir);
@@ -54,6 +54,7 @@ fn resolve_project_dir(
     raw_path: Option<String>,
     current_dir: &Path,
     prompt: &mut impl Prompt,
+    env: &impl HomeEnv,
 ) -> Result<PathBuf, String> {
     match raw_path {
         None => {
@@ -69,7 +70,7 @@ fn resolve_project_dir(
         }
         Some(path) if path == "." => Ok(current_dir.to_path_buf()),
         Some(path) => {
-            let expanded = expand_tilde(&path)?;
+            let expanded = expand_tilde(&path, env)?;
             let resolved = if expanded.is_absolute() {
                 normalize_path(&expanded)
             } else {
@@ -130,19 +131,92 @@ fn handle_missing_directory(path: &Path, prompt: &mut impl Prompt) -> Result<Pat
     Ok(path.to_path_buf())
 }
 
-pub(super) fn expand_tilde(path: &str) -> Result<PathBuf, String> {
-    if let Some(rest) = path.strip_prefix('~') {
-        let home = std::env::var("HOME")
-            .map_err(|_| "Could not determine home directory for '~' expansion.".to_string())?;
-        let home_path = PathBuf::from(home);
-        let rest_trimmed = rest.trim_start_matches('/');
-        if rest_trimmed.is_empty() {
-            Ok(home_path)
-        } else {
-            Ok(home_path.join(rest_trimmed))
+/// Isolated environment-variable lookup for home-directory resolution.
+///
+/// WHAT: Reads the process environment through a narrow trait so that
+/// `expand_tilde` can be tested with an injected mock instead of mutating
+/// process-global variables.
+/// WHY: Direct `std::env::var("HOME")` inside `expand_tilde` forced tests to
+/// set and restore `HOME` globally, which races under parallel test execution
+/// and cannot exercise Windows fallback variables on a Unix host.
+pub(super) trait HomeEnv {
+    fn get(&self, key: &str) -> Option<String>;
+    fn is_windows(&self) -> bool;
+}
+
+/// Production `HomeEnv` backed by the real process environment.
+struct ProcessEnv;
+
+impl HomeEnv for ProcessEnv {
+    fn get(&self, key: &str) -> Option<String> {
+        std::env::var(key).ok()
+    }
+
+    fn is_windows(&self) -> bool {
+        cfg!(windows)
+    }
+}
+
+/// Resolve the current user's home directory.
+///
+/// Tries `HOME` first. On Windows, it then falls back to `USERPROFILE` and a
+/// complete `HOMEDRIVE` plus `HOMEPATH` pair. Empty values are treated as unset.
+fn resolve_home(env: &impl HomeEnv) -> Result<PathBuf, String> {
+    if let Some(home) = non_blank_env(env, "HOME") {
+        return Ok(PathBuf::from(home));
+    }
+
+    if env.is_windows() {
+        if let Some(userprofile) = non_blank_env(env, "USERPROFILE") {
+            return Ok(PathBuf::from(userprofile));
         }
+        if let (Some(drive), Some(path)) = (
+            non_blank_env(env, "HOMEDRIVE"),
+            non_blank_env(env, "HOMEPATH"),
+        ) {
+            return Ok(PathBuf::from(format!("{drive}{path}")));
+        }
+    }
+
+    Err("Could not determine home directory for '~' expansion.".to_string())
+}
+
+/// Return a non-blank environment value, treating empty strings as unset.
+fn non_blank_env(env: &impl HomeEnv, key: &str) -> Option<String> {
+    env.get(key).filter(|value| !value.is_empty())
+}
+
+/// Expand a leading tilde into the current user's home directory.
+///
+/// Only bare `~`, `~/...` and `~\...` expand. Forms such as `~other` or
+/// `~other/...` are left unchanged so named-user shorthand is not misread as
+/// the current user's home. Windows backslash separators in the remainder are
+/// normalised to forward slashes so the result resolves to the same logical
+/// components as the slash-separated form on any host platform.
+pub(super) fn expand_tilde(path: &str, env: &impl HomeEnv) -> Result<PathBuf, String> {
+    let Some(rest) = path.strip_prefix('~') else {
+        return Ok(PathBuf::from(path));
+    };
+
+    let is_bare = rest.is_empty();
+    let is_slash_separated = rest.starts_with('/');
+    let is_backslash_separated = rest.starts_with('\\');
+
+    if !is_bare && !is_slash_separated && !is_backslash_separated {
+        return Ok(PathBuf::from(path));
+    }
+
+    let home = resolve_home(env)?;
+
+    if is_bare {
+        return Ok(home);
+    }
+
+    let remainder = rest[1..].replace('\\', "/");
+    if remainder.is_empty() {
+        Ok(home)
     } else {
-        Ok(PathBuf::from(path))
+        Ok(home.join(remainder))
     }
 }
 
