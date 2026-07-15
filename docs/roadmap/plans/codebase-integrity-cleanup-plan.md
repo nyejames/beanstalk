@@ -19,19 +19,19 @@ The target result is a compiler that:
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
-STATUS: final review
-CURRENT_SLICE: plan-wide final audit
-LAST_ACCEPTED_COMMIT: `97b2a4275`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 6B accepted and awaiting its checkpoint commit
+STATUS: final review corrections
+CURRENT_SLICE: Audit correction 1, reject non-UTF-8 hash-root candidates
+LAST_ACCEPTED_COMMIT: `28dde0f7b`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, clean after the initial final audit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: this plan, roadmap sequencing and affected canonical docs
-- code: the complete cleanup-plan diff since audit anchor `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`
+- docs: exact filesystem identity and Stage 0 project-structure contracts
+- code: hash-root discovery, source-package preparation and route-specific regression tests
 ACCEPTANCE_CRITERIA:
-- independent audit finds no unresolved correctness, ownership, duplication, diagnostic or coverage issue
-- every retained plan finding is closed without TIR-owned edits
-- final validation and benchmark guard pass after any audit corrections
-- the completed plan link is removed from the roadmap only after acceptance
+- direct-child non-UTF-8 source-package filenames return a typed discovery failure with the original path
+- every Stage 0 preparation route maps that failure to the filesystem `CompilerError` lane
+- missing, valid and multiple UTF-8 root outcomes remain unchanged
+- Unix invalid-byte regression tests cover missing-only and valid-plus-invalid cases
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -63,11 +63,18 @@ VALIDATION_STATE:
 - Phase 6B focused Wasm tests: passed, 23 tests
 - Phase 6B `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: all identified canonical docs are aligned. No progress-matrix status change is needed.
-BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: codex-cli audit worker - the complete plan requires independent final review
-NEXT_WORKER_ORDER: codex-cli, parent-audit
+BLOCKERS_OR_OPEN_DECISIONS: initial final audit found two accepted correctness gaps. Correct non-UTF-8 hash-root discovery first, then transactional generic binding collection and focused re-audit.
+DELEGATION_DECISION: ollama implementation worker - correction 1 is a bounded Stage 0 filesystem-identity slice
+NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 6B, then run the mandatory plan-wide final audit
+NEXT_RESUME_ACTION: implement audit correction 1 and run focused plus full validation
+
+## Final audit record
+
+The initial plan-wide audit accepted two required corrections. Hash-root discovery must reject
+non-UTF-8 direct-child filenames instead of silently skipping them. Recursive generic binding
+collection must be transactional so a structural mismatch cannot retain partial evidence. Both
+remain inside the original Phase 1 and Phase 2 scopes. A focused re-audit is required after fixes.
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
