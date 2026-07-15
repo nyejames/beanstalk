@@ -276,8 +276,8 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
 
         let schema = collect_tir_slot_schema(self.store, template_id, self.string_table)?;
         let Some(target_key) = loose_contribution_target_key(&schema) else {
-            // Named-only wrappers cannot absorb a loose contribution. Let the atom
-            // fallback produce the same diagnostic it always has.
+            // Named-only wrappers cannot absorb a loose contribution. Returning
+            // None lets the caller report that the wrapper could not be applied.
             return Ok(None);
         };
 
@@ -296,10 +296,10 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
 
 /// Chooses the slot key that a single loose contribution would fill.
 ///
-/// WHAT: mirrors the atom-level router: loose chunks go to positional slots
-///       first, then to the default slot. Named slots only receive explicit
-///       `$insert(...)` contributions, so a wrapper with only named slots cannot
-///       absorb a loose contribution through this path.
+/// WHAT: routes a loose contribution to positional slots first, then to the
+///       default slot. Named slots only receive explicit `$insert(...)`
+///       contributions, so a wrapper with only named slots cannot absorb a
+///       loose contribution through this path.
 fn loose_contribution_target_key(schema: &TirSlotSchema) -> Option<SlotKey> {
     if let Some(index) = schema.ordered_positional_slots().first() {
         return Some(SlotKey::Positional(*index));
@@ -318,8 +318,8 @@ fn loose_contribution_target_key(schema: &TirSlotSchema) -> Option<SlotKey> {
 ///
 /// WHAT: walks the wrapper's own content only; slots nested inside child
 ///       templates or control-flow bodies are treated as part of the subtree
-///       that gets copied as a render piece, matching the atom fallback's
-///       top-level behavior.
+///       that gets copied as a render piece. TIR is the sole authority for
+///       wrapper render-piece construction.
 fn build_tir_wrapper_render_pieces(
     wrapper_root: TemplateIrNodeId,
     inner_plan: &TemplateSlotSiteRenderPlan,
@@ -344,44 +344,64 @@ fn build_tir_wrapper_render_pieces(
             let mut pieces = Vec::new();
 
             for child_id in children {
-                if let Some(slot_key) = slot_key_for_node(store, child_id) {
-                    if slot_key == target_key {
-                        pieces.extend(inner_plan.pieces.iter().cloned());
+                match slot_key_for_node(store, child_id)? {
+                    Some(slot_key) => {
+                        if slot_key == target_key {
+                            pieces.extend(inner_plan.pieces.iter().cloned());
+                        }
                     }
 
-                    continue;
+                    None => {
+                        let copied_child = copy_tir_subtree_with_active_slot_plan(
+                            child_id, None, store, copy_state,
+                        )?;
+                        pieces.push(TemplateSlotSiteRenderPiece::Render(copied_child));
+                    }
                 }
-
-                let copied_child =
-                    copy_tir_subtree_with_active_slot_plan(child_id, None, store, copy_state)?;
-                pieces.push(TemplateSlotSiteRenderPiece::Render(copied_child));
             }
 
             Ok(pieces)
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-            if let Some(template_id) = reference.template_id_in_store(store.store_id())
-                && let Some(template) = store.get_template(template_id)
-            {
-                build_tir_wrapper_render_pieces(
-                    template.root,
-                    inner_plan,
-                    target_key,
-                    store,
-                    copy_state,
-                )
-            } else {
-                let copied_root =
-                    copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, copy_state)?;
-                Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
+            match reference.template_id_in_store(store.store_id()) {
+                Some(template_id) => {
+                    let template = store.get_template(template_id).ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "Runtime slot site planning found same-store child template {} missing from TIR store {}.",
+                            template_id,
+                            store.store_id()
+                        ))
+                    })?;
+
+                    build_tir_wrapper_render_pieces(
+                        template.root,
+                        inner_plan,
+                        target_key,
+                        store,
+                        copy_state,
+                    )
+                }
+
+                None => {
+                    // Foreign reference: keep on the subtree-copy authority
+                    // path. Same-store authority is required above, so a
+                    // reference to another store stays on the existing copy
+                    // owner instead of being resolved here.
+                    let copied_root = copy_tir_subtree_with_active_slot_plan(
+                        wrapper_root,
+                        None,
+                        store,
+                        copy_state,
+                    )?;
+                    Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
+                }
             }
         }
 
         _ => {
             // Non-sequence roots with unresolved slots (for example a control-flow
-            // wrapper) are copied whole without inserting the inner plan, just as
-            // the atom fallback materializes the whole top-level content atom.
+            // wrapper) are copied whole without inserting the inner plan.
             let copied_root =
                 copy_tir_subtree_with_active_slot_plan(wrapper_root, None, store, copy_state)?;
             Ok(vec![TemplateSlotSiteRenderPiece::Render(copied_root)])
@@ -389,11 +409,30 @@ fn build_tir_wrapper_render_pieces(
     }
 }
 
-fn slot_key_for_node(store: &TemplateIrStore, node_id: TemplateIrNodeId) -> Option<SlotKey> {
-    let node = store.get_node(node_id)?;
+/// Classifies a wrapper child node as a slot or a non-slot.
+///
+/// WHAT: returns `Ok(Some(key))` when the node is a slot placeholder, `Ok(None)`
+///       when the node is a present non-slot, and an error when the node ID is
+///       not present in the store.
+/// WHY: a missing node is a broken TIR authority invariant, not an implicit
+///      non-slot classification. Sequences are built from real child IDs, so a
+///      missing child must surface as an internal error before any subtree copy.
+fn slot_key_for_node(
+    store: &TemplateIrStore,
+    node_id: TemplateIrNodeId,
+) -> Result<Option<SlotKey>, CompilerError> {
+    let node = store.get_node(node_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "Runtime slot site planning lost wrapper child node {} during slot classification.",
+            node_id
+        ))
+    })?;
     let TemplateIrNodeKind::Slot { placeholder } = &node.kind else {
-        return None;
+        return Ok(None);
     };
 
-    Some(placeholder.key.clone())
+    Ok(Some(placeholder.key.clone()))
 }
+
+#[cfg(test)]
+mod sites_tests;

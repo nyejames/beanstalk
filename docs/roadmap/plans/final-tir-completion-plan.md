@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E2b2 - make runtime slot-node authority explicit
-LAST_ACCEPTED_COMMIT: `829317500` (prior checkpoint; Slice 3E2b1 is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3 - audit final module/API ownership
+LAST_ACCEPTED_COMMIT: `751442111` (prior checkpoint; Slice 3E2b2 is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`, reviewed Slice 3E2b1 change pending commit, no unrelated changes
+WORKTREE: `main`, reviewed Slice 3E2b2 change pending commit, no unrelated changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `template_slots/runtime_plan/sites.rs`, its owning runtime-plan module and focused malformed-plan tests
-- exact caller audit found `slot_key_for_node` treats a missing node as a non-slot and the child-template branch treats a missing same-store template like a legitimate foreign child.
+- code: `templates/mod.rs`, `tir/mod.rs`, remaining production modules, test-only owners and exact hard-grep/caller evidence
+- audit the remaining required `Option` flows, local recursive walkers, forwarding/test-only files, migration-shaped names, long argument lists and stale comments before selecting the next code-bearing slice.
 ACCEPTANCE_CRITERIA:
-- Make node lookup return `Result<Option<SlotKey>, CompilerError>` so only a present non-slot node is optional.
-- Distinguish same-store and foreign child references explicitly. Require a same-store template before recursive wrapper traversal and preserve intentional whole-subtree copying for foreign children.
-- Remove directly owned atom/fallback migration comments, add focused malformed-authority coverage and preserve valid slot routing/output.
+- Produce an exact file/symbol/caller inventory for every remaining Phase 3B/3E checkbox without editing source.
+- Distinguish real final owners and semantic optionality from test-only, forwarding-only, duplicated or migration-shaped paths.
+- Recommend the smallest coherent implementation slice with allowed files, non-goals and focused validation.
 VALIDATION_STATE:
-- Slice 3E2b1 focused template suite: passed, 831 tests
-- Slice 3E2b1 parent `just validate`: passed cross-target Clippy, 3427 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 1 ms average improvement, 5 faster and 1 slower
+- Slice 3E2b2 focused template suite: passed, 836 tests
+- Slice 3E2b2 parent `just validate`: passed cross-target Clippy, 3432 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 9 faster and 1 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: ollama - one runtime slot-site owner with a bounded lookup/traversal correction and focused invariant tests
-NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+DELEGATION_DECISION: codex-cli simple-exploration - bounded read-only ownership inventory before the next implementation slice
+NEXT_WORKER_ORDER: codex-cli, simple-ollama, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: implement and review runtime slot-node required errors, then continue the final module/comment ownership audit
+NEXT_RESUME_ACTION: inventory remaining Phase 3B/3E ownership issues, review evidence and select one coherent implementation slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -440,6 +440,8 @@ Slice 3E1 checkpoint: the durable `Template`, its cached-kind synchronization an
 Slice 3E2a checkpoint: recursive TIR copy-pass state, runtime slot-site cursor state and copy instrumentation now live in `tir/copy_state.rs`. The vague `tir/construction.rs` name, its stale atom/materialization wording and every old private import are deleted without changing copy algorithms or counters.
 
 Slice 3E2b1 checkpoint: formatter, wrapper normalization and render-unit preparation now propagate missing root, overlay, store, template and node authority through explicit internal errors. Body and loop helpers require sequence roots, foreign child conversion requires registry-backed kind ownership and focused malformed-store tests protect the final error boundaries without changing valid template output.
+
+Slice 3E2b2 checkpoint: runtime slot-site planning now distinguishes missing nodes from present non-slots and missing same-store child templates from foreign references. Required authority fails in the runtime-plan owner, semantic optionality remains explicit and focused subsystem tests protect the store-local and subtree-copy boundaries without changing valid slot routing.
 
 #### Phase 3 acceptance
 

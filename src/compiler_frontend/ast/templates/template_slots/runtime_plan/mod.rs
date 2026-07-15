@@ -29,17 +29,15 @@ pub(crate) use types::{RuntimeSlotContributionSourceId, RuntimeSlotSiteId};
 /// WHAT: when the TIR-native head-chain composition detects that a wrapper's
 ///       fill content is non-const-evaluable (runtime), this function produces a
 ///       new TIR template entry whose `runtime_slot_plan` carries the
-///       contribution sources and slot sites, mirroring the atom-based
-///       `materialize_runtime_slot_handoff` but starting from already-routed
-///       TIR node IDs instead of atoms.
+///       contribution sources and slot sites, starting from already-routed
+///       TIR node IDs.
 /// WHY: the HIR materializes runtime slot plans through the template's
 ///      `runtime_slot_plan` field. Without this path, TIR-native composition
 ///      would structurally expand runtime fills, flattening wrapper text and
 ///      fill content together — which breaks loop-control semantics (wrapper
 ///      text would render before `continue` is reached) and drops runtime
 ///      slot-site boundaries. Producing a runtime plan here ensures the HIR
-///      sees the same `RuntimeSlotSite` / contribution-source structure the
-///      atom-based path would have produced.
+///      sees the owned `RuntimeSlotSite` / contribution-source structure.
 pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runtime_slot_plan(
     store: &mut TemplateIrStore,
     wrapper_template_id: crate::compiler_frontend::ast::templates::tir::TemplateIrId,
@@ -116,7 +114,7 @@ pub(in crate::compiler_frontend::ast::templates) fn materialize_tir_native_runti
     slot_plan.slot_sites = slot_sites;
 
     // Convert the scratch tree's Slot nodes into RuntimeSlotSite nodes using
-    // the active slot plan's cursor, matching the atom-based path's conversion.
+    // the active slot plan's cursor.
     copy_state.reset_runtime_slot_site_cursor(slot_plan_id);
     convert_tir_tree_to_active_slot_plan(scratch_tir_root, slot_plan_id, store, &mut copy_state)
         .map_err(TemplateSlotError::from)?;
