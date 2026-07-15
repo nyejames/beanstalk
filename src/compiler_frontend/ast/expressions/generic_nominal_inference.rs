@@ -408,10 +408,11 @@ fn collect_constructor_argument_bindings(
 /// Collects one template-to-concrete binding pair and records evidence.
 ///
 /// WHAT: unifies a template `TypeId` with a concrete `TypeId` through the fallible owner,
-/// records the evidence location for newly-bound parameters, and converts a binding conflict
-/// into the typed conflicting-inference diagnostic.
-/// WHY: structural non-matches return `Ok(())` and stay distinct from binding conflicts,
-/// which propagate as the typed invalid generic instantiation diagnostic.
+/// records the evidence location for newly-bound parameters on a complete structural match,
+/// and converts a binding conflict into the typed conflicting-inference diagnostic.
+/// WHY: structural non-matches return `Ok(false)` and stay distinct from binding conflicts,
+/// which propagate as the typed invalid generic instantiation diagnostic. Evidence is
+/// recorded only for a complete match so a mismatch cannot poison a later constraint.
 fn collect_nominal_binding_evidence(
     context: &mut NominalBindingEvidenceContext<'_>,
     template_type_id: TypeId,
@@ -428,12 +429,18 @@ fn collect_nominal_binding_evidence(
             concrete_type_id,
             &mut *context.bindings,
         ) {
-        Ok(_) => {
+        Ok(true) => {
             context.evidence_locations.record_first_bindings(
                 canonical_parameters,
                 &*context.bindings,
                 location,
             );
+            Ok(())
+        }
+        Ok(false) => {
+            // Structural non-match: no new binding evidence, and the staged walk
+            // left the caller's binding map unchanged. This stays a non-binding
+            // mismatch, not a repeated-parameter conflict.
             Ok(())
         }
         Err(conflict) => {

@@ -633,13 +633,19 @@ fn collect_binding_evidence(
             concrete_type_id,
             &mut *context.bindings,
         ) {
-        Ok(_) => {
+        Ok(true) => {
             context.evidence_locations.record_first_bindings(
                 context.template,
                 &*context.bindings,
                 context.type_environment,
                 location,
             );
+            Ok(())
+        }
+        Ok(false) => {
+            // Structural non-match: no new binding evidence, and the staged walk
+            // left the caller's binding map unchanged. This stays a non-binding
+            // mismatch, not a repeated-parameter conflict.
             Ok(())
         }
         Err(conflict) => Err(binding_conflict_diagnostic(

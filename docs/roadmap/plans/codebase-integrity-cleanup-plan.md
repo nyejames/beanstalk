@@ -20,18 +20,18 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: final review corrections
-CURRENT_SLICE: Audit correction 2, make generic binding collection transactional
-LAST_ACCEPTED_COMMIT: `ce4267efe`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, audit correction 1 accepted and awaiting its checkpoint commit
+CURRENT_SLICE: focused re-audit of final-review corrections
+LAST_ACCEPTED_COMMIT: `9bcb64143`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, audit correction 2 accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: generic inference, type identity and diagnostic-evidence contracts
-- code: recursive TypeId binding collection and both nominal/function inference callers
+- docs: final audit record, exact filesystem identity and generic inference contracts
+- code: audit corrections in hash-root discovery and transactional TypeId binding collection
 ACCEPTANCE_CRITERIA:
-- structural mismatches leave the binding map unchanged at every recursion depth
-- `BindingConflict` retains both types and first-evidence facts
-- nominal and generic-function callers distinguish match, non-match and conflict
-- nested mismatch regressions retain the ordinary type-mismatch diagnostic lane
+- focused independent audit confirms both initial findings are closed
+- corrections introduce no new ownership, diagnostic, duplication or coverage drift
+- final validation evidence remains current after any required re-audit correction
+- no TIR-owned path changed
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -64,12 +64,14 @@ VALIDATION_STATE:
 - Phase 6B `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Audit correction 1 focused root-file and Stage 0 identity tests: passed locally, 12 and 5 tests. Three invalid-byte regressions are Linux-only and compiled by cross-target Clippy.
 - Audit correction 1 `just validate`: passed, including cross-target Clippy, 3,410 local unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Audit correction 2 focused generic tests: passed, 28 TypeEnvironment tests, 10 inference tests and 1,623 HTML integration cases
+- Audit correction 2 `just validate`: passed, including cross-target Clippy, 3,413 unit tests, 1,764 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: all identified canonical docs are aligned. No progress-matrix status change is needed.
-BLOCKERS_OR_OPEN_DECISIONS: audit correction 1 is accepted. Transactional generic binding collection remains, followed by focused re-audit.
-DELEGATION_DECISION: ollama implementation worker - correction 2 is a bounded generic inference integrity slice
-NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+BLOCKERS_OR_OPEN_DECISIONS: both required audit corrections are accepted. Focused independent re-audit remains.
+DELEGATION_DECISION: codex-cli audit worker - both final-review corrections require closure review
+NEXT_WORKER_ORDER: codex-cli, parent-audit
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit audit correction 1, then implement transactional generic binding collection
+NEXT_RESUME_ACTION: commit audit correction 2, then run focused re-audit
 
 ## Final audit record
 
@@ -77,7 +79,8 @@ The initial plan-wide audit accepted two required corrections. Hash-root discove
 non-UTF-8 direct-child filenames instead of silently skipping them. Recursive generic binding
 collection must be transactional so a structural mismatch cannot retain partial evidence. Both
 remain inside the original Phase 1 and Phase 2 scopes. The hash-root correction is accepted and
-fully validated. A focused re-audit is required after the generic correction.
+fully validated. Transactional binding collection and its nominal/function regressions are also
+accepted and fully validated. A focused re-audit remains before plan acceptance.
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 

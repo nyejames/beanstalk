@@ -1579,12 +1579,47 @@ impl TypeEnvironment {
         concrete_type_id: TypeId,
         bindings: &mut GenericTypeBindings,
     ) -> Result<bool, BindingConflict> {
+        // WHAT: stage every binding produced by one complete structural walk in a clone
+        //       and commit it into the caller's map only when the walk reports a match.
+        // WHY: a structural mismatch (`Ok(false)`) or a binding conflict (`Err`) partway
+        //      through a nested constructed/generic-instance walk must not leave partial
+        //      bindings behind, since those could poison a later constraint or turn a
+        //      mismatch into a spurious binding-conflict diagnostic.
+        let mut staged = bindings.clone();
+        match self.collect_type_parameter_bindings_inner(
+            template_type_id,
+            concrete_type_id,
+            &mut staged,
+        ) {
+            Ok(true) => {
+                *bindings = staged;
+                Ok(true)
+            }
+            Ok(false) => Ok(false),
+            Err(conflict) => Err(conflict),
+        }
+    }
+
+    /// Recursive structural walker that mutates only the staged binding map.
+    ///
+    /// WHAT: walks template and concrete `TypeId` trees in lock-step, recording each
+    ///       generic-parameter binding in `staged` and returning whether the structure
+    ///       matched.
+    /// WHY: keeping recursion on a private helper means nested arguments share one
+    ///      staged transaction instead of cloning and committing independently at
+    ///      every level, so a deep mismatch rolls back the whole walk atomically.
+    fn collect_type_parameter_bindings_inner(
+        &self,
+        template_type_id: TypeId,
+        concrete_type_id: TypeId,
+        staged: &mut GenericTypeBindings,
+    ) -> Result<bool, BindingConflict> {
         // If template is a generic parameter, record the binding.
         if let Some(TypeDefinition::GenericParameter(param)) = self.get(template_type_id) {
             if concrete_type_id == self.builtins().none {
                 return Ok(false); // Inferred/unknown — don't bind
             }
-            return bindings
+            return staged
                 .insert_consistent(param.id, concrete_type_id)
                 .map(|()| true);
         }
@@ -1605,10 +1640,10 @@ impl TypeEnvironment {
                     .iter()
                     .zip(concrete_def.arguments.iter())
                 {
-                    if !self.try_collect_type_parameter_bindings_typeid(
+                    if !self.collect_type_parameter_bindings_inner(
                         *template_argument,
                         *concrete_argument,
-                        bindings,
+                        staged,
                     )? {
                         return Ok(false);
                     }
@@ -1627,10 +1662,10 @@ impl TypeEnvironment {
                     .iter()
                     .zip(concrete_inst.arguments.iter())
                 {
-                    if !self.try_collect_type_parameter_bindings_typeid(
+                    if !self.collect_type_parameter_bindings_inner(
                         *template_argument,
                         *concrete_argument,
-                        bindings,
+                        staged,
                     )? {
                         return Ok(false);
                     }

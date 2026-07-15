@@ -995,3 +995,203 @@ fn substitute_preserves_fixed_capacity_element_only_substitution() {
         None
     );
 }
+
+fn register_two_parameter_list(
+    type_environment: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+    first_name: &str,
+    second_name: &str,
+) -> GenericParameterListId {
+    let parameter_list = GenericParameterList {
+        parameters: vec![
+            GenericParameter {
+                id: TypeParameterId(0),
+                name: string_table.intern(first_name),
+                location: location(),
+                trait_bounds: Vec::new(),
+            },
+            GenericParameter {
+                id: TypeParameterId(1),
+                name: string_table.intern(second_name),
+                location: location(),
+                trait_bounds: Vec::new(),
+            },
+        ],
+    };
+
+    type_environment
+        .register_generic_parameter_list(&parameter_list, &Default::default())
+        .list_id
+}
+
+/// A nested structural mismatch after a partial binding must not leave the caller's
+/// binding map mutated.
+///
+/// WHAT: a constructed type's first argument binds `T`, then a later nested argument is a
+///       structural non-match, so the whole walk returns `Ok(false)` and the staged `T`
+///       binding is rolled back.
+/// WHY: without a transactional walk the partial `T` binding would survive and could poison
+///      a later constraint or turn a mismatch into a spurious binding-conflict diagnostic.
+#[test]
+fn type_id_bindings_rollback_constructed_mismatch_after_partial_binding() {
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let first_parameter_id = GenericParameterId(0);
+    let second_parameter_id = GenericParameterId(1);
+    let first_parameter_type_id = register_environment_parameter(
+        &mut type_environment,
+        &mut string_table,
+        first_parameter_id,
+        "T",
+    );
+    let second_parameter_type_id = register_environment_parameter(
+        &mut type_environment,
+        &mut string_table,
+        second_parameter_id,
+        "U",
+    );
+    let int_type_id = type_environment.builtins().int;
+
+    // Template: OrderedMap<T, Collection<U>>; concrete: OrderedMap<Int, Option<Int>>.
+    // The first argument binds T -> Int, the second is a structural non-match
+    // (Collection vs Option) which makes the whole walk return Ok(false).
+    let template_inner_collection = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
+        Box::new([second_parameter_type_id]),
+    );
+    let template = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+        Box::new([first_parameter_type_id, template_inner_collection]),
+    );
+    let concrete_inner_option = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Option),
+        Box::new([int_type_id]),
+    );
+    let concrete = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+        Box::new([int_type_id, concrete_inner_option]),
+    );
+
+    let mut bindings = GenericTypeBindings::new();
+    assert!(
+        !type_environment
+            .try_collect_type_parameter_bindings_typeid(template, concrete, &mut bindings)
+            .unwrap()
+    );
+    assert_eq!(
+        bindings.get(first_parameter_id),
+        None,
+        "the partial T binding must be rolled back after the nested mismatch"
+    );
+    assert_eq!(
+        bindings.get(second_parameter_id),
+        None,
+        "no parameter should be bound after a structural mismatch"
+    );
+}
+
+/// A nested generic-instance mismatch after a partial binding must not leave the caller's
+/// binding map mutated.
+///
+/// WHAT: a generic nominal instance's first argument binds `T`, then a later nested argument
+///       is a generic-instance structural non-match, so the whole walk returns `Ok(false)` and
+///       the staged `T` binding is rolled back.
+/// WHY: the rollback property must hold for generic-instance recursion, not only constructed
+///      types, so a mismatch cannot leave partial inference evidence behind.
+#[test]
+fn type_id_bindings_rollback_generic_instance_mismatch_after_partial_binding() {
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let parameter_id = GenericParameterId(0);
+    let parameter_type_id =
+        register_environment_parameter(&mut type_environment, &mut string_table, parameter_id, "T");
+
+    let pair_list = register_two_parameter_list(&mut type_environment, &mut string_table, "A", "B");
+    let box_list = register_single_parameter_list(&mut type_environment, &mut string_table, "Item");
+    let wrapper_list =
+        register_single_parameter_list(&mut type_environment, &mut string_table, "Item");
+    let pair_nominal =
+        register_empty_generic_struct(&mut type_environment, &mut string_table, "Pair", pair_list);
+    let box_nominal =
+        register_empty_generic_struct(&mut type_environment, &mut string_table, "Box", box_list);
+    let wrapper_nominal = register_empty_generic_struct(
+        &mut type_environment,
+        &mut string_table,
+        "Wrapper",
+        wrapper_list,
+    );
+    let int_type_id = type_environment.builtins().int;
+
+    // Template: Pair<T, Box<T>>; concrete: Pair<Int, Wrapper<Int>>.
+    // The first argument binds T -> Int, the second is a base mismatch
+    // (Box vs Wrapper) which makes the whole walk return Ok(false).
+    let template_inner_box =
+        type_environment.intern_generic_instance(box_nominal, Box::new([parameter_type_id]));
+    let template = type_environment.intern_generic_instance(
+        pair_nominal,
+        Box::new([parameter_type_id, template_inner_box]),
+    );
+    let concrete_inner_wrapper =
+        type_environment.intern_generic_instance(wrapper_nominal, Box::new([int_type_id]));
+    let concrete = type_environment.intern_generic_instance(
+        pair_nominal,
+        Box::new([int_type_id, concrete_inner_wrapper]),
+    );
+
+    let mut bindings = GenericTypeBindings::new();
+    assert!(
+        !type_environment
+            .try_collect_type_parameter_bindings_typeid(template, concrete, &mut bindings)
+            .unwrap()
+    );
+    assert_eq!(
+        bindings.get(parameter_id),
+        None,
+        "the partial T binding must be rolled back after the nested mismatch"
+    );
+}
+
+/// A repeated-parameter conflict produced within one staged walk must still surface the
+/// `BindingConflict` facts while leaving the caller's binding map unchanged.
+///
+/// WHAT: the same generic parameter appears in two argument positions; the first binds it,
+///       the second binds it to a different concrete type, producing a `BindingConflict` whose
+///       existing/replacement TypeIds come from within the same staged walk.
+/// WHY: the conflict must be reported with its real evidence, but the caller's map must stay
+///      byte-for-byte unchanged so the conflict does not leak partial bindings.
+#[test]
+fn type_id_bindings_rollback_preserves_repeated_parameter_conflict_within_one_walk() {
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let parameter_id = GenericParameterId(0);
+    let parameter_type_id =
+        register_environment_parameter(&mut type_environment, &mut string_table, parameter_id, "T");
+    let int_type_id = type_environment.builtins().int;
+    let string_type_id = type_environment.builtins().string;
+
+    // Template: OrderedMap<T, T>; concrete: OrderedMap<Int, String>.
+    // The first argument stages T -> Int, the second stages T -> String and conflicts.
+    let template = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+        Box::new([parameter_type_id, parameter_type_id]),
+    );
+    let concrete = type_environment.intern_constructed(
+        TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+        Box::new([int_type_id, string_type_id]),
+    );
+
+    let mut bindings = GenericTypeBindings::new();
+    let conflict = type_environment
+        .try_collect_type_parameter_bindings_typeid(template, concrete, &mut bindings)
+        .expect_err("a repeated parameter bound to two types must conflict");
+    assert_eq!(conflict.parameter_id, parameter_id);
+    assert_eq!(conflict.existing_type_id, int_type_id);
+    assert_eq!(conflict.replacement_type_id, string_type_id);
+    assert_eq!(
+        bindings.get(parameter_id),
+        None,
+        "the caller's binding map must remain unchanged after a conflict"
+    );
+}
