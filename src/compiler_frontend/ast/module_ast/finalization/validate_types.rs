@@ -392,48 +392,26 @@ fn validate_owned_runtime_template_handoff(
     handoff: &OwnedRuntimeTemplateHandoff,
     context: &TypeValidationContext,
 ) -> Result<(), CompilerError> {
-    let mut first_error = None;
     runtime_handoff::walk_owned_runtime_template_handoff(handoff, &mut |node| {
-        if first_error.is_some() {
-            return;
+        if let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = node {
+            validate_expression(expression, context)?;
         }
 
-        if let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = node
-            && let Err(error) = validate_expression(expression, context)
-        {
-            first_error = Some(error);
-        }
-    });
-
-    if let Some(error) = first_error {
-        return Err(error);
-    }
-
-    Ok(())
+        Ok(())
+    })
 }
 
 fn validate_owned_runtime_slot_application_handoff(
     handoff: &OwnedRuntimeSlotApplicationHandoff,
     context: &TypeValidationContext,
 ) -> Result<(), CompilerError> {
-    let mut first_error = None;
     runtime_handoff::walk_owned_runtime_slot_application_handoff(handoff, &mut |node| {
-        if first_error.is_some() {
-            return;
+        if let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = node {
+            validate_expression(expression, context)?;
         }
 
-        if let OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } = node
-            && let Err(error) = validate_expression(expression, context)
-        {
-            first_error = Some(error);
-        }
-    });
-
-    if let Some(error) = first_error {
-        return Err(error);
-    }
-
-    Ok(())
+        Ok(())
+    })
 }
 
 // --------------------------

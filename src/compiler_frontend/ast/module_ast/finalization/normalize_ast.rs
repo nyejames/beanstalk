@@ -780,26 +780,15 @@ fn reactive_template_metadata_from_store(
     registry: &TemplateIrRegistry,
 ) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
-    let mut resolver_error = None;
     reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry(
         template,
         store,
         registry,
         &mut metadata,
-        &mut |expression| match expression_reactive_template_metadata_from_store(
-            expression, store, registry,
-        ) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                resolver_error.get_or_insert(error);
-                None
-            }
+        &mut |expression| {
+            expression_reactive_template_metadata_from_store(expression, store, registry)
         },
     )?;
-
-    if let Some(error) = resolver_error {
-        return Err(error);
-    }
 
     Ok(Some(metadata))
 }

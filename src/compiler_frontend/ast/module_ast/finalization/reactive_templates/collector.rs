@@ -15,6 +15,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::templates::reactive_template_metadata;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::tir::TemplateIrStore;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;
 
@@ -23,7 +24,7 @@ pub(super) fn metadata_for_expression(
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
     store: &TemplateIrStore,
-) -> Option<ReactiveTemplateMetadata> {
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     match &expression.kind {
         ExpressionKind::Template(template) => {
             metadata_for_template(template, flows, value_environment, store)
@@ -35,15 +36,17 @@ pub(super) fn metadata_for_expression(
         }
 
         ExpressionKind::Coerced { value, .. } => {
-            metadata_for_expression(value, flows, value_environment, store)
-                .or_else(|| expression.reactive_template.clone())
+            Ok(
+                metadata_for_expression(value, flows, value_environment, store)?
+                    .or_else(|| expression.reactive_template.clone()),
+            )
         }
 
-        ExpressionKind::Reference(path) => value_environment
+        ExpressionKind::Reference(path) => Ok(value_environment
             .metadata_for_path(path)
-            .or_else(|| expression.reactive_template.clone()),
+            .or_else(|| expression.reactive_template.clone())),
 
-        _ => expression.reactive_template.clone(),
+        _ => Ok(expression.reactive_template.clone()),
     }
 }
 
@@ -53,20 +56,24 @@ fn metadata_for_function_call(
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
     store: &TemplateIrStore,
-) -> Option<ReactiveTemplateMetadata> {
-    let flow = flows.get(name)?;
-    let metadata = flow.success_returns.first()?.as_ref()?;
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
+    let Some(flow) = flows.get(name) else {
+        return Ok(None);
+    };
+    let Some(metadata) = flow.success_returns.first().and_then(Option::as_ref) else {
+        return Ok(None);
+    };
     let resolved_arguments = arguments
         .iter()
-        .map(|argument| {
+        .map(|argument| -> Result<CallArgument, CompilerError> {
             let mut resolved_argument = argument.clone();
             resolved_argument.value.reactive_template =
-                metadata_for_expression(&argument.value, flows, value_environment, store);
-            resolved_argument
+                metadata_for_expression(&argument.value, flows, value_environment, store)?;
+            Ok(resolved_argument)
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()?;
 
-    metadata.instantiate_for_call(&flow.parameters, &resolved_arguments)
+    Ok(metadata.instantiate_for_call(&flow.parameters, &resolved_arguments))
 }
 
 fn metadata_for_template(
@@ -74,17 +81,18 @@ fn metadata_for_template(
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &ReactiveTemplateValueEnvironment,
     store: &TemplateIrStore,
-) -> Option<ReactiveTemplateMetadata> {
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
 
-    // Use the store-aware traversal so control-flow bodies are read from
-    // finalized same-store TIR body roots.
+    // Use the raw store-aware traversal so control-flow bodies are read from
+    // same-store Composed-or-later TIR roots and required authority failures
+    // reach the annotation/finalizer boundary.
     reactive_template_metadata::merge_reactive_template_metadata_with_store_and_resolver(
         template,
         store,
         &mut metadata,
         &mut |expression| metadata_for_expression(expression, flows, value_environment, store),
-    );
+    )?;
 
-    Some(metadata)
+    Ok(Some(metadata))
 }

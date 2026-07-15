@@ -48,10 +48,12 @@ pub(super) fn annotate_nodes(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     for node in nodes {
-        annotate_node(node, flows, value_environment, store, registry);
+        annotate_node(node, flows, value_environment, store, registry)?;
     }
+
+    Ok(())
 }
 
 /// One expression payload collected with the environment that applies at its
@@ -107,32 +109,47 @@ fn compose_expression_overlays(
     registry: &mut TemplateIrRegistry,
     current_overlay_set_id: TemplateOverlaySetId,
     annotated_overrides: Vec<(ExpressionSiteId, Box<Expression>)>,
-) -> Option<TemplateOverlaySetId> {
-    if annotated_overrides.is_empty() {
-        return Some(current_overlay_set_id);
-    }
-
+) -> Result<TemplateOverlaySetId, CompilerError> {
     let existing_overlay_set = registry
         .overlay_set(current_overlay_set_id)
         .cloned()
-        .unwrap_or_default();
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TIR reactive annotation referenced missing current overlay set {}",
+                current_overlay_set_id
+            ))
+        })?;
+    let existing_overrides =
+        if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides {
+            registry
+                .expression_overlay(existing_overlay_id)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "TIR reactive annotation referenced missing expression overlay {}",
+                        existing_overlay_id
+                    ))
+                })?
+                .overrides
+                .iter()
+                .map(|(site_id, expression)| (*site_id, expression.clone()))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
+    if annotated_overrides.is_empty() {
+        return Ok(current_overlay_set_id);
+    }
+
     let annotated_site_ids = annotated_overrides
         .iter()
         .map(|(site_id, _)| *site_id)
         .collect::<HashSet<_>>();
 
-    let mut overrides = if let Some(existing_overlay_id) = existing_overlay_set.expression_overrides
-    {
-        let existing_overlay = registry.expression_overlay(existing_overlay_id)?;
-        existing_overlay
-            .overrides
-            .iter()
-            .filter(|(site_id, _)| !annotated_site_ids.contains(site_id))
-            .map(|(site_id, expression)| (*site_id, expression.clone()))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let mut overrides: Vec<(ExpressionSiteId, Box<Expression>)> = existing_overrides
+        .into_iter()
+        .filter(|(site_id, _)| !annotated_site_ids.contains(site_id))
+        .collect();
     overrides.extend(annotated_overrides);
 
     let expression_overlay_id =
@@ -142,13 +159,32 @@ fn compose_expression_overlays(
         slot_resolution: None,
         wrapper_context: None,
     });
-    let overlay_set_id =
-        match registry.compose_overlay_sets(&[current_overlay_set_id, expression_overlay_set_id]) {
-            Ok(id) => id,
-            Err(_) => return None,
-        };
+    registry.compose_overlay_sets(&[current_overlay_set_id, expression_overlay_set_id])
+}
 
-    Some(overlay_set_id)
+fn validate_expression_overlay_authority(
+    registry: &TemplateIrRegistry,
+    overlay_set_id: TemplateOverlaySetId,
+) -> Result<(), CompilerError> {
+    let overlay_set = registry.overlay_set(overlay_set_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "TIR environment-aware payload collection referenced missing overlay set {}",
+            overlay_set_id
+        ))
+    })?;
+
+    if let Some(expression_overlay_id) = overlay_set.expression_overrides {
+        registry
+            .expression_overlay(expression_overlay_id)
+            .ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "TIR environment-aware payload collection referenced missing expression overlay {}",
+                    expression_overlay_id
+                ))
+            })?;
+    }
+
+    Ok(())
 }
 
 /// Environment-aware TIR expression-payload collector.
@@ -180,12 +216,7 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
         flows: &'flow FxHashMap<InternedPath, FunctionTemplateFlow>,
         root_overlay_set_id: TemplateOverlaySetId,
     ) -> Result<Self, CompilerError> {
-        registry.overlay_set(root_overlay_set_id).ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "TIR environment-aware payload collection referenced missing root overlay set {}",
-                root_overlay_set_id
-            ))
-        })?;
+        validate_expression_overlay_authority(registry, root_overlay_set_id)?;
 
         Ok(Self {
             store,
@@ -238,9 +269,11 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
             .get_template(template_id)
             .map(|template| (template.root, template.runtime_slot_plan))
             .ok_or_else(|| {
-                CompilerError::compiler_error(
-                    "TIR environment-aware payload collection referenced a missing child template.",
-                )
+                CompilerError::compiler_error(format!(
+                    "TIR environment-aware payload collection referenced missing child template {} in store {}",
+                    template_id,
+                    self.store.store_id()
+                ))
             })?;
 
         let result = if let Some(slot_plan_id) = runtime_slot_plan {
@@ -296,9 +329,11 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
         slot_plan_id: TemplateSlotPlanId,
     ) -> Result<(Vec<TemplateIrNodeId>, Vec<TemplateIrNodeId>), CompilerError> {
         let slot_plan = self.store.get_slot_plan(slot_plan_id).ok_or_else(|| {
-            CompilerError::compiler_error(
-                "TIR environment-aware payload collection referenced a missing runtime slot plan.",
-            )
+            CompilerError::compiler_error(format!(
+                "TIR environment-aware payload collection referenced missing runtime slot plan {} in store {}",
+                slot_plan_id,
+                self.store.store_id()
+            ))
         })?;
 
         let contribution_roots: Vec<TemplateIrNodeId> = slot_plan
@@ -316,9 +351,10 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
                     }
                     TemplateSlotSiteRenderPiece::ContributionSource(source_id) => {
                         if source_id.0 >= slot_plan.contribution_sources.len() {
-                            return Err(CompilerError::compiler_error(
-                                "TIR environment-aware payload collection referenced a missing runtime slot contribution source.",
-                            ));
+                            return Err(CompilerError::compiler_error(format!(
+                                "TIR environment-aware payload collection referenced missing runtime slot contribution source {:?} in plan {}",
+                                source_id, slot_plan_id
+                            )));
                         }
                     }
                 }
@@ -358,9 +394,11 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
         environment: &ReactiveTemplateValueEnvironment,
     ) -> Result<(), CompilerError> {
         let Some(node) = self.store.get_node(node_id) else {
-            return Err(CompilerError::compiler_error(
-                "TIR environment-aware payload collection referenced a missing node.",
-            ));
+            return Err(CompilerError::compiler_error(format!(
+                "TIR environment-aware payload collection referenced missing node {} in store {}",
+                node_id,
+                self.store.store_id()
+            )));
         };
 
         match &node.kind {
@@ -408,7 +446,7 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
                             self.flows,
                             &branch_environment,
                             self.store,
-                        );
+                        )?;
                         branch_environment.record_binding_metadata(binding_path, captured_metadata);
                     }
 
@@ -439,7 +477,10 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
             }
 
             TemplateIrNodeKind::ChildTemplate { reference, .. } => {
-                if let Some(template_id) = reference.template_id_in_store(self.store.store_id()) {
+                if reference.phase.is_at_least(TemplateTirPhase::Composed)
+                    && let Some(template_id) = reference.template_id_in_store(self.store.store_id())
+                {
+                    validate_expression_overlay_authority(self.registry, reference.overlay_set_id)?;
                     self.overlay_set_stack.push(reference.overlay_set_id);
                     let result = self.collect_template(template_id, environment);
                     self.overlay_set_stack.pop();
@@ -453,11 +494,41 @@ impl<'store, 'registry, 'flow> EnvironmentAwarePayloadCollector<'store, 'registr
                 Ok(())
             }
 
+            TemplateIrNodeKind::RuntimeSlotSite { plan, site } => {
+                let slot_plan = self.store.get_slot_plan(*plan).ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "TIR environment-aware payload collection referenced missing runtime slot plan {} in store {}",
+                        plan,
+                        self.store.store_id()
+                    ))
+                })?;
+                let site_plan = slot_plan
+                    .slot_sites
+                    .iter()
+                    .find(|site_plan| site_plan.site == *site)
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "TIR environment-aware payload collection referenced missing runtime slot site {:?} in plan {}",
+                            site, plan
+                        ))
+                    })?;
+                for piece in &site_plan.render_plan.pieces {
+                    if let TemplateSlotSiteRenderPiece::ContributionSource(source_id) = piece
+                        && source_id.0 >= slot_plan.contribution_sources.len()
+                    {
+                        return Err(CompilerError::compiler_error(format!(
+                            "TIR environment-aware payload collection referenced missing runtime slot contribution source {:?}",
+                            source_id
+                        )));
+                    }
+                }
+                Ok(())
+            }
+
             TemplateIrNodeKind::Text { .. }
             | TemplateIrNodeKind::Slot { .. }
             | TemplateIrNodeKind::AggregateOutput
-            | TemplateIrNodeKind::LoopControl { .. }
-            | TemplateIrNodeKind::RuntimeSlotSite { .. } => Ok(()),
+            | TemplateIrNodeKind::LoopControl { .. } => Ok(()),
         }
     }
 
@@ -568,27 +639,27 @@ fn annotate_node(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match &mut node.kind {
         NodeKind::Function(path, signature, body) => {
             let mut function_environment =
                 ReactiveTemplateValueEnvironment::for_parameters(&signature.parameters);
-            annotate_nodes(body, flows, &mut function_environment, store, registry);
+            annotate_nodes(body, flows, &mut function_environment, store, registry)?;
             apply_flow_to_signature(path, signature, flows);
         }
 
         NodeKind::VariableDeclaration(declaration) => {
-            annotate_declaration(declaration, flows, value_environment, store, registry);
+            annotate_declaration(declaration, flows, value_environment, store, registry)?;
         }
 
         NodeKind::Return(values) => {
-            annotate_expressions(values, flows, value_environment, store, registry);
+            annotate_expressions(values, flows, value_environment, store, registry)?;
         }
 
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
         | NodeKind::ExpressionStatement(value) => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
         }
 
         NodeKind::ThenValue(produced_values) => {
@@ -598,16 +669,16 @@ fn annotate_node(
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
         }
 
         NodeKind::If(condition, then_body, else_body) => {
-            annotate_expression(condition, flows, value_environment, store, registry);
+            annotate_expression(condition, flows, value_environment, store, registry)?;
             let mut then_environment = value_environment.clone();
-            annotate_nodes(then_body, flows, &mut then_environment, store, registry);
+            annotate_nodes(then_body, flows, &mut then_environment, store, registry)?;
             if let Some(else_body) = else_body {
                 let mut else_environment = value_environment.clone();
-                annotate_nodes(else_body, flows, &mut else_environment, store, registry);
+                annotate_nodes(else_body, flows, &mut else_environment, store, registry)?;
             }
         }
 
@@ -617,7 +688,7 @@ fn annotate_node(
             default,
             ..
         } => {
-            annotate_expression(scrutinee, flows, value_environment, store, registry);
+            annotate_expression(scrutinee, flows, value_environment, store, registry)?;
             for arm in arms {
                 let mut arm_environment = value_environment.clone();
                 annotate_match_pattern(
@@ -626,11 +697,11 @@ fn annotate_node(
                     &mut arm_environment,
                     store,
                     registry,
-                );
+                )?;
                 if let Some(guard) = &mut arm.guard {
-                    annotate_expression(guard, flows, &mut arm_environment, store, registry);
+                    annotate_expression(guard, flows, &mut arm_environment, store, registry)?;
                 }
-                annotate_nodes(&mut arm.body, flows, &mut arm_environment, store, registry);
+                annotate_nodes(&mut arm.body, flows, &mut arm_environment, store, registry)?;
             }
             if let Some(default_body) = default {
                 let mut default_environment = value_environment.clone();
@@ -640,13 +711,13 @@ fn annotate_node(
                     &mut default_environment,
                     store,
                     registry,
-                );
+                )?;
             }
         }
 
         NodeKind::ScopedBlock { body } => {
             let mut body_environment = value_environment.clone();
-            annotate_nodes(body, flows, &mut body_environment, store, registry);
+            annotate_nodes(body, flows, &mut body_environment, store, registry)?;
         }
 
         NodeKind::RangeLoop {
@@ -655,25 +726,25 @@ fn annotate_node(
             body,
         } => {
             let mut loop_environment = value_environment.clone();
-            annotate_loop_bindings(bindings, flows, &mut loop_environment, store, registry);
+            annotate_loop_bindings(bindings, flows, &mut loop_environment, store, registry)?;
             annotate_expression(
                 &mut range.start,
                 flows,
                 &mut loop_environment,
                 store,
                 registry,
-            );
+            )?;
             annotate_expression(
                 &mut range.end,
                 flows,
                 &mut loop_environment,
                 store,
                 registry,
-            );
+            )?;
             if let Some(step) = &mut range.step {
-                annotate_expression(step, flows, &mut loop_environment, store, registry);
+                annotate_expression(step, flows, &mut loop_environment, store, registry)?;
             }
-            annotate_nodes(body, flows, &mut loop_environment, store, registry);
+            annotate_nodes(body, flows, &mut loop_environment, store, registry)?;
         }
 
         NodeKind::CollectionLoop {
@@ -682,40 +753,42 @@ fn annotate_node(
             body,
         } => {
             let mut loop_environment = value_environment.clone();
-            annotate_loop_bindings(bindings, flows, &mut loop_environment, store, registry);
-            annotate_expression(iterable, flows, &mut loop_environment, store, registry);
-            annotate_nodes(body, flows, &mut loop_environment, store, registry);
+            annotate_loop_bindings(bindings, flows, &mut loop_environment, store, registry)?;
+            annotate_expression(iterable, flows, &mut loop_environment, store, registry)?;
+            annotate_nodes(body, flows, &mut loop_environment, store, registry)?;
         }
 
         NodeKind::WhileLoop(condition, body) => {
-            annotate_expression(condition, flows, value_environment, store, registry);
+            annotate_expression(condition, flows, value_environment, store, registry)?;
             let mut body_environment = value_environment.clone();
-            annotate_nodes(body, flows, &mut body_environment, store, registry);
+            annotate_nodes(body, flows, &mut body_environment, store, registry)?;
         }
 
         NodeKind::Assert { condition, .. } => {
-            annotate_expression(condition, flows, value_environment, store, registry);
+            annotate_expression(condition, flows, value_environment, store, registry)?;
         }
 
         NodeKind::StructDefinition(_, fields) => {
             for field in fields {
-                annotate_declaration(field, flows, value_environment, store, registry);
+                annotate_declaration(field, flows, value_environment, store, registry)?;
             }
         }
 
         NodeKind::Assignment { target, value } => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
             if let Some(target_path) = reference_path_for_place_expression(target) {
                 value_environment.record_assignment(target_path, value);
             }
         }
 
         NodeKind::MultiBind { value, .. } => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
         }
 
         NodeKind::Break | NodeKind::Continue => {}
     }
+
+    Ok(())
 }
 
 fn apply_flow_to_signature(
@@ -748,13 +821,13 @@ fn annotate_declaration(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     if let ExpressionKind::Function(signature) = &mut declaration.value.kind {
         apply_flow_to_signature(&declaration.id, signature, flows);
         declaration.value.reactive_template =
-            metadata_for_expression(&declaration.value, flows, value_environment, store);
+            metadata_for_expression(&declaration.value, flows, value_environment, store)?;
         value_environment.record_declaration(declaration);
-        return;
+        return Ok(());
     }
 
     annotate_expression(
@@ -763,8 +836,10 @@ fn annotate_declaration(
         value_environment,
         store,
         registry,
-    );
+    )?;
     value_environment.record_declaration(declaration);
+
+    Ok(())
 }
 
 fn annotate_expressions(
@@ -773,10 +848,12 @@ fn annotate_expressions(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     for expression in expressions {
-        annotate_expression(expression, flows, value_environment, store, registry);
+        annotate_expression(expression, flows, value_environment, store, registry)?;
     }
+
+    Ok(())
 }
 
 fn annotate_place_expression(place: &mut PlaceExpression) {
@@ -792,10 +869,10 @@ fn annotate_expression(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match &mut expression.kind {
         ExpressionKind::Template(template) => {
-            annotate_template(template, flows, value_environment, store, registry);
+            annotate_template(template, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::RuntimeTemplateHandoff(handoff) => {
@@ -805,13 +882,13 @@ fn annotate_expression(
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
             expression.reactive_template = Some(handoff_metadata);
         }
 
         ExpressionKind::RuntimeSlotApplicationHandoff(handoff) => {
             let handoff_metadata =
-                annotate_runtime_slot_handoff(handoff, flows, value_environment, store, registry);
+                annotate_runtime_slot_handoff(handoff, flows, value_environment, store, registry)?;
             expression.reactive_template = Some(handoff_metadata);
         }
 
@@ -819,23 +896,23 @@ fn annotate_expression(
 
         ExpressionKind::FunctionCall { args, .. }
         | ExpressionKind::HostFunctionCall { args, .. } => {
-            annotate_call_arguments(args, flows, value_environment, store, registry);
+            annotate_call_arguments(args, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::FieldAccess { base, .. } => {
-            annotate_expression(base, flows, value_environment, store, registry);
+            annotate_expression(base, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::MethodCall { receiver, args, .. }
         | ExpressionKind::CollectionBuiltinCall { receiver, args, .. }
         | ExpressionKind::MapBuiltinCall { receiver, args, .. } => {
-            annotate_expression(receiver, flows, value_environment, store, registry);
-            annotate_call_arguments(args, flows, value_environment, store, registry);
+            annotate_expression(receiver, flows, value_environment, store, registry)?;
+            annotate_call_arguments(args, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::HandledFallibleFunctionCall { args, .. }
         | ExpressionKind::HandledFallibleHostFunctionCall { args, .. } => {
-            annotate_call_arguments(args, flows, value_environment, store, registry);
+            annotate_call_arguments(args, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::Copy(place) => {
@@ -846,7 +923,7 @@ fn annotate_expression(
             for item in &mut rpn.items {
                 match item {
                     ExpressionRpnItem::Operand(expression) => {
-                        annotate_expression(expression, flows, value_environment, store, registry);
+                        annotate_expression(expression, flows, value_environment, store, registry)?;
                     }
                     ExpressionRpnItem::Operator { .. } => {}
                 }
@@ -854,13 +931,13 @@ fn annotate_expression(
         }
 
         ExpressionKind::Collection(items) => {
-            annotate_expressions(items, flows, value_environment, store, registry)
+            annotate_expressions(items, flows, value_environment, store, registry)?
         }
 
         ExpressionKind::MapLiteral(entries) => {
             for entry in entries {
-                annotate_expression(&mut entry.key, flows, value_environment, store, registry);
-                annotate_expression(&mut entry.value, flows, value_environment, store, registry);
+                annotate_expression(&mut entry.key, flows, value_environment, store, registry)?;
+                annotate_expression(&mut entry.value, flows, value_environment, store, registry)?;
             }
         }
 
@@ -868,34 +945,34 @@ fn annotate_expression(
         | ExpressionKind::StructDefinition(fields)
         | ExpressionKind::ChoiceConstruct { fields, .. } => {
             for field in fields {
-                annotate_declaration(field, flows, value_environment, store, registry);
+                annotate_declaration(field, flows, value_environment, store, registry)?;
             }
         }
 
         ExpressionKind::Range(start, end) => {
-            annotate_expression(start, flows, value_environment, store, registry);
-            annotate_expression(end, flows, value_environment, store, registry);
+            annotate_expression(start, flows, value_environment, store, registry)?;
+            annotate_expression(end, flows, value_environment, store, registry)?;
         }
 
         #[cfg(test)]
         ExpressionKind::FallibleCarrierConstruct { value, .. } => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::OptionPropagation { value } | ExpressionKind::Coerced { value, .. } => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::HandledFallibleExpression { value, .. } => {
-            annotate_expression(value, flows, value_environment, store, registry);
+            annotate_expression(value, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::Cast(cast) => {
-            annotate_expression(&mut cast.source, flows, value_environment, store, registry);
+            annotate_expression(&mut cast.source, flows, value_environment, store, registry)?;
         }
 
         ExpressionKind::ValueBlock { block } => {
-            annotate_value_block(block, flows, value_environment, store, registry)
+            annotate_value_block(block, flows, value_environment, store, registry)?
         }
 
         ExpressionKind::NoValue
@@ -912,7 +989,9 @@ fn annotate_expression(
     }
 
     expression.reactive_template =
-        metadata_for_expression(expression, flows, value_environment, store);
+        metadata_for_expression(expression, flows, value_environment, store)?;
+
+    Ok(())
 }
 
 fn annotate_template(
@@ -921,12 +1000,14 @@ fn annotate_template(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
-    annotate_template_tir_root(template, flows, value_environment, store, registry);
+) -> Result<(), CompilerError> {
+    annotate_template_tir_root(template, flows, value_environment, store, registry)?;
 
     // `$children(..)` wrappers are exact registry-backed TIR references by this
     // stage. Their reactive payloads are annotated through effective TIR views
     // and overlays, so there is no recursive AST wrapper tree to walk here.
+
+    Ok(())
 }
 
 fn annotate_branch_selector(
@@ -935,16 +1016,18 @@ fn annotate_branch_selector(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match selector {
         TemplateBranchSelector::Bool(condition) => {
-            annotate_expression(condition, flows, value_environment, store, registry)
+            annotate_expression(condition, flows, value_environment, store, registry)?
         }
         TemplateBranchSelector::OptionPresentCapture { scrutinee, pattern } => {
-            annotate_expression(scrutinee, flows, value_environment, store, registry);
-            annotate_match_pattern(pattern, flows, value_environment, store, registry);
+            annotate_expression(scrutinee, flows, value_environment, store, registry)?;
+            annotate_match_pattern(pattern, flows, value_environment, store, registry)?;
         }
     }
+
+    Ok(())
 }
 
 fn annotate_loop_header(
@@ -953,24 +1036,26 @@ fn annotate_loop_header(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match header {
         TemplateLoopHeader::Conditional { condition } => {
-            annotate_expression(condition, flows, value_environment, store, registry)
+            annotate_expression(condition, flows, value_environment, store, registry)?
         }
         TemplateLoopHeader::Range { bindings, range } => {
-            annotate_loop_bindings(bindings, flows, value_environment, store, registry);
-            annotate_expression(&mut range.start, flows, value_environment, store, registry);
-            annotate_expression(&mut range.end, flows, value_environment, store, registry);
+            annotate_loop_bindings(bindings, flows, value_environment, store, registry)?;
+            annotate_expression(&mut range.start, flows, value_environment, store, registry)?;
+            annotate_expression(&mut range.end, flows, value_environment, store, registry)?;
             if let Some(step) = &mut range.step {
-                annotate_expression(step, flows, value_environment, store, registry);
+                annotate_expression(step, flows, value_environment, store, registry)?;
             }
         }
         TemplateLoopHeader::Collection { bindings, iterable } => {
-            annotate_loop_bindings(bindings, flows, value_environment, store, registry);
-            annotate_expression(iterable, flows, value_environment, store, registry);
+            annotate_loop_bindings(bindings, flows, value_environment, store, registry)?;
+            annotate_expression(iterable, flows, value_environment, store, registry)?;
         }
     }
+
+    Ok(())
 }
 
 fn annotate_runtime_slot_handoff(
@@ -979,27 +1064,26 @@ fn annotate_runtime_slot_handoff(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) -> ReactiveTemplateMetadata {
-    let result = runtime_handoff::walk_owned_runtime_slot_application_handoff_mut(
+) -> Result<ReactiveTemplateMetadata, CompilerError> {
+    runtime_handoff::walk_owned_runtime_slot_application_handoff_mut(
         handoff,
-        &mut |event| -> Result<(), std::convert::Infallible> {
+        &mut |event| -> Result<(), CompilerError> {
             annotate_owned_runtime_template_handoff_event(
                 event,
                 flows,
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
             Ok(())
         },
-    );
-    let Ok(()) = result;
+    )?;
 
     // After annotating nested expression payloads, compute the handoff's own
     // reactive template metadata from its structural shape so HIR can bind the
     // runtime slot application's reactive dependencies.
     metadata_for_owned_runtime_slot_application_handoff(handoff, &mut |expression| {
-        expression.reactive_template.clone()
+        Ok(expression.reactive_template.clone())
     })
 }
 
@@ -1009,28 +1093,26 @@ fn annotate_owned_runtime_template_handoff(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) -> ReactiveTemplateMetadata {
-    let result =
-        runtime_handoff::walk_owned_runtime_template_handoff_mut(handoff, &mut |event| -> Result<
-            (),
-            std::convert::Infallible,
-        > {
-            annotate_owned_runtime_template_handoff_event(
-                event,
-                flows,
-                value_environment,
-                store,
-                registry,
-            );
-            Ok(())
-        });
-    let Ok(()) = result;
+) -> Result<ReactiveTemplateMetadata, CompilerError> {
+    runtime_handoff::walk_owned_runtime_template_handoff_mut(handoff, &mut |event| -> Result<
+        (),
+        CompilerError,
+    > {
+        annotate_owned_runtime_template_handoff_event(
+            event,
+            flows,
+            value_environment,
+            store,
+            registry,
+        )?;
+        Ok(())
+    })?;
 
     // After annotating nested expression payloads, compute the handoff's own
     // reactive template metadata from its structural shape so HIR can bind the
     // runtime template's reactive dependencies.
     metadata_for_owned_runtime_template_handoff(handoff, &mut |expression| {
-        expression.reactive_template.clone()
+        Ok(expression.reactive_template.clone())
     })
 }
 
@@ -1040,10 +1122,10 @@ fn annotate_owned_runtime_template_handoff_event(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match event {
         runtime_handoff::OwnedRuntimeTemplateWalkMutEvent::Node(node) => {
-            annotate_owned_runtime_template_node(node, flows, value_environment, store, registry);
+            annotate_owned_runtime_template_node(node, flows, value_environment, store, registry)?;
         }
 
         runtime_handoff::OwnedRuntimeTemplateWalkMutEvent::HandoffAfterBody(_handoff) => {
@@ -1052,6 +1134,8 @@ fn annotate_owned_runtime_template_handoff_event(
             // to annotate at the handoff boundary.
         }
     }
+
+    Ok(())
 }
 
 fn annotate_owned_runtime_template_node(
@@ -1060,10 +1144,10 @@ fn annotate_owned_runtime_template_node(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match node {
         OwnedRuntimeTemplateNode::DynamicExpression { expression, .. } => {
-            annotate_expression(expression, flows, value_environment, store, registry);
+            annotate_expression(expression, flows, value_environment, store, registry)?;
         }
 
         OwnedRuntimeTemplateNode::BranchChain { branches, .. } => {
@@ -1074,12 +1158,12 @@ fn annotate_owned_runtime_template_node(
                     value_environment,
                     store,
                     registry,
-                );
+                )?;
             }
         }
 
         OwnedRuntimeTemplateNode::Loop { header, .. } => {
-            annotate_loop_header(header, flows, value_environment, store, registry);
+            annotate_loop_header(header, flows, value_environment, store, registry)?;
         }
 
         OwnedRuntimeTemplateNode::Sequence { .. }
@@ -1091,6 +1175,8 @@ fn annotate_owned_runtime_template_node(
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}
     }
+
+    Ok(())
 }
 
 fn annotate_loop_bindings(
@@ -1099,13 +1185,15 @@ fn annotate_loop_bindings(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     if let Some(item) = &mut bindings.item {
-        annotate_declaration(item, flows, value_environment, store, registry);
+        annotate_declaration(item, flows, value_environment, store, registry)?;
     }
     if let Some(index) = &mut bindings.index {
-        annotate_declaration(index, flows, value_environment, store, registry);
+        annotate_declaration(index, flows, value_environment, store, registry)?;
     }
+
+    Ok(())
 }
 
 fn annotate_call_arguments(
@@ -1114,7 +1202,7 @@ fn annotate_call_arguments(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     for argument in arguments {
         annotate_expression(
             &mut argument.value,
@@ -1122,8 +1210,10 @@ fn annotate_call_arguments(
             value_environment,
             store,
             registry,
-        );
+        )?;
     }
+
+    Ok(())
 }
 
 fn annotate_fallible_handling(
@@ -1132,14 +1222,16 @@ fn annotate_fallible_handling(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match handling {
         FallibleHandling::Propagate => {}
         FallibleHandling::Handler { body, .. } => {
             let mut handler_environment = value_environment.clone();
-            annotate_nodes(body, flows, &mut handler_environment, store, registry);
+            annotate_nodes(body, flows, &mut handler_environment, store, registry)?;
         }
     }
+
+    Ok(())
 }
 
 fn annotate_match_pattern(
@@ -1148,12 +1240,12 @@ fn annotate_match_pattern(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match pattern {
         MatchPattern::Literal(value)
         | MatchPattern::OptionValue { value, .. }
         | MatchPattern::Relational { value, .. } => {
-            annotate_expression(value, flows, value_environment, store, registry)
+            annotate_expression(value, flows, value_environment, store, registry)?
         }
 
         MatchPattern::ChoiceVariant { .. }
@@ -1161,6 +1253,8 @@ fn annotate_match_pattern(
         | MatchPattern::Capture { .. }
         | MatchPattern::OptionPresentCapture { .. } => {}
     }
+
+    Ok(())
 }
 
 fn annotate_value_block(
@@ -1169,7 +1263,7 @@ fn annotate_value_block(
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     match block.as_mut() {
         ValueBlock::If(value_if) => {
             annotate_expression(
@@ -1178,7 +1272,7 @@ fn annotate_value_block(
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
             let mut then_environment = value_environment.clone();
             annotate_nodes(
                 &mut value_if.then_body,
@@ -1186,7 +1280,7 @@ fn annotate_value_block(
                 &mut then_environment,
                 store,
                 registry,
-            );
+            )?;
             let mut else_environment = value_environment.clone();
             annotate_nodes(
                 &mut value_if.else_body,
@@ -1194,7 +1288,7 @@ fn annotate_value_block(
                 &mut else_environment,
                 store,
                 registry,
-            );
+            )?;
         }
         ValueBlock::Match(value_match) => {
             annotate_expression(
@@ -1203,7 +1297,7 @@ fn annotate_value_block(
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
             for arm in &mut value_match.arms {
                 let mut arm_environment = value_environment.clone();
                 annotate_match_pattern(
@@ -1212,11 +1306,11 @@ fn annotate_value_block(
                     &mut arm_environment,
                     store,
                     registry,
-                );
+                )?;
                 if let Some(guard) = &mut arm.guard {
-                    annotate_expression(guard, flows, &mut arm_environment, store, registry);
+                    annotate_expression(guard, flows, &mut arm_environment, store, registry)?;
                 }
-                annotate_nodes(&mut arm.body, flows, &mut arm_environment, store, registry);
+                annotate_nodes(&mut arm.body, flows, &mut arm_environment, store, registry)?;
             }
             if let Some(default_body) = &mut value_match.default {
                 let mut default_environment = value_environment.clone();
@@ -1226,7 +1320,7 @@ fn annotate_value_block(
                     &mut default_environment,
                     store,
                     registry,
-                );
+                )?;
             }
         }
         ValueBlock::Catch(value_catch) => {
@@ -1236,16 +1330,18 @@ fn annotate_value_block(
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
             annotate_fallible_handling(
                 &mut value_catch.handler,
                 flows,
                 value_environment,
                 store,
                 registry,
-            );
+            )?;
         }
     }
+
+    Ok(())
 }
 
 /// Annotates a template's same-store TIR root with one composed expression
@@ -1260,52 +1356,55 @@ fn annotate_value_block(
 ///      loops, selectors, headers, bodies, and aggregate wrappers are all
 ///      reachable from the root, so one environment-aware traversal and one
 ///      composed overlay replaces the prior durable control-flow and per-body
-///      overlay paths. Missing TIR authority, foreign stores, and pre-Composed
-///      references leave the existing overlay unchanged.
+///      overlay paths. Foreign stores and pre-Composed references remain
+///      semantic non-participants; required same-store authority failures
+///      propagate as compiler errors.
 fn annotate_template_tir_root(
     template: &mut Template,
     flows: &FxHashMap<InternedPath, FunctionTemplateFlow>,
     value_environment: &mut ReactiveTemplateValueEnvironment,
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     let reference = &mut template.tir_reference;
 
     if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        return;
+        return Ok(());
     }
 
     let store_owner = store.owner();
     if !std::sync::Arc::ptr_eq(&reference.store_owner, &store_owner) {
-        return;
+        return Ok(());
     }
 
     if reference.root.store_id != store.store_id() {
-        return;
+        return Ok(());
     }
 
-    let root = match store.get_template(reference.root.template_id) {
-        Some(tir_template) => tir_template.root,
-        None => return,
-    };
+    let root = store
+        .get_template(reference.root.template_id)
+        .map(|tir_template| tir_template.root)
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "TIR reactive annotation referenced missing root template {} in store {}",
+                reference.root.template_id,
+                store.store_id()
+            ))
+        })?;
 
-    let environment_aware_payloads = match collect_environment_aware_tir_expression_payloads(
+    let environment_aware_payloads = collect_environment_aware_tir_expression_payloads(
         store,
         registry,
         root,
         reference.overlay_set_id,
         value_environment,
         flows,
-    ) {
-        Ok(payloads) => payloads,
-        Err(_) => return,
-    };
+    )?;
 
     if environment_aware_payloads.is_empty() {
-        if reference.phase < TemplateTirPhase::Composed {
-            reference.phase = TemplateTirPhase::Composed;
-        }
-        return;
+        // The reference is already at least Composed, and the collector has
+        // validated the root and its expression-overlay authority.
+        return Ok(());
     }
 
     let mut annotated_overrides = Vec::with_capacity(environment_aware_payloads.len());
@@ -1316,18 +1415,14 @@ fn annotate_template_tir_root(
             &mut payload.environment,
             store,
             registry,
-        );
+        )?;
         annotated_overrides.push((payload.site_id, Box::new(payload.expression)));
     }
 
-    let Some(new_overlay_set_id) =
-        compose_expression_overlays(registry, reference.overlay_set_id, annotated_overrides)
-    else {
-        return;
-    };
+    let new_overlay_set_id =
+        compose_expression_overlays(registry, reference.overlay_set_id, annotated_overrides)?;
 
-    if reference.phase < TemplateTirPhase::Composed {
-        reference.phase = TemplateTirPhase::Composed;
-    }
     reference.overlay_set_id = new_overlay_set_id;
+
+    Ok(())
 }

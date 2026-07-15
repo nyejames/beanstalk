@@ -21,10 +21,14 @@ mod types;
 use super::finalizer::AstFinalizer;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::templates::tir::{TemplateIrRegistry, TemplateIrStore};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 
 impl AstFinalizer<'_, '_> {
     /// Propagate direct reactive-template value metadata through the emitted AST.
-    pub(super) fn propagate_reactive_template_metadata(&self, ast: &mut [AstNode]) {
+    pub(super) fn propagate_reactive_template_metadata(
+        &self,
+        ast: &mut [AstNode],
+    ) -> Result<(), CompilerError> {
         // Borrow the module-scoped TIR store mutably so annotation can update
         // same-store finalized body roots directly. Later normalization then
         // observes the same annotated expressions instead of stale body content.
@@ -38,7 +42,7 @@ impl AstFinalizer<'_, '_> {
             .registered_template_ir_store
             .registry()
             .borrow_mut();
-        propagate_reactive_template_metadata_in_ast(ast, &mut store, &mut registry);
+        propagate_reactive_template_metadata_in_ast(ast, &mut store, &mut registry)
     }
 }
 
@@ -46,14 +50,14 @@ pub(crate) fn propagate_reactive_template_metadata_in_ast(
     ast: &mut [AstNode],
     store: &mut TemplateIrStore,
     registry: &mut TemplateIrRegistry,
-) {
+) -> Result<(), CompilerError> {
     let mut function_flows = flow::initialize_function_template_flows(ast);
 
     // Function return metadata can depend on direct calls to other functions. A tiny fixed point
     // handles helper chains without introducing a general expression dependency graph.
     loop {
         let mut next_flows = function_flows.clone();
-        flow::refresh_function_template_flows(ast, &function_flows, &mut next_flows, &*store);
+        flow::refresh_function_template_flows(ast, &function_flows, &mut next_flows, &*store)?;
 
         if next_flows == function_flows {
             break;
@@ -69,7 +73,7 @@ pub(crate) fn propagate_reactive_template_metadata_in_ast(
         &mut value_environment,
         store,
         registry,
-    );
+    )
 }
 
 #[cfg(test)]

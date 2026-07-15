@@ -115,7 +115,8 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         //  Propagate reactive template metadata
         // ----------------------------
         let reactive_template_metadata_start = Instant::now();
-        self.propagate_reactive_template_metadata(&mut emitted.ast);
+        self.propagate_reactive_template_metadata(&mut emitted.ast)
+            .map_err(|error| self.error_messages(error, &emitted.warnings, string_table))?;
         timer_log!(
             reactive_template_metadata_start,
             "AST/finalize/reactive template metadata propagated in: "

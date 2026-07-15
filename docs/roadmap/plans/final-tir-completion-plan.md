@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3c - inventory the remaining Phase 3 ownership and failure-path cleanup
-LAST_ACCEPTED_COMMIT: `f72119d05` (prior checkpoint; Slice 3E3b2 is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3c2a - require contribution and wrapper-shape authority
+LAST_ACCEPTED_COMMIT: `0b3af137c` (prior checkpoint; Slice 3E3c1 is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main`; reviewed Slice 3E3b2 change pending commit, with no unrelated uncommitted changes
+WORKTREE: `main`; reviewed Slice 3E3c1 change pending commit, with no unrelated uncommitted changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: production template/TIR modules, module maps, required Option/error boundaries and final walkers
-- post-normalization reactive metadata now has a required Finalized view. The remaining Phase 3 work must distinguish semantic optionality from missing authority, avoid merging walkers whose traversal state differs and remove only genuinely migration-shaped ownership noise.
+- code: `tir/contribution_shape.rs`, slot-composition contribution/schema helpers, runtime slot contribution sources and focused slot/classification tests
+- missing contribution nodes, referenced same-store child templates and named wrapper-set IDs are required authority. Non-child nodes, foreign child references, named-only wrappers and an empty combined wrapper set remain semantic classifications.
 ACCEPTANCE_CRITERIA:
-- Inventory remaining production `Option`/`.ok()?` paths whose state is required by final TIR authority, separating them from semantic absence.
-- Identify local recursive walkers that genuinely duplicate `TirView`, slot composition or render-unit ownership, with exact callers and differing traversal state.
-- Identify forwarding/test-only files, migration-shaped names or comments and stale `templates/mod.rs` / `tir/mod.rs` ownership text, then propose bounded implementation slices without editing code.
+- Make contribution-shape classification return a narrow `Result` and reject missing nodes or required same-store child/insert templates.
+- Propagate missing nodes and referenced wrapper-set authority through loose-contribution grouping, control-flow classification and wrapper-set merge/application helpers.
+- Preserve valid slot-routing behavior, foreign-reference handling and legitimate optional wrapper/target outcomes without merging distinct walkers.
 VALIDATION_STATE:
-- Slice 3E3b2 focused suites: passed 19 reactive metadata, 18 normalization and 75 parser TIR tests
-- Slice 3E3b2 parent `just validate`: passed cross-target Clippy, 3435 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 5 faster and 0 slower
+- Slice 3E3c1 focused suites: passed 17 reactive-template, 23 reactive metadata, 5 type-validation and 1 finalizer tests
+- Slice 3E3c1 parent `just validate`: passed cross-target Clippy, 3442 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 7 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
 BLOCKERS_OR_OPEN_DECISIONS: none
-DELEGATION_DECISION: codex-cli simple exploration - read-only inventory before final Phase 3 deletion and naming slices
+DELEGATION_DECISION: codex-cli implementation - bounded slot/contribution authority slice
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Slice 3E3b2, then run the remaining Phase 3 ownership inventory
+NEXT_RESUME_ACTION: commit Slice 3E3c1, then delegate required contribution/wrapper-shape authority
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -448,6 +448,8 @@ Slice 3E3a checkpoint: malformed-store validation now lives with its focused TIR
 Slice 3E3b1 checkpoint: HIR template normalization now carries a required module TIR registry. Every production and focused context supplies the authority directly, and registry-absence branches no longer skip overlay normalization, classification, folding, metadata, handoff or kind reads.
 
 Slice 3E3b2 checkpoint: post-normalization reactive metadata now requires a Finalized registry-backed view. Exact child view identity selects the owning store for slot-plan traversal, semantic expression-override absence still uses the stored payload, and malformed store, root, node, overlay, plan or site authority propagates as an internal compiler error instead of downgrading to raw-store reads.
+
+Slice 3E3c1 checkpoint: reactive annotation, flow refresh and raw structural metadata traversal now propagate same-store root, overlay, node, slot-plan, slot-site and resolver failures through the AST finalizer. Below-Composed and foreign-store templates remain semantic non-participants, while the flow-aware collector and effective-view paths keep their distinct state and owned runtime handoffs use one fallible canonical walker.
 
 #### Phase 3 acceptance
 

@@ -185,86 +185,92 @@ pub(crate) enum OwnedRuntimeSlotSiteRenderPiece {
 /// the data prevents three separate local copies from drifting out of sync.
 ///
 /// `callback` is invoked on a node before the walk recurses into its children, preserving the
-/// document order of the previous local walkers. This immutable variant is for read-only
-/// consumers such as reactive metadata merge.
-pub(crate) fn walk_owned_runtime_template_handoff(
+/// document order of the previous local walkers. The callback may short-circuit
+/// the walk by returning `Err`.
+pub(crate) fn walk_owned_runtime_template_handoff<E>(
     handoff: &OwnedRuntimeTemplateHandoff,
-    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode),
-) {
+    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode) -> Result<(), E>,
+) -> Result<(), E> {
     match &handoff.body {
         OwnedRuntimeTemplateBody::Render(node) => {
-            walk_owned_runtime_template_node(node, callback);
+            walk_owned_runtime_template_node(node, callback)?;
         }
 
         OwnedRuntimeTemplateBody::RuntimeSlotApplication(handoff) => {
-            walk_owned_runtime_slot_application_handoff(handoff, callback);
+            walk_owned_runtime_slot_application_handoff(handoff, callback)?;
         }
     }
+
+    Ok(())
 }
 
 /// Walks every nested `OwnedRuntimeTemplateNode` in `handoff` and calls `callback` for each.
 ///
 /// See [`walk_owned_runtime_template_handoff`] for traversal order guarantees.
-pub(crate) fn walk_owned_runtime_slot_application_handoff(
+pub(crate) fn walk_owned_runtime_slot_application_handoff<E>(
     handoff: &OwnedRuntimeSlotApplicationHandoff,
-    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode),
-) {
-    walk_owned_runtime_template_node(&handoff.wrapper, callback);
+    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode) -> Result<(), E>,
+) -> Result<(), E> {
+    walk_owned_runtime_template_node(&handoff.wrapper, callback)?;
 
     for source in &handoff.contribution_sources {
-        walk_owned_runtime_template_node(&source.render_root, callback);
+        walk_owned_runtime_template_node(&source.render_root, callback)?;
     }
 
     for site in &handoff.slot_sites {
-        walk_owned_runtime_slot_site_render_plan(&site.render_plan, callback);
+        walk_owned_runtime_slot_site_render_plan(&site.render_plan, callback)?;
     }
+
+    Ok(())
 }
 
-fn walk_owned_runtime_slot_site_render_plan(
+fn walk_owned_runtime_slot_site_render_plan<E>(
     plan: &OwnedRuntimeSlotSiteRenderPlan,
-    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode),
-) {
+    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode) -> Result<(), E>,
+) -> Result<(), E> {
     for piece in &plan.pieces {
         if let OwnedRuntimeSlotSiteRenderPiece::Render(node) = piece {
-            walk_owned_runtime_template_node(node, callback);
+            walk_owned_runtime_template_node(node, callback)?;
         }
     }
+
+    Ok(())
 }
 
 /// Walks every nested `OwnedRuntimeTemplateNode` in `node` and calls `callback` for each.
 ///
 /// See [`walk_owned_runtime_template_handoff`] for traversal order guarantees.
-pub(crate) fn walk_owned_runtime_template_node(
+pub(crate) fn walk_owned_runtime_template_node<E>(
     node: &OwnedRuntimeTemplateNode,
-    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode),
-) {
-    callback(node);
+    callback: &mut impl FnMut(&OwnedRuntimeTemplateNode) -> Result<(), E>,
+) -> Result<(), E> {
+    callback(node)?;
 
     match node {
         OwnedRuntimeTemplateNode::Sequence { children, .. } => {
             for child in children {
-                walk_owned_runtime_template_node(child, callback);
+                walk_owned_runtime_template_node(child, callback)?;
             }
         }
 
         OwnedRuntimeTemplateNode::ChildTemplate { template, .. } => {
-            walk_owned_runtime_template_handoff(template, callback);
+            walk_owned_runtime_template_handoff(template, callback)?;
         }
 
         OwnedRuntimeTemplateNode::ConditionalWrapper { child, wrapper, .. } => {
-            walk_owned_runtime_template_node(child, callback);
-            walk_owned_runtime_template_node(wrapper, callback);
+            walk_owned_runtime_template_node(child, callback)?;
+            walk_owned_runtime_template_node(wrapper, callback)?;
         }
 
         OwnedRuntimeTemplateNode::BranchChain {
             branches, fallback, ..
         } => {
             for branch in branches {
-                walk_owned_runtime_template_node(&branch.body, callback);
+                walk_owned_runtime_template_node(&branch.body, callback)?;
             }
 
             if let Some(fallback) = fallback {
-                walk_owned_runtime_template_node(fallback, callback);
+                walk_owned_runtime_template_node(fallback, callback)?;
             }
         }
 
@@ -273,10 +279,10 @@ pub(crate) fn walk_owned_runtime_template_node(
             aggregate_wrapper,
             ..
         } => {
-            walk_owned_runtime_template_node(body, callback);
+            walk_owned_runtime_template_node(body, callback)?;
 
             if let Some(aggregate_wrapper) = aggregate_wrapper {
-                walk_owned_runtime_template_node(aggregate_wrapper, callback);
+                walk_owned_runtime_template_node(aggregate_wrapper, callback)?;
             }
         }
 
@@ -287,6 +293,8 @@ pub(crate) fn walk_owned_runtime_template_node(
         | OwnedRuntimeTemplateNode::RuntimeSlotSite { .. }
         | OwnedRuntimeTemplateNode::Slot { .. } => {}
     }
+
+    Ok(())
 }
 
 /// Events emitted by the mutable owned-runtime-template walker.

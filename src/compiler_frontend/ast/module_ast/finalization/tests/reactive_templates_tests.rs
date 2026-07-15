@@ -24,10 +24,10 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::tir::{
-    ExpressionSiteId, TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
-    TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateOverlaySet, TemplateOverlaySetId, TemplateRef, TemplateTirChildReference,
-    TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+    ExpressionSiteId, TemplateIr, TemplateIrBranch, TemplateIrId, TemplateIrNode,
+    TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary,
+    TemplateLoopHeaderExpressionSites, TemplateOverlaySet, TemplateOverlaySetId, TemplateRef,
+    TemplateTirChildReference, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotApplicationHandoff, OwnedRuntimeSlotSite, OwnedRuntimeSlotSiteRenderPiece,
@@ -200,6 +200,119 @@ fn template_from_expression_statement(ast: &[AstNode]) -> &Template {
 }
 
 #[test]
+fn reactive_annotation_rejects_missing_same_store_root_template() {
+    let mut store = TemplateIrStore::new();
+    let location = test_location(2);
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), TemplateIrId::new(99)),
+            store_owner: store.owner(),
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
+    let mut ast = vec![node(
+        NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
+        location,
+    )];
+    let mut registry = TemplateIrRegistry::new();
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect_err("missing same-store root template authority must propagate");
+
+    assert!(format!("{error:?}").contains("root"));
+}
+
+#[test]
+fn reactive_annotation_rejects_missing_same_store_root_overlay_set() {
+    let mut store = TemplateIrStore::new();
+    let location = test_location(2);
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: Vec::new(),
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id: TemplateOverlaySetId::empty_for_test(),
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
+    let mut ast = vec![node(
+        NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
+        location,
+    )];
+    let mut registry = TemplateIrRegistry::new();
+
+    let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect_err("missing same-store root overlay authority must propagate");
+
+    assert!(format!("{error:?}").contains("overlay set"));
+}
+
+#[test]
+fn reactive_annotation_rejects_missing_same_store_expression_overlay() {
+    let mut store = TemplateIrStore::new();
+    let location = test_location(2);
+    let root = store.push_node(TemplateIrNode::new(
+        TemplateIrNodeKind::Sequence {
+            children: Vec::new(),
+        },
+        location.clone(),
+    ));
+    let template_id = store.push_template(TemplateIr::new(
+        root,
+        Style::default(),
+        TemplateType::String,
+        TemplateIrSummary::empty(),
+        location.clone(),
+    ));
+    let mut registry = TemplateIrRegistry::new();
+    let mut foreign_registry = TemplateIrRegistry::new();
+    let foreign_expression_overlay_id =
+        foreign_registry.allocate_expression_overlay(TirExpressionOverlay::default());
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(foreign_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store.store_id(), template_id),
+            store_owner: store.owner(),
+            phase: TemplateTirPhase::Composed,
+            overlay_set_id,
+        },
+        TemplateType::StringFunction,
+        location.clone(),
+    );
+    let mut ast = vec![node(
+        NodeKind::ExpressionStatement(Expression::template(template, ValueMode::ImmutableOwned)),
+        location,
+    )];
+
+    let error = propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect_err("missing expression overlay authority must propagate");
+
+    assert!(format!("{error:?}").contains("expression overlay"));
+}
+
+#[test]
 fn rebases_reactive_parameter_subscription_to_call_argument_source() {
     let mut string_table = StringTable::new();
     let mut store = TemplateIrStore::new();
@@ -250,7 +363,9 @@ fn rebases_reactive_parameter_subscription_to_call_argument_source() {
     ];
 
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let metadata = first_expression_statement_metadata(&ast);
     assert_eq!(metadata.subscriptions.len(), 1);
@@ -319,7 +434,9 @@ fn substitutes_string_parameter_template_value_from_call_argument() {
     ];
 
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let metadata = first_expression_statement_metadata(&ast);
     assert_eq!(metadata.subscriptions.len(), 1);
@@ -386,7 +503,9 @@ fn references_use_metadata_computed_for_prior_declarations() {
     ];
 
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(expression) = &ast[2].kind else {
         panic!("expected expression statement reference");
@@ -428,7 +547,9 @@ fn runtime_string_operations_do_not_inherit_nested_template_metadata() {
         test_location(1),
     )];
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(expression) = &ast[0].kind else {
         panic!("expected expression statement node");
@@ -510,7 +631,8 @@ fn annotates_same_store_branch_body_tir_root_metadata() {
 
     let mut registry = TemplateIrRegistry::new();
     registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let template = template_from_expression_statement(&ast);
     let metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
@@ -601,7 +723,8 @@ fn annotates_same_store_fallback_body_tir_root_metadata() {
 
     let mut registry = TemplateIrRegistry::new();
     registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let template = template_from_expression_statement(&ast);
     let metadata = linear_tir_expression_overlay_metadata(&registry, template, fallback_site_id)
@@ -683,7 +806,8 @@ fn annotates_same_store_loop_body_tir_root_metadata() {
 
     let mut registry = TemplateIrRegistry::new();
     registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let template = template_from_expression_statement(&ast);
     let metadata = linear_tir_expression_overlay_metadata(&registry, template, body_site_id)
@@ -786,7 +910,8 @@ fn annotates_branch_selector_and_body_through_one_root_overlay() {
 
     let mut registry = TemplateIrRegistry::new();
     registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(Expression {
         kind: ExpressionKind::Template(template),
@@ -892,7 +1017,8 @@ fn annotates_existing_effective_expression_override_instead_of_structural_payloa
         ),
     ];
 
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(Expression {
         kind: ExpressionKind::Template(template),
@@ -1010,7 +1136,8 @@ fn annotates_existing_same_store_child_expression_override() {
         ),
     ];
 
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(Expression {
         kind: ExpressionKind::Template(template),
@@ -1118,7 +1245,8 @@ fn option_capture_body_uses_scrutinee_reactive_metadata() {
 
     let mut registry = TemplateIrRegistry::new();
     registry.allocate_overlay_set(TemplateOverlaySet::empty());
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(Expression {
         kind: ExpressionKind::Template(template),
@@ -1188,7 +1316,8 @@ fn annotates_same_store_linear_tir_root_metadata_through_overlay() {
         location,
     )];
 
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(expression) = &ast[0].kind else {
         panic!("expected expression statement");
@@ -1238,7 +1367,9 @@ fn sink_operand_expressions_keep_reactive_template_metadata() {
     ];
 
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::PushStartRuntimeFragment(fragment) = &ast[0].kind else {
         panic!("expected runtime fragment push");
@@ -1293,7 +1424,9 @@ fn annotates_reactive_subscription_in_runtime_slot_site_render_piece() {
         Expression::runtime_slot_application_handoff(handoff, ValueMode::ImmutableOwned);
     let mut ast = vec![node(NodeKind::ExpressionStatement(expression), location)];
     let mut registry = TemplateIrRegistry::new();
-    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry);
+    registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    propagate_reactive_template_metadata_in_ast(&mut ast, &mut store, &mut registry)
+        .expect("reactive template metadata propagation should succeed");
 
     let NodeKind::ExpressionStatement(expression) = &ast[0].kind else {
         panic!("expected expression statement");
