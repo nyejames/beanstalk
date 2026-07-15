@@ -19,18 +19,19 @@ The target result is a compiler that:
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
-STATUS: active
-CURRENT_SLICE: Phase 6B, exact Wasm prose and internal error fixes
-LAST_ACCEPTED_COMMIT: `ca0477ccb`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 6A accepted and awaiting its checkpoint commit
+STATUS: final review
+CURRENT_SLICE: plan-wide final audit
+LAST_ACCEPTED_COMMIT: `97b2a4275`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 6B accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: Wasm lowering ownership and internal invariant wording
-- code: runtime string module prose and unsupported HIR terminator reporting
+- docs: this plan, roadmap sequencing and affected canonical docs
+- code: the complete cleanup-plan diff since audit anchor `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`
 ACCEPTANCE_CRITERIA:
-- the runtime string module documentation contains no em dash
-- unsupported Wasm lowering reports name `HirTerminator::Match` precisely
-- the change stays inside the two named Wasm files and focused owner tests
+- independent audit finds no unresolved correctness, ownership, duplication, diagnostic or coverage issue
+- every retained plan finding is closed without TIR-owned edits
+- final validation and benchmark guard pass after any audit corrections
+- the completed plan link is removed from the roadmap only after acceptance
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -59,12 +60,14 @@ VALIDATION_STATE:
 - Phase 5 `just validate`: passed, including cross-target Clippy, 3,400 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 6A focused scaffold tests: passed, 71 tests
 - Phase 6A `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
-DOCS_IMPACT: no Phase 6A docs or progress-matrix change is needed.
+- Phase 6B focused Wasm tests: passed, 23 tests
+- Phase 6B `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+DOCS_IMPACT: all identified canonical docs are aligned. No progress-matrix status change is needed.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 6B is a bounded two-file Wasm cleanup
-NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
+DELEGATION_DECISION: codex-cli audit worker - the complete plan requires independent final review
+NEXT_WORKER_ORDER: codex-cli, parent-audit
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 6A, then delegate Phase 6B Wasm cleanup
+NEXT_RESUME_ACTION: commit accepted Phase 6B, then run the mandatory plan-wide final audit
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -591,6 +594,9 @@ Changes:
 Tests cover `.gitignore` whitespace, trailing slash, near matches, Unix tilde forms, Windows separator forms and missing home variables.
 
 ### Slice 6B: Exact small prose and internal error fixes
+
+Status: Complete. Runtime string layout comments use normal punctuation and the unsupported Wasm
+lowering error names `HirTerminator::Match` precisely. Focused Wasm tests and `just validate` passed.
 
 Files:
 

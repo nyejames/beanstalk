@@ -61,7 +61,7 @@ pub(crate) fn lower_terminator(
         HirTerminator::RuntimeFailure { .. } => Ok(WasmLirTerminator::Trap),
         HirTerminator::AssertFailure { .. } => Ok(WasmLirTerminator::Trap),
         HirTerminator::Match { .. } => Err(lir_transformation_error(
-            "Wasm lowering does not yet support this terminator",
+            "Wasm lowering does not yet support HirTerminator::Match",
         )),
     }
 }

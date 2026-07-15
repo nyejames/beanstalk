@@ -1,13 +1,13 @@
 //! Runtime string helper identifiers.
 //!
 //! Buffer layout (12 bytes, allocated by `StringNewBuffer`):
-//!   offset 0: content_ptr  (i32) — pointer to accumulated byte region
-//!   offset 4: content_len  (i32) — current byte count
-//!   offset 8: capacity     (i32) — allocated capacity of the content region
+//!   offset 0: content_ptr  (i32): pointer to accumulated byte region
+//!   offset 4: content_len  (i32): current byte count
+//!   offset 8: capacity     (i32): allocated capacity of the content region
 //!
 //! Finalized string layout (8 bytes, produced by `StringFinish`):
-//!   offset 0: ptr (i32) — pointer to UTF-8 byte content
-//!   offset 4: len (i32) — byte length
+//!   offset 0: ptr (i32): pointer to UTF-8 byte content
+//!   offset 4: len (i32): byte length
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum WasmRuntimeHelper {
