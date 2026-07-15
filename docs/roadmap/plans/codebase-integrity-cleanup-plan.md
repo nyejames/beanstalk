@@ -19,19 +19,19 @@ The target result is a compiler that:
 ## Current state
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
-STATUS: final review corrections
-CURRENT_SLICE: focused re-audit of final-review corrections
-LAST_ACCEPTED_COMMIT: `9bcb64143`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, audit correction 2 accepted and awaiting its checkpoint commit
+STATUS: complete
+CURRENT_SLICE: none
+LAST_ACCEPTED_COMMIT: `49734bb86` (final implementation correction)
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, clean at plan completion
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: final audit record, exact filesystem identity and generic inference contracts
-- code: audit corrections in hash-root discovery and transactional TypeId binding collection
+- docs: completed plan record and final roadmap sequencing
+- code: all plan implementation commits through `49734bb86`
 ACCEPTANCE_CRITERIA:
-- focused independent audit confirms both initial findings are closed
-- corrections introduce no new ownership, diagnostic, duplication or coverage drift
-- final validation evidence remains current after any required re-audit correction
-- no TIR-owned path changed
+- all retained findings, final-audit corrections and completion criteria are closed
+- initial plan-wide audit and focused correction re-audit have no unresolved source finding
+- final `just validate` and 28-case benchmark guard passed after the last code correction
+- no TIR-owned path changed and the completed roadmap link is removed
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -66,12 +66,13 @@ VALIDATION_STATE:
 - Audit correction 1 `just validate`: passed, including cross-target Clippy, 3,410 local unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Audit correction 2 focused generic tests: passed, 28 TypeEnvironment tests, 10 inference tests and 1,623 HTML integration cases
 - Audit correction 2 `just validate`: passed, including cross-target Clippy, 3,413 unit tests, 1,764 integration tests, docs and 28 benchmark cases
+- Focused correction re-audit: passed; both findings closed with no remaining source, diagnostic, ownership, duplication, test-design or TIR issue
 DOCS_IMPACT: all identified canonical docs are aligned. No progress-matrix status change is needed.
-BLOCKERS_OR_OPEN_DECISIONS: both required audit corrections are accepted. Focused independent re-audit remains.
-DELEGATION_DECISION: codex-cli audit worker - both final-review corrections require closure review
-NEXT_WORKER_ORDER: codex-cli, parent-audit
-STOP_REASON: none
-NEXT_RESUME_ACTION: commit audit correction 2, then run focused re-audit
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: none - plan work and final review are complete
+NEXT_WORKER_ORDER: none
+STOP_REASON: active work source complete
+NEXT_RESUME_ACTION: none
 
 ## Final audit record
 
@@ -80,7 +81,8 @@ non-UTF-8 direct-child filenames instead of silently skipping them. Recursive ge
 collection must be transactional so a structural mismatch cannot retain partial evidence. Both
 remain inside the original Phase 1 and Phase 2 scopes. The hash-root correction is accepted and
 fully validated. Transactional binding collection and its nominal/function regressions are also
-accepted and fully validated. A focused re-audit remains before plan acceptance.
+accepted and fully validated. The focused re-audit closed both findings and found no remaining
+source, diagnostic, ownership, duplication, test-design or TIR issue.
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
