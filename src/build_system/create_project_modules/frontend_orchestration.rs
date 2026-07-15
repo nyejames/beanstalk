@@ -473,6 +473,7 @@ impl FrontendModuleBuildContext<'_> {
         Self::merge_file_preparation_chunks(
             compiler,
             preparation_chunks,
+            module.len(),
             base_len,
             external_import_resolution_table,
             &options,
@@ -487,6 +488,7 @@ impl FrontendModuleBuildContext<'_> {
     fn merge_file_preparation_chunks(
         compiler: &mut CompilerFrontend,
         mut preparation_chunks: Vec<FilePreparationChunk>,
+        module_file_count: usize,
         base_len: usize,
         external_import_resolution_table: &ExternalImportResolutionTable,
         options: &HeaderParseOptions,
@@ -498,6 +500,12 @@ impl FrontendModuleBuildContext<'_> {
             "File preparation results sorted in: ",
             || preparation_chunks.sort_by_key(|chunk| chunk.chunk_index),
         );
+
+        // Release-safe validation replaces the previous ordering debug_asserts so release
+        // builds reject malformed scheduler payloads with a CompilerError instead of silently
+        // dropping, reordering or truncating prepared files.
+        validate_preparation_chunk_order(&preparation_chunks, module_file_count)
+            .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
 
         let mut prepared_outputs = Vec::new();
         let mut warnings = Vec::new();
@@ -511,14 +519,7 @@ impl FrontendModuleBuildContext<'_> {
             .sum();
         prepared_outputs.reserve(prepared_file_capacity);
 
-        let mut expected_file_index = 0usize;
         for chunk in preparation_chunks {
-            debug_assert_eq!(
-                chunk.file_range.start, expected_file_index,
-                "file preparation chunks must be merged in original source-file order"
-            );
-            expected_file_index = chunk.file_range.end;
-
             let remap = timed_frontend_substep(
                 "file_prepare_string_table_delta_merge_ms",
                 "File preparation string-table delta merged in: ",
@@ -536,14 +537,7 @@ impl FrontendModuleBuildContext<'_> {
                 add_frontend_counter(FrontendCounter::FilePreparationNonIdentityRemapCount, 1);
             }
 
-            for (expected_chunk_file_index, prepared_file) in
-                (chunk.file_range.start..).zip(chunk.results)
-            {
-                debug_assert_eq!(
-                    prepared_file.file_index, expected_chunk_file_index,
-                    "prepared file records must stay ordered inside each chunk"
-                );
-
+            for prepared_file in chunk.results {
                 match prepared_file.result {
                     Ok(mut output) => {
                         if output.const_template_count > 0 {
@@ -837,6 +831,77 @@ fn plan_file_preparation_chunks(
     }
 
     plans
+}
+
+/// Validate that sorted file-preparation chunks cover the module input exactly, in order, with
+/// no gaps, overlaps, mismatched record counts or wrong internal file indexes.
+///
+/// WHAT: release-safe replacement for the ordering `debug_assert`s that previously guarded the
+///      merge loop. Malformed scheduler payloads produce a `CompilerError` instead of silently
+///      dropping, reordering or truncating prepared files.
+/// WHY:  release builds must reject corrupted chunk payloads with the same invariant checks as
+///      debug builds, and the merge path must not silently heal a broken scheduler result.
+fn validate_preparation_chunk_order(
+    preparation_chunks: &[FilePreparationChunk],
+    module_file_count: usize,
+) -> Result<(), CompilerError> {
+    let mut expected_file_index = 0usize;
+
+    for chunk in preparation_chunks {
+        if chunk.file_range.start != expected_file_index {
+            return Err(CompilerError::compiler_error(format!(
+                "file preparation chunk {} starts at file index {} but expected \
+                 {expected_file_index}; chunks must be ordered, non-overlapping and gap-free",
+                chunk.chunk_index, chunk.file_range.start,
+            )));
+        }
+
+        if chunk.file_range.end < chunk.file_range.start {
+            return Err(CompilerError::compiler_error(format!(
+                "file preparation chunk {} has reversed range {:?}",
+                chunk.chunk_index, chunk.file_range,
+            )));
+        }
+
+        if chunk.file_range.end > module_file_count {
+            return Err(CompilerError::compiler_error(format!(
+                "file preparation chunk {} ends at file index {} but the module has only \
+                 {module_file_count} files",
+                chunk.chunk_index, chunk.file_range.end,
+            )));
+        }
+
+        if chunk.results.len() != chunk.file_range.len() {
+            return Err(CompilerError::compiler_error(format!(
+                "file preparation chunk {} declares range {:?} ({} files) but carries {} results",
+                chunk.chunk_index,
+                chunk.file_range,
+                chunk.file_range.len(),
+                chunk.results.len(),
+            )));
+        }
+
+        for (expected_index, prepared_file) in (chunk.file_range.start..).zip(&chunk.results) {
+            if prepared_file.file_index != expected_index {
+                return Err(CompilerError::compiler_error(format!(
+                    "file preparation chunk {} record carries file index {} but expected \
+                     {expected_index}",
+                    chunk.chunk_index, prepared_file.file_index,
+                )));
+            }
+        }
+
+        expected_file_index = chunk.file_range.end;
+    }
+
+    if expected_file_index != module_file_count {
+        return Err(CompilerError::compiler_error(format!(
+            "file preparation chunks cover {expected_file_index} files but the module has \
+             {module_file_count} files",
+        )));
+    }
+
+    Ok(())
 }
 
 fn record_module_input_counters(module: &[InputFile]) -> usize {

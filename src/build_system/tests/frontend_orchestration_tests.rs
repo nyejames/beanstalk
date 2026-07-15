@@ -18,7 +18,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderKind, HeaderParseOptions, parse_headers,
+    FileFrontendPrepareError, HeaderKind, HeaderParseOptions, parse_headers,
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
@@ -761,6 +761,7 @@ fn chunked_file_preparation_merges_in_source_order_after_out_of_order_completion
     let (headers, warnings) = super::FrontendModuleBuildContext::merge_file_preparation_chunks(
         &mut fixture.frontend,
         chunks,
+        fixture.input_files.len(),
         base_len,
         &ExternalImportResolutionTable::default(),
         &options,
@@ -866,6 +867,143 @@ fn chunked_file_preparation_preserves_warning_source_order() {
         warning_names, expected_names,
         "warnings should aggregate in source-file order"
     );
+}
+
+//  ----------------------------------------------------------------------
+//  Malformed file-preparation payload rejection
+//  ----------------------------------------------------------------------
+
+/// Build a `PreparedFileResult` carrying a dummy error so the validation path can inspect
+/// `file_index` without needing a full prepared output.
+fn dummy_prepared_file_result(file_index: usize) -> super::PreparedFileResult {
+    super::PreparedFileResult {
+        file_index,
+        result: Err(FileFrontendPrepareError {
+            warnings: Vec::new(),
+            diagnostic: Box::new(CompilerDiagnostic::unreachable_match_arm(
+                SourceLocation::default(),
+            )),
+        }),
+    }
+}
+
+/// Build a chunk with the given file range and one result per supplied file index.
+///
+/// Pass explicit `file_indexes` to create a wrong-index malformation or a length mismatch.
+fn dummy_preparation_chunk(
+    chunk_index: usize,
+    file_range: std::ops::Range<usize>,
+    file_indexes: Vec<usize>,
+) -> super::FilePreparationChunk {
+    super::FilePreparationChunk {
+        chunk_index,
+        file_range,
+        local_string_table: StringTable::new(),
+        results: file_indexes
+            .into_iter()
+            .map(dummy_prepared_file_result)
+            .collect(),
+    }
+}
+
+/// Merge malformed chunks through the real merge path and assert the boundary returns an
+/// infrastructure `CompilerError` whose message contains `expected_fragment`.
+fn assert_malformed_chunks_rejected(
+    chunks: Vec<super::FilePreparationChunk>,
+    module_file_count: usize,
+    expected_fragment: &str,
+) {
+    let mut fixture = frontend_preparation_fixture(&[("a.bst", "x #= 1\n")]);
+    let options = HeaderParseOptions {
+        entry_file_id: fixture
+            .frontend
+            .source_files
+            .get_by_canonical_path(&fixture.entry_file_path)
+            .map(|identity| identity.file_id),
+        project_path_resolver: fixture.frontend.project_path_resolver.clone(),
+    };
+    let base_len = fixture.frontend.string_table.fork_source().base_len();
+
+    let error_messages = match super::FrontendModuleBuildContext::merge_file_preparation_chunks(
+        &mut fixture.frontend,
+        chunks,
+        module_file_count,
+        base_len,
+        &ExternalImportResolutionTable::default(),
+        &options,
+    ) {
+        Err(messages) => messages,
+        Ok(_) => panic!("malformed chunk payload should be rejected, but merge succeeded"),
+    };
+
+    assert!(
+        error_messages.has_errors(),
+        "malformed chunks should produce at least one error diagnostic"
+    );
+
+    let infrastructure_error = error_messages.diagnostics.iter().find(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::InfrastructureError { .. }
+        )
+    });
+    let infrastructure_error = infrastructure_error
+        .expect("malformed chunks should produce an infrastructure CompilerError");
+
+    match &infrastructure_error.payload {
+        DiagnosticPayload::InfrastructureError { msg, .. } => {
+            assert!(
+                msg.contains(expected_fragment),
+                "error message `{msg}` should contain `{expected_fragment}`"
+            );
+        }
+        _ => unreachable!("already matched InfrastructureError"),
+    }
+}
+
+#[test]
+fn merge_rejects_chunk_gap_in_file_indexes() {
+    let chunk_zero = dummy_preparation_chunk(0, 0..4, (0..4).collect::<Vec<_>>());
+    let chunk_one = dummy_preparation_chunk(1, 5..8, (5..8).collect::<Vec<_>>());
+
+    assert_malformed_chunks_rejected(vec![chunk_zero, chunk_one], 8, "but expected 4");
+}
+
+#[test]
+fn merge_rejects_chunk_overlap_in_file_indexes() {
+    let chunk_zero = dummy_preparation_chunk(0, 0..4, (0..4).collect::<Vec<_>>());
+    let chunk_one = dummy_preparation_chunk(1, 3..8, (3..8).collect::<Vec<_>>());
+
+    assert_malformed_chunks_rejected(vec![chunk_zero, chunk_one], 8, "but expected 4");
+}
+
+#[test]
+fn merge_rejects_wrong_internal_file_index_in_chunk() {
+    let chunk = dummy_preparation_chunk(0, 0..4, vec![0, 1, 2, 7]);
+
+    assert_malformed_chunks_rejected(vec![chunk], 4, "but expected 3");
+}
+
+#[test]
+fn merge_rejects_missing_tail_coverage() {
+    let chunk_zero = dummy_preparation_chunk(0, 0..4, (0..4).collect::<Vec<_>>());
+
+    assert_malformed_chunks_rejected(vec![chunk_zero], 8, "cover 4 files but the module has 8");
+}
+
+#[test]
+fn merge_rejects_chunk_range_past_module_tail() {
+    let chunk = dummy_preparation_chunk(0, 0..5, (0..5).collect::<Vec<_>>());
+
+    assert_malformed_chunks_rejected(vec![chunk], 4, "module has only 4 files");
+}
+
+#[test]
+fn merge_rejects_reversed_chunk_range() {
+    let chunk = dummy_preparation_chunk(0, 0..4, (0..4).collect::<Vec<_>>());
+    let reversed = dummy_preparation_chunk(1, std::ops::Range { start: 4, end: 3 }, Vec::new());
+
+    assert_malformed_chunks_rejected(vec![chunk, reversed], 4, "has reversed range");
 }
 
 #[cfg(all(feature = "timers", feature = "benchmark_counters"))]

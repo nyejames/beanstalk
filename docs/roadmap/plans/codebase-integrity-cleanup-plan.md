@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3A, validate file-preparation chunk order in release builds
-LAST_ACCEPTED_COMMIT: `37cd80e6b`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2D accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 3B, use one canonical config identity
+LAST_ACCEPTED_COMMIT: `90cbb06ab`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 3A accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: build-system/frontend boundary, diagnostics and release-safe infrastructure invariants
-- code: `src/build_system/create_project_modules/frontend_orchestration.rs` file-preparation chunk assembly
+- docs: Stage 0 config ownership, filesystem identity and diagnostic scope classification
+- code: `src/build_system/project_config/parsing.rs` canonical config resolver and diagnostic classification
 ACCEPTANCE_CRITERIA:
-- chunk ranges start at the next expected file index and never overlap
-- prepared records match their expected file indexes
-- final coverage matches the module input length
-- malformed scheduler payloads return `CompilerError` through `CompilerMessages`
-- gap, overlap, wrong-index, missing-tail and valid strategy tests cover the invariant
+- resolver directory comes only from the canonical config path
+- a canonical config path without a parent returns an explicit infrastructure/file-path error
+- authored spelling remains only for source locations and uses the same interned identity as tokenization
+- diagnostic classification compares exact interned scope identity without filesystem recanonicalization
+- imported config support files remain non-entry files and `paths_match` is removed when unused
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -45,12 +45,14 @@ VALIDATION_STATE:
 - Phase 2C `just validate`: passed, including cross-target Clippy, 3,362 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 2D focused import-environment and diagnostic-model tests: passed
 - Phase 2D `just validate`: passed, including cross-target Clippy, 3,366 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 3A focused orchestration invariant tests: passed, 19 tests
+- Phase 3A `just validate`: passed, including cross-target Clippy, 3,372 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 3A is a bounded build-system invariant slice
+DELEGATION_DECISION: ollama implementation worker - Phase 3B is a bounded canonical config identity slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 2D, then delegate Phase 3A release-safe chunk validation
+NEXT_RESUME_ACTION: commit accepted Phase 3A, then delegate Phase 3B canonical config identity
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -346,6 +348,11 @@ Prefer making the existing duplicate-declaration payload's previous location opt
 - no user diagnostic contains a fabricated empty previous location
 
 ## Phase 3: Harden Stage 0 and config invariants
+
+Progress: Slice 3A is complete. File-preparation chunks now receive release-safe validation before
+string-table merging. Malformed gaps, overlaps, ranges, record indexes and tail coverage return an
+infrastructure error through `CompilerMessages`. Valid serial, per-file and chunked strategies retain
+their deterministic merge behavior. Focused tests and `just validate` passed.
 
 ### Slice 3A: Validate file-preparation chunk order in release builds
 
