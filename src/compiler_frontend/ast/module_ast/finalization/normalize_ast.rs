@@ -602,7 +602,7 @@ fn normalize_expression_templates_with_context(
                     template,
                     context,
                     &final_classification,
-                    reactive_template_metadata_from_current_store(template, context),
+                    reactive_template_metadata_from_current_store(template, context)?,
                 )?
             }
         }
@@ -742,7 +742,7 @@ fn normalize_expression_templates_with_context(
         None => {
             if let ExpressionKind::Template(template) = &expression.kind {
                 expression.reactive_template =
-                    reactive_template_metadata_from_current_store(template, context);
+                    reactive_template_metadata_from_current_store(template, context)?;
             }
         }
     }
@@ -765,10 +765,10 @@ enum NormalizedTemplateExpression {
 fn reactive_template_metadata_from_current_store(
     template: &Template,
     context: &TemplateNormalizationContext<'_, '_>,
-) -> Option<ReactiveTemplateMetadata> {
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     // Normalization has the module store, so it should refresh metadata from
     // the same finalized TIR roots that HIR handoff materialization consumes.
-    // Prefer a final effective `TirView` so expression overlays are honored.
+    // Use the final effective `TirView` so expression overlays are honored.
     let store = context.template_ir_store.borrow();
     let registry = context.template_ir_registry.borrow();
     reactive_template_metadata_from_store(template, &store, &registry)
@@ -778,18 +778,30 @@ fn reactive_template_metadata_from_store(
     template: &Template,
     store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
-) -> Option<ReactiveTemplateMetadata> {
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
+    let mut resolver_error = None;
     reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry(
         template,
         store,
         registry,
         &mut metadata,
-        &mut |expression| {
-            expression_reactive_template_metadata_from_store(expression, store, registry)
+        &mut |expression| match expression_reactive_template_metadata_from_store(
+            expression, store, registry,
+        ) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                resolver_error.get_or_insert(error);
+                None
+            }
         },
-    );
-    Some(metadata)
+    )?;
+
+    if let Some(error) = resolver_error {
+        return Err(error);
+    }
+
+    Ok(Some(metadata))
 }
 
 /// Classifies the finalized effective `TirView` of `template`.
@@ -853,16 +865,16 @@ fn expression_reactive_template_metadata_from_store(
     expression: &Expression,
     store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
-) -> Option<ReactiveTemplateMetadata> {
+) -> Result<Option<ReactiveTemplateMetadata>, CompilerError> {
     if let Some(metadata) = &expression.reactive_template {
-        return Some(metadata.clone());
+        return Ok(Some(metadata.clone()));
     }
 
     if let ExpressionKind::Template(template) = &expression.kind {
         return reactive_template_metadata_from_store(template, store, registry);
     }
 
-    None
+    Ok(None)
 }
 
 /// Normalizes a template for HIR consumption.

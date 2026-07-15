@@ -2,9 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{
     ConstRecordState, Expression, ExpressionKind, ReactiveSource, ReactiveSourceKind,
-    ReactiveTemplateMetadata,
 };
-use crate::compiler_frontend::ast::templates::reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template::{
@@ -870,36 +868,6 @@ fn parser_tir_preserves_reactive_head_and_nested_child_metadata() {
         .get_template(template.tir_reference.root.template_id)
         .expect("parent parser TIR template should exist");
     assert!(parent_template.summary.has_reactivity);
-
-    drop(store);
-
-    // Nested child expressions live only in parser TIR. Prove the
-    // store-and-registry-aware metadata owner still finds the
-    // child's subscription through the parent's parser TIR root.
-    let mut parent_tokens =
-        template_tokens_from_source("[: [$(source): child]]", &mut string_table);
-    let parent = Template::new(&mut parent_tokens, &context, vec![], &mut string_table)
-        .expect("parent with nested reactive child should parse");
-    let store = context.template_ir_store();
-    let store = store.borrow();
-    let registry = context.registered_template_ir_store.registry().borrow();
-    let mut metadata = ReactiveTemplateMetadata::template_backed();
-
-    merge_reactive_template_metadata_with_store_and_registry(
-        &parent,
-        &store,
-        &registry,
-        &mut metadata,
-        &mut |expression| expression.reactive_template.clone(),
-    );
-
-    assert!(
-        metadata
-            .subscriptions
-            .iter()
-            .any(|subscription| subscription.source.path == source_path),
-        "parent metadata should include the nested child's TIR-owned subscription"
-    );
 }
 
 // -------------------------

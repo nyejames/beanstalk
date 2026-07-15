@@ -2,13 +2,10 @@
 //!
 //! WHAT: walks the structural shape of a `Template` and merges reactive metadata
 //! using a caller-supplied expression resolver. Runtime handoffs are walked
-//! through owned expression payloads. Raw templates are traversed only with a
-//! `TemplateIrStore`: control-flow bodies come from same-store TIR roots and
-//! linear templates use same-store `Composed`-or-later roots.
-//! When the module-local `TemplateIrRegistry` is also available and the template's
-//! same-store TIR reference is `Composed` or later, the effective `TirView` is
-//! authoritative for expression overlays: metadata is read through those overlay
-//! lookups for dynamic splices, branch selectors, and loop headers.
+//! through owned expression payloads. The pre-overlay structural pass traverses
+//! raw templates with a `TemplateIrStore`; the post-normalization registry path
+//! requires a Finalized `TirView`, validates its overlay authority, and reads
+//! effective node and expression state.
 //! Runtime slot-site render pieces are traversed through the store's slot plan so
 //! nested subscriptions inside site render roots are discovered.
 //! WHY: template shape is owned by the template subsystem, but expression metadata
@@ -26,12 +23,15 @@ use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateBranchSelector, TemplateLoopHeader,
 };
+use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::tir::{
     ExpressionSiteId, TemplateIrId, TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry,
-    TemplateIrStore, TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateSlotPlanId,
-    TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan, TemplateTirPhase, TirView,
+    TemplateIrStore, TemplateLoopHeaderExpressionSites, TemplateNodeRef, TemplateOverlaySetId,
+    TemplateRef, TemplateSlotPlanId, TemplateSlotSiteRenderPiece, TemplateSlotSiteRenderPlan,
+    TemplateTirPhase, TirView, finalized_tir_view_for_template,
 };
-use std::sync::Arc;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use std::collections::HashSet;
 
 /// Store-aware reactive-template metadata traversal.
 ///
@@ -531,201 +531,146 @@ fn merge_loop_header_metadata(
 
 /// Store-and-registry-aware metadata traversal.
 ///
-/// WHAT: prefers a final effective `TirView` when the template owns a
-///       same-store Composed-or-later TIR reference and the module-local registry is
-///       available. The view path resolves effective expressions through the
-///       expression-overlay dimension for dynamic-expression splices, branch
-///       selectors, and loop-header expressions. All unsupported roots
-///       (missing registry, non-finalized phase, cross-store reference,
-///       non-expression overlay dimensions, malformed view identity, or any
-///       other surface not safely covered) fall back to the raw store-aware
-///       traversal.
-/// WHY: after AST normalization the finalized TIR tree is the authoritative
-///      template representation. Reading reactive metadata through `TirView`
-///      keeps it aligned with expression overlays for templates that already
-///      carry TIR-backed roots.
+/// WHAT: resolves the required finalized effective `TirView` and walks every
+///       reachable TIR root through its exact phase and overlay identity.
+///       Missing authority is reported as an internal compiler error rather than
+///       downgraded to a raw-store interpretation.
+/// WHY: post-normalization metadata is part of the AST-to-HIR boundary. The
+///      finalized registry-backed view is the only representation that includes
+///      expression, slot-resolution, and wrapper-context overlay dimensions.
 pub(crate) fn merge_reactive_template_metadata_with_store_and_registry(
     template: &Template,
     store: &TemplateIrStore,
     registry: &TemplateIrRegistry,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    if let Some(view) = try_finalized_tir_view_for_template(template, store, registry) {
-        merge_reactive_template_metadata_from_tir_view(template, &view, store, metadata, resolver);
-    } else {
-        merge_reactive_template_metadata_with_store_and_resolver(
-            template, store, metadata, resolver,
-        );
-    }
+) -> Result<(), CompilerError> {
+    let view = finalized_tir_view_for_template(template, store, registry)?;
+    let mut traversal = TirViewMetadataTraversal::default();
+    merge_reactive_template_metadata_from_tir_view(&view, metadata, resolver, &mut traversal)
 }
 
-/// Tries to construct an effective expression-overlay `TirView` for a same-store template.
-///
-/// WHAT: returns a view only when the template carries a same-store
-///       Composed-or-later TIR reference, the registry owns that store and overlay set, and the
-///       overlay set does not use unsupported dimensions. Slot-resolution and
-///       wrapper-context overlays are not yet safely readable through this
-///       metadata path, so their presence causes a conservative fallback.
-/// WHY: the caller decides whether to use the view or fall back to the raw
-///      store-aware path. Returning `None` for every unsupported root keeps the
-///      fallback decision local and explicit without reviving compatibility
-///      content.
-fn try_finalized_tir_view_for_template<'a>(
-    template: &Template,
-    store: &TemplateIrStore,
-    registry: &'a TemplateIrRegistry,
-) -> Option<TirView<'a>> {
-    let reference = &template.tir_reference;
-
-    if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
-        return None;
-    }
-
-    if !Arc::ptr_eq(&reference.store_owner, &store.owner()) {
-        return None;
-    }
-
-    if reference.root.store_id != store.store_id() {
-        return None;
-    }
-
-    let overlay_set = registry.overlay_set(reference.overlay_set_id)?;
-    if overlay_set.slot_resolution.is_some() || overlay_set.wrapper_context.is_some() {
-        return None;
-    }
-
-    // Expression-overlay normalization stores every reachable same-store
-    // expression payload on the root reference's overlay set before metadata
-    // refresh runs. With no expression overlay, the raw-store traversal is
-    // equivalent for this first slice and avoids a view lookup on every node.
-    overlay_set.expression_overrides?;
-
-    TirView::with_minimum_phase(
-        registry,
-        reference.root,
-        reference.phase,
-        TemplateTirPhase::Composed,
-        reference.overlay_set_id,
-    )
-    .ok()
+#[derive(Default)]
+struct TirViewMetadataTraversal {
+    active_views: HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
+    completed_views: HashSet<(TemplateRef, TemplateTirPhase, TemplateOverlaySetId)>,
 }
 
-/// Merges reactive metadata by walking the effective expression-overlay `TirView`.
+/// Merges reactive metadata by walking the finalized effective `TirView`.
 ///
-/// WHAT: walks the finalized TIR body tree, reading effective expressions from
-///       the view's expression-overlay dimension when present and falling back
-///       to the stored structural expression otherwise. It preserves runtime
-///       slot-site traversal through the store's slot plan and the owned
-///       conditional child-wrapper node from the AST template.
-/// WHY: this is the narrow view-based replacement for the raw-store body walk.
-///      Keeping slot-plan enumeration in the store and child-wrapper handling
-///      on the AST template preserves the metadata behavior established by the
-///      existing store-aware path.
+/// WHAT: walks the TIR body and every referenced child view, resolving each
+///       view's own store for slot-plan side tables. Expression overrides are
+///       optional semantic values; all structural authority is required.
+/// WHY: this is the post-normalization metadata owner. Keeping traversal on the
+///      finalized view preserves every overlay dimension without reconstructing
+///      template meaning from a raw store.
 fn merge_reactive_template_metadata_from_tir_view(
-    _template: &Template,
     view: &TirView<'_>,
-    store: &TemplateIrStore,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    let slot_plan_id = match view.root_template() {
-        Ok(root_template) => root_template.runtime_slot_plan,
-        Err(_) => {
-            // `try_finalized_tir_view_for_template` validates the root before
-            // constructing the view. If this fails, the registry is internally
-            // inconsistent and there is no safe metadata to add from this path.
-            return;
-        }
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
+    let identity = (view.root_ref(), view.phase(), view.overlay_set_id());
+    if traversal.completed_views.contains(&identity) {
+        return Ok(());
+    }
+    if !traversal.active_views.insert(identity) {
+        return Ok(());
+    }
+
+    let result = merge_tir_view_root_contents(view, metadata, resolver, traversal);
+
+    traversal.active_views.remove(&identity);
+    if result.is_ok() {
+        traversal.completed_views.insert(identity);
+    }
+
+    result
+}
+
+fn merge_tir_view_root_contents(
+    view: &TirView<'_>,
+    metadata: &mut ReactiveTemplateMetadata,
+    resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
+    let (root_node_id, slot_plan_id) = {
+        view.overlay_set()?;
+        view.expression_overlay()?;
+        view.slot_resolution_overlay()?;
+        view.wrapper_context_overlay()?;
+
+        let root_template = view.root_template()?;
+        (root_template.root, root_template.runtime_slot_plan)
     };
 
     if let Some(slot_plan_id) = slot_plan_id {
-        merge_tir_view_root_metadata(
+        merge_tir_view_node_metadata(
             view,
-            store,
+            TemplateNodeRef::new(view.root_ref().store_id, root_node_id),
             RuntimeSlotSiteMetadataMode::WrapperNodeOnly,
             metadata,
             resolver,
-        );
+            traversal,
+        )?;
 
-        if let Some(slot_plan) = store.get_slot_plan(slot_plan_id) {
-            for source in &slot_plan.contribution_sources {
-                merge_tir_view_node_metadata(
-                    view,
-                    store,
-                    TemplateNodeRef::new(view.root_ref().store_id, source.render_root),
-                    RuntimeSlotSiteMetadataMode::WalkRenderPieces,
-                    metadata,
-                    resolver,
-                );
-            }
+        let (contribution_roots, site_render_roots) =
+            view_slot_plan_render_roots(view, slot_plan_id, None)?;
 
-            for site_plan in &slot_plan.slot_sites {
-                merge_tir_view_slot_site_render_plan_metadata(
-                    view,
-                    store,
-                    &site_plan.render_plan,
-                    metadata,
-                    resolver,
-                );
-            }
+        for source_root in contribution_roots {
+            merge_tir_view_node_metadata(
+                view,
+                TemplateNodeRef::new(view.root_ref().store_id, source_root),
+                RuntimeSlotSiteMetadataMode::WalkRenderPieces,
+                metadata,
+                resolver,
+                traversal,
+            )?;
+        }
+
+        for site_render_root in site_render_roots {
+            merge_tir_view_node_metadata(
+                view,
+                TemplateNodeRef::new(view.root_ref().store_id, site_render_root),
+                RuntimeSlotSiteMetadataMode::WalkRenderPieces,
+                metadata,
+                resolver,
+                traversal,
+            )?;
         }
     } else {
-        merge_tir_view_root_metadata(
+        merge_tir_view_node_metadata(
             view,
-            store,
+            TemplateNodeRef::new(view.root_ref().store_id, root_node_id),
             RuntimeSlotSiteMetadataMode::WalkRenderPieces,
             metadata,
             resolver,
-        );
+            traversal,
+        )?;
     }
-}
 
-fn merge_tir_view_root_metadata(
-    view: &TirView<'_>,
-    store: &TemplateIrStore,
-    runtime_slot_site_mode: RuntimeSlotSiteMetadataMode,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    let root_node_id = match view.root_template() {
-        Ok(root_template) => root_template.root,
-        Err(_) => return,
-    };
-
-    merge_tir_view_node_metadata(
-        view,
-        store,
-        TemplateNodeRef::new(view.root_ref().store_id, root_node_id),
-        runtime_slot_site_mode,
-        metadata,
-        resolver,
-    );
+    Ok(())
 }
 
 /// View-based TIR node metadata walker.
 ///
-/// WHAT: mirrors the raw-store `merge_tir_node_metadata_with_slot_site_mode`,
-///       but reads effective expressions through `TirView` overlay lookups.
+/// WHAT: reads finalized nodes and expressions through `TirView` overlay lookups.
 ///       Dynamic-expression splices, branch selectors, and loop-header
 ///       expressions prefer the override expression when the view provides
-///       one, falling back to the stored structural expression directly.
+///       one and otherwise use the stored structural expression directly.
 /// WHY: this keeps the walker aligned with the final effective TIR without
 ///      copying nodes or expressions in the common no-overlay case.
 fn merge_tir_view_node_metadata(
     view: &TirView<'_>,
-    store: &TemplateIrStore,
     node_ref: TemplateNodeRef,
     runtime_slot_site_mode: RuntimeSlotSiteMetadataMode,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
+    traversal: &mut TirViewMetadataTraversal,
+) -> Result<(), CompilerError> {
     let store_id = view.root_ref().store_id;
 
-    let node = match view.effective_node(node_ref) {
-        Ok(node) => node,
-        Err(_) => return,
-    };
+    let node = view.effective_node(node_ref)?;
 
     match &node.kind {
         TemplateIrNodeKind::Sequence { children } => {
@@ -734,12 +679,12 @@ fn merge_tir_view_node_metadata(
             for child in children {
                 merge_tir_view_node_metadata(
                     view,
-                    store,
                     TemplateNodeRef::new(store_id, child),
                     runtime_slot_site_mode,
                     metadata,
                     resolver,
-                );
+                    traversal,
+                )?;
             }
         }
 
@@ -752,74 +697,41 @@ fn merge_tir_view_node_metadata(
             if let Some(subscription) = reactive_subscription {
                 metadata.push_subscription(subscription.clone());
             }
-            merge_effective_expression_metadata(
-                view,
-                *site_id,
-                expression.as_ref(),
-                metadata,
-                resolver,
-            );
+            merge_effective_expression_metadata(view, *site_id, expression, metadata, resolver)?;
         }
 
         TemplateIrNodeKind::ChildTemplate { reference, .. } => {
             let reference = *reference;
             drop(node);
 
-            if reference.root.store_id != store_id {
-                return;
-            }
-
             let child_view =
-                match view.child_view(reference.root, reference.phase, reference.overlay_set_id) {
-                    Ok(view) => view,
-                    Err(_) => {
-                        merge_tir_template_metadata(
-                            store,
-                            reference.root.template_id,
-                            metadata,
-                            resolver,
-                        );
-                        return;
-                    }
-                };
-
-            let child_overlay_set = match child_view.overlay_set() {
-                Ok(set) => set,
-                Err(_) => {
-                    merge_tir_template_metadata(
-                        store,
-                        reference.root.template_id,
-                        metadata,
-                        resolver,
-                    );
-                    return;
-                }
-            };
-
-            if child_overlay_set.slot_resolution.is_some()
-                || child_overlay_set.wrapper_context.is_some()
-                || child_overlay_set.expression_overrides.is_none()
-            {
-                merge_tir_template_metadata(store, reference.root.template_id, metadata, resolver);
-                return;
-            }
-
-            merge_tir_view_root_metadata(
+                view.child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+            merge_reactive_template_metadata_from_tir_view(
                 &child_view,
-                store,
-                RuntimeSlotSiteMetadataMode::WalkRenderPieces,
                 metadata,
                 resolver,
-            );
+                traversal,
+            )?;
         }
 
         TemplateIrNodeKind::InsertContribution { template } => {
             let template_id = *template;
             drop(node);
-            merge_tir_template_metadata(store, template_id, metadata, resolver);
+            let insert_view = view.child_view(
+                TemplateRef::new(store_id, template_id),
+                view.phase(),
+                view.overlay_set_id(),
+            )?;
+            merge_reactive_template_metadata_from_tir_view(
+                &insert_view,
+                metadata,
+                resolver,
+                traversal,
+            )?;
         }
 
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
+            let mut body_ids = Vec::with_capacity(branches.len());
             for branch in branches {
                 merge_effective_expression_metadata(
                     view,
@@ -827,33 +739,32 @@ fn merge_tir_view_node_metadata(
                     branch.condition_expression(),
                     metadata,
                     resolver,
-                );
+                )?;
+                body_ids.push(branch.body);
             }
-
-            let bodies: Vec<_> = branches.iter().map(|branch| branch.body).collect();
             let fallback = *fallback;
             drop(node);
 
-            for body in bodies {
+            for body in body_ids {
                 merge_tir_view_node_metadata(
                     view,
-                    store,
                     TemplateNodeRef::new(store_id, body),
                     runtime_slot_site_mode,
                     metadata,
                     resolver,
-                );
+                    traversal,
+                )?;
             }
 
             if let Some(fallback) = fallback {
                 merge_tir_view_node_metadata(
                     view,
-                    store,
                     TemplateNodeRef::new(store_id, fallback),
                     runtime_slot_site_mode,
                     metadata,
                     resolver,
-                );
+                    traversal,
+                )?;
             }
         }
 
@@ -864,7 +775,7 @@ fn merge_tir_view_node_metadata(
             aggregate_wrapper,
             ..
         } => {
-            merge_tir_view_loop_header_metadata(view, header, header_sites, metadata, resolver);
+            merge_tir_view_loop_header_metadata(view, header, header_sites, metadata, resolver)?;
 
             let body = *body;
             let aggregate_wrapper = *aggregate_wrapper;
@@ -872,50 +783,48 @@ fn merge_tir_view_node_metadata(
 
             merge_tir_view_node_metadata(
                 view,
-                store,
                 TemplateNodeRef::new(store_id, body),
                 runtime_slot_site_mode,
                 metadata,
                 resolver,
-            );
+                traversal,
+            )?;
 
             if let Some(aggregate_wrapper) = aggregate_wrapper {
                 merge_tir_view_node_metadata(
                     view,
-                    store,
                     TemplateNodeRef::new(store_id, aggregate_wrapper),
                     runtime_slot_site_mode,
                     metadata,
                     resolver,
-                );
+                    traversal,
+                )?;
             }
         }
 
         TemplateIrNodeKind::RuntimeSlotSite { plan, site } => {
-            if matches!(
-                runtime_slot_site_mode,
-                RuntimeSlotSiteMetadataMode::WrapperNodeOnly
-            ) {
-                return;
-            }
-
             let plan = *plan;
             let site = *site;
             drop(node);
 
-            let Some(slot_plan) = store.get_slot_plan(plan) else {
-                return;
-            };
-            let Some(site_plan) = slot_plan.slot_sites.iter().find(|s| s.site == site) else {
-                return;
-            };
-            merge_tir_view_slot_site_render_plan_metadata(
-                view,
-                store,
-                &site_plan.render_plan,
-                metadata,
-                resolver,
-            );
+            let (_, render_roots) = view_slot_plan_render_roots(view, plan, Some(site))?;
+            if matches!(
+                runtime_slot_site_mode,
+                RuntimeSlotSiteMetadataMode::WrapperNodeOnly
+            ) {
+                return Ok(());
+            }
+
+            for render_root in render_roots {
+                merge_tir_view_node_metadata(
+                    view,
+                    TemplateNodeRef::new(store_id, render_root),
+                    RuntimeSlotSiteMetadataMode::WalkRenderPieces,
+                    metadata,
+                    resolver,
+                    traversal,
+                )?;
+            }
         }
 
         TemplateIrNodeKind::Text { .. }
@@ -923,6 +832,8 @@ fn merge_tir_view_node_metadata(
         | TemplateIrNodeKind::AggregateOutput
         | TemplateIrNodeKind::LoopControl { .. } => {}
     }
+
+    Ok(())
 }
 
 fn merge_tir_view_loop_header_metadata(
@@ -931,7 +842,7 @@ fn merge_tir_view_loop_header_metadata(
     header_sites: &TemplateLoopHeaderExpressionSites,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
+) -> Result<(), CompilerError> {
     match (header, header_sites) {
         (
             TemplateLoopHeader::Conditional { condition },
@@ -943,15 +854,15 @@ fn merge_tir_view_loop_header_metadata(
                 condition.as_ref(),
                 metadata,
                 resolver,
-            );
+            )?;
         }
 
         (
             TemplateLoopHeader::Range { range, .. },
             TemplateLoopHeaderExpressionSites::Range { start, end, step },
         ) => {
-            merge_effective_expression_metadata(view, *start, &range.start, metadata, resolver);
-            merge_effective_expression_metadata(view, *end, &range.end, metadata, resolver);
+            merge_effective_expression_metadata(view, *start, &range.start, metadata, resolver)?;
+            merge_effective_expression_metadata(view, *end, &range.end, metadata, resolver)?;
             if let (Some(step_expr), Some(step_site_id)) = (&range.step, *step) {
                 merge_effective_expression_metadata(
                     view,
@@ -959,9 +870,11 @@ fn merge_tir_view_loop_header_metadata(
                     step_expr,
                     metadata,
                     resolver,
-                );
-            } else if let Some(step_expr) = &range.step {
-                merge_expression_metadata(step_expr, metadata, resolver);
+                )?;
+            } else if range.step.is_some() {
+                return Err(CompilerError::compiler_error(
+                    "reactive TIR metadata: loop range step expression is missing its expression site",
+                ));
             }
         }
 
@@ -975,54 +888,77 @@ fn merge_tir_view_loop_header_metadata(
                 iterable.as_ref(),
                 metadata,
                 resolver,
-            );
+            )?;
         }
 
-        // Mismatched header/site shape is an internal invariant issue. Use
-        // only the stored header expressions and do not try to resolve sites.
-        _ => match header {
-            TemplateLoopHeader::Conditional { condition } => {
-                merge_expression_metadata(condition.as_ref(), metadata, resolver);
-            }
-            TemplateLoopHeader::Range { range, .. } => {
-                merge_expression_metadata(&range.start, metadata, resolver);
-                merge_expression_metadata(&range.end, metadata, resolver);
-                if let Some(step) = &range.step {
-                    merge_expression_metadata(step, metadata, resolver);
-                }
-            }
-            TemplateLoopHeader::Collection { iterable, .. } => {
-                merge_expression_metadata(iterable.as_ref(), metadata, resolver);
-            }
-        },
+        _ => {
+            return Err(CompilerError::compiler_error(
+                "reactive TIR metadata: loop header shape does not match its expression sites",
+            ));
+        }
     }
+
+    Ok(())
 }
 
-fn merge_tir_view_slot_site_render_plan_metadata(
+fn view_slot_plan_render_roots(
     view: &TirView<'_>,
-    store: &TemplateIrStore,
-    render_plan: &TemplateSlotSiteRenderPlan,
-    metadata: &mut ReactiveTemplateMetadata,
-    resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    let store_id = view.root_ref().store_id;
+    plan_id: TemplateSlotPlanId,
+    site_id: Option<RuntimeSlotSiteId>,
+) -> Result<(Vec<TemplateIrNodeId>, Vec<TemplateIrNodeId>), CompilerError> {
+    let store = view.store()?;
+    let slot_plan = store.get_slot_plan(plan_id).ok_or_else(|| {
+        CompilerError::compiler_error(format!(
+            "reactive TIR metadata: slot plan {} does not exist in owning store {}",
+            plan_id,
+            view.root_ref().store_id
+        ))
+    })?;
 
-    for piece in &render_plan.pieces {
-        match piece {
-            TemplateSlotSiteRenderPiece::Render(root) => {
-                merge_tir_view_node_metadata(
-                    view,
-                    store,
-                    TemplateNodeRef::new(store_id, *root),
-                    RuntimeSlotSiteMetadataMode::WalkRenderPieces,
-                    metadata,
-                    resolver,
-                );
-            }
+    let contribution_roots = if site_id.is_none() {
+        slot_plan
+            .contribution_sources
+            .iter()
+            .map(|source| source.render_root)
+            .collect()
+    } else {
+        Vec::new()
+    };
 
-            TemplateSlotSiteRenderPiece::ContributionSource(_) => {}
+    let render_roots = match site_id {
+        Some(site_id) => {
+            let site_plan = slot_plan
+                .slot_sites
+                .iter()
+                .find(|site_plan| site_plan.site == site_id)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "reactive TIR metadata: slot site {:?} does not exist in slot plan {}",
+                        site_id, plan_id
+                    ))
+                })?;
+            site_plan
+                .render_plan
+                .pieces
+                .iter()
+                .filter_map(|piece| match piece {
+                    TemplateSlotSiteRenderPiece::Render(root) => Some(*root),
+                    TemplateSlotSiteRenderPiece::ContributionSource(_) => None,
+                })
+                .collect()
         }
-    }
+        None => slot_plan
+            .slot_sites
+            .iter()
+            .flat_map(|site_plan| site_plan.render_plan.pieces.iter())
+            .filter_map(|piece| match piece {
+                TemplateSlotSiteRenderPiece::Render(root) => Some(*root),
+                TemplateSlotSiteRenderPiece::ContributionSource(_) => None,
+            })
+            .collect(),
+    };
+
+    Ok((contribution_roots, render_roots))
 }
 
 /// Merges metadata for the effective expression at `site_id`.
@@ -1038,11 +974,16 @@ fn merge_effective_expression_metadata(
     stored: &Expression,
     metadata: &mut ReactiveTemplateMetadata,
     resolver: &mut impl FnMut(&Expression) -> Option<ReactiveTemplateMetadata>,
-) {
-    match view.effective_expression_for_site(site_id) {
-        Ok(Some(expression)) => merge_expression_metadata(expression, metadata, resolver),
-        _ => merge_expression_metadata(stored, metadata, resolver),
+) -> Result<(), CompilerError> {
+    if let Some(expression) = view.effective_expression_for_site(site_id)? {
+        merge_expression_metadata(expression, metadata, resolver);
+    } else {
+        // No override is a semantic absence, so the structural expression remains
+        // the effective payload for this site.
+        merge_expression_metadata(stored, metadata, resolver);
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1066,7 +1007,8 @@ mod tests {
         TemplateIrNodeId, TemplateIrNodeKind, TemplateIrRegistry, TemplateIrStore,
         TemplateIrSummary, TemplateLoopHeaderExpressionSites, TemplateOverlaySet,
         TemplateOverlaySetId, TemplateRef, TemplateSlotContributionSourcePlan, TemplateSlotPlan,
-        TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirExpressionOverlay,
+        TemplateStoreId, TemplateTirChildReference, TemplateTirPhase, TemplateTirReference,
+        TirExpressionOverlay,
     };
     use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
     use crate::compiler_frontend::datatypes::DataType;
@@ -1188,7 +1130,8 @@ mod tests {
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect("finalized TIR metadata fixture should have valid authority");
         metadata
     }
 
@@ -1623,12 +1566,13 @@ mod tests {
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect("finalized TIR metadata fixture should have valid authority");
 
         assert_eq!(
             metadata.subscriptions,
             vec![subscription],
-            "final metadata should collect subscriptions from dynamic expression nodes, either through the view path or the equivalent raw-store path"
+            "final metadata should collect subscriptions from dynamic expression nodes through the finalized view path"
         );
     }
 
@@ -1708,7 +1652,8 @@ mod tests {
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect("finalized TIR metadata fixture should have valid authority");
 
         assert_eq!(
             metadata.subscriptions,
@@ -1816,7 +1761,8 @@ mod tests {
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect("finalized TIR metadata fixture should have valid authority");
 
         assert_eq!(
             metadata.subscriptions,
@@ -1826,7 +1772,216 @@ mod tests {
     }
 
     #[test]
-    fn registry_metadata_skips_parsed_phase_tir_subscription() {
+    fn finalized_tir_view_metadata_uses_foreign_child_store_for_slot_plan() {
+        let mut string_table = StringTable::new();
+        let mut registry = TemplateIrRegistry::new();
+        let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+        let parent_store_id = registry.allocate_store();
+        let child_store_id = registry.allocate_store();
+
+        let (child_template_id, child_subscription) = {
+            let mut child_store = registry
+                .store_mut(child_store_id)
+                .expect("child store should be mutable");
+            let wrapper_root = child_store.push_node(TemplateIrNode::new(
+                TemplateIrNodeKind::Sequence {
+                    children: Vec::new(),
+                },
+                test_location(),
+            ));
+            let (contribution_root, contribution_subscription) = {
+                let mut builder = TemplateIrBuilder::new(&mut child_store);
+                reactive_dynamic_expression_node(
+                    &mut builder,
+                    &mut string_table,
+                    "foreign_slot_source",
+                )
+            };
+            let slot_plan_id = child_store.push_slot_plan(TemplateSlotPlan {
+                location: test_location(),
+                contribution_sources: vec![TemplateSlotContributionSourcePlan {
+                    source: RuntimeSlotContributionSourceId(0),
+                    target: SlotKey::Default,
+                    render_root: contribution_root,
+                    renders_wrapper_unconditionally: false,
+                    location: test_location(),
+                }],
+                slot_sites: Vec::new(),
+            });
+            let child_template_id = {
+                let mut builder = TemplateIrBuilder::new(&mut child_store);
+                finish_string_function_template(&mut builder, wrapper_root)
+            };
+            child_store.templates[child_template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+            (child_template_id, contribution_subscription)
+        };
+
+        let parent_template_id = {
+            let mut parent_store = registry
+                .store_mut(parent_store_id)
+                .expect("parent store should be mutable");
+            let child_reference = TemplateTirChildReference::new(
+                TemplateRef::new(child_store_id, child_template_id),
+                TemplateTirPhase::Finalized,
+                overlay_set_id,
+            );
+            let occurrence_id = parent_store.next_child_template_occurrence_id();
+            let parent_root = parent_store.push_node(TemplateIrNode::new(
+                TemplateIrNodeKind::ChildTemplate {
+                    reference: child_reference,
+                    occurrence_id,
+                },
+                test_location(),
+            ));
+            let mut builder = TemplateIrBuilder::new(&mut parent_store);
+            finish_string_function_template(&mut builder, parent_root)
+        };
+
+        let parent_store_ref = registry
+            .store(parent_store_id)
+            .expect("parent store should remain registered");
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(parent_store_id, parent_template_id),
+                store_owner: parent_store_ref.owner(),
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            test_location(),
+        );
+
+        let mut metadata = ReactiveTemplateMetadata::template_backed();
+        merge_reactive_template_metadata_with_store_and_registry(
+            &template,
+            &parent_store_ref,
+            &registry,
+            &mut metadata,
+            &mut |expression| expression.reactive_template.clone(),
+        )
+        .expect("foreign child slot-plan authority should be valid");
+
+        assert_eq!(metadata.subscriptions, vec![child_subscription]);
+    }
+
+    #[test]
+    fn finalized_tir_view_metadata_rejects_missing_runtime_slot_plan() {
+        let mut registry = TemplateIrRegistry::new();
+        let store_id = registry.allocate_store();
+        let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+        let missing_slot_plan_id = TemplateSlotPlanId::new(0);
+
+        let template_id = {
+            let mut store = registry
+                .store_mut(store_id)
+                .expect("store should be mutable");
+            let root = store.push_node(TemplateIrNode::new(
+                TemplateIrNodeKind::Sequence {
+                    children: Vec::new(),
+                },
+                test_location(),
+            ));
+            let template_id = {
+                let mut builder = TemplateIrBuilder::new(&mut store);
+                finish_string_function_template(&mut builder, root)
+            };
+            store.templates[template_id.index()].runtime_slot_plan = Some(missing_slot_plan_id);
+            template_id
+        };
+
+        let store_ref = registry
+            .store(store_id)
+            .expect("store should remain registered");
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            test_location(),
+        );
+
+        let mut metadata = ReactiveTemplateMetadata::template_backed();
+        let error = merge_reactive_template_metadata_with_store_and_registry(
+            &template,
+            &store_ref,
+            &registry,
+            &mut metadata,
+            &mut |expression| expression.reactive_template.clone(),
+        )
+        .expect_err("missing runtime slot-plan authority must fail post-normalization metadata");
+
+        assert!(
+            format!("{error:?}").contains("slot plan"),
+            "missing runtime slot plan should be reported as a compiler error"
+        );
+    }
+
+    #[test]
+    fn finalized_tir_view_metadata_rejects_missing_runtime_slot_site() {
+        let mut registry = TemplateIrRegistry::new();
+        let store_id = registry.allocate_store();
+        let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+        let missing_site_id = RuntimeSlotSiteId(0);
+
+        let template_id = {
+            let mut store = registry
+                .store_mut(store_id)
+                .expect("store should be mutable");
+            let slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+                location: test_location(),
+                contribution_sources: Vec::new(),
+                slot_sites: Vec::new(),
+            });
+            let root = store.push_node(TemplateIrNode::new(
+                TemplateIrNodeKind::RuntimeSlotSite {
+                    plan: slot_plan_id,
+                    site: missing_site_id,
+                },
+                test_location(),
+            ));
+            let template_id = {
+                let mut builder = TemplateIrBuilder::new(&mut store);
+                finish_string_function_template(&mut builder, root)
+            };
+            store.templates[template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+            template_id
+        };
+
+        let store_ref = registry
+            .store(store_id)
+            .expect("store should remain registered");
+        let template = template_with_reference(
+            TemplateTirReference {
+                root: TemplateRef::new(store_id, template_id),
+                store_owner: store_ref.owner(),
+                phase: TemplateTirPhase::Finalized,
+                overlay_set_id,
+            },
+            TemplateType::StringFunction,
+            test_location(),
+        );
+
+        let mut metadata = ReactiveTemplateMetadata::template_backed();
+        let error = merge_reactive_template_metadata_with_store_and_registry(
+            &template,
+            &store_ref,
+            &registry,
+            &mut metadata,
+            &mut |expression| expression.reactive_template.clone(),
+        )
+        .expect_err("missing runtime slot-site authority must fail metadata traversal");
+
+        assert!(
+            format!("{error:?}").contains("slot site"),
+            "missing runtime slot site should be reported as a compiler error"
+        );
+    }
+
+    #[test]
+    fn finalized_tir_view_metadata_rejects_parsed_phase() {
         let mut string_table = StringTable::new();
         let store_rc = Rc::new(RefCell::new(TemplateIrStore::new()));
 
@@ -1869,7 +2024,7 @@ mod tests {
             TemplateTirReference {
                 root: TemplateRef::new(store_id, template_id),
                 store_owner: store_ref.owner(),
-                // Phase is below Composed, so neither the view nor raw root is authoritative.
+                // Post-normalization metadata requires the completed AST phase.
                 phase: TemplateTirPhase::Parsed,
                 overlay_set_id,
             },
@@ -1878,22 +2033,23 @@ mod tests {
         );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
-        merge_reactive_template_metadata_with_store_and_registry(
+        let error = merge_reactive_template_metadata_with_store_and_registry(
             &template,
             &store_ref,
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect_err("parsed TIR must not enter post-normalization metadata traversal");
 
         assert!(
-            metadata.subscriptions.is_empty(),
-            "registry-backed metadata must not collect subscriptions from a parsed-phase TIR root"
+            format!("{error:?}").contains("Finalized"),
+            "parsed-phase rejection should identify the required Finalized authority"
         );
     }
 
     #[test]
-    fn formatted_tir_view_metadata_reads_expression_overlay() {
+    fn formatted_tir_view_metadata_requires_finalized_phase() {
         let mut string_table = StringTable::new();
         let store_rc = Rc::new(RefCell::new(TemplateIrStore::new()));
 
@@ -1962,18 +2118,18 @@ mod tests {
         );
 
         let mut metadata = ReactiveTemplateMetadata::template_backed();
-        merge_reactive_template_metadata_with_store_and_registry(
+        let error = merge_reactive_template_metadata_with_store_and_registry(
             &template,
             &store_ref,
             &registry,
             &mut metadata,
             &mut |expression| expression.reactive_template.clone(),
-        );
+        )
+        .expect_err("formatted TIR must not enter post-normalization metadata traversal");
 
-        assert_eq!(
-            metadata.subscriptions,
-            vec![overlay_subscription],
-            "formatted TirView metadata must resolve the effective expression overlay"
+        assert!(
+            format!("{error:?}").contains("Finalized"),
+            "formatted-phase rejection should identify the required Finalized authority"
         );
     }
 
