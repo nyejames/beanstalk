@@ -374,11 +374,15 @@ fn type_id_bindings_unify_generic_parameter_with_concrete_type() {
     let int_type_id = type_environment.builtins().int;
     let mut bindings = GenericTypeBindings::new();
 
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        parameter_type_id,
-        int_type_id,
-        &mut bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                parameter_type_id,
+                int_type_id,
+                &mut bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(bindings.get(parameter_id), Some(int_type_id));
 }
 
@@ -392,16 +396,24 @@ fn type_id_bindings_accept_repeated_identical_unification() {
     let int_type_id = type_environment.builtins().int;
     let mut bindings = GenericTypeBindings::new();
 
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        parameter_type_id,
-        int_type_id,
-        &mut bindings,
-    ));
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        parameter_type_id,
-        int_type_id,
-        &mut bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                parameter_type_id,
+                int_type_id,
+                &mut bindings,
+            )
+            .unwrap()
+    );
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                parameter_type_id,
+                int_type_id,
+                &mut bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(bindings.get(parameter_id), Some(int_type_id));
 }
 
@@ -416,16 +428,24 @@ fn type_id_bindings_reject_conflicting_unification() {
     let string_type_id = type_environment.builtins().string;
     let mut bindings = GenericTypeBindings::new();
 
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        parameter_type_id,
-        int_type_id,
-        &mut bindings,
-    ));
-    assert!(!type_environment.collect_type_parameter_bindings_typeid(
-        parameter_type_id,
-        string_type_id,
-        &mut bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                parameter_type_id,
+                int_type_id,
+                &mut bindings,
+            )
+            .unwrap()
+    );
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                parameter_type_id,
+                string_type_id,
+                &mut bindings,
+            )
+            .is_err()
+    );
     assert_eq!(bindings.get(parameter_id), Some(int_type_id));
 }
 
@@ -451,11 +471,15 @@ fn type_id_bindings_unify_collection_arguments() {
     );
     let mut bindings = GenericTypeBindings::new();
 
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        template_collection,
-        concrete_collection,
-        &mut bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                template_collection,
+                concrete_collection,
+                &mut bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(bindings.get(parameter_id), Some(int_type_id));
 }
 
@@ -477,11 +501,15 @@ fn type_id_bindings_unify_option_arguments() {
     );
     let mut bindings = GenericTypeBindings::new();
 
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        template_option,
-        concrete_option,
-        &mut bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                template_option,
+                concrete_option,
+                &mut bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(bindings.get(parameter_id), Some(string_type_id));
 }
 
@@ -516,19 +544,27 @@ fn type_id_bindings_unify_generic_instances_only_when_base_matches() {
         type_environment.intern_generic_instance(wrapper_nominal, Box::new([int_type_id]));
 
     let mut matching_bindings = GenericTypeBindings::new();
-    assert!(type_environment.collect_type_parameter_bindings_typeid(
-        template_box,
-        concrete_box,
-        &mut matching_bindings,
-    ));
+    assert!(
+        type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                template_box,
+                concrete_box,
+                &mut matching_bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(matching_bindings.get(parameter_id), Some(int_type_id));
 
     let mut mismatched_bindings = GenericTypeBindings::new();
-    assert!(!type_environment.collect_type_parameter_bindings_typeid(
-        template_box,
-        concrete_wrapper,
-        &mut mismatched_bindings,
-    ));
+    assert!(
+        !type_environment
+            .try_collect_type_parameter_bindings_typeid(
+                template_box,
+                concrete_wrapper,
+                &mut mismatched_bindings,
+            )
+            .unwrap()
+    );
     assert_eq!(mismatched_bindings.get(parameter_id), None);
 }
 

@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticLabel, DiagnosticLabelMessage, DiagnosticLabelStyle,
-    GenericSubstitutionDiagnostic, InvalidGenericInstantiationReason,
+    GenericInferenceSubject, GenericSubstitutionDiagnostic, InvalidGenericInstantiationReason,
 };
 use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -47,30 +47,14 @@ pub(crate) fn conflicting_generic_function_argument(
     current_evidence_location: SourceLocation,
     previous_evidence_location: Option<SourceLocation>,
 ) -> CompilerDiagnostic {
-    let mut diagnostic = CompilerDiagnostic::invalid_generic_instantiation(
+    CompilerDiagnostic::conflicting_generic_inference(
         function_name,
-        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
-            parameter_id: conflict.parameter_id,
-            parameter_name,
-            existing_type_id: conflict.existing_type_id,
-            replacement_type_id: conflict.replacement_type_id,
-            current_evidence_location: current_evidence_location.clone(),
-            previous_evidence_location: previous_evidence_location.clone(),
-        },
-        current_evidence_location.clone(),
-    );
-
-    if let Some(previous_evidence_location) = previous_evidence_location {
-        diagnostic = diagnostic.with_labels(vec![
-            DiagnosticLabel::primary(current_evidence_location),
-            DiagnosticLabel::secondary(
-                previous_evidence_location,
-                Some(DiagnosticLabelMessage::GenericInferencePreviousEvidence),
-            ),
-        ]);
-    }
-
-    diagnostic
+        GenericInferenceSubject::Function,
+        conflict,
+        parameter_name,
+        current_evidence_location,
+        previous_evidence_location,
+    )
 }
 
 pub(crate) fn missing_generic_function_trait_evidence(

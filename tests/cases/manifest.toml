@@ -1104,6 +1104,11 @@ path = "generic_choice_equality_unsupported_payload_rejected"
 tags = ["integration","generics","choices","equality","diagnostics"]
 
 [[case]]
+id = "generic_choice_payload_conflict_rejected"
+path = "generic_choice_payload_conflict_rejected"
+tags = ["integration","generics","choices","diagnostics"]
+
+[[case]]
 id = "generic_empty_collection_constructor_ambiguity"
 path = "generic_empty_collection_constructor_ambiguity"
 tags = ["integration","generics","structs"]
@@ -1136,6 +1141,21 @@ tags = ["integration","generics","choices","named-args"]
 [[case]]
 id = "generic_conflicting_inference_rejected"
 path = "generic_conflicting_inference_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_nominal_expected_type_conflict_rejected"
+path = "generic_nominal_expected_type_conflict_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_nominal_matching_repeated_bindings_success"
+path = "generic_nominal_matching_repeated_bindings_success"
+tags = ["integration","generics","structs"]
+
+[[case]]
+id = "generic_nominal_structural_mismatch_not_conflict_rejected"
+path = "generic_nominal_structural_mismatch_not_conflict_rejected"
 tags = ["integration","generics","diagnostics"]
 
 [[case]]

@@ -3,6 +3,8 @@
 //! WHAT: maps expected types plus constructor arguments onto generic declaration parameters.
 //! WHY: structs and choices use the same nominal generic rules, and both must route named
 //! arguments through the shared call-slot resolver before binding type parameters.
+//! Conflicting repeated-parameter bindings are propagated through the typed invalid generic
+//! instantiation diagnostic, keeping structural non-matches distinct from binding conflicts.
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
@@ -16,23 +18,24 @@ use crate::compiler_frontend::ast::generic_bounds::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidGenericInstantiationReason,
+    CompilerDiagnostic, GenericInferenceSubject, InvalidGenericInstantiationReason,
 };
 use crate::compiler_frontend::datatypes::definitions::{
-    ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, FieldDefinition, TypeDefinition,
+    ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, TypeDefinition,
 };
 use crate::compiler_frontend::datatypes::environment::{
     GenericParameter as EnvironmentGenericParameter, TypeEnvironment,
 };
-use crate::compiler_frontend::datatypes::generic_bindings::GenericTypeBindings;
+use crate::compiler_frontend::datatypes::generic_bindings::{BindingConflict, GenericTypeBindings};
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
     GenericInstantiationKey, TypeIdentityKey,
 };
-use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::headers::module_symbols::GenericDeclarationMetadata;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use rustc_hash::FxHashMap;
 
 pub(crate) enum GenericNominalTemplate<'a> {
     StructFields(&'a [ConstructorField]),
@@ -64,17 +67,26 @@ pub(crate) fn infer_generic_nominal_constructor(
     string_table: &mut StringTable,
 ) -> Result<GenericNominalInference, CallValidationError> {
     let mut bindings = GenericTypeBindings::new();
+    let mut evidence_locations = NominalBindingEvidenceLocations::new();
 
     // ------------------------
     //  Collect type bindings
     // ------------------------
     // First from the expected result type (contextual type information),
     // then from the constructor arguments themselves.
-    collect_expected_type_bindings(&input, context, type_interner.environment(), &mut bindings);
+    collect_expected_type_bindings(
+        &input,
+        context,
+        type_interner.environment(),
+        &mut bindings,
+        &mut evidence_locations,
+        string_table,
+    )?;
     collect_constructor_argument_bindings(
         &input,
         type_interner.environment(),
         &mut bindings,
+        &mut evidence_locations,
         string_table,
     )?;
 
@@ -163,6 +175,62 @@ pub(crate) fn infer_generic_nominal_constructor(
     })
 }
 
+/// Records the first source location at which each generic parameter received a binding.
+///
+/// WHAT: keeps a per-parameter map used for secondary diagnostic labels when a later
+/// binding conflicts with an earlier one.
+/// WHY: the first evidence location lets the conflict diagnostic point the user at the
+/// earlier inference that fixed the parameter before the conflicting evidence arrived.
+struct NominalBindingEvidenceLocations {
+    locations_by_parameter: FxHashMap<GenericParameterId, SourceLocation>,
+}
+
+impl NominalBindingEvidenceLocations {
+    fn new() -> Self {
+        Self {
+            locations_by_parameter: FxHashMap::default(),
+        }
+    }
+
+    fn previous_location(&self, parameter_id: GenericParameterId) -> Option<SourceLocation> {
+        self.locations_by_parameter.get(&parameter_id).cloned()
+    }
+
+    /// Records the evidence location for every parameter that is currently bound.
+    ///
+    /// WHAT: uses entry-or-insert so only the first location is retained for each parameter.
+    /// WHY: later evidence for the same parameter must not overwrite the first evidence
+    /// location, which is the one needed for the secondary conflict label.
+    fn record_first_bindings(
+        &mut self,
+        canonical_parameters: Option<&[EnvironmentGenericParameter]>,
+        bindings: &GenericTypeBindings,
+        location: SourceLocation,
+    ) {
+        let Some(parameters) = canonical_parameters else {
+            return;
+        };
+
+        for parameter in parameters {
+            if bindings.get(parameter.id).is_some() {
+                self.locations_by_parameter
+                    .entry(parameter.id)
+                    .or_insert_with(|| location.clone());
+            }
+        }
+    }
+}
+
+/// Shared state for fallible nominal binding collection with evidence tracking.
+struct NominalBindingEvidenceContext<'a> {
+    nominal_path: &'a InternedPath,
+    display_name: &'a str,
+    bindings: &'a mut GenericTypeBindings,
+    evidence_locations: &'a mut NominalBindingEvidenceLocations,
+    type_environment: &'a TypeEnvironment,
+    string_table: &'a mut StringTable,
+}
+
 /// Collect generic parameter bindings from every expected type in the surrounding context.
 ///
 /// WHAT: when the compiler already knows the nominal type being constructed (e.g. from a
@@ -175,7 +243,18 @@ fn collect_expected_type_bindings(
     context: &ScopeContext,
     type_environment: &TypeEnvironment,
     bindings: &mut GenericTypeBindings,
-) {
+    evidence_locations: &mut NominalBindingEvidenceLocations,
+    string_table: &mut StringTable,
+) -> Result<(), CallValidationError> {
+    let mut evidence_context = NominalBindingEvidenceContext {
+        nominal_path: input.nominal_path,
+        display_name: input.display_name,
+        bindings,
+        evidence_locations,
+        type_environment,
+        string_table,
+    };
+
     for &expected_type_id in &context.expected_result_type_ids {
         match type_environment.get(expected_type_id) {
             // A prior generic instance of the same nominal type gives us direct argument mappings.
@@ -201,11 +280,12 @@ fn collect_expected_type_bindings(
                     else {
                         continue;
                     };
-                    let _ = type_environment.collect_type_parameter_bindings_typeid(
+                    collect_nominal_binding_evidence(
+                        &mut evidence_context,
                         parameter_type_id,
                         argument,
-                        bindings,
-                    );
+                        input.location.clone(),
+                    )?;
                 }
             }
 
@@ -216,12 +296,17 @@ fn collect_expected_type_bindings(
                     else {
                         continue;
                     };
-                    collect_constructor_field_bindings_typeid(
-                        template_fields,
-                        expected_fields,
-                        type_environment,
-                        bindings,
-                    );
+                    if template_fields.len() != expected_fields.len() {
+                        continue;
+                    }
+                    collect_pairwise_type_bindings(
+                        template_fields
+                            .iter()
+                            .zip(expected_fields)
+                            .map(|(template, expected)| (template.type_id, expected.type_id)),
+                        &mut evidence_context,
+                        input.location.clone(),
+                    )?;
                 }
             }
 
@@ -232,18 +317,20 @@ fn collect_expected_type_bindings(
                     else {
                         continue;
                     };
-                    collect_choice_variant_bindings_typeid(
+                    collect_choice_variant_bindings(
                         template_variants,
                         expected_variants,
-                        type_environment,
-                        bindings,
-                    );
+                        &mut evidence_context,
+                        input.location.clone(),
+                    )?;
                 }
             }
 
             _ => {}
         }
     }
+
+    Ok(())
 }
 
 /// Look up the canonical generic parameter list for a nominal type path.
@@ -270,6 +357,7 @@ fn collect_constructor_argument_bindings(
     input: &GenericNominalConstructorInput<'_>,
     type_environment: &TypeEnvironment,
     bindings: &mut GenericTypeBindings,
+    evidence_locations: &mut NominalBindingEvidenceLocations,
     string_table: &mut StringTable,
 ) -> Result<(), CallValidationError> {
     let (Some(fields), Some(raw_args)) = (input.constructor_fields, input.raw_args) else {
@@ -285,6 +373,15 @@ fn collect_constructor_argument_bindings(
         string_table,
     )?;
 
+    let mut evidence_context = NominalBindingEvidenceContext {
+        nominal_path: input.nominal_path,
+        display_name: input.display_name,
+        bindings,
+        evidence_locations,
+        type_environment,
+        string_table,
+    };
+
     for (field, slot) in fields.iter().zip(resolved_slots.iter()) {
         let Some(argument) = slot else {
             continue;
@@ -297,75 +394,99 @@ fn collect_constructor_argument_bindings(
             continue;
         }
 
-        let _ = type_environment.collect_type_parameter_bindings_typeid(
+        collect_nominal_binding_evidence(
+            &mut evidence_context,
             field.type_id,
             argument.value.type_id,
-            bindings,
-        );
+            argument.location.clone(),
+        )?;
     }
 
     Ok(())
 }
 
-/// Pairwise generic binding collection between template fields and expected struct fields.
+/// Collects one template-to-concrete binding pair and records evidence.
 ///
-/// WHAT: for each field in the struct declaration template, match it with the corresponding
-/// expected field and collect type-parameter bindings from their respective type_ids.
-fn collect_constructor_field_bindings_typeid(
-    template_fields: &[ConstructorField],
-    expected_fields: &[FieldDefinition],
-    type_environment: &TypeEnvironment,
-    bindings: &mut GenericTypeBindings,
-) {
-    if template_fields.len() != expected_fields.len() {
-        return;
-    }
+/// WHAT: unifies a template `TypeId` with a concrete `TypeId` through the fallible owner,
+/// records the evidence location for newly-bound parameters, and converts a binding conflict
+/// into the typed conflicting-inference diagnostic.
+/// WHY: structural non-matches return `Ok(())` and stay distinct from binding conflicts,
+/// which propagate as the typed invalid generic instantiation diagnostic.
+fn collect_nominal_binding_evidence(
+    context: &mut NominalBindingEvidenceContext<'_>,
+    template_type_id: TypeId,
+    concrete_type_id: TypeId,
+    location: SourceLocation,
+) -> Result<(), CallValidationError> {
+    let canonical_parameters =
+        canonical_parameters_for_nominal(context.nominal_path, context.type_environment);
 
-    for (template_field, expected_field) in template_fields.iter().zip(expected_fields.iter()) {
-        let _ = type_environment.collect_type_parameter_bindings_typeid(
-            template_field.type_id,
-            expected_field.type_id,
-            bindings,
-        );
+    match context
+        .type_environment
+        .try_collect_type_parameter_bindings_typeid(
+            template_type_id,
+            concrete_type_id,
+            &mut *context.bindings,
+        ) {
+        Ok(_) => {
+            context.evidence_locations.record_first_bindings(
+                canonical_parameters,
+                &*context.bindings,
+                location,
+            );
+            Ok(())
+        }
+        Err(conflict) => {
+            let previous_evidence_location = context
+                .evidence_locations
+                .previous_location(conflict.parameter_id);
+            Err(nominal_binding_conflict_diagnostic(
+                context.display_name,
+                conflict,
+                canonical_parameters,
+                context.string_table,
+                location,
+                previous_evidence_location,
+            )
+            .into())
+        }
     }
 }
 
-/// Pairwise generic binding collection between template payload fields and expected payload fields.
+/// Pairwise generic binding collection between two `TypeId` slices.
 ///
-/// WHAT: helper for choice variant record payloads; mirrors
-/// `collect_constructor_field_bindings_typeid` but operates on `FieldDefinition` slices
-/// instead of `ConstructorField` slices.
-fn collect_choice_field_bindings_typeid(
-    template_fields: &[FieldDefinition],
-    expected_fields: &[FieldDefinition],
-    type_environment: &TypeEnvironment,
-    bindings: &mut GenericTypeBindings,
-) {
-    if template_fields.len() != expected_fields.len() {
-        return;
+/// WHAT: for each position, collects one template-to-concrete binding pair with evidence.
+/// WHY: struct fields and choice payload fields both reduce to matching `TypeId` slices,
+/// so one helper serves both and avoids duplicating the length guard and zipping logic.
+fn collect_pairwise_type_bindings(
+    type_pairs: impl IntoIterator<Item = (TypeId, TypeId)>,
+    context: &mut NominalBindingEvidenceContext<'_>,
+    location: SourceLocation,
+) -> Result<(), CallValidationError> {
+    for (template_type_id, concrete_type_id) in type_pairs {
+        collect_nominal_binding_evidence(
+            context,
+            template_type_id,
+            concrete_type_id,
+            location.clone(),
+        )?;
     }
 
-    for (template_field, expected_field) in template_fields.iter().zip(expected_fields.iter()) {
-        let _ = type_environment.collect_type_parameter_bindings_typeid(
-            template_field.type_id,
-            expected_field.type_id,
-            bindings,
-        );
-    }
+    Ok(())
 }
 
 /// Pairwise generic binding collection between template choice variants and expected choice variants.
 ///
 /// WHAT: for each variant in the choice declaration template, match it with the corresponding
-/// expected variant and, if both are record payloads, delegate to `collect_choice_field_bindings_typeid`.
-fn collect_choice_variant_bindings_typeid(
+/// expected variant and, if both are record payloads, delegate to `collect_pairwise_type_bindings`.
+fn collect_choice_variant_bindings(
     template_variants: &[ChoiceVariantDefinition],
     expected_variants: &[ChoiceVariantDefinition],
-    type_environment: &TypeEnvironment,
-    bindings: &mut GenericTypeBindings,
-) {
+    context: &mut NominalBindingEvidenceContext<'_>,
+    location: SourceLocation,
+) -> Result<(), CallValidationError> {
     if template_variants.len() != expected_variants.len() {
-        return;
+        return Ok(());
     }
 
     for (template_variant, expected_variant) in template_variants.iter().zip(expected_variants) {
@@ -380,12 +501,53 @@ fn collect_choice_variant_bindings_typeid(
         else {
             continue;
         };
+        if template_fields.len() != expected_fields.len() {
+            continue;
+        }
 
-        collect_choice_field_bindings_typeid(
-            template_fields,
-            expected_fields,
-            type_environment,
-            bindings,
-        );
+        collect_pairwise_type_bindings(
+            template_fields
+                .iter()
+                .zip(expected_fields)
+                .map(|(template, expected)| (template.type_id, expected.type_id)),
+            context,
+            location.clone(),
+        )?;
     }
+
+    Ok(())
+}
+
+/// Builds the typed generic-inference diagnostic from a nominal binding conflict.
+///
+/// WHAT: resolves the parameter name from the canonical parameter list, carries the
+/// conflicting `TypeId`s without rendering them, and attaches a secondary label at the
+/// first evidence location when one was recorded.
+/// WHY: type names are rendered later through `DiagnosticRenderContext`; the diagnostic
+/// payload carries only semantic `TypeId`s and structured facts.
+fn nominal_binding_conflict_diagnostic(
+    display_name: &str,
+    conflict: BindingConflict,
+    canonical_parameters: Option<&[EnvironmentGenericParameter]>,
+    string_table: &mut StringTable,
+    current_evidence_location: SourceLocation,
+    previous_evidence_location: Option<SourceLocation>,
+) -> CompilerDiagnostic {
+    let parameter_name = canonical_parameters
+        .and_then(|parameters| {
+            parameters
+                .iter()
+                .find(|parameter| parameter.id == conflict.parameter_id)
+                .map(|parameter| parameter.name)
+        })
+        .unwrap_or_else(|| string_table.intern("<generic parameter>"));
+
+    CompilerDiagnostic::conflicting_generic_inference(
+        Some(string_table.intern(display_name)),
+        GenericInferenceSubject::NominalType,
+        conflict,
+        parameter_name,
+        current_evidence_location,
+        previous_evidence_location,
+    )
 }

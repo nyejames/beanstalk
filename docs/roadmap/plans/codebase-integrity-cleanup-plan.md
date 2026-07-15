@@ -20,30 +20,31 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2A, propagate generic nominal binding conflicts
-LAST_ACCEPTED_COMMIT: `67b53bdd6`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 1 accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 2B, report the correct initializer delimiter at EOF
+LAST_ACCEPTED_COMMIT: `7a478ea3a`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 2A accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: generics, type identity, AST expression ownership and diagnostic evidence locations
-- code: `generic_nominal_inference.rs`, generic function inference and generic application diagnostics
+- docs: tokenizer and header-parsing delimiter ownership plus structured syntax diagnostics
+- code: `utilities/token_scan.rs`, declaration-initializer scanner and focused scanner/parser tests
 ACCEPTANCE_CRITERIA:
-- repeated nominal constructor evidence with conflicting concrete types produces the typed generic application diagnostic
-- structural mismatches remain distinct from repeated-binding conflicts
-- constructor, expected-context and first-evidence locations remain accurate
-- matching repeated bindings succeed and incomplete evidence keeps the existing cannot-infer path
-- focused inference tests pass without touching TIR-owned files
+- EOF reports the delimiter for the actual open template, parenthesis, collection, catch or value-producing if construct
+- nested scanning uses an explicit open-construct model instead of a fixed `]` fallback
+- an impossible nested state with no open construct is reported as an internal scanner invariant
+- focused tokenizer and parser cases pass without touching TIR-owned files
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
 - Phase 1 separate `just bench-check`: passed, 28/28 cases
-- Phase 2A validation: not run
+- Phase 2A focused generic inference, diagnostic-label and rendering tests: passed
+- Phase 2A `just validate`: passed, including cross-target Clippy, 3,350 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 2B validation: not run
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 2A is a bounded frontend inference slice
+DELEGATION_DECISION: ollama implementation worker - Phase 2B is a bounded scanner diagnostic slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 1, then delegate Phase 2A
+NEXT_RESUME_ACTION: commit accepted Phase 2A, then delegate Phase 2B
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -222,6 +223,10 @@ Add platform-independent tests for:
 - focused path, Stage 0 and HTML route tests pass
 
 ## Phase 2: Preserve frontend semantic and diagnostic facts
+
+Progress: Slice 2A is complete. Generic nominal inference now preserves repeated binding conflicts,
+shares one typed conflict payload with generic function inference and retains current plus first
+evidence locations. Matching evidence and structural mismatch behavior have focused coverage.
 
 ### Slice 2A: Propagate generic nominal binding conflicts
 

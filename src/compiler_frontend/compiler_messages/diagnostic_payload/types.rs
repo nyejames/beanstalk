@@ -1491,7 +1491,8 @@ pub enum InvalidGenericInstantiationReason {
     CannotInferFunctionArguments {
         missing_parameters: Vec<StringId>,
     },
-    ConflictingFunctionArgument {
+    ConflictingInference {
+        subject: GenericInferenceSubject,
         parameter_id: GenericParameterId,
         parameter_name: StringId,
         existing_type_id: TypeId,
@@ -1512,4 +1513,10 @@ pub enum InvalidGenericInstantiationReason {
     RecursiveFunctionInstantiation,
     ExplicitCallTypeArgumentsUnsupported,
     GenericFunctionValueDeferred,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum GenericInferenceSubject {
+    Function,
+    NominalType,
 }

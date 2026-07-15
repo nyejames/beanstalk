@@ -1188,7 +1188,8 @@ fn generic_conflict_rendering_resolves_concrete_type_names() {
 
     let diagnostic = CompilerDiagnostic::invalid_generic_instantiation(
         Some(function_name),
-        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+        InvalidGenericInstantiationReason::ConflictingInference {
+            subject: crate::compiler_frontend::compiler_messages::GenericInferenceSubject::Function,
             parameter_id: GenericParameterId(0),
             parameter_name,
             existing_type_id: type_environment.builtins().int,

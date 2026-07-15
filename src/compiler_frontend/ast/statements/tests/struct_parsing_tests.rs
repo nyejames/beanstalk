@@ -7,7 +7,10 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{
     ExpressionKind, ExpressionValueShape,
 };
-use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidFieldAccessReason};
+use crate::compiler_frontend::compiler_messages::{
+    DiagnosticLabelMessage, DiagnosticLabelStyle, DiagnosticPayload, GenericInferenceSubject,
+    InvalidFieldAccessReason, InvalidGenericInstantiationReason,
+};
 use crate::compiler_frontend::tests::ast_fixture_support::start_function_body;
 use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
@@ -124,4 +127,52 @@ fn rejects_removed_builtin_error_fields() {
             ..
         }
     ));
+}
+
+#[test]
+fn generic_struct_conflict_keeps_argument_and_expected_type_evidence_locations() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "Pair type T = |\n\
+             left T,\n\
+             right T,\n\
+         |\n\
+         bad Pair of Int = Pair(\"two\", 1)\n",
+    );
+
+    let DiagnosticPayload::InvalidGenericInstantiation {
+        reason:
+            InvalidGenericInstantiationReason::ConflictingInference {
+                subject,
+                current_evidence_location,
+                previous_evidence_location,
+                ..
+            },
+        ..
+    } = &diagnostic.payload
+    else {
+        panic!(
+            "expected a generic inference conflict, got {:?}",
+            diagnostic.payload
+        );
+    };
+    let previous_evidence_location = previous_evidence_location
+        .as_ref()
+        .expect("expected type evidence should be retained");
+
+    assert_eq!(*subject, GenericInferenceSubject::NominalType);
+    assert_eq!(diagnostic.primary_location, *current_evidence_location);
+    assert_eq!(
+        current_evidence_location.start_pos.line_number,
+        previous_evidence_location.start_pos.line_number
+    );
+    assert!(
+        current_evidence_location.start_pos.char_column
+            > previous_evidence_location.start_pos.char_column,
+        "the argument evidence should follow the receiving-boundary evidence"
+    );
+    assert!(diagnostic.labels.iter().any(|label| {
+        label.style == DiagnosticLabelStyle::Secondary
+            && label.location == *previous_evidence_location
+            && label.message == Some(DiagnosticLabelMessage::GenericInferencePreviousEvidence)
+    }));
 }

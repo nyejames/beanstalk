@@ -413,7 +413,7 @@ impl DiagnosticPayload {
                             *parameter = remap.get(*parameter);
                         }
                     }
-                    InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+                    InvalidGenericInstantiationReason::ConflictingInference {
                         parameter_name,
                         current_evidence_location,
                         previous_evidence_location,

@@ -1569,30 +1569,10 @@ impl TypeEnvironment {
     /// collecting parameter-to-argument bindings.
     ///
     /// WHAT: recursively walks two `TypeId` trees and records which concrete `TypeId`
-    ///       each generic parameter must map to.
-    /// WHY: generic struct/choice constructor inference needs to map expected types
-    ///      and constructor arguments onto generic declaration parameters.
-    /// RETURN: true if unification succeeded (all positions match).
-    pub(crate) fn collect_type_parameter_bindings_typeid(
-        &self,
-        template_type_id: TypeId,
-        concrete_type_id: TypeId,
-        bindings: &mut GenericTypeBindings,
-    ) -> bool {
-        self.try_collect_type_parameter_bindings_typeid(
-            template_type_id,
-            concrete_type_id,
-            bindings,
-        )
-        .unwrap_or(false)
-    }
-
-    /// Unifies a template type with a concrete type and preserves binding-conflict facts.
-    ///
-    /// WHAT: this is the diagnostic-capable form of
-    /// `collect_type_parameter_bindings_typeid`.
-    /// WHY: generic function inference needs to distinguish structural mismatches from a
-    /// repeated `T` being inferred as two different concrete types.
+    ///       each generic parameter must map to, preserving binding-conflict facts.
+    /// WHY: generic function and nominal constructor inference need to distinguish
+    ///      structural mismatches from a repeated `T` being inferred as two different
+    ///      concrete types.
     pub(crate) fn try_collect_type_parameter_bindings_typeid(
         &self,
         template_type_id: TypeId,

@@ -253,7 +253,8 @@ pub(crate) fn invalid_generic_instantiation_message(
                 "Cannot infer type argument(s) for generic function {type_name_str}: {missing}. Add an immediate receiving-site type annotation or pass arguments that fix the type."
             )
         }
-        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+        InvalidGenericInstantiationReason::ConflictingInference {
+            subject,
             parameter_name,
             existing_type_id,
             replacement_type_id,
@@ -262,8 +263,16 @@ pub(crate) fn invalid_generic_instantiation_message(
             let parameter = string_table.resolve(*parameter_name);
             let existing_type = diagnostic_type_name(*existing_type_id, context);
             let replacement_type = diagnostic_type_name(*replacement_type_id, context);
+            let subject = match subject {
+                crate::compiler_frontend::compiler_messages::GenericInferenceSubject::Function => {
+                    "generic function"
+                }
+                crate::compiler_frontend::compiler_messages::GenericInferenceSubject::NominalType => {
+                    "generic type"
+                }
+            };
             format!(
-                "Generic parameter '{parameter}' in generic function {type_name_str} was inferred as both {existing_type} and {replacement_type}."
+                "Generic parameter '{parameter}' in {subject} {type_name_str} was inferred as both {existing_type} and {replacement_type}."
             )
         }
         InvalidGenericInstantiationReason::MissingTraitEvidence {

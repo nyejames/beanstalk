@@ -9,12 +9,12 @@ use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, BorrowDiagnosticKind, CommonSyntaxMistakeReason, ConfigDiagnosticKind,
     DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticKind,
     DiagnosticLabel, DiagnosticLabelMessage, DiagnosticPayload, DiagnosticPlace,
-    DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
-    ImportPublicSurfaceType, IncompatibleChoiceComparisonReason, InvalidCastReason,
-    InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidCompileTimePathReason,
-    InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
-    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
+    DiagnosticSeverity, GenericApplicationErrorReason, GenericInferenceSubject, ImportClauseKind,
+    ImportDiagnosticKind, ImportPublicSurfaceType, IncompatibleChoiceComparisonReason,
+    InvalidCastReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
+    InvalidCompileTimePathReason, InvalidConfigReason, InvalidFunctionSignatureReason,
+    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
+    InvalidLoopHeaderReason, InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
     InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
     InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
     InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
@@ -23,6 +23,7 @@ use crate::compiler_frontend::compiler_messages::{
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
+use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
@@ -1504,6 +1505,41 @@ impl CompilerDiagnostic {
             location,
             DiagnosticPayload::InvalidGenericInstantiation { type_name, reason },
         )
+    }
+
+    pub(crate) fn conflicting_generic_inference(
+        type_name: Option<StringId>,
+        subject: GenericInferenceSubject,
+        conflict: BindingConflict,
+        parameter_name: StringId,
+        current_evidence_location: SourceLocation,
+        previous_evidence_location: Option<SourceLocation>,
+    ) -> Self {
+        let mut diagnostic = Self::invalid_generic_instantiation(
+            type_name,
+            crate::compiler_frontend::compiler_messages::InvalidGenericInstantiationReason::ConflictingInference {
+                subject,
+                parameter_id: conflict.parameter_id,
+                parameter_name,
+                existing_type_id: conflict.existing_type_id,
+                replacement_type_id: conflict.replacement_type_id,
+                current_evidence_location: current_evidence_location.clone(),
+                previous_evidence_location: previous_evidence_location.clone(),
+            },
+            current_evidence_location.clone(),
+        );
+
+        if let Some(previous_evidence_location) = previous_evidence_location {
+            diagnostic = diagnostic.with_labels(vec![
+                DiagnosticLabel::primary(current_evidence_location),
+                DiagnosticLabel::secondary(
+                    previous_evidence_location,
+                    Some(DiagnosticLabelMessage::GenericInferencePreviousEvidence),
+                ),
+            ]);
+        }
+
+        diagnostic
     }
 
     pub(crate) fn invalid_assignment_target(
