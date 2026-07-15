@@ -13,6 +13,7 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 - [Config Blocks replacing top level project builder keys](docs/roadmap/plans/entry-config-blocks-runtime-title-plan.md)
 - [New Number type for precise numerical values](docs/roadmap/plans/number_type_numeric_plan.md)
 - [#Import values and anonymous records plan](docs/roadmap/plans/import_values_anonymous_records_plan.md)
+- [Canonical module compilation and scoped packages](docs/roadmap/plans/canonical-module-compilation-and-scoped-packages-plan.md)
 - [HTML project builder Wasm backend plan](docs/roadmap/plans/html_project_backend_wasm_final_implementation_plan.md)
 
 # Post-TIR template performance follow-ups (deferred)
