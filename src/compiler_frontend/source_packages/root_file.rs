@@ -20,6 +20,21 @@ pub(crate) enum HashRootFileDiscovery {
     Unreadable(String),
 }
 
+/// A typed failure from direct-child hash-root discovery.
+///
+/// WHAT: distinguishes filesystem read failures from unrepresentable filenames so the owning
+///     Stage 0 boundary can map each kind to its correct error channel.
+/// WHY: a non-UTF-8 direct-child name cannot be classified as a hash-root candidate and must not
+///      be silently skipped. The offending `PathBuf` is preserved independently of
+///      `CompilerMessages` and `CompilerError` so the calling stage owns the diagnostic lane.
+#[derive(Debug)]
+pub(crate) enum HashRootDiscoveryError {
+    /// Filesystem `read_dir` or entry iteration failure.
+    Io(io::Error),
+    /// A direct-child filename that cannot be represented as UTF-8.
+    InvalidFileName(PathBuf),
+}
+
 /// Immutable source-backed package roots and their prepared public-surface states.
 ///
 /// WHAT: carries the canonical filesystem roots and the typed direct-child hash-root discovery
@@ -81,15 +96,22 @@ pub(crate) fn file_name_is_hash_root_file(file_name: &str) -> bool {
 /// WHAT: applies the generic `#*.bst` filename policy to one source-backed package directory.
 /// WHY: source-backed package preflight and path resolution must inspect the same filesystem candidates
 ///      while keeping missing or ambiguous roots available for typed Stage 0 diagnostics.
-pub(crate) fn discover_hash_root_file(directory: &Path) -> io::Result<HashRootFileDiscovery> {
+pub(crate) fn discover_hash_root_file(
+    directory: &Path,
+) -> Result<HashRootFileDiscovery, HashRootDiscoveryError> {
     let mut root_files = Vec::new();
 
-    for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
+    for entry in std::fs::read_dir(directory).map_err(HashRootDiscoveryError::Io)? {
+        let entry = entry.map_err(HashRootDiscoveryError::Io)?;
         let path = entry.path();
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
+
+        // A direct-child filename that is not valid UTF-8 cannot be classified as a hash-root
+        // candidate. Fail immediately with the offending path instead of silently skipping it,
+        // which could misreport a valid root as missing.
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| HashRootDiscoveryError::InvalidFileName(path.clone()))?;
 
         if file_name_is_hash_root_file(file_name) && path.is_file() {
             root_files.push(path);

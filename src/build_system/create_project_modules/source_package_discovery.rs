@@ -9,7 +9,8 @@ use crate::builder_surface::{ProvidedSourceRoot, SourcePackageRegistry};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::source_packages::root_file::{
-    HashRootFileDiscovery, PreparedSourcePackageRoots, discover_hash_root_file,
+    HashRootDiscoveryError, HashRootFileDiscovery, PreparedSourcePackageRoots,
+    discover_hash_root_file,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
@@ -59,10 +60,21 @@ pub(crate) fn prepare_source_package_roots(
                 )),
             },
             Ok(discovery) => discovery,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(HashRootDiscoveryError::Io(error))
+                if error.kind() == std::io::ErrorKind::NotFound =>
+            {
                 HashRootFileDiscovery::Missing
             }
-            Err(error) => HashRootFileDiscovery::Unreadable(error.to_string()),
+            Err(HashRootDiscoveryError::Io(error)) => {
+                HashRootFileDiscovery::Unreadable(error.to_string())
+            }
+            Err(HashRootDiscoveryError::InvalidFileName(path)) => {
+                return Err(non_utf8_filesystem_name_error(
+                    &path,
+                    "source-backed package hash-root public-surface candidate",
+                    string_table,
+                ));
+            }
         };
 
         entries.push((package.import_prefix.clone(), canonical_root, discovery));

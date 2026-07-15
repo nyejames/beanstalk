@@ -441,3 +441,95 @@ mod prepare_source_package_roots_tests {
         fs::remove_dir_all(&root).expect("should remove temp root");
     }
 }
+
+/// Linux preparation tests for non-UTF-8 direct-child hash-root candidates.
+///
+/// Directory, single-file and config compilation all delegate source-package preparation to
+/// `prepare_source_package_roots`, so these tests cover the shared owner instead of duplicating the
+/// same assertion at each orchestration boundary. macOS rejects the invalid-byte fixture before
+/// discovery can inspect it.
+#[cfg(target_os = "linux")]
+mod non_utf8_hash_root_candidate_tests {
+    use super::*;
+    use crate::builder_surface::SourcePackageRegistry;
+    use crate::compiler_frontend::compiler_errors::ErrorType;
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::path::PathBuf;
+
+    fn assert_non_utf8_file_error(messages: &CompilerMessages) {
+        let (error_type, message, _location) = messages
+            .first_infrastructure_error_for_tests()
+            .expect("expected an infrastructure file error");
+        assert_eq!(
+            *error_type,
+            ErrorType::File,
+            "non-UTF-8 hash-root candidate should be a File infrastructure error"
+        );
+        assert!(
+            message.contains("Non-UTF-8"),
+            "error message should mention non-UTF-8: {message}"
+        );
+        assert!(
+            message.contains("hash-root public-surface candidate"),
+            "error message should name the hash-root context: {message}"
+        );
+    }
+
+    fn package_with_non_utf8_child() -> (PathBuf, PathBuf) {
+        let root = temp_dir("prepare_roots_non_utf8_candidate");
+        let package_root = root.join("pkg");
+        fs::create_dir_all(&package_root).expect("should create package root");
+
+        let bad_name = OsString::from_vec(vec![0xC3, 0x28]);
+        let bad_file = package_root.join(bad_name);
+        fs::write(&bad_file, b"").expect("should write non-UTF-8 named file");
+
+        (root, package_root)
+    }
+
+    #[test]
+    fn invalid_candidate_without_valid_hash_root_returns_file_error() {
+        let (root, package_root) = package_with_non_utf8_child();
+
+        let mut source_packages = SourcePackageRegistry::new();
+        source_packages.register_filesystem_root(
+            "pkg",
+            package_root,
+            crate::builder_surface::PackageOrigin::ProjectLocal,
+        );
+
+        let mut string_table = StringTable::new();
+        let messages = super::source_package_discovery::prepare_source_package_roots(
+            &source_packages,
+            &mut string_table,
+        )
+        .expect_err("non-UTF-8 candidate should fail preparation");
+
+        assert_non_utf8_file_error(&messages);
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+
+    #[test]
+    fn valid_hash_root_plus_invalid_candidate_still_returns_file_error() {
+        let (root, package_root) = package_with_non_utf8_child();
+        fs::write(package_root.join("#home.bst"), b"").expect("should write valid hash root");
+
+        let mut source_packages = SourcePackageRegistry::new();
+        source_packages.register_filesystem_root(
+            "pkg",
+            package_root,
+            crate::builder_surface::PackageOrigin::ProjectLocal,
+        );
+
+        let mut string_table = StringTable::new();
+        let messages = super::source_package_discovery::prepare_source_package_roots(
+            &source_packages,
+            &mut string_table,
+        )
+        .expect_err("valid root plus invalid candidate should still fail");
+
+        assert_non_utf8_file_error(&messages);
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+}

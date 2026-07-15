@@ -20,18 +20,18 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: final review corrections
-CURRENT_SLICE: Audit correction 1, reject non-UTF-8 hash-root candidates
-LAST_ACCEPTED_COMMIT: `28dde0f7b`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, clean after the initial final audit
+CURRENT_SLICE: Audit correction 2, make generic binding collection transactional
+LAST_ACCEPTED_COMMIT: `ce4267efe`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, audit correction 1 accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: exact filesystem identity and Stage 0 project-structure contracts
-- code: hash-root discovery, source-package preparation and route-specific regression tests
+- docs: generic inference, type identity and diagnostic-evidence contracts
+- code: recursive TypeId binding collection and both nominal/function inference callers
 ACCEPTANCE_CRITERIA:
-- direct-child non-UTF-8 source-package filenames return a typed discovery failure with the original path
-- every Stage 0 preparation route maps that failure to the filesystem `CompilerError` lane
-- missing, valid and multiple UTF-8 root outcomes remain unchanged
-- Unix invalid-byte regression tests cover missing-only and valid-plus-invalid cases
+- structural mismatches leave the binding map unchanged at every recursion depth
+- `BindingConflict` retains both types and first-evidence facts
+- nominal and generic-function callers distinguish match, non-match and conflict
+- nested mismatch regressions retain the ordinary type-mismatch diagnostic lane
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -62,19 +62,22 @@ VALIDATION_STATE:
 - Phase 6A `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 6B focused Wasm tests: passed, 23 tests
 - Phase 6B `just validate`: passed, including cross-target Clippy, 3,410 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Audit correction 1 focused root-file and Stage 0 identity tests: passed locally, 12 and 5 tests. Three invalid-byte regressions are Linux-only and compiled by cross-target Clippy.
+- Audit correction 1 `just validate`: passed, including cross-target Clippy, 3,410 local unit tests, 1,762 integration tests, docs and 28 benchmark cases
 DOCS_IMPACT: all identified canonical docs are aligned. No progress-matrix status change is needed.
-BLOCKERS_OR_OPEN_DECISIONS: initial final audit found two accepted correctness gaps. Correct non-UTF-8 hash-root discovery first, then transactional generic binding collection and focused re-audit.
-DELEGATION_DECISION: ollama implementation worker - correction 1 is a bounded Stage 0 filesystem-identity slice
+BLOCKERS_OR_OPEN_DECISIONS: audit correction 1 is accepted. Transactional generic binding collection remains, followed by focused re-audit.
+DELEGATION_DECISION: ollama implementation worker - correction 2 is a bounded generic inference integrity slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: implement audit correction 1 and run focused plus full validation
+NEXT_RESUME_ACTION: commit audit correction 1, then implement transactional generic binding collection
 
 ## Final audit record
 
 The initial plan-wide audit accepted two required corrections. Hash-root discovery must reject
 non-UTF-8 direct-child filenames instead of silently skipping them. Recursive generic binding
 collection must be transactional so a structural mismatch cannot retain partial evidence. Both
-remain inside the original Phase 1 and Phase 2 scopes. A focused re-audit is required after fixes.
+remain inside the original Phase 1 and Phase 2 scopes. The hash-root correction is accepted and
+fully validated. A focused re-audit is required after the generic correction.
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 

@@ -176,3 +176,28 @@ fn prepared_roots_preserve_canonical_prefix_order() {
     let file_prefixes: Vec<&str> = prepared.root_files().keys().map(|k| k.as_str()).collect();
     assert_eq!(file_prefixes, vec!["alpha", "middle", "zeta"]);
 }
+
+// macOS rejects this invalid-byte filename before discovery can inspect it.
+#[cfg(target_os = "linux")]
+#[test]
+fn rejects_non_utf8_direct_child_filename_with_the_offending_path() {
+    use super::root_file::HashRootDiscoveryError;
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let directory = tempfile::tempdir().expect("failed to create temp directory");
+    let bad_name = OsString::from_vec(vec![0xC3, 0x28]);
+    let bad_file = directory.path().join(bad_name);
+    fs::write(&bad_file, b"").expect("should write non-UTF-8 named file");
+
+    let error = discover_hash_root_file(directory.path())
+        .expect_err("non-UTF-8 filename should be rejected");
+    let HashRootDiscoveryError::InvalidFileName(path) = error else {
+        panic!("expected InvalidFileName, got {error:?}");
+    };
+
+    assert_eq!(
+        path, bad_file,
+        "the offending path should be preserved in the typed error"
+    );
+}
