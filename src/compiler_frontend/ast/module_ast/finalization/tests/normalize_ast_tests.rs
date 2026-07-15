@@ -257,7 +257,7 @@ fn finalization_normalizes_dynamic_expression_payloads_into_expression_overlay()
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::clone(&registry)),
+        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -379,7 +379,7 @@ fn finalization_does_not_mark_parsed_expression_overlay_reference_finalized() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::clone(&registry)),
+        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -472,7 +472,7 @@ fn finalization_normalizes_branch_selector_payloads_into_expression_overlay() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::clone(&registry)),
+        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -603,7 +603,7 @@ fn finalization_normalizes_loop_header_payloads_into_expression_overlay() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::clone(&registry)),
+        template_ir_registry: Rc::clone(&registry),
     };
 
     normalize_template_for_hir(&mut template, &mut context)
@@ -1148,7 +1148,7 @@ fn branch_tir_root_normalizes_into_owned_runtime_handoff() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1254,7 +1254,7 @@ fn loop_tir_root_normalizes_into_owned_runtime_handoff() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1467,7 +1467,7 @@ fn ordinary_runtime_template_handoff_uses_module_tir_store() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1512,7 +1512,7 @@ fn runtime_template_expression_normalization_replaces_template_with_owned_handof
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1615,7 +1615,7 @@ fn runtime_template_expression_handoff_uses_finalized_expression_overlay_view() 
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1703,7 +1703,7 @@ fn nested_runtime_template_normalizes_through_final_view() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -1926,7 +1926,7 @@ fn reactive_metadata_derived_from_nested_final_view() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     normalize_expression_templates(&mut expression, &mut context)
@@ -2007,7 +2007,7 @@ fn helper_artifact_rejected_after_final_view_traversal() {
         template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         string_table: &mut string_table,
         template_ir_store: Rc::clone(&template_ir_store),
-        template_ir_registry: Some(Rc::new(RefCell::new(registry))),
+        template_ir_registry: Rc::new(RefCell::new(registry)),
     };
 
     let result = normalize_expression_templates(&mut expression, &mut context);

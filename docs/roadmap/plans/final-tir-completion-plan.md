@@ -21,28 +21,28 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
-CURRENT_SLICE: Slice 3E3b - audit the reactive-metadata effective-view fallback
-LAST_ACCEPTED_COMMIT: `83f0d4c7a` (prior TIR checkpoint; Slice 3E3a is accepted in this plan-bearing commit)
+CURRENT_SLICE: Slice 3E3b2 - require post-normalization reactive metadata views
+LAST_ACCEPTED_COMMIT: `f294e7eb9` (prior checkpoint; Slice 3E3b1 is accepted in this plan-bearing commit)
 BRANCH: `main`
-WORKTREE: `main` at user roadmap commit `0e38ee37c`; reviewed Slice 3E3a relocation pending commit, with no unrelated uncommitted changes
+WORKTREE: `main`; reviewed Slice 3E3b1 change pending commit, with no unrelated uncommitted changes
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `reactive_template_metadata.rs`, finalization metadata callers, `TirView` expression traversal and focused reactive tests
-- determine which raw-store metadata reads are pre-overlay structural reads and which duplicate the final effective-view path before editing.
+- code: `reactive_template_metadata.rs`, normalization metadata callers, `TirView` and focused reactive tests
+- the pre-overlay flow-aware collector remains a distinct structural pass. The post-normalization path always has a Finalized registry-backed view and must not downgrade to raw-store reads or ignore missing effective authority.
 ACCEPTANCE_CRITERIA:
-- Map both metadata entry points and every production caller to its exact compilation phase and registry availability.
-- Remove required-root `Option`/`.ok()` fallback and duplicate raw/effective traversal only where the final effective view is authoritative.
-- Preserve environment-aware annotation ownership and semantic absence of reactive metadata.
+- Make the post-normalization store-and-registry metadata API require a Finalized `TirView` and return internal errors for missing stores, roots, nodes, overlays, slot plans or sites.
+- Preserve cross-store child view identity and semantic absence of expression overrides or reactive metadata.
+- Keep the pre-overlay flow-aware structural collector unchanged and avoid a broad generic walker abstraction.
 VALIDATION_STATE:
-- Slice 3E3a focused malformed-store suite: passed, 27 tests
-- Slice 3E3a parent `just validate`: passed cross-target Clippy, 3432 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 2 ms average improvement, 9 faster and 0 slower
+- Slice 3E3b1 focused normalization suite: passed, 18 tests
+- Slice 3E3b1 parent `just validate`: passed cross-target Clippy, 3432 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 3 ms average improvement, 12 faster and 0 slower
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: none. Distinguish the pre-overlay structural metadata pass from the post-normalization effective-view pass before choosing the edit boundary
-DELEGATION_DECISION: undecided - parent will bound the caller/phase inventory, then use Codex CLI for implementation
+BLOCKERS_OR_OPEN_DECISIONS: none. Wrapper-context and slot-resolution overlays are final view dimensions, not reasons to use the structural fallback
+DELEGATION_DECISION: codex-cli implementation - bounded post-normalization effective-view/error-propagation slice
 NEXT_WORKER_ORDER: codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Slice 3E3a, reload the plan and inventory reactive-metadata caller phases
+NEXT_RESUME_ACTION: commit Slice 3E3b1, then delegate the post-normalization reactive-view slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 
@@ -444,6 +444,8 @@ Slice 3E2b1 checkpoint: formatter, wrapper normalization and render-unit prepara
 Slice 3E2b2 checkpoint: runtime slot-site planning now distinguishes missing nodes from present non-slots and missing same-store child templates from foreign references. Required authority fails in the runtime-plan owner, semantic optionality remains explicit and focused subsystem tests protect the store-local and subtree-copy boundaries without changing valid slot routing.
 
 Slice 3E3a checkpoint: malformed-store validation now lives with its focused TIR tests. The production `validation` submodule and module-map entries are deleted, while all 27 invariant tests retain the same checker and diagnostics.
+
+Slice 3E3b1 checkpoint: HIR template normalization now carries a required module TIR registry. Every production and focused context supplies the authority directly, and registry-absence branches no longer skip overlay normalization, classification, folding, metadata, handoff or kind reads.
 
 #### Phase 3 acceptance
 

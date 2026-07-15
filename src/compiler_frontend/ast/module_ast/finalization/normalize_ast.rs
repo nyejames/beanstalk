@@ -87,7 +87,7 @@ struct TemplateNormalizationContext<'a, 'strings> {
     template_const_loop_iteration_limit: usize,
     string_table: &'strings mut StringTable,
     template_ir_store: Rc<RefCell<TemplateIrStore>>,
-    template_ir_registry: Option<Rc<RefCell<TemplateIrRegistry>>>,
+    template_ir_registry: Rc<RefCell<TemplateIrRegistry>>,
 }
 
 impl AstFinalizer<'_, '_> {
@@ -125,9 +125,9 @@ impl AstFinalizer<'_, '_> {
                     .template_const_loop_iteration_limit,
                 string_table,
                 template_ir_store: Rc::clone(self.context.registered_template_ir_store.store()),
-                template_ir_registry: Some(Rc::clone(
+                template_ir_registry: Rc::clone(
                     self.context.registered_template_ir_store.registry(),
-                )),
+                ),
             };
             normalize_ast_node_templates(node, &mut normalization_context)?;
         }
@@ -576,15 +576,7 @@ fn normalize_expression_templates_with_context(
                         template_const_loop_iteration_limit: context
                             .template_const_loop_iteration_limit,
                         template_ir_store: &context.template_ir_store,
-                        template_ir_registry: context
-                            .template_ir_registry
-                            .as_ref()
-                            .map(Rc::clone)
-                            .ok_or_else(|| {
-                                CompilerError::compiler_error(
-                                    "AST finalization template folding requires the module TIR registry.",
-                                )
-                            })?,
+                        template_ir_registry: Rc::clone(&context.template_ir_registry),
                     },
                 )?
                 .folded
@@ -776,43 +768,27 @@ fn reactive_template_metadata_from_current_store(
 ) -> Option<ReactiveTemplateMetadata> {
     // Normalization has the module store, so it should refresh metadata from
     // the same finalized TIR roots that HIR handoff materialization consumes.
-    // When the registry is available, prefer a final effective `TirView` so
-    // expression overlays are honored; otherwise fall back to the raw-store
-    // traversal.
+    // Prefer a final effective `TirView` so expression overlays are honored.
     let store = context.template_ir_store.borrow();
-    let registry = context
-        .template_ir_registry
-        .as_ref()
-        .map(|registry| registry.borrow());
-    reactive_template_metadata_from_store(template, &store, registry.as_deref())
+    let registry = context.template_ir_registry.borrow();
+    reactive_template_metadata_from_store(template, &store, &registry)
 }
 
 fn reactive_template_metadata_from_store(
     template: &Template,
     store: &TemplateIrStore,
-    registry: Option<&TemplateIrRegistry>,
+    registry: &TemplateIrRegistry,
 ) -> Option<ReactiveTemplateMetadata> {
     let mut metadata = ReactiveTemplateMetadata::template_backed();
-    if let Some(registry) = registry {
-        reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry(
-            template,
-            store,
-            registry,
-            &mut metadata,
-            &mut |expression| {
-                expression_reactive_template_metadata_from_store(expression, store, Some(registry))
-            },
-        );
-    } else {
-        reactive_template_metadata::merge_reactive_template_metadata_with_store_and_resolver(
-            template,
-            store,
-            &mut metadata,
-            &mut |expression| {
-                expression_reactive_template_metadata_from_store(expression, store, None)
-            },
-        );
-    }
+    reactive_template_metadata::merge_reactive_template_metadata_with_store_and_registry(
+        template,
+        store,
+        registry,
+        &mut metadata,
+        &mut |expression| {
+            expression_reactive_template_metadata_from_store(expression, store, registry)
+        },
+    );
     Some(metadata)
 }
 
@@ -838,15 +814,7 @@ fn classify_final_effective_template_view(
         .into());
     }
 
-    let registry = context
-        .template_ir_registry
-        .as_ref()
-        .map(Rc::clone)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Template HIR normalization requires the module TIR registry.",
-            )
-        })?;
+    let registry = Rc::clone(&context.template_ir_registry);
 
     if !template_reference_matches_current_store(&reference, context) {
         return Err(CompilerError::compiler_error(format!(
@@ -884,7 +852,7 @@ fn classify_final_effective_template_view(
 fn expression_reactive_template_metadata_from_store(
     expression: &Expression,
     store: &TemplateIrStore,
-    registry: Option<&TemplateIrRegistry>,
+    registry: &TemplateIrRegistry,
 ) -> Option<ReactiveTemplateMetadata> {
     if let Some(metadata) = &expression.reactive_template {
         return Some(metadata.clone());
@@ -929,9 +897,7 @@ fn normalize_expression_overlays_for_template_reference(
     // preserves shared TIR nodes while covering dynamic expressions, selectors,
     // loop headers, and every reachable control-flow body from one root pass.
     let reference = template.tir_reference.clone();
-    let Some(registry) = context.template_ir_registry.as_ref().map(Rc::clone) else {
-        return Ok(());
-    };
+    let registry = Rc::clone(&context.template_ir_registry);
 
     let is_same_store_reference = template_reference_matches_current_store(&reference, context);
     let should_mark_finalized =
@@ -1026,15 +992,7 @@ fn collect_same_store_expression_overlay_payloads(
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<Vec<(ExpressionSiteId, Expression)>, TemplateNormalizationError> {
     let store = context.template_ir_store.borrow();
-    let registry = context
-        .template_ir_registry
-        .as_ref()
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "expression overlay normalization requires the module TIR registry",
-            )
-        })?
-        .borrow();
+    let registry = context.template_ir_registry.borrow();
     let expression_payloads = collect_effective_tir_expression_overlay_payloads(
         &store,
         &registry,
@@ -1071,15 +1029,7 @@ fn materialize_runtime_template_handoff_for_hir(
     classification: &TirTemplateClassification,
     reactive_template: Option<ReactiveTemplateMetadata>,
 ) -> Result<Option<NormalizedTemplateExpression>, TemplateNormalizationError> {
-    let registry_rc = context
-        .template_ir_registry
-        .as_ref()
-        .map(Rc::clone)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "Runtime template HIR handoff requires the module TIR registry.",
-            )
-        })?;
+    let registry_rc = Rc::clone(&context.template_ir_registry);
     let registry = registry_rc.borrow();
     let store = context.template_ir_store.borrow();
     let view = finalized_tir_view_for_template(template, &store, &registry)?;
@@ -1125,7 +1075,7 @@ fn materialize_runtime_template_handoff_for_hir(
             context.project_path_resolver,
             context.string_table,
             context.template_const_loop_iteration_limit,
-            context.template_ir_registry.as_ref().map(Rc::clone),
+            Some(Rc::clone(&context.template_ir_registry)),
         );
         store.owned_runtime_template_handoff_for_tir_view_with_fold_context(
             &view,
@@ -1226,15 +1176,7 @@ fn effective_template_kind(
     template: &Template,
     context: &TemplateNormalizationContext<'_, '_>,
 ) -> Result<TemplateType, TemplateNormalizationError> {
-    let registry = context
-        .template_ir_registry
-        .as_ref()
-        .map(Rc::clone)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(
-                "AST finalization kind read requires the module TIR registry.",
-            )
-        })?;
+    let registry = Rc::clone(&context.template_ir_registry);
     let registry = registry.borrow();
     template.tir_kind_via_registry(&registry).ok_or_else(|| {
         CompilerError::compiler_error(
