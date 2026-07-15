@@ -20,19 +20,19 @@ The target result is a compiler that:
 
 ACTIVE_PLAN: `docs/roadmap/plans/codebase-integrity-cleanup-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 3B, use one canonical config identity
-LAST_ACCEPTED_COMMIT: `90cbb06ab`
-WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 3A accepted and awaiting its checkpoint commit
+CURRENT_SLICE: Phase 4A, verify manifest extension ownership
+LAST_ACCEPTED_COMMIT: `4b8bbb5da`
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, Phase 3B accepted and awaiting its checkpoint commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: Stage 0 config ownership, filesystem identity and diagnostic scope classification
-- code: `src/build_system/project_config/parsing.rs` canonical config resolver and diagnostic classification
+- docs: backend output-writing ownership and conservative cleanup policy
+- code: `src/build_system/output_cleanup.rs` v2 manifest managed-extension validation
 ACCEPTANCE_CRITERIA:
-- resolver directory comes only from the canonical config path
-- a canonical config path without a parent returns an explicit infrastructure/file-path error
-- authored spelling remains only for source locations and uses the same interned identity as tokenization
-- diagnostic classification compares exact interned scope identity without filesystem recanonicalization
-- imported config support files remain non-entry files and `paths_match` is removed when unused
+- parsed managed extensions are normalized and retained
+- exact set equality with the active policy is required regardless of input order, dot or case
+- missing or extra extensions enter limited safe mode with a distinct mismatch reason
+- mismatch warnings identify both sets concisely and stale files are preserved
+- existing builder mismatch and malformed metadata behavior stays distinct
 VALIDATION_STATE:
 - Phase 1 focused path, Stage 0, source-package, diagnostic-scope and HTML-route tests: passed
 - Phase 1 `just validate`: passed, including cross-target Clippy, 3,349 unit tests, 1,758 integration tests, docs and 28 benchmark cases
@@ -47,12 +47,15 @@ VALIDATION_STATE:
 - Phase 2D `just validate`: passed, including cross-target Clippy, 3,366 unit tests, 1,762 integration tests, docs and 28 benchmark cases
 - Phase 3A focused orchestration invariant tests: passed, 19 tests
 - Phase 3A `just validate`: passed, including cross-target Clippy, 3,372 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 3B focused config tests: passed, 68 tests
+- Phase 3B `just validate`: passed, including cross-target Clippy, 3,374 unit tests, 1,762 integration tests, docs and 28 benchmark cases
+- Phase 3 separate `just bench-check`: passed, 28/28 cases
 DOCS_IMPACT: no support-status change expected. This plan and roadmap are user-authorized management records.
 BLOCKERS_OR_OPEN_DECISIONS: none. The user's explicit sequence overrides the old post-TIR sequencing note while the TIR exclusion remains binding.
-DELEGATION_DECISION: ollama implementation worker - Phase 3B is a bounded canonical config identity slice
+DELEGATION_DECISION: ollama implementation worker - Phase 4A is a bounded output-cleanup policy slice
 NEXT_WORKER_ORDER: ollama, codex-cli, parent-direct
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Phase 3A, then delegate Phase 3B canonical config identity
+NEXT_RESUME_ACTION: commit accepted Phase 3B, then delegate Phase 4A managed-extension ownership
 
 The audit anchor was `a688cc3be9f2eda49586d298a0fff7f3b4ffcf84`. Every named file must be refreshed against current `main`. Keep a finding only when the same failure mode still exists.
 
@@ -349,10 +352,12 @@ Prefer making the existing duplicate-declaration payload's previous location opt
 
 ## Phase 3: Harden Stage 0 and config invariants
 
-Progress: Slice 3A is complete. File-preparation chunks now receive release-safe validation before
-string-table merging. Malformed gaps, overlaps, ranges, record indexes and tail coverage return an
-infrastructure error through `CompilerMessages`. Valid serial, per-file and chunked strategies retain
-their deterministic merge behavior. Focused tests and `just validate` passed.
+Status: Complete. File-preparation chunks receive release-safe validation before string-table
+merging, with malformed ranges, records and coverage returning an infrastructure error. Config
+resolver construction uses the canonical config parent, while one authored interned scope owns
+tokenization, duplicate classification and validation without diagnostic-time recanonicalization.
+Imported support files remain non-entry. Focused tests, `just validate` and the separate 28-case
+benchmark guard passed.
 
 ### Slice 3A: Validate file-preparation chunk order in release builds
 

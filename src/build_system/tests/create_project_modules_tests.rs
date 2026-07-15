@@ -2716,6 +2716,81 @@ fn detects_duplicate_top_level_config_constants() {
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
 
+// ── Canonical config identity tests ──────────────────────────────────────────
+
+#[test]
+fn authored_config_keeps_non_canonical_spelling_in_duplicate_diagnostic() {
+    // The caller-provided config path spelling is preserved as the authored source-location
+    // identity even when it is non-canonical. The resolver directory comes only from the
+    // canonical config parent, while diagnostics keep the authored spelling.
+    let root = temp_dir("config_non_canonical_spelling");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("sub")).expect("should create sub dir");
+    let config_path = root.join("config.bst");
+    fs::write(
+        &config_path,
+        "entry_root #= \"src\"\nentry_root #= \"other\"\n",
+    )
+    .expect("should write config");
+
+    // Spell the config path with a `..` detour so it is not equal to its canonical form.
+    let non_canonical_config_path = root.join("sub").join("..").join("config.bst");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages =
+        parse_project_config_for_test(&mut config, &non_canonical_config_path, &style_directives)
+            .expect_err("duplicate authored config key should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DuplicateKey,
+                ..
+            }
+        ),
+        "expected authored duplicate key diagnostic, got: {:?}",
+        diagnostic.payload
+    );
+
+    // The diagnostic location scope must keep the non-canonical authored spelling, proving the
+    // same interned identity used for tokenization and classification is preserved for rendering.
+    let rendered_scope = diagnostic
+        .primary_location
+        .scope
+        .to_portable_string(&messages.string_table);
+    assert!(
+        rendered_scope.contains("sub") && rendered_scope.contains(".."),
+        "expected non-canonical authored spelling in diagnostic scope, got: {rendered_scope}"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn authored_config_resolver_uses_canonical_parent_for_noncanonical_spelling() {
+    // A non-canonical config path that detours through a sibling directory must still derive
+    // the resolver directory from the canonical config parent and apply the config value.
+    let root = temp_dir("config_relative_parent_spelling");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("sub")).expect("should create sub dir");
+    let config_path = root.join("config.bst");
+    fs::write(&config_path, "entry_root #= \"src\"\n").expect("should write config");
+
+    let non_canonical_config_path = root.join("sub").join("..").join("config.bst");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &non_canonical_config_path, &style_directives)
+        .expect("non-canonical authored spelling should resolve and apply config");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
 #[test]
 fn project_local_lib_directory_is_discovered_as_source_package_root() {
     let root = temp_dir("project_local_lib");

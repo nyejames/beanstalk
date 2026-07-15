@@ -45,8 +45,10 @@ pub(super) fn validate_and_apply_config_ast(
     let mut seen_config_keys = HashSet::new();
 
     // Only top-level `#` constant declarations authored in `config.bst` are config keys.
-    // Imported package constants and types are support surface, not entries.
-    let authored_scope = parsed_config.authored_config_path.as_path();
+    // Imported package constants and types are support surface, not entries. The authored scope
+    // is the exact interned identity the parser used for tokenization, so membership is checked by
+    // direct interned equality rather than by converting paths back to `PathBuf`.
+    let authored_scope = &parsed_config.authored_scope;
 
     // 1. Extract from module_constants (top-level # bindings).
     for declaration in &parsed_config.ast.module_constants {
@@ -54,12 +56,7 @@ pub(super) fn validate_and_apply_config_ast(
         // WHY: the value expression's location scope may be normalized to an imported
         // file when the initializer references an imported constant, so the declaration id
         // is the reliable source-of-authority for which file owns the constant.
-        let declaration_source = declaration
-            .id
-            .parent()
-            .map(|parent| parent.to_path_buf(string_table))
-            .unwrap_or_default();
-        if declaration_source != authored_scope {
+        if declaration.id.parent().as_ref() != Some(authored_scope) {
             continue;
         }
 
@@ -101,8 +98,7 @@ pub(super) fn validate_and_apply_config_ast(
 
         for body_node in body {
             // Only consider statements authored in the config file itself.
-            let node_scope = body_node.scope.to_path_buf(string_table);
-            if node_scope != authored_scope {
+            if body_node.scope != *authored_scope {
                 continue;
             }
 

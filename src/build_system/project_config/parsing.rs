@@ -40,11 +40,13 @@ use std::path::{Path, PathBuf};
 pub(super) struct ParsedConfigFile {
     pub(super) ast: Ast,
     pub(super) errors: Vec<CompilerDiagnostic>,
-    /// The source identity used when tokenizing the authored `config.bst` file.
+    /// The interned source identity of the authored `config.bst` file.
     ///
     /// WHY: validation must distinguish declarations authored in config from imported support
-    /// declarations so only authored declarations are treated as config keys.
-    pub(super) authored_config_path: PathBuf,
+    /// declarations so only authored declarations are treated as config keys. This is the same
+    /// identity used for tokenization, duplicate diagnostic classification and AST entry identity,
+    /// so authored-scope comparisons never re-canonicalize or convert back to `PathBuf`.
+    pub(super) authored_scope: InternedPath,
 }
 
 // -------------------------
@@ -85,9 +87,24 @@ pub(super) fn parse_config_file(
     // -------------------------
     //  Config Path Resolver
     // -------------------------
-    let config_dir = config_path.parent().unwrap_or_else(|| Path::new("."));
-    let canonical_dir =
-        std::fs::canonicalize(config_dir).unwrap_or_else(|_| config_dir.to_path_buf());
+    // The canonical config path is the only filesystem identity used for resolver construction.
+    // WHY: deriving the resolver directory from the already-canonical config parent avoids a
+    // second canonicalization of the authored path, which could fall back to a different
+    // directory when the caller-provided spelling is relative or non-canonical.
+    let canonical_dir = match canonical_config.parent() {
+        Some(parent) => parent.to_path_buf(),
+        None => {
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            return Err(CompilerMessages::from_error(
+                CompilerError::file_error(
+                    &canonical_config,
+                    "Canonical config path has no parent directory; cannot construct a config resolver",
+                    string_table,
+                ),
+                string_table.clone(),
+            ));
+        }
+    };
 
     let path_resolver_start = crate::timing::start_pipeline_timing();
     let prepared_source_package_roots = match prepare_source_package_roots(
@@ -147,22 +164,65 @@ pub(super) fn parse_config_file(
     log_config_stage_timing("config.parse.source_set", source_set_start);
 
     // -------------------------
+    //  Authored Config Identity
+    // -------------------------
+    // Construct the one exact authored `InternedPath` before file preparation and reuse it for
+    // tokenization, duplicate diagnostic classification, AST entry identity and validation
+    // ownership. WHY: a single interned identity keeps authored-scope classification exact without
+    // re-canonicalizing or converting paths back to `PathBuf` during diagnostic handling.
+    let authored_scope =
+        InternedPath::try_from_filesystem_path(config_path, string_table).map_err(|non_utf8| {
+            log_config_stage_timing("config.parse.total", parse_total_start);
+            CompilerMessages::from_error(
+                CompilerError::file_error(
+                    &non_utf8.path,
+                    format!(
+                        "Config path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
+                        non_utf8.path
+                    ),
+                    string_table,
+                ),
+                string_table.clone(),
+            )
+        })?;
+
+    // -------------------------
     //  Tokenize and Prepare All Files
     // -------------------------
     let prepare_files_start = crate::timing::start_pipeline_timing();
     let mut prepared_outputs = Vec::with_capacity(source_set.len());
 
     for file_path in &source_set {
-        // Preserve the original non-canonicalized path for the authored config file's source
-        // location scope so diagnostics match the path the caller provided.
-        let logical_scope_path;
-        let scope_path = if file_path == &canonical_config {
-            config_path
+        let is_authored_config = file_path == &canonical_config;
+
+        // The authored config file keeps the caller-provided spelling as its interned scope.
+        // Imported support files use their resolver-derived logical path so they stay non-entry.
+        let scope = if is_authored_config {
+            authored_scope.clone()
         } else {
             match project_path_resolver.logical_path_for_canonical_file(file_path, string_table) {
-                Ok(path) => {
-                    logical_scope_path = path;
-                    logical_scope_path.as_path()
+                Ok(logical_path) => {
+                    match InternedPath::try_from_filesystem_path(&logical_path, string_table) {
+                        Ok(interned) => interned,
+                        Err(non_utf8) => {
+                            log_config_stage_timing(
+                                "config.parse.prepare_files_total",
+                                prepare_files_start,
+                            );
+                            log_config_stage_timing("config.parse.total", parse_total_start);
+                            return Err(CompilerMessages::from_error(
+                                CompilerError::file_error(
+                                    &non_utf8.path,
+                                    format!(
+                                        "Config scope path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
+                                        non_utf8.path
+                                    ),
+                                    string_table,
+                                ),
+                                string_table.clone(),
+                            ));
+                        }
+                    }
                 }
                 Err(error) => {
                     log_config_stage_timing(
@@ -175,10 +235,19 @@ pub(super) fn parse_config_file(
             }
         };
 
+        // The authored config file is the entry file. Imported support files receive the
+        // canonical config path as a non-matching entry sentinel so they remain non-entry.
+        let entry_file_path = if is_authored_config {
+            config_path
+        } else {
+            canonical_config.as_path()
+        };
+
         let prepared_output = match prepare_one_config_file(
             file_path,
-            scope_path,
-            &canonical_config,
+            scope,
+            entry_file_path,
+            &authored_scope,
             services,
             &mut errors,
             string_table,
@@ -224,7 +293,7 @@ pub(super) fn parse_config_file(
         Ok(headers) => headers,
         Err(bag) => {
             for diagnostic in bag.diagnostics() {
-                if is_authored_config_duplicate(diagnostic, config_path, string_table) {
+                if is_authored_config_duplicate(diagnostic, &authored_scope) {
                     errors.push(config_diagnostic(
                         None,
                         InvalidConfigReason::DuplicateKey,
@@ -278,20 +347,6 @@ pub(super) fn parse_config_file(
     //  AST Construction
     // -------------------------
     let ast_start = crate::timing::start_pipeline_timing();
-    let interned_path =
-        InternedPath::try_from_filesystem_path(config_path, string_table).map_err(|non_utf8| {
-            CompilerMessages::from_error(
-                CompilerError::file_error(
-                    &non_utf8.path,
-                    format!(
-                        "Config path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
-                        non_utf8.path
-                    ),
-                    string_table,
-                ),
-                string_table.clone(),
-            )
-        })?;
 
     let external_package_registry = Arc::new(services.frontend_surface.binding_packages.clone());
 
@@ -306,7 +361,7 @@ pub(super) fn parse_config_file(
             external_package_registry,
             style_directives: services.style_directives,
             string_table,
-            entry_dir: interned_path,
+            entry_dir: authored_scope.clone(),
             build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
             project_path_resolver: Some(project_path_resolver),
             path_format_config: PathStringFormatConfig::default(),
@@ -329,7 +384,7 @@ pub(super) fn parse_config_file(
     Ok(ParsedConfigFile {
         ast,
         errors,
-        authored_config_path: config_path.to_path_buf(),
+        authored_scope,
     })
 }
 
@@ -444,32 +499,21 @@ fn build_config_source_set(
 /// config-specific token validation only to the authored config file.
 fn prepare_one_config_file(
     file_path: &Path,
-    scope_path: &Path,
-    canonical_config: &Path,
+    scope: InternedPath,
+    entry_file_path: &Path,
+    authored_scope: &InternedPath,
     services: &ProjectConfigParseServices<'_>,
     errors: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
 ) -> Result<Option<FileFrontendPrepareOutput>, CompilerMessages> {
     let source = extract_source_code(file_path, string_table)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-    let interned_path =
-        InternedPath::try_from_filesystem_path(scope_path, string_table).map_err(|error| {
-            CompilerMessages::from_error(
-                CompilerError::file_error(
-                    &error.path,
-                    format!(
-                        "Config scope path {:?} contains a non-UTF-8 component; Beanstalk identity requires UTF-8 paths.",
-                        error.path
-                    ),
-                    string_table,
-                ),
-                string_table.clone(),
-            )
-        })?;
 
+    // The caller already interned the file's scope identity, so tokenization reuses it directly
+    // without a second `InternedPath::try_from_filesystem_path` round-trip.
     let mut token_stream = match tokenize(
         &source,
-        &interned_path,
+        &scope,
         TokenizerEntryMode::SourceFile,
         services.style_directives,
         string_table,
@@ -483,19 +527,12 @@ fn prepare_one_config_file(
     };
     token_stream.canonical_os_path = Some(file_path.to_path_buf());
 
-    // Only validate hash assignments for the authored config file.
-    let is_authored_config = file_path == canonical_config;
+    // Only the authored config file carries config-key declarations. Comparing the already-interned
+    // scope to the authored identity keeps classification exact without filesystem recanonicalization.
+    let is_authored_config = &scope == authored_scope;
     if is_authored_config {
         errors.extend(validate_config_hash_assignments(&token_stream.tokens));
     }
-
-    // Only the authored config file should be treated as the entry file.
-    // Imported package files must be non-entry so top-level runtime statements are rejected.
-    let entry_file_path = if is_authored_config {
-        scope_path
-    } else {
-        canonical_config
-    };
 
     let output = match prepare_file_from_tokens(
         token_stream,
@@ -509,7 +546,11 @@ fn prepare_one_config_file(
         Ok(output) => output,
         Err(error) => {
             errors.extend(error.warnings);
-            if is_authored_config && is_duplicate_config_header_error(&error.diagnostic) {
+            // Classify authored duplicate declarations by direct interned scope equality so the
+            // canonical authored file is the only one remapped to a config `DuplicateKey`.
+            if is_duplicate_config_header_error(&error.diagnostic)
+                && &error.diagnostic.primary_location.scope == authored_scope
+            {
                 errors.push(config_diagnostic(
                     None,
                     InvalidConfigReason::DuplicateKey,
@@ -593,32 +634,15 @@ fn is_duplicate_config_header_error(diagnostic: &CompilerDiagnostic) -> bool {
 
 fn is_authored_config_duplicate(
     diagnostic: &CompilerDiagnostic,
-    authored_config_path: &Path,
-    string_table: &StringTable,
+    authored_scope: &InternedPath,
 ) -> bool {
-    if !is_duplicate_config_header_error(diagnostic) {
-        return false;
-    }
-
-    let diagnostic_path = diagnostic.primary_location.scope.to_path_buf(string_table);
-    paths_match(&diagnostic_path, authored_config_path)
-}
-
-/// Compare source paths exactly first, then by canonical filesystem identity.
-///
-/// WHY: authored config diagnostics preserve the caller-provided path, while other
-/// config source-set paths may already be canonicalized or package-logical.
-fn paths_match(left: &Path, right: &Path) -> bool {
-    if left == right {
-        return true;
-    }
-
-    let left_canonical = std::fs::canonicalize(left);
-    let right_canonical = std::fs::canonicalize(right);
-    matches!(
-        (left_canonical, right_canonical),
-        (Ok(left_path), Ok(right_path)) if left_path == right_path
-    )
+    // Classify authored duplicate declarations by direct interned scope equality.
+    // WHY: the authored config file was tokenized with this exact interned identity, so a
+    // duplicate declaration whose primary location shares that scope is an authored duplicate.
+    // Comparing interned identity avoids converting paths back to `PathBuf` or canonicalizing
+    // during diagnostic handling.
+    is_duplicate_config_header_error(diagnostic)
+        && diagnostic.primary_location.scope == *authored_scope
 }
 
 /// Validate that all config declarations use standard constant syntax (`key #= value`).
