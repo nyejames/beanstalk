@@ -21,7 +21,8 @@ use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::TemplateTirPhase;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 
-use crate::compiler_frontend::ast::templates::tir::construction::TirCopyState;
+use crate::compiler_frontend::ast::templates::tir::copy_state::TirCopyState;
+
 /// Copies a finalized TIR subtree into a fresh tree, applying an optional active
 /// slot-plan context to any unresolved `Slot` placeholders.
 ///

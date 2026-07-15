@@ -1,5 +1,5 @@
-//! TIR construction helpers: copy state, runtime slot-site cursor, and
-//! construction counters.
+//! TIR copy state: recursive copy-pass state, runtime slot-site cursor, and
+//! copy-pass instrumentation counters.
 //!
 //! WHAT: owns `TirCopyState` (summary + depth + slot-site cursor) and
 //!       `RuntimeSlotSiteCursor` (slot-copy traversal progress), plus the
@@ -204,7 +204,7 @@ impl TirCopyState {
 }
 
 // -------------------------
-//  Construction counters
+//  Copy-pass instrumentation
 // -------------------------
 
 /// Records the templates, nodes, text and depth produced by one TIR copy pass.

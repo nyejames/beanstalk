@@ -51,7 +51,7 @@
 //! ├── builder.rs                       Parser-facing mutable facade for direct TIR emission
 //! ├── parser_builder_state.rs          In-progress parser TIR accumulator
 //! ├── expression_payload_walker.rs     Shared read-only expression-payload traversal
-//! ├── construction.rs                  TIR construction helpers (atom-to-node, summary)
+//! ├── copy_state.rs                    Recursive TIR copy-pass state and instrumentation
 //! ├── subtree_copy.rs                  TIR-native active-context subtree copying
 //! ├── control_flow_roots.rs            Install prepared control-flow body roots
 //! ├── classification.rs                Store-aware TIR shape queries for classification
@@ -78,8 +78,8 @@
 // forward-parity hooks with explicit reasons.
 
 mod classification;
-mod construction;
 mod contribution_shape;
+mod copy_state;
 mod expression_payload_walker;
 mod ids;
 mod subtree_copy;
@@ -257,10 +257,9 @@ pub(crate) use parser_builder_state::TemplateTirReference;
 // off the long-lived `Template` struct.
 pub(crate) use construction_context::TemplateConstructionContext;
 
-// TIR construction and active-slot-plan helpers: atom-to-node conversion,
-// copy-state tracking, and subtree copying used by runtime slot planning and
-// finalize-sync body roots.
-pub(crate) use construction::{TirCopyState, record_tir_copy_counters};
+// TIR copy state and instrumentation: recursive copy-pass state and
+// copy-pass counters used by subtree copying and runtime slot planning.
+pub(crate) use copy_state::{TirCopyState, record_tir_copy_counters};
 pub(crate) use subtree_copy::copy_tir_subtree_with_active_slot_plan;
 
 // Classification: store-aware TIR shape queries for template classification.

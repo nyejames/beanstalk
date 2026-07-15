@@ -12,7 +12,7 @@
 //!      without introducing a new broad utility layer.
 
 use crate::compiler_frontend::ast::templates::template::{SlotKey, Style, TemplateType};
-use crate::compiler_frontend::ast::templates::tir::construction::TirCopyState;
+use crate::compiler_frontend::ast::templates::tir::copy_state::TirCopyState;
 use crate::compiler_frontend::ast::templates::tir::node::TemplateIrNodeKind;
 use crate::compiler_frontend::ast::templates::tir::overlays::TemplateOverlaySetId;
 use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateTirChildReference};

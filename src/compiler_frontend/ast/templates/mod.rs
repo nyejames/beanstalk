@@ -71,7 +71,7 @@
 //! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
 //! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
-//! | `tir/construction.rs` | TIR construction helpers (atom-to-node, summary) |
+//! | `tir/copy_state.rs` | Recursive TIR copy-pass state and instrumentation |
 //! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
 //! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
 //! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
@@ -113,7 +113,7 @@
 //! | `tir/builder.rs` | Parser-facing mutable facade for pushing TIR nodes |
 //! | `tir/parser_builder_state.rs` | Parser-emitted TIR builder state |
 //! | `tir/expression_payload_walker.rs` | Shared read-only expression-payload traversal |
-//! | `tir/construction.rs` | TIR construction helpers (atom-to-node, summary) |
+//! | `tir/copy_state.rs` | Recursive TIR copy-pass state and instrumentation |
 //! | `tir/subtree_copy.rs` | TIR-native active-context subtree copying |
 //! | `tir/control_flow_roots.rs` | Install and resolve finalized control-flow body roots |
 //! | `tir/classification.rs` | Store-aware TIR shape queries for classification |
