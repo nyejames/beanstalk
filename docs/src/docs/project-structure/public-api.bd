@@ -73,7 +73,7 @@ The export block can re-export grouped imports from other files:
     ;
 ]
 
-The original symbol names become accessible to cross-module imports. The public alias names (such as `Card`) are public names of the module's API surface.
+The grouped alias becomes the public name. In this example cross-module consumers can import `Card`, not `CardData`, unless the export block lists `CardData` separately.
 
 ### `#` constants are compile-time, not visibility
 
@@ -89,5 +89,5 @@ The `#` marker on a binding means compile-time constant. It does not control cro
 ### Related concepts
 
 - For module root rules see @#module-roots (Module roots).
-- For re-export syntax see @../libraries/#public-reexports (Public re-exports).
-- For visibility rules see @../libraries/#module-visibility (Module visibility).
+- For re-export syntax see @../packages/#public-reexports (Public re-exports).
+- For visibility rules see @../packages/#module-visibility (Module visibility).

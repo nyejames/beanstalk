@@ -13,10 +13,10 @@ Typed provider metadata, reachability and runtime glue.
 ## Main paths
 
 - `src/projects/html_project/external_js/`
-- `LibrarySet` registries
+- `BuilderSurface` registries
 
 ## Read next
 
 - `docs/src/docs/codebase/compiler-design/backend/external-js-and-runtime-assets/external-js-and-runtime-assets.bd`
 - `docs/src/docs/codebase/compiler-design/backend/js-lowering/overview.bd`
-- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/overview.bd`
+- `docs/src/docs/codebase/compiler-design/imports-packages-and-bindings/overview.bd`

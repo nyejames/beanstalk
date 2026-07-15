@@ -684,9 +684,9 @@ fn import_descriptor(kind: ImportDiagnosticKind) -> DiagnosticDescriptor {
             "Unsupported external file extension in import",
             DiagnosticSeverity::Error,
         ),
-        ImportDiagnosticKind::InvalidExternalLibrary => DiagnosticDescriptor::new(
+        ImportDiagnosticKind::InvalidExternalModule => DiagnosticDescriptor::new(
             "BST-IMPORT-0022",
-            "Invalid external library",
+            "Invalid external JS module",
             DiagnosticSeverity::Error,
         ),
         ImportDiagnosticKind::ExplicitSourceExtension => DiagnosticDescriptor::new(

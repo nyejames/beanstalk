@@ -45,8 +45,8 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 | Structural conformance | Matching method shapes must not silently imply conformance. `Type must TRAIT` stays explicit. |
 | Type-set constraints, union constraints, underlying-type constraints, and user-defined numeric/operator constraints | Generic bounds name traits only. They are not a constraint sublanguage. |
 | Operator overloading | Operators remain compiler-owned and predictable. |
-| Source-authored receiver methods for builtins, imported types, dependency/library types, external opaque types, or types declared in another file | Source-authored receiver methods belong only to the same file as their nominal receiver type. Use free functions for other types. |
-| User-defined `HASHABLE`, custom map hashers/comparers, and user-defined keys for builtin maps | Builtin map syntax stays scalar-keyed. More sophisticated maps belong in libraries as ordinary structs. |
+| Source-authored receiver methods for builtins, imported types, dependency package types, external opaque types, or types declared in another file | Source-authored receiver methods belong only to the same file as their nominal receiver type. Use free functions for other types. |
+| User-defined `HASHABLE`, custom map hashers/comparers, and user-defined keys for builtin maps | Builtin map syntax stays scalar-keyed. More sophisticated maps belong in packages as ordinary structs. |
 | First-class public `Result` values and result pattern matching | `Error!`, postfix `!`, and `catch` are the language error path. Users can define ordinary choices when they want explicit result values. |
 | Exceptions | Expected failures use `Error!`; invariants use `assert`. |
 | Reflection, runtime type IDs, compile-time type inspection, and type-returning functions | These encourage generic meta-programming and weaken static readability. |
@@ -68,7 +68,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 |---|---|
 | Blocks | `:` opens a scope; `;` closes it. Semicolons do not terminate statements. |
 | Braced literals/templates | `{}` are collections or hashmaps depending on the type/literal shape. `[]` are string templates only. |
-| Comments | `--` starts a single-line comment. |
+| Comments | In ordinary code, `--` starts a single-line comment. Template and Beandown bodies treat it as content. |
 | Operators | Logical/equality forms use words such as `is` and `not`; symbolic equality and logical-not forms are not operators. |
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
 | References | Shared immutable access is the default for stack and heap values. |
@@ -102,7 +102,6 @@ value = 2 -- reassigns the existing mutable binding
 count ~= 0
 ratio Float = 1.5
 text_slice = "text"
-raw_slice = `raw`
 letter = '🌱'
 
 message = [:
@@ -135,6 +134,10 @@ right = "world"
 joined = [left, right]
 ```
 
+Raw backtick string slices aren't implemented in the current Alpha surface. Backticks are inline-code delimiters inside `$md` content.
+
+`copy` accepts a visible binding, field projection or parenthesised place. Literals, templates, calls and computed expressions aren't copy places and are rejected.
+
 ### Function Calls, Named Arguments, and Mutable Access
 
 Named arguments use `parameter = value`. Access mode is chosen at the call site.
@@ -151,6 +154,7 @@ Rules:
 - Each parameter may be supplied once.
 - Host calls and builtin member calls are currently positional-only.
 - Defaulted parameters may be omitted; named arguments can skip earlier defaults.
+- Parameter defaults fully fold in the declaration-time compile-time context. Reactive parameters don't support defaults.
 - A `~T` parameter accepts `~place` for an existing mutable place, or a plain fresh rvalue such as a literal, template, constructor call, or computed value.
 - Passing an existing place to a `~T` parameter without `~` is an error.
 - `~` is place-only syntax and is invalid on immutable bindings, literals, templates, constructor calls, and computed expressions.
@@ -311,6 +315,8 @@ Rules:
 - Canonical recovery is explicit present-value inspection: `if maybe is |value| then value else fallback`.
 - Statement-only absence inspection remains valid: `if maybe is none: ... ;`.
 - Full option matches support `none`, literal/relational present-value patterns, `|value|` capture, guards, and `else`.
+- Options support equality against `none`, the same option type when its inner type supports equality and a compatible inner value. Options don't support ordering.
+- A full option match may omit `else =>` when it has both an unguarded `none` arm and an unguarded present-value capture arm.
 - Direct fallback syntax such as `maybe else then fallback` is rejected.
 - Postfix `?` unwraps a present value or returns `none` from the current function.
 
@@ -359,9 +365,13 @@ value = parse_number(text)!
 fallback = parse_number(text) catch:
     then 0
 ;
+
+inline_fallback = parse_number(text) catch |err| then err.code
 ```
 
-Results are call-site-only. Public first-class `Result` values and result-pattern matching remain deferred. The special `!` return is only for the error path; success values use the normal return list.
+The inline catch binding is local to its fallback expression. First-class public `Result` values are outside language design scope. The special `!` return is only for the error path. Success values use the normal return list.
+
+An error-only function uses `-> Error!` and may fall through normally. A direct top-level `return!` produces its error. Nested-block `return!` in an error-only function remains a current implementation gap.
 
 Automatic checked-numeric recovery is compiler-owned and applies only when the current function's
 fallible return slot is builtin `Error!`. It does not make numeric operators source-visible
@@ -386,6 +396,7 @@ Value-producing blocks are not general expressions and are rejected in function 
 
 ```beanstalk
 value = if condition then 1 else 0
+state = if status is Ready then "ready" else "waiting"
 name = if maybe_name is |name| then name else "guest"
 fallback = parse_number(text) catch then 0
 
@@ -396,6 +407,8 @@ name, score = load_user(id) catch |err|:
 ```
 
 Multi-value blocks must produce the receiver arity on every producing path. Multi-bind accepts explicit multi-return function calls and value-producing blocks at closed RHS receiving sites. Regular declarations remain single-target, and user-visible tuple values are not supported.
+
+Inline `if` supports Bool conditions and choice predicates. The block `if ...: then ...` form has a known implementation gap and should not be treated as current-valid syntax.
 
 ```beanstalk
 pair || -> String, Int:
@@ -410,8 +423,8 @@ name, count = pair()
 `assert` is a statement-only language intrinsic for invariants.
 
 ```beanstalk
-assert(index < items.length)
-assert(index < items.length, "index must be in bounds")
+assert(index < items.length())
+assert(index < items.length(), "index must be in bounds")
 assert(false, "unimplemented backend path")
 ```
 
@@ -422,7 +435,7 @@ Rules:
 - Expected failures should use typed error propagation with `Error!` and `catch`.
 - `assert(false)` and `assert(false, "message")` are statically terminal and may end a non-`Void` function or value-required `catch` handler.
 - Dynamic `assert(condition)` is not statically terminal.
-- Assertion messages are currently string literals only.
+- The second literal message is optional. Assertion messages are currently string literals only.
 
 ### Collections
 
@@ -509,6 +522,7 @@ Rules:
 - `{key = value}` is a hashmap literal. Any top-level `=` entry inside a non-empty `{...}` value literal makes the whole literal a hashmap literal.
 - Every hashmap literal entry must be a key/value pair. Mixing collection items and hashmap entries is invalid.
 - Empty map literals require an explicit or contextual hashmap type.
+- Inline map type annotations are limited to two nested map levels in Alpha. Use a named type alias when deeper nesting is needed.
 - Bare identifiers in key position are variable references, not string-key shorthand.
 - Hashmaps are insertion ordered. First insertion determines entry position; replacing an existing key updates the value without moving the entry or replacing the stored key.
 - Removing a key removes that entry from the order. Re-inserting the key appends a new entry.
@@ -528,7 +542,7 @@ Rules:
 Outside the builtin hashmap design scope: hashsets as language syntax, user-defined hashers or
 comparers, `Float` keys, user-defined key types, generic key maps through `HASHABLE`, map equality,
 mutable entry APIs, indexing syntax, const hashmaps, fixed/capacity maps, and specialized map
-variants. More sophisticated maps should be ordinary standard-library or user-defined structs.
+variants. More sophisticated maps should be ordinary Standard package or user-defined structs.
 
 Wasm hashmap runtime/lowering remains deferred backend work for the existing scalar-keyed builtin map
 surface.
@@ -607,7 +621,7 @@ picker APIs.
 
 ## String Template System
 
-Templates use `[]`; collections use `{}`. `""` creates escaped string slices, and expression-position backticks create raw string slices. Templates create owned strings and may fold at compile time or lower to runtime string construction.
+Templates use `[]`; collections use `{}`. `""` creates escaped string slices. Expression-position raw backtick slices aren't implemented. Templates create owned strings and may fold at compile time or lower to runtime string construction.
 
 Template head/body shape:
 
@@ -623,7 +637,7 @@ Core rules:
 - Authored `.bst` templates must close with `]`; truncated heads, bodies, nested child templates, and directive-argument templates produce syntax diagnostics.
 - Template bodies capture variables from the surrounding scope.
 - Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$md`). Regular quoted string literals still support escapes.
-- Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]` or `[: [`[This is text inside sqauare brackets as a string]`]]`.
+- Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]`.
 - Only direct top-level template expressions in an active HTML module root contribute page fragments.
 - Top-level runtime templates run in active-root `start()` order.
 - Top-level const templates fold at compile time and are merged separately.
@@ -710,11 +724,13 @@ title = [:
     </h1>
 ]
 
-blue = [$insert("style"): color: blue;]
-[title, blue:
+[title:
+    [$insert("style"): color: blue;]
     Hello world
 ]
 ```
+
+Named inserts may be authored directly in an application. Storing a named insert in a binding and passing it later is a current implementation gap.
 
 Nested `$children(...)` wrappers remain scoped to direct children, so row/cell-style helpers can be layered without wrapper leakage.
 
@@ -925,7 +941,7 @@ Rules:
 - Arm headers must start at the beginning of a logical line.
 - Arm forms are `<pattern> => <body>`, `<pattern> if <Bool> => <body>`, `else => <body>`, and bodyless `else =>`.
 - In statement matches, bodyless `else =>` catches all remaining cases and executes no statements.
-- Non-choice scrutinees require `else =>`.
+- Non-choice scrutinees require `else =>`, except a full option match with unguarded `none` and present-value capture arms.
 - Choice scrutinees require either `else =>` or coverage of every variant.
 - Any guarded choice arm requires `else =>`.
 - The same choice variant cannot be matched more than once.
@@ -952,6 +968,8 @@ Supported patterns:
 - relational scalar patterns: `< 0`, `<= 10`, `> 0`, `>= 100`
 
 Payload capture names must match declared field names unless renamed with `as`. Payload exhaustiveness is tag-level. Relational patterns support ordered scalar scrutinees: `Int`, `Float`, `Char`, and `String`; string ordering is backend-defined in Alpha. Nested choice payload patterns are deferred.
+
+A general capture doesn't currently satisfy final exhaustiveness on its own. The checker still requires explicit coverage or `else =>`. This is a known compiler mismatch.
 
 ## Loops
 
@@ -1020,7 +1038,7 @@ Receiver method rules:
 - There may be exactly one `this` parameter.
 - Supported source-authored receiver types are user-defined structs and choices declared in the same source file as the receiver method.
 - Aligned declaration-site generic nominal receivers are valid when the method belongs to the same generic type declaration.
-- Source-authored receiver methods for built-in scalars, imported source types, dependency/library types, external opaque types, and types declared in another file are rejected.
+- Source-authored receiver methods for built-in scalars, imported source types, dependency package types, external opaque types, and types declared in another file are rejected.
 - Compiler-owned collection operations and compiler/builder-owned builtin operations are not user extension methods.
 - `this T` is immutable; `this ~T` is mutable.
 - Mutable receiver calls require explicit mutable/exclusive receiver syntax: `~value.method(...)`.
@@ -1070,7 +1088,7 @@ Rules:
 - A matching method without `Type must TRAIT` is not conformance.
 - Conformance validates exact receiver mutability, non-receiver parameter modes/types, return types, and return channels. Parameter names do not matter.
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
-- User-authored conformance for builtins, imported types, dependency/library types, external opaque types, and types declared in another file is rejected.
+- User-authored conformance for builtins, imported types, dependency package types, external opaque types, and types declared in another file is rejected.
 - `TRAIT must not TRAIT, OTHER_TRAIT` declares narrow trait-incompatibility metadata. No concrete type may explicitly conform to both traits. The relation is symmetric, affects only conformance validation, and does not create negative conformance or trait composition.
 - Trait bounds may enable calls on generic parameters inside the bounded generic declaration.
   Concrete values use ordinary visible receiver methods. A conformance declaration proves that a
@@ -1181,6 +1199,7 @@ Generic parameter rules:
 - Names use type-name style.
 - Parameters are scoped to the declaration.
 - Parameters are compile-time placeholders, not runtime values.
+- Every declared generic parameter must be used by the declaration.
 - A parameter cannot collide with another parameter in the same declaration or with visible concrete types, type aliases, external package types, builtins, or other type-position names.
 
 Generic function calls use normal call syntax only. Type arguments are inferred from immediate call arguments and, at closed receiving sites, the immediate expected result type.
@@ -1268,9 +1287,11 @@ raw Int = id -- valid
 
 Aliases can target builtins, structs, choices, options, collections, fully concrete generic instances, imported types, and external package types.
 
+Aliases are transparent type spellings, not constructors. Construct a nominal struct, choice or generic instance through its canonical nominal name.
+
 ## Module System, Config, and Imports
 
-A module is a directory-scoped set of Beanstalk source files compiled together. A directory becomes a module root when it contains exactly one non-config `#*.bst` file. More than one root file in the same directory is rejected. A project contains one or more modules plus libraries and other builder inputs.
+A module is a directory-scoped set of Beanstalk source files compiled together. A directory becomes a module root when it contains exactly one non-config `#*.bst` file. More than one root file in the same directory is rejected. A project contains one or more modules plus packages and other builder inputs.
 
 ### Project config
 
@@ -1279,7 +1300,7 @@ A module is a directory-scoped set of Beanstalk source files compiled together. 
 - uses normal declaration syntax;
 - accepts only known top-level `#` constants as config entries;
 - requires values to fold at compile time;
-- may reference earlier compile-time config keys or constants imported from core/builder source libraries;
+- may reference earlier compile-time config keys or constants imported from core/builder source-backed packages;
 - may contain core/builder imports, type aliases, structs, and choices as support declarations;
 - rejects plain top-level bindings because they are runtime/start-body syntax;
 - rejects project-local/relative imports, mutable bindings, functions, calls, host calls, runtime statements, non-key helper constants, traits, trait conformances, trait incompatibility declarations, standalone templates, and `#[...]` page fragments.
@@ -1288,7 +1309,7 @@ Known config key shapes include:
 - string settings: string literals or folded templates;
 - `project`: currently only `"html"`;
 - boolean HTML settings: folded `Bool`, not strings;
-- `library_folders`: one string or a collection of strings;
+- `package_folders`: one string or a collection of strings;
 - `template_const_loop_iteration_limit`: positive folded `Int`, default `10_000`, max `1_000_000`.
 
 ```beanstalk
@@ -1296,7 +1317,7 @@ project #= "html"
 entry_root #= "src"
 dev_folder #= "dev"
 output_folder #= "release"
-library_folders #= {"lib", "packages"}
+package_folders #= {"lib", "packages"}
 ```
 
 Config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`. Structured typed config values such as `project #= Project::Html(...)` remain deferred.
@@ -1349,7 +1370,7 @@ export:
 - Invalid namespace path stems require explicit aliases.
 - Direct imports of any `#*.bst` root file and `config.bst` are invalid.
 
-### Module roots, runtime, public APIs, and libraries
+### Module roots, runtime, public APIs and packages
 
 | File/root | Role |
 |---|---|
@@ -1375,30 +1396,35 @@ Execution and visibility:
 Import resolution:
 - `@./x` resolves from the importing file’s directory.
 - Parent-directory imports with `..` are unsupported.
-- Imports cannot escape module/library/project boundaries.
-- Library-prefix imports resolve from the matching library root.
+- Imports cannot escape module, package or project boundaries.
+- Package-prefix imports resolve from the matching package root.
 - Other non-relative imports resolve from the configured module entry root.
-- Configured library folders are scan roots; each direct child directory becomes an import prefix.
-- `/lib` is the default scan folder when `library_folders` is omitted.
+- Configured package folders are scan roots; each direct child directory becomes an import prefix.
+- `/lib` is the default scan folder when `package_folders` is omitted.
 - Importing a folder across or into a module boundary requires one unique `#*.bst` root, and only declarations in its `export:` block are visible.
 - Sibling `name.bst` and `name/` folder imports are ambiguous; `.js` files are excluded from that collision rule.
 - Grouped imports expand into individual symbol imports.
-- Circular imports are compilation errors.
+- Same-module file cycles are accepted when declarations resolve through the dependency graph. Circular compile-time constant dependencies are rejected. Cross-module and package visibility still applies.
 
-Library categories:
-- core prelude libraries: every builder must provide `@core/prelude`; exported prelude names are bare;
-- core libraries: optional builder packages such as `@core/math`, `@core/text`, `@core/random`, `@core/time`;
-- builder libraries: builder-owned libraries such as HTML `@html`;
-- project libraries: source libraries discovered from configured library folders;
-- external packages: virtual packages provided by backend metadata.
+Package metadata has two orthogonal axes:
 
-Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules with one cosmetic `#*.bst` root and an `export:` public surface.
+| Package | Origin | Backing |
+|---|---|---|
+| `@html` | Builder | BeanstalkSource |
+| `@core/collections`, `@core/io`, `@core/math`, `@core/text`, `@core/random`, `@core/time` | Core | ExternalBinding |
+| `@web/canvas` | Builder | ExternalBinding |
+| configured package-folder child | ProjectLocal | BeanstalkSource |
+| annotated project-local `.js` import | ProjectLocal | ExternalBinding |
 
-The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Its cosmetic root filename is currently `libraries/html/#mod.bst`, but its public API comes from the root's `export:` block. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
+`Standard` and `Dependency` are reserved future origins. The prelude is implicit-import policy, not a package origin or backing. It exposes the bare `io` namespace as an alias to `@core/io`.
+
+Core packages require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source-backed packages are normal modules with one cosmetic `#*.bst` root and an `export:` public surface.
+
+The HTML builder's `@html` source-backed package exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Its cosmetic root filename is currently `packages/html/#mod.bst`, but its public API comes from the root's `export:` block. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
 
 ### External platform package imports
 
-Project builders may provide virtual packages such as `@core/io`, `@core/math`, or `@web/canvas`. These are typed external packages, not Beanstalk source files. They expose opaque external types, compile-time constants, and external free functions only.
+Project builders may provide binding-backed packages such as `@core/io`, `@core/math` or `@web/canvas`. These aren't Beanstalk source files. They expose opaque external types, compile-time constants and external free functions only.
 
 ```beanstalk
 import @core/math
@@ -1431,13 +1457,15 @@ Time package split:
 
 The HTML builder supports annotated single-file `.js` imports through `@bst.opaque` and `@bst.sig`. JavaScript export names are runtime implementation details; Beanstalk names come from annotations. Supported JS export forms are `export function name(...) { ... }` and block-bodied arrow exports. `@bst.sig` annotations expose free functions; `this` receiver-style signatures are rejected during registration. Runtime imports from builder-registered modules must be named static imports. Unsupported JS features include arbitrary dependency graphs, default exports, re-exports, CommonJS, classes, JS constants, property accessors, callbacks, async functions, collections/options in JS signatures, generic external types, receiver methods, and multi-success JS returns.
 
-Deferred library-system features:
+Deferred package-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules
-- source-library HIR caching
+- source-backed package HIR caching
 - user-authored external binding files
 - wildcard imports/exports and namespace exports
 - automatic docs/API extraction from module-root `export:` blocks
 - seeded random, full date/time/time-zone/calendar APIs, Temporal-backed calendar implementation, locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals, browser animation scheduling packages, and non-JS lowerings for JS-backed core packages
+
+Beanstalk `$md` links use `@path (label)`. Plain Markdown `.md` files use ordinary `[label](path)` links. Plain Markdown href and src values are rendered literally rather than rewritten as tracked assets.
 
 ### Binding Modes, Top-Level Declarations, and Constants
 

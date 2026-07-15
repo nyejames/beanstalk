@@ -19,7 +19,7 @@ A Beanstalk project is a directory tree with one strict config file, a source en
 
 - `config.bst` is the only project config file. It lives at the project root and is not module source.
 - The configured `entry_root` (usually `src`) is the source folder the compiler searches for module roots.
-- `lib/` is the conventional default folder for project-local source libraries. Each direct child becomes an import prefix.
+- `lib/` is the conventional default folder for project-local source-backed packages. Each direct child becomes a package prefix.
 - `dev/` and `release/` are builder output folders, not source folders. They are generated and managed by the build system.
 - `.beanstalk_manifest` files are build-system metadata used for safe stale-output cleanup. They are not source.
 

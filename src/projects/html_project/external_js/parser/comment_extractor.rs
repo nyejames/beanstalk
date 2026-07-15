@@ -11,7 +11,7 @@
 //! - Inline `/** ... */` on a single line is supported.
 //! - `//` comments are ignored even if they contain `@bst.`.
 
-use super::parsed_js_library::{JsDiagnosticKind, JsParserDiagnostic, JsSourceSpan};
+use super::parsed_js_module::{JsDiagnosticKind, JsParserDiagnostic, JsSourceSpan};
 
 /// A single `@bst.*` annotation extracted from a comment block.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,7 +203,7 @@ impl<'a> CommentScanner<'a> {
             }
             "@bst.package" => {
                 self.diagnostics.push(JsParserDiagnostic {
-                    message: "`@bst.package` is not supported in Beanstalk JS library comments."
+                    message: "`@bst.package` is not supported in Beanstalk JS module comments."
                         .to_string(),
                     span: block_span,
                     kind: JsDiagnosticKind::UnsupportedPackageTag,

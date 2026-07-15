@@ -1,8 +1,7 @@
-Beanstalk has three main string source forms and one character form.
+Beanstalk has two string source forms and one character form.
 
 [codeblock, $code("bst"):
     escaped_slice = "Hello\nworld"
-    raw_slice = `C:\docs\site`
     letter = '🌱'
 
     name = "Ada"
@@ -16,14 +15,6 @@ Beanstalk has three main string source forms and one character form.
 Double quotes create escaped string slices. Escape sequences are interpreted by
 the string literal parser.
 
-### Raw string slices
-
-Backticks create raw string slices in expression position. Their text is kept
-without normal quoted-string escaping.
-
-Inside a template body, backticks are ordinary body text available to the
-active formatter.
-
 ### Characters
 
 Single quotes create `Char` values.
@@ -36,6 +27,6 @@ may fold at compile time or lower to runtime string construction.
 Templates own interpolation, formatting, slots, wrappers and structured
 content. See @../templates (Templates) for the complete system.
 
-Quoted slices, raw slices and templates all participate in the language's
-`String` surface. Their storage and folding behaviour differs, but they do not
-create three unrelated source-level string types.
+Quoted slices and templates both participate in the language's `String` surface.
+Expression-position raw backtick slices aren't implemented. Inside a template body,
+backticks are ordinary body text available to the active formatter.

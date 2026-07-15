@@ -69,23 +69,23 @@ fn lookup_receiver_method_prefers_exact_source_file_before_catalog_fallback() {
     let receiver = ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int);
     let key = (receiver.to_owned(), method_name);
     let local_source = interned_path(&["src", "#page.bst"], &mut string_table);
-    let library_source = interned_path(&["lib", "shared.bst"], &mut string_table);
+    let package_source = interned_path(&["lib", "shared.bst"], &mut string_table);
 
     let local_entry = empty_receiver_entry(
         interned_path(&["src", "reset"], &mut string_table),
         local_source.to_owned(),
         receiver.to_owned(),
     );
-    let library_entry = empty_receiver_entry(
+    let package_entry = empty_receiver_entry(
         interned_path(&["lib", "reset"], &mut string_table),
-        library_source,
+        package_source,
         receiver.to_owned(),
     );
 
     let mut catalog = ReceiverMethodCatalog::default();
     catalog
         .by_receiver_and_name
-        .insert(key, vec![library_entry, local_entry.to_owned()]);
+        .insert(key, vec![package_entry, local_entry.to_owned()]);
 
     let exact_context = context_for_source_file(local_source, catalog);
     let resolved = exact_context
@@ -110,7 +110,7 @@ fn visible_method_lookup_prefers_same_file_before_catalog_fallback() {
         local_source.to_owned(),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
     );
-    let library_entry = empty_receiver_entry(
+    let package_entry = empty_receiver_entry(
         interned_path(&["lib", "render"], &mut string_table),
         exported_source,
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
@@ -119,7 +119,7 @@ fn visible_method_lookup_prefers_same_file_before_catalog_fallback() {
     let mut catalog = ReceiverMethodCatalog::default();
     catalog
         .by_method_name
-        .insert(method_name, vec![library_entry, local_entry.to_owned()]);
+        .insert(method_name, vec![package_entry, local_entry.to_owned()]);
 
     let context = context_for_source_file(local_source, catalog);
     let resolved = context

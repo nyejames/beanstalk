@@ -34,18 +34,18 @@ Files without `#` in the same directory as a root file are normal source files w
 A module root can serve two roles depending on context:
 
 - **Active root**: the module being compiled. Its top-level runtime code becomes implicit module start work. Its direct top-level templates become page fragments.
-- **Imported root**: a module compiled only to validate its public declaration surface. Its top-level runtime code is not executed. Its top-level templates do not become page fragments. Only its exported declarations are available to the importing module.
+- **Imported root**: its top-level runtime and page-fragment activity is inactive. Only the declarations selected by `export:` are visible through the module boundary.
 
 ### API-only roots
 
 A module root with no builder-relevant top-level activity (no runtime code, no const fragments, no runtime fragments) is API-only. It is a valid module root that exports declarations but produces no builder artifact.
 
-### Migrating facade-era projects
+### Migrating older module projects
 
 - Rename the project config file to plain `config.bst`.
 - Keep one non-config `#*.bst` root per source directory. Merge old `#page.bst` and `#mod.bst` roles when they shared a directory.
 - Replace inline `export` declarations and imports with one strict `export:` block in the module root.
-- Import the module directory or library prefix. Do not import the hash-root filename directly.
+- Import the module directory or package prefix. Do not import the hash-root filename directly.
 
 ### Related concepts
 

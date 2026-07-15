@@ -206,9 +206,7 @@ pub fn register_core_io_package(registry: &mut ExternalPackageRegistry) {
     let package_id = registry
         .register_package(
             CORE_IO_PACKAGE_PATH,
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Core,
-            ),
+            crate::builder_surface::PackageOrigin::Core,
         )
         .expect("builtin package registration should not collide");
 

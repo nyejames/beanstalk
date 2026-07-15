@@ -41,7 +41,7 @@ pub(crate) fn invalid_config_message(
                 .to_owned()
         }
         InvalidConfigReason::ConfigImportRootViolation => {
-            "Config files may only import from core or builder-provided libraries.".to_owned()
+            "Config files may only import from Core or Builder packages.".to_owned()
         }
         InvalidConfigReason::FunctionUnsupported => {
             "`config.bst` does not support user-defined functions. Use known setting declarations plus import/type support declarations only.".to_owned()
@@ -169,7 +169,7 @@ pub(crate) fn invalid_config_message(
             prefixes,
             package_folders,
         } => format!(
-            "Project-local source libraries collide with builder-provided libraries: {}. Rename or remove the conflicting project-local package prefix, or update 'package_folders' (currently: {}).",
+            "Project-local package prefixes collide with Builder package prefixes: {}. Rename or remove the conflicting project-local package prefix, or update 'package_folders' (currently: {}).",
             string_table.resolve(*prefixes),
             string_table.resolve(*package_folders),
         ),
@@ -244,12 +244,12 @@ fn invalid_package_folder_message(
 
     match reason {
         InvalidPackageFolderReason::Empty => {
-            "Invalid 'package_folders' entry. Library folders cannot be empty.".to_owned()
+            "Invalid 'package_folders' entry. Package folders cannot be empty.".to_owned()
         }
         InvalidPackageFolderReason::AbsolutePath => {
             let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
             format!(
-                "Invalid 'package_folders' entry '{folder_name}'. Library folders must be relative to the project root."
+                "Invalid 'package_folders' entry '{folder_name}'. Package folders must be relative to the project root."
             )
         }
         InvalidPackageFolderReason::ParentDirectorySegment => {
@@ -261,7 +261,7 @@ fn invalid_package_folder_message(
         InvalidPackageFolderReason::NestedPath => {
             let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
             format!(
-                "Invalid 'package_folders' entry '{folder_name}'. Library folders must be a single top-level folder name such as '@lib'."
+                "Invalid 'package_folders' entry '{folder_name}'. Package folders must be a single top-level folder name such as \"lib\"."
             )
         }
     }
@@ -484,14 +484,14 @@ pub(crate) fn unsupported_external_extension_message(
     )
 }
 
-pub(crate) fn invalid_external_library_message(
+pub(crate) fn invalid_external_module_message(
     path: &InternedPath,
     message: StringId,
     string_table: &StringTable,
 ) -> String {
     let path = path.to_portable_string(string_table);
     let message = string_table.resolve(message);
-    format!("External library `{path}` is invalid.\n{message}")
+    format!("External JS module `{path}` is invalid.\n{message}")
 }
 
 pub(crate) fn import_record_used_as_value_message(

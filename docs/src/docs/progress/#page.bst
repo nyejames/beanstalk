@@ -324,17 +324,17 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Paths and imports]
             [: Supported]
-            [: Broad source import, namespace import, grouped import, external package, public-surface, module-boundary, collision, and project-structure coverage.]
+            [: Broad source import, namespace import, grouped import, binding-backed package, public-surface, module-boundary, collision and project-structure coverage.]
             [: Frontend / HTML builder]
-            [: Source and module namespace records are shallow. External package namespace records support nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through the target root's [$html:<code>export:</code>] public surface.]
+            [: Source and module namespace records are shallow. External package namespace records support nested symbol paths such as [$html:<code>io.input.new</code>] and [$html:<code>io.input.Input</code>]. Direct symbol-path imports remain rejected. Cross-module and source-backed package access goes through the target root's [$html:<code>export:</code>] public surface.]
         ]
 
         [data:
-            [: External platform packages]
+            [: Binding-backed platform packages]
             [: Partial]
             [: Broad package import, external constant, external signature, provider-created JS package, runtime asset/glue, core package, prelude, and backend validation coverage.]
             [: Frontend / JS]
-            [: Rust-side and provider-created external packages expose free functions, opaque types, and compile-time scalar constants. Project-local and builder-owned annotated [$html:<code>.js</code>] files can create JS-backed package surfaces. External packages do not expose receiver methods. Unsupported reachable calls for an active backend fail before lowering.]
+            [: Rust-side and provider-created binding-backed packages expose free functions, opaque types and compile-time scalar constants. Project-local and builder-owned annotated [$html:<code>.js</code>] files can create JS-backed package surfaces. Binding-backed packages do not expose receiver methods. Unsupported reachable calls for an active backend fail before lowering.]
         ]
 
         [data:
@@ -386,11 +386,11 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Notes] ]
 
         [data:
-            [: Core prelude]
+            [: Prelude policy]
             [: Supported]
             [: Targeted prelude symbol registration, namespace-alias plumbing, and collision rejection coverage.]
             [: Frontend / JS]
-            [: Every builder provides [$html:<code>@core/prelude</code>]. The builtin prelude registers [$html:<code>io</code>] as a namespace alias to [$html:<code>@core/io</code>] and leaves compiler-owned [$html:<code>Error</code>] as a bare language symbol.]
+            [: The builtin prelude policy registers [$html:<code>io</code>] as a namespace alias to [$html:<code>@core/io</code>] and leaves compiler-owned [$html:<code>Error</code>] as a bare language symbol. There is no [$html:<code>@core/prelude</code>] package.]
         ]
 
         [data:
@@ -434,27 +434,27 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
-            [: Source library roots]
+            [: Source-backed package roots]
             [: Partial]
-            [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, generic library root discovery, collision detection, and public-surface enforcement coverage.]
+            [: Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-backed package imports, project-local/relative config import rejection, generic package-root discovery, collision detection and public-surface enforcement coverage.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share module-root and visibility rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.]
+            [: Source-backed packages and regular modules share module-root and visibility rules. Authored config entries are folded known top-level [$html:<code>#</code>] constants in [$html:<code>config.bst</code>]. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target Core or Builder packages only.]
         ]
 
         [data:
-            [: Builder-provided source libraries]
+            [: Builder-provided source-backed packages]
             [: Partial]
-            [: Targeted builder source-library root registration and HTML builder library coverage.]
+            [: Targeted builder source-backed package root registration and HTML Builder package coverage.]
             [: Frontend / HTML]
-            [: Builders expose source libraries through [$html:<code>LibrarySet.source_libraries</code>]. The HTML builder provides [$html:<code>@html</code>] as a source library. Builder and project-local prefix collisions are hard config errors.]
+            [: Builders expose source-backed packages through [$html:<code>BuilderSurface.source_packages</code>]. The HTML builder provides [$html:<code>@html</code>] as a source-backed package. Builder and project-local prefix collisions are hard config errors.]
         ]
 
         [data:
-            [: Project-local libraries]
+            [: Project-local packages]
             [: Partial]
-            [: Targeted config-defined library folders, import resolution, generic hash-root, and public-surface coverage.]
+            [: Targeted config-defined package folders, import resolution, generic hash-root, and public-surface coverage.]
             [: Frontend / HTML]
-            [: Project-local source libraries are discovered from [$html:<code>library_folders</code>], with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. The filename after [$html:<code>#</code>] has no semantic role and the root's strict [$html:<code>export:</code>] block defines its public surface.]
+            [: Project-local source-backed packages are discovered from [$html:<code>package_folders</code>], with `/lib` as the default convention. Each direct child folder becomes a package prefix and Stage 0 requires exactly one direct [$html:<code>#*.bst</code>] root with a non-empty cosmetic name. The filename after [$html:<code>#</code>] has no semantic role and the root's strict [$html:<code>export:</code>] block defines its public surface.]
         ]
 
         [data:
@@ -462,7 +462,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Targeted built-in JS-backed package, runtime asset, runtime module, import-map, glue, and backend validation coverage.]
             [: HTML / JS]
-            [: Builder-owned runtime packages such as [$html:<code>@web/canvas</code>] share the external package registry and HTML external JS asset/glue pipeline with provider-created imports.]
+            [: Builder-owned runtime packages such as [$html:<code>@web/canvas</code>] are binding-backed packages. They share the specialised external package registry and HTML external JS asset/glue pipeline with provider-created imports.]
         ]
     ]
 ]
@@ -700,10 +700,10 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
-            [: Source-library HIR caching]
+            [: Source-backed package HIR caching]
             [: Deferred]
-            [: No precompiled source-library cache.]
-            [: Source libraries are compiled from source each build. Caching is deferred until the library system is stable.]
+            [: No precompiled source-backed package cache.]
+            [: Source-backed packages are compiled from source each build. Caching is deferred until the package system is stable.]
         ]
 
         [data:
@@ -714,9 +714,9 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
-            [: External JS library expansion]
+            [: External JS package expansion]
             [: Deferred]
-            [: JS provider diagnostics reject unsupported public library forms.]
+            [: JS provider diagnostics reject unsupported public binding forms.]
             [: The HTML builder supports annotated single-file [$html:<code>.js</code>] imports and builder-owned JS-backed packages. JS constants, classes, dependency graphs, default exports, re-exports, CommonJS, callbacks, async functions, generic external types, collection/option signatures, and multi-success returns remain deferred.]
         ]
 

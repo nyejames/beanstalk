@@ -1,3 +1,3 @@
-import @./library.js as library
+import @./module.js as module
 
-value = library.identity(1)
+value = module.identity(1)

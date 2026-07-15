@@ -9,8 +9,9 @@ Beandown references.
 Read `docs/language-overview.md` for syntax, semantic invariants, edge cases,
 deferred behaviour and the exact outside-scope language surface.
 
-The file remains untouched throughout the migration so every focused
-replacement can be checked against one stable baseline.
+Dedicated parity-sync plans may update the monolith after canonical focused pages have been
+verified. Each sync must keep the monolith and focused references aligned in the same accepted
+slice.
 
 ## Focused references under review
 
@@ -153,14 +154,14 @@ replacement can be checked against one stable baseline.
 - `docs/src/docs/project-structure/entry-runtime-and-fragments.bd`
 - `docs/src/docs/project-structure/html-routing-and-artifacts.bd`
 
-### Libraries and imports
+### Packages and imports
 
-- `docs/src/docs/libraries/import-paths.bd`
-- `docs/src/docs/libraries/grouped-and-namespace-imports.bd`
-- `docs/src/docs/libraries/module-visibility.bd`
-- `docs/src/docs/libraries/public-reexports.bd`
-- `docs/src/docs/libraries/source-libraries.bd`
-- `docs/src/docs/libraries/core-builder-and-external-packages.bd`
+- `docs/src/docs/packages/import-paths.bd`
+- `docs/src/docs/packages/grouped-and-namespace-imports.bd`
+- `docs/src/docs/packages/module-visibility.bd`
+- `docs/src/docs/packages/public-reexports.bd`
+- `docs/src/docs/packages/project-local-packages.bd`
+- `docs/src/docs/packages/package-origins-and-backing.bd`
 
 ### Beandown
 

@@ -8,7 +8,6 @@ Use the [Progress Matrix](docs/src/docs/progress/#page.bst) as a reference for w
 ---
 
 # Plans
-- [Updating Package Terminology and docs](docs/roadmap/plans/package-terminology-docs-monolith-sync-plan.md)
 - [Some cleanup](docs/roadmap/plans/codebase-integrity-cleanup-plan.md)
 - [TIR Finalisation plan](docs/roadmap/plans/final-tir-completion-plan.md)
 - [Diagnostics Improvements](docs/roadmap/plans/compiler-diagnostics-improvement-plan.md)
@@ -64,7 +63,7 @@ The final TIR architecture creates safe extension hooks, but the actual optimisa
   builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that
   keeps traits as static contracts only.
 
-- Time library follow-ups after the first `@core/time` JS slice: civil/calendar types
+- Time package follow-ups after the first `@core/time` JS slice: civil/calendar types
   (`Date`, `TimeOfDay`, `DateTime`, `TimeZone`, `ZonedDateTime`, `Period`),
   Temporal-backed JS calendar behavior once runtime/polyfill policy is clear,
   locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals
@@ -72,7 +71,7 @@ The final TIR architecture creates safe extension hooks, but the actual optimisa
   package rather than `@core/time`, Wasm/native lowerings, and higher-precision or
   nanosecond timestamp representation if wider numeric ABI work lands.
 
-- Deliberately deferred library-system follow-ups after the canvas reachability refactor:
+- Deliberately deferred package-system follow-ups after the canvas reachability refactor:
   JS-backed external package APIs, and Wasm implementations for JS-backed packages such as
   `@web/canvas`. Current reachability is artifact-planning correctness, not general JS
   tree-shaking/minification.
@@ -86,7 +85,7 @@ The final TIR architecture creates safe extension hooks, but the actual optimisa
 - `bean new` follow-ups: non-interactive `--default`, template selection, project type aliases, richer scaffold presets, and optional package/dev tooling setup.
 
 - Benchmarking/profiling deferred tooling: CI performance gates, public dashboards,
-  source-library HIR caching, ownership/drop/ABI specialization, JS minification/tree-shaking,
+  source-backed package HIR caching, ownership/drop/ABI specialization, JS minification/tree-shaking,
   package-manager caching, broad Criterion benchmark suites, tracing/allocation profiler
   integrations, and tracked-summary counter expansion remain outside the current benchmarking
   implementation. These tools should be added only when they answer a specific optimization
@@ -119,10 +118,10 @@ changed first:
 # Future Design Notes
 
 ## Wasm
-- Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
+- Define the Wasm external package policy: host imports, JS-backed package rejection, Core package native lowerings and future package-provided Wasm imports.
 - Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
 - Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
-- Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.
+- Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, binding-backed packages, Core packages, assertions, IO and runtime memory helpers.
 - Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
 - Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected, or lowered through runtime helpers.
 - Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, and errors.
@@ -135,14 +134,14 @@ changed first:
 
 ## Package manager ideas
 - Should try to prevent dependency explosion as much as possible, make adding dependencies with lots of dependencies harder / discouraged
-- Idea of "Golden" libraries (and silver / bronze etc):
+- Idea of "Golden" packages (and silver / bronze etc):
     1. Golden dependencies have 0 depedencies themselves (outside of std or core)
     2. Silver dependencies only have golden dependencies
     3. Bronze dependencies only have silver or gold dependencies
     4. Lead dependencies don't meet these criteria and there is additional friction and checks before they can be added to a project.
-Lead dependencies maybe won't even be allowed to be uploaded to the official Beanstalk libraries / docs website (a future site that will be very similar to crates.io) and so won't be supported automatically by the package manager. 
+Lead dependencies may not be eligible for the future official Beanstalk package registry and won't be supported automatically by the package manager.
 
 The package manager should be extremely strict about security and other things before something can become an official "package".
 Maybe the source code must pass a series of quality checks and be ran through various bits of compiler tooling before it can be added.
 
-In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.
+In the current architecture, source-backed packages are compiled into each consuming module. A future package system may move to separate package compilation, where packages are built first and project modules consume precompiled package artifacts.

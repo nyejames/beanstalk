@@ -4,10 +4,11 @@ Use double quotes for normal text:
     greeting = "Hello"
 ]
 
-Use backticks when the text should stay raw:
+Expression-position backtick strings aren't implemented. Use an ordinary string
+with escapes when the text contains backslashes:
 
 [codeblock, $code("bst"):
-    windows_path = `C:\docs\site`
+    windows_path = "C:\\docs\\site"
 ]
 
 Use single quotes for one character:

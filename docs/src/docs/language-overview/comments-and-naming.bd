@@ -43,4 +43,4 @@ A visible name cannot be redeclared while it remains in scope.
 
 The complete no-shadowing contract is documented by
 @../bindings/#shadowing (Values and bindings). Import aliases and module API
-names have additional collision rules in the Libraries documentation.
+names have additional collision rules in the Packages documentation.

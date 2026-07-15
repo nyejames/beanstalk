@@ -30,20 +30,20 @@ import @./public-reexports-basic {
     content as public_reexports_basic,
 }
 
-import @./source-libraries {
-    content as source_libraries,
+import @./project-local-packages {
+    content as project_local_packages,
 }
 
-import @./source-libraries-basic {
-    content as source_libraries_basic,
+import @./project-local-packages-basic {
+    content as project_local_packages_basic,
 }
 
-import @./core-builder-and-external-packages {
-    content as core_builder_and_external_packages,
+import @./package-origins-and-backing {
+    content as package_origins_and_backing,
 }
 
-import @./core-builder-and-external-packages-basic {
-    content as core_builder_and_external_packages_basic,
+import @./package-origins-and-backing-basic {
+    content as package_origins_and_backing_basic,
 }
 
 import @styles/docs {
@@ -54,19 +54,19 @@ import @styles/docs {
     doc_pager,
 }
 
-page_title #= "Libraries and imports"
-page_description #= "Import paths, module visibility, source libraries, and builder-provided packages."
+page_title #= "Packages and imports"
+page_description #= "Import paths, module visibility, project-local packages and package origin and backing."
 page_head #= language_theme_head
 
 #[navbar]
 
 #[section, $md:
-    @../ (Documentation) / Libraries and imports
+    @../ (Documentation) / Packages and imports
 
-    # Libraries and imports
+    # Packages and imports
 
     Imports make names visible. Module roots decide what crosses a module boundary.
-    Source libraries give reusable modules stable prefixes.
+    Project-local packages give reusable modules stable prefixes.
 
     Those are separate jobs. Keeping them separate is what stops a filesystem from
     quietly becoming an API.
@@ -114,21 +114,21 @@ page_head #= language_theme_head
 
 #[section:
     [doc_level:
-        [$insert("key"):source-libraries]
-        [$insert("title"):Source libraries]
-        [$insert("advanced"):[source_libraries]]
+        [$insert("key"):project-local-packages]
+        [$insert("title"):Project-local packages]
+        [$insert("advanced"):[project_local_packages]]
 
-        [source_libraries_basic]
+        [project_local_packages_basic]
     ]
 ]
 
 #[section:
     [doc_level:
-        [$insert("key"):core-builder-and-external-packages]
-        [$insert("title"):Core, builder and external packages]
-        [$insert("advanced"):[core_builder_and_external_packages]]
+        [$insert("key"):package-origins-and-backing]
+        [$insert("title"):Package origins and backing]
+        [$insert("advanced"):[package_origins_and_backing]]
 
-        [core_builder_and_external_packages_basic]
+        [package_origins_and_backing_basic]
     ]
 ]
 

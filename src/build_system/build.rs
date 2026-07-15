@@ -443,9 +443,9 @@ pub(crate) fn bootstrap_project_build(
 
     // Compute the builder's frontend surface once so config loading and frontend compilation
     // see the same set of allowed config keys, external packages, and source-backed packages.
-    let backend_libraries_start = crate::timing::start_pipeline_timing();
+    let frontend_surface_start = crate::timing::start_pipeline_timing();
     let frontend_surface = project_builder.backend.frontend_surface();
-    log_stage_timing("bootstrap.backend_libraries", backend_libraries_start);
+    log_stage_timing("bootstrap.frontend_surface", frontend_surface_start);
 
     let style_directives_start = crate::timing::start_pipeline_timing();
     let frontend_style_directives = project_builder.backend.frontend_style_directives();

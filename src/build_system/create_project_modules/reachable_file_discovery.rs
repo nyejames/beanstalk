@@ -1011,7 +1011,7 @@ fn resolve_provider_backed_import(
         string_table,
     )?;
 
-    // Enforce module/library boundaries for provider-backed imports.
+    // Enforce module/package boundaries for provider-backed imports.
     // A file may only directly import a .js file that lives in the same module,
     // source-backed package, or default entry-root area.
     check_provider_import_module_boundary(
@@ -1178,8 +1178,8 @@ fn source_file_logical_path(
 
 /// Enforce that a provider-backed import does not cross a module or source-backed package boundary.
 ///
-/// WHAT: .js files are private implementation details of the module or library that owns them.
-///       Cross-module or cross-library .js imports bypass the public surface and are rejected.
+/// WHAT: .js files are private implementation details of the module or package that owns them.
+///       Cross-module or cross-package .js imports bypass the public surface and are rejected.
 /// WHY: provider-backed imports must obey the same visibility boundaries as .bst source imports.
 fn check_provider_import_module_boundary(
     importer_file: &Path,

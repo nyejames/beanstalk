@@ -73,12 +73,7 @@ fn assert_duplicate_import_surface_member(error: CompilerDiagnostic) {
 fn external_nested_namespace_tree_builds_correctly() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package should register");
 
     registry
@@ -396,9 +391,7 @@ fn register_prelude_namespace_test_package(registry: &mut ExternalPackageRegistr
     let package_id = registry
         .register_package(
             "@test/prelude_ns",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
+            crate::builder_surface::PackageOrigin::Builder,
         )
         .expect("test package registration should not collide");
 

@@ -1150,7 +1150,7 @@ Add these as deferred until profiling justifies them:
 - [x] Full template/render-plan arena migration.
 - [x] HIR arena conversion.
 - [x] Borrow fact compaction and snapshot reduction.
-- [x] Source-library HIR caching.
+- [x] Source-backed package HIR caching.
 - [x] Incremental compiler caching.
 - [x] Whole-project persistent semantic cache.
 

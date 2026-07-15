@@ -610,17 +610,17 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Paths and imports</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad source import, namespace import, grouped import, external package, public-surface, module-boundary, collision, and project-structure coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad source import, namespace import, grouped import, binding-backed package, public-surface, module-boundary, collision and project-structure coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;  "> Source and module namespace records are shallow. External package namespace records support nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Direct symbol-path imports remain rejected. Cross-module and source-library access goes through the target root's <code>export:</code> public surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source and module namespace records are shallow. External package namespace records support nested symbol paths such as <code>io.input.new</code> and <code>io.input.Input</code>. Direct symbol-path imports remain rejected. Cross-module and source-backed package access goes through the target root's <code>export:</code> public surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> External platform packages</td>
+             <td style="padding: 0.2em 0.5em;  "> Binding-backed platform packages</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Broad package import, external constant, external signature, provider-created JS package, runtime asset/glue, core package, prelude, and backend validation coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> Rust-side and provider-created external packages expose free functions, opaque types, and compile-time scalar constants. Project-local and builder-owned annotated <code>.js</code> files can create JS-backed package surfaces. External packages do not expose receiver methods. Unsupported reachable calls for an active backend fail before lowering.</td>
+     <td style="padding: 0.2em 0.5em;  "> Rust-side and provider-created binding-backed packages expose free functions, opaque types and compile-time scalar constants. Project-local and builder-owned annotated <code>.js</code> files can create JS-backed package surfaces. Binding-backed packages do not expose receiver methods. Unsupported reachable calls for an active backend fail before lowering.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -677,11 +677,11 @@ body {
                 
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Core prelude</td>
+             <td style="padding: 0.2em 0.5em;  "> Prelude policy</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted prelude symbol registration, namespace-alias plumbing, and collision rejection coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> Every builder provides <code>@core/prelude</code>. The builtin prelude registers <code>io</code> as a namespace alias to <code>@core/io</code> and leaves compiler-owned <code>Error</code> as a bare language symbol.</td>
+     <td style="padding: 0.2em 0.5em;  "> The builtin prelude policy registers <code>io</code> as a namespace alias to <code>@core/io</code> and leaves compiler-owned <code>Error</code> as a bare language symbol. There is no <code>@core/prelude</code> package.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -725,27 +725,27 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Source library roots</td>
+             <td style="padding: 0.2em 0.5em;  "> Source-backed package roots</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-library imports, project-local/relative config import rejection, generic library root discovery, collision detection, and public-surface enforcement coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted AST-backed config loading, known-key and shape enforcement, config support declarations, source-backed package imports, project-local/relative config import rejection, generic package-root discovery, collision detection and public-surface enforcement coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share module-root and visibility rules. Authored config entries are folded known top-level <code>#</code> constants in <code>config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target core/builder libraries only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source-backed packages and regular modules share module-root and visibility rules. Authored config entries are folded known top-level <code>#</code> constants in <code>config.bst</code>. Import/type support declarations are accepted, while plain config bindings and trait metadata are rejected. Config imports may target Core or Builder packages only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Builder-provided source libraries</td>
+             <td style="padding: 0.2em 0.5em;  "> Builder-provided source-backed packages</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted builder source-library root registration and HTML builder library coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted builder source-backed package root registration and HTML Builder package coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Builders expose source libraries through <code>LibrarySet.source_libraries</code>. The HTML builder provides <code>@html</code> as a source library. Builder and project-local prefix collisions are hard config errors.</td>
+     <td style="padding: 0.2em 0.5em;  "> Builders expose source-backed packages through <code>BuilderSurface.source_packages</code>. The HTML builder provides <code>@html</code> as a source-backed package. Builder and project-local prefix collisions are hard config errors.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Project-local libraries</td>
+             <td style="padding: 0.2em 0.5em;  "> Project-local packages</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted config-defined library folders, import resolution, generic hash-root, and public-surface coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted config-defined package folders, import resolution, generic hash-root, and public-surface coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <code>library_folders</code>, with `/lib` as the default convention. Each direct child folder becomes an import prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. The filename after <code>#</code> has no semantic role and the root's strict <code>export:</code> block defines its public surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> Project-local source-backed packages are discovered from <code>package_folders</code>, with `/lib` as the default convention. Each direct child folder becomes a package prefix and Stage 0 requires exactly one direct <code>#*.bst</code> root with a non-empty cosmetic name. The filename after <code>#</code> has no semantic role and the root's strict <code>export:</code> block defines its public surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -753,7 +753,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted built-in JS-backed package, runtime asset, runtime module, import-map, glue, and backend validation coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> Builder-owned runtime packages such as <code>@web/canvas</code> share the external package registry and HTML external JS asset/glue pipeline with provider-created imports.</td>
+     <td style="padding: 0.2em 0.5em;  "> Builder-owned runtime packages such as <code>@web/canvas</code> are binding-backed packages. They share the specialised external package registry and HTML external JS asset/glue pipeline with provider-created imports.</td>
         </tr>
             
 
@@ -1016,10 +1016,10 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Source-library HIR caching</td>
+             <td style="padding: 0.2em 0.5em;  "> Source-backed package HIR caching</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> No precompiled source-library cache.</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries are compiled from source each build. Caching is deferred until the library system is stable.</td>
+     <td style="padding: 0.2em 0.5em;  "> No precompiled source-backed package cache.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source-backed packages are compiled from source each build. Caching is deferred until the package system is stable.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1030,9 +1030,9 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> External JS library expansion</td>
+             <td style="padding: 0.2em 0.5em;  "> External JS package expansion</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> JS provider diagnostics reject unsupported public library forms.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS provider diagnostics reject unsupported public binding forms.</td>
      <td style="padding: 0.2em 0.5em;  "> The HTML builder supports annotated single-file <code>.js</code> imports and builder-owned JS-backed packages. JS constants, classes, dependency graphs, default exports, re-exports, CommonJS, callbacks, async functions, generic external types, collection/option signatures, and multi-success returns remain deferred.</td>
         </tr>
 

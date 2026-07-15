@@ -140,7 +140,7 @@ page_head #= language_theme_head
 #[section, $md:
     ## Create a new HTML project
 
-    The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore.
+    The scaffold creates a complete default project including config, a starter page, package folder, output folders with build manifests, and an optional .gitignore.
     The HTML project builder itself has more rules than this page needs to cover; see @../project-structure (the project structure guide) for page layout, routing, assets, fragments, and generated output details.
 
     Start a new project:
@@ -212,7 +212,7 @@ page_head #= language_theme_head
         └── .gitignore
     ]
 
-    - `lib/` is created empty by default for project-local source libraries.
+    - `lib/` is created empty by default for project-local source-backed packages.
     - `dev/` and `release/` are output folders.
     - .beanstalk_manifest files are build-system metadata for safe stale-output cleanup.
     - `src/#page.bst` is the conventional module root with a starter page. The filename is cosmetic.
@@ -371,7 +371,7 @@ page_head #= language_theme_head
         [data:
             [: Missing File or Directory]
             [: The project references a file, directory, import path, or output path that cannot be resolved.]
-            [: Check spelling, relative paths, [$html:<code>entry_root</code>], [$html:<code>library_folders</code>], and project config.]
+            [: Check spelling, relative paths, [$html:<code>entry_root</code>], [$html:<code>package_folders</code>] and project config.]
         ]
 
         [data:
@@ -427,7 +427,7 @@ page_head #= language_theme_head
     `bean` is expected to become the main Beanstalk project tool, not just a thin compiler launcher.
     Planned additions include:
 
-    - a package manager for Beanstalk libraries and project dependencies
+    - a package manager for Beanstalk packages and project dependencies
     - a formatter for stable project-wide formatting
     - `suggest`, a pedantic style and cleanup command to use alongside `check`
     - richer `new` project options, including more complete config templates

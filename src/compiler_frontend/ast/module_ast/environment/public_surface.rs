@@ -382,14 +382,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             return true;
         }
 
-        if let Some(library_prefix) = self
+        if let Some(package_prefix) = self
             .module_symbols
             .file_package_membership
             .get(public_root_file)
             && let Some(entries) = self
                 .module_symbols
                 .source_package_public_exports
-                .get(library_prefix)
+                .get(package_prefix)
             && entries
                 .iter()
                 .any(|entry| public_export_targets_source_path(entry, path))

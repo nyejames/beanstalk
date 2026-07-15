@@ -11,7 +11,7 @@
 //! - Rejects `Void`, multi-success returns, collections, options, callbacks, and generics.
 //! - Does not validate that receiver types were declared with `@bst.opaque`.
 
-use super::parsed_js_library::{
+use super::parsed_js_module::{
     JsDiagnosticKind, JsParserDiagnostic, JsSourceSpan, ParsedParameter, ParsedReturnType,
     ParsedSignature,
 };
@@ -200,7 +200,7 @@ impl SignatureScanner {
         // at the next boundary instead of consuming the rest of the signature.
         if self.peek_str("...") {
             self.emit_diagnostic(
-                "Rest parameters are not supported in Beanstalk JS library signatures.",
+                "Rest parameters are not supported in Beanstalk JS module signatures.",
                 JsDiagnosticKind::UnsupportedParameterPattern,
             );
             self.skip_to_parameter_boundary();
@@ -211,7 +211,7 @@ impl SignatureScanner {
         // only accepts flat ABI slots.
         if self.peek_char('{') || self.peek_char('[') {
             self.emit_diagnostic(
-                "Destructuring parameters are not supported in Beanstalk JS library signatures.",
+                "Destructuring parameters are not supported in Beanstalk JS module signatures.",
                 JsDiagnosticKind::UnsupportedParameterPattern,
             );
             self.skip_to_parameter_boundary();
@@ -223,7 +223,7 @@ impl SignatureScanner {
         // Optional parameters are rejected in the external signature subset.
         if self.consume_char('?') {
             self.emit_diagnostic(
-                "Optional parameters are not supported in Beanstalk JS library signatures.",
+                "Optional parameters are not supported in Beanstalk JS module signatures.",
                 JsDiagnosticKind::UnsupportedParameterPattern,
             );
             self.skip_to_parameter_boundary();
@@ -250,13 +250,13 @@ impl SignatureScanner {
         if is_receiver {
             if parameter_index != 0 {
                 self.emit_diagnostic(
-                    "Receiver parameter `this` must be the first parameter in a Beanstalk JS library signature.",
+                    "Receiver parameter `this` must be the first parameter in a Beanstalk JS module signature.",
                     JsDiagnosticKind::InvalidReceiverParameter,
                 );
             }
             if *has_seen_receiver {
                 self.emit_diagnostic(
-                    "Receiver parameter `this` may appear at most once in a Beanstalk JS library signature.",
+                    "Receiver parameter `this` may appear at most once in a Beanstalk JS module signature.",
                     JsDiagnosticKind::InvalidReceiverParameter,
                 );
             }
@@ -288,7 +288,7 @@ impl SignatureScanner {
                 type_name.push('}');
             }
             self.emit_diagnostic(
-                "Collection types are not supported in Beanstalk JS library signatures yet.",
+                "Collection types are not supported in Beanstalk JS module signatures yet.",
                 JsDiagnosticKind::UnsupportedTypeSyntax,
             );
             return type_name;
@@ -306,7 +306,7 @@ impl SignatureScanner {
         if self.consume_char('?') {
             type_name.push('?');
             self.emit_diagnostic(
-                "Option types are not supported in Beanstalk JS library signatures yet.",
+                "Option types are not supported in Beanstalk JS module signatures yet.",
                 JsDiagnosticKind::UnsupportedTypeSyntax,
             );
         }
@@ -380,7 +380,7 @@ impl SignatureScanner {
         // More than one success return is not supported in this parser subset.
         if returns.len() > 1 {
             self.emit_diagnostic(
-                "Multi-success returns are not supported in Beanstalk JS library signatures yet.",
+                "Multi-success returns are not supported in Beanstalk JS module signatures yet.",
                 JsDiagnosticKind::MultiSuccessReturn,
             );
         }

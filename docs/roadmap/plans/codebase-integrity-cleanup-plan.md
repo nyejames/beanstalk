@@ -125,23 +125,23 @@ Update the filesystem-origin path call sites in:
 
 - `src/build_system/create_project_modules/source_tree_index.rs`
 - `src/build_system/create_project_modules/collision_detection.rs`
-- `src/build_system/create_project_modules/source_library_discovery.rs`
+- `src/build_system/create_project_modules/source_package_discovery.rs`
 - `src/build_system/create_project_modules/compilation.rs`
 - relevant project-structure diagnostic helpers
 
 Required changes:
 
-- reject non-UTF-8 module root names, source filenames, folder names, extensions and source-library prefixes
-- stop skipping invalid folder names during collision and library-prefix checks
+- reject non-UTF-8 module root names, source filenames, folder names, extensions and source-package prefixes
+- stop skipping invalid folder names during collision and package-prefix checks
 - stop converting invalid extensions to `""`
 - ensure root-file recognition and sibling collision detection see the same exact names
 - preserve the offending filesystem path in the error
 
 Use a file/infrastructure error for names discovered directly from the filesystem. Use a typed config diagnostic only when the invalid value came from an authored config key before filesystem discovery.
 
-### Slice 1C: Make source-library preflight strict
+### Slice 1C: Make source-package preflight strict
 
-Change `prepare_source_library_roots` to return a result and make canonicalization mandatory.
+Change `prepare_source_package_roots` to return a result and make canonicalization mandatory.
 
 Required behaviour:
 
@@ -149,7 +149,7 @@ Required behaviour:
 2. return a clear file error when canonicalization fails
 3. run `discover_hash_root_file` only on the canonical root
 4. canonicalize the discovered root file
-5. construct `PreparedSourceLibraryRoots` only from successful exact identities
+5. construct `PreparedSourcePackageRoots` only from successful exact identities
 
 Delete the `unwrap_or_else(|_| path.clone())` fallback. Discovery must never proceed against a path whose canonicalization failed.
 
@@ -179,13 +179,13 @@ Add Unix-only invalid-byte tests with `std::os::unix::ffi::OsStringExt` for:
 - `InternedPath` conversion
 - source tree module-root discovery
 - sibling `.bst` file/folder collision discovery
-- project-local source-library prefixes
+- project-local source-package prefixes
 - single-file extension handling
 - single-file HTML route derivation
 
 Add platform-independent tests for:
 
-- canonical source-library root success
+- canonical source-package root success
 - canonicalization failure
 - missing, multiple and unreadable public-surface roots
 - empty single-file stem rejection where constructible
@@ -194,7 +194,7 @@ Add platform-independent tests for:
 
 - no filesystem-origin path component is silently dropped
 - no invalid extension becomes an empty extension
-- no source-library root continues after canonicalization failure
+- no source-package root continues after canonicalization failure
 - no HTML route falls back to `main`
 - focused path, Stage 0 and HTML route tests pass
 
@@ -604,7 +604,7 @@ This plan is complete when:
 | 21 | Discard | Repeated import candidate scans are real but unmeasured and not roadmap-worthy cleanup. |
 | 22 | Retain | The fixed `]` fallback can misreport EOF inside a value-producing block. |
 | 23 | Discard | JS function scans and block clones are unmeasured. The clone also avoids mutable-borrow conflicts during emission. |
-| 24 | Discard | Returning the first source-library root error is a valid fail-fast policy, not style-guide drift. |
+| 24 | Discard | Returning the first source-package root error is a valid fail-fast policy, not style-guide drift. |
 | 25 | Retain | Invalid or empty single-file stems must not collapse to `main`. |
 | 26 | Discard | A canonical regular entry file has a usable parent. The fallback is not a user-reachable defect. |
 | 27 | Retain | Invalid extension bytes currently collapse to an empty extension. |
@@ -615,9 +615,9 @@ This plan is complete when:
 | 32 | Discard | Imported config support files deliberately receive a nonmatching entry sentinel so they remain non-entry files. |
 | 33 | Discard | Rayon work cannot promise immediate cancellation while preserving deterministic diagnostics. |
 | 34 | Discard | Deterministic result ordering is intentional. Any redundant sort removal requires measurement and a separate performance change. |
-| 35 | Retain | Source-library canonicalization failure currently falls back to the original path. |
+| 35 | Retain | Source-package canonicalization failure currently falls back to the original path. |
 | 36 | Retain | Hash-root discovery must not run on that fallback path. |
-| 37 | Retain | Non-UTF-8 source-library prefixes are silently skipped. |
+| 37 | Retain | Non-UTF-8 source-package prefixes are silently skipped. |
 | 38 | Discard | One `PathBuf` membership allocation per directory check is unmeasured micro-optimisation. |
 | 39 | Retain | Source-tree name checks silently omit non-UTF-8 entries. |
 | 40 | Discard | The multi-entry provider-free threshold is an explicit design decision that avoids single-module fork/merge overhead. |

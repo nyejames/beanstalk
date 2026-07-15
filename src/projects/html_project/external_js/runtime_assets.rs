@@ -1,4 +1,4 @@
-//! Runtime asset emission for provider-backed external JavaScript libraries.
+//! Runtime asset emission for provider-backed external JavaScript modules.
 //!
 //! WHAT: turns module-carried JS runtime asset metadata into ordinary HTML builder outputs.
 //! WHY: external JS files are backend artifacts, not frontend source files. Keeping their

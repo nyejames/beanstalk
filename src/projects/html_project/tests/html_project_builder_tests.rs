@@ -54,20 +54,79 @@ fn first_invalid_config_reason(messages: &CompilerMessages) -> &InvalidConfigRea
 }
 
 #[test]
-fn libraries_register_content_source_kinds() {
+fn frontend_surface_registers_content_source_kinds() {
     let builder = HtmlProjectBuilder::new();
-    let libraries = builder.frontend_surface();
+    let frontend_surface = builder.frontend_surface();
 
     assert_eq!(
-        libraries.source_file_kinds.kind_for_extension("bd"),
+        frontend_surface.source_file_kinds.kind_for_extension("bd"),
         Some(crate::builder_surface::SourceFileKind::Beandown)
     );
     assert_eq!(
-        libraries.source_file_kinds.kind_for_extension("md"),
+        frontend_surface.source_file_kinds.kind_for_extension("md"),
         Some(crate::builder_surface::SourceFileKind::PlainMarkdown)
     );
 
-    assert_eq!(libraries.source_file_kinds.kind_for_extension("bst"), None);
+    assert_eq!(
+        frontend_surface.source_file_kinds.kind_for_extension("bst"),
+        None
+    );
+}
+
+#[test]
+fn frontend_surface_registers_core_packages_with_core_binding_metadata() {
+    let frontend_surface = HtmlProjectBuilder::new().frontend_surface();
+
+    for package_path in [
+        "@core/collections",
+        "@core/io",
+        "@core/math",
+        "@core/random",
+        "@core/text",
+        "@core/time",
+    ] {
+        let package = frontend_surface
+            .binding_packages
+            .get_package(package_path)
+            .unwrap_or_else(|| panic!("HTML frontend surface should register {package_path}"));
+
+        assert_eq!(
+            package.metadata,
+            crate::builder_surface::PackageMetadata::binding(
+                crate::builder_surface::PackageOrigin::Core,
+            )
+        );
+    }
+
+    let html_package = frontend_surface
+        .source_packages
+        .get_root("html")
+        .expect("HTML frontend surface should register @html");
+    assert_eq!(
+        html_package.metadata,
+        crate::builder_surface::PackageMetadata::source(
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+    );
+
+    let canvas_package = frontend_surface
+        .binding_packages
+        .get_package("@web/canvas")
+        .expect("HTML frontend surface should register @web/canvas");
+    assert_eq!(
+        canvas_package.metadata,
+        crate::builder_surface::PackageMetadata::binding(
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+    );
+
+    assert!(
+        frontend_surface
+            .binding_packages
+            .get_package("@core/prelude")
+            .is_none(),
+        "prelude is visibility policy, not a package"
+    );
 }
 
 #[test]

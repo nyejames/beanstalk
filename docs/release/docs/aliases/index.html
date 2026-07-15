@@ -785,7 +785,7 @@ body {
 
     <span class='bst-code-comment'>-- Error: State is a type, not a constructor</span>
     <span class='bst-code-comment'>-- ready State = State::Ready</span>
-    </code></pre><p>Aliases to scalar or otherwise non-constructible targets are not callable for the same reason: the alias name is a type, not a value.</p><h3>Visibility and module public surfaces</h3><p>Type aliases follow ordinary module visibility rules. A type alias declared in a source file is importable by other files in the same module. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself has no semantic role. A public re-export may expose an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.</p><h3>Related concepts</h3><ul><li>For concrete generic application see <a href="../generics">Generics</a>.</li><li>For import aliasing see the next section.</li><li>For project visibility and module roots see <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>.</li></ul>
+    </code></pre><p>Aliases to scalar or otherwise non-constructible targets are not callable for the same reason: the alias name is a type, not a value.</p><h3>Visibility and module public surfaces</h3><p>Type aliases follow ordinary module visibility rules. A type alias declared in a source file is importable by other files in the same module. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself has no semantic role. A public re-export may expose an imported alias under a chosen public name. That operation is not the same as an ordinary local file import alias.</p><h3>Related concepts</h3><ul><li>For concrete generic application see <a href="../generics">Generics</a>.</li><li>For import aliasing see the next section.</li><li>For project visibility and module roots see <a href="../project-structure">Project Structure</a> and <a href="../packages">Packages</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -837,7 +837,7 @@ body {
 
 
 
-            <p>Import aliases rename something you import so it fits better in the current file.</p><h3>Two libraries called <code>render</code></h3><p>Suppose two libraries both export a function named <code>render</code>. You cannot import both as <code>render</code> because names must not collide.</p><pre style=""><code class='codeblock'>
+            <p>Import aliases rename something you import so it fits better in the current file.</p><h3>Two packages called <code>render</code></h3><p>Suppose two packages both export a function named <code>render</code>. You cannot import both as <code>render</code> because names must not collide.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
     import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
 
@@ -879,7 +879,7 @@ body {
 
     value <span class='bst-code-operator'>=</span> math.sin<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
     length <span class='bst-code-operator'>=</span> text.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h3>Grouped symbol aliases</h3><p>Use grouped symbol aliases when two libraries export the same name.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Grouped symbol aliases</h3><p>Use grouped symbol aliases when two packages export the same name.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>blog <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_blog <span class='bst-code-parenthesis'>}</span>
     import <span class='bst-code-operator'>@</span>docs <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_docs <span class='bst-code-parenthesis'>}</span>
 
@@ -894,14 +894,14 @@ body {
         <span class='bst-code-struct'>Button</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiButton,</span>
         <span class='bst-code-struct'>Card</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UiCard,</span>
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><h3>Local and public-name distinction</h3><p>An ordinary import alias is private to the importing file. A public name chosen in a module root&#39;s export surface is a different operation. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself has no semantic role. The current export syntax is owned by <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a>. Do not treat a local import alias as a public API rename.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Local and public-name distinction</h3><p>An ordinary import alias is private to the importing file. A public name chosen in a module root&#39;s export surface is a different operation. Cross-module visibility is controlled by the module root&#39;s explicit <code>export:</code> surface. The hash-root filename itself has no semantic role. The current export syntax is owned by <a href="../project-structure">Project Structure</a> and <a href="../packages">Packages</a>. Do not treat a local import alias as a public API rename.</p><pre style=""><code class='codeblock'>
     <span class='bst-code-comment'>-- Ordinary local import alias</span>
     import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ModelUser</span> <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The local <code>ModelUser</code> is visible only in this file. A public rename belongs inside the module root&#39;s current explicit <code>export:</code> block. See <a href="../project-structure">Project Structure</a> and <a href="../libraries">Libraries</a> for the exact current form.</p><h3>Import aliases with type aliases</h3><p>A type alias may target an imported type alias.</p><pre style=""><code class='codeblock'>
+    </code></pre><p>The local <code>ModelUser</code> is visible only in this file. A public rename belongs inside the module root&#39;s current explicit <code>export:</code> block. See <a href="../project-structure">Project Structure</a> and <a href="../packages">Packages</a> for the exact current form.</p><h3>Import aliases with type aliases</h3><p>A type alias may target an imported type alias.</p><pre style=""><code class='codeblock'>
     import <span class='bst-code-operator'>@</span>models <span class='bst-code-parenthesis'>{</span> <span class='bst-code-struct'>User</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span> <span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-struct'>CurrentUser</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExternalUser</span>
-    </code></pre><p>This combines a file-local import rename with a domain-specific type alias.</p><h3>Related concepts</h3><ul><li>For type aliases see the previous section.</li><li>For payload capture aliases see the next section.</li><li>For import syntax and module roots see <a href="../libraries">Libraries</a> and <a href="../project-structure">Project Structure</a>.</li></ul>
+    </code></pre><p>This combines a file-local import rename with a domain-specific type alias.</p><h3>Related concepts</h3><ul><li>For type aliases see the previous section.</li><li>For payload capture aliases see the next section.</li><li>For import syntax and module roots see <a href="../packages">Packages</a> and <a href="../project-structure">Project Structure</a>.</li></ul>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">

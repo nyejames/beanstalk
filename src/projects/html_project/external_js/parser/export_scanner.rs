@@ -18,7 +18,7 @@
 //! - `exports.name = ...` (CommonJS)
 //! - `export const name = value` where value is not an arrow function
 
-use super::parsed_js_library::{
+use super::parsed_js_module::{
     JsDiagnosticKind, JsParserDiagnostic, JsSourceSpan, ParsedRuntimeImport,
 };
 use crate::projects::html_project::external_js::runtime_module_registry::RuntimeModuleRegistry;
@@ -100,13 +100,13 @@ impl<'a> ExportScanner<'a> {
                 && self.is_word_boundary_at("module.exports".len())
             {
                 self.emit_diagnostic_at_current(
-                    "CommonJS `module.exports` is not supported in Beanstalk JS libraries.",
+                    "CommonJS `module.exports` is not supported in Beanstalk JS modules.",
                     JsDiagnosticKind::CommonJsExport,
                 );
                 self.skip_to_statement_end();
             } else if self.peek_str("exports.") {
                 self.emit_diagnostic_at_current(
-                    "CommonJS `exports.name` is not supported in Beanstalk JS libraries.",
+                    "CommonJS `exports.name` is not supported in Beanstalk JS modules.",
                     JsDiagnosticKind::CommonJsExport,
                 );
                 self.skip_to_statement_end();
@@ -140,7 +140,7 @@ impl<'a> ExportScanner<'a> {
         if self.consume_str("default") {
             let span = self.make_span(export_start_byte, export_start_line, export_start_column);
             self.emit_diagnostic(
-                "Default exports are not supported in Beanstalk JS libraries.",
+                "Default exports are not supported in Beanstalk JS modules.",
                 JsDiagnosticKind::DefaultExport,
                 span,
             );
@@ -151,7 +151,7 @@ impl<'a> ExportScanner<'a> {
         if self.consume_char('{') {
             let span = self.make_span(export_start_byte, export_start_line, export_start_column);
             self.emit_diagnostic(
-                "Re-export forms such as `export { name }` are not supported in Beanstalk JS libraries.",
+                "Re-export forms such as `export { name }` are not supported in Beanstalk JS modules.",
                 JsDiagnosticKind::ReExport,
                 span,
             );
@@ -197,7 +197,7 @@ impl<'a> ExportScanner<'a> {
                                 export_start_column,
                             );
                             self.emit_diagnostic(
-                                "`export const` must be bound to an arrow function in Beanstalk JS libraries.",
+                                "`export const` must be bound to an arrow function in Beanstalk JS modules.",
                                 JsDiagnosticKind::UnsupportedParameterPattern,
                                 span,
                             );
@@ -212,7 +212,7 @@ impl<'a> ExportScanner<'a> {
                                 export_start_column,
                             );
                             self.emit_diagnostic(
-                                "Expression-bodied arrow exports are not supported in Beanstalk JS libraries. \
+                                "Expression-bodied arrow exports are not supported in Beanstalk JS modules. \
                                  Use a block body `=> { ... }`.",
                                 JsDiagnosticKind::ExpressionBodiedArrowExport,
                                 span,
@@ -241,7 +241,7 @@ impl<'a> ExportScanner<'a> {
                             export_start_column,
                         );
                         self.emit_diagnostic(
-                            "`export const` must be bound to an arrow function in Beanstalk JS libraries.",
+                            "`export const` must be bound to an arrow function in Beanstalk JS modules.",
                             JsDiagnosticKind::UnsupportedParameterPattern,
                             span,
                         );
@@ -257,7 +257,7 @@ impl<'a> ExportScanner<'a> {
         if self.consume_str("class") && self.is_word_boundary_at(0) {
             let span = self.make_span(export_start_byte, export_start_line, export_start_column);
             self.emit_diagnostic(
-                "Class exports are not supported in Beanstalk JS libraries.",
+                "Class exports are not supported in Beanstalk JS modules.",
                 JsDiagnosticKind::ClassExport,
                 span,
             );
@@ -284,7 +284,7 @@ impl<'a> ExportScanner<'a> {
         // Dynamic import: `import(...)`
         if self.consume_char('(') {
             self.emit_diagnostic(
-                "Dynamic `import()` is not supported in Beanstalk JS libraries.",
+                "Dynamic `import()` is not supported in Beanstalk JS modules.",
                 JsDiagnosticKind::DynamicImport,
                 JsSourceSpan::range(
                     import_start_byte,
@@ -303,7 +303,7 @@ impl<'a> ExportScanner<'a> {
 
         let Some(specifier) = specifier else {
             self.emit_diagnostic(
-                "JavaScript static import is not supported in Beanstalk JS library files yet. \
+                "JavaScript static import is not supported in Beanstalk JS module files yet. \
                  Only registered Beanstalk core runtime modules are supported.",
                 JsDiagnosticKind::ArbitraryImport,
                 JsSourceSpan::range(
@@ -366,7 +366,7 @@ impl<'a> ExportScanner<'a> {
         } else {
             self.emit_diagnostic(
                 format!(
-                    "JavaScript import `{specifier}` is not supported in Beanstalk JS library files yet. \
+                    "JavaScript import `{specifier}` is not supported in Beanstalk JS module files yet. \
                      Only registered Beanstalk core runtime modules are supported."
                 ),
                 JsDiagnosticKind::ArbitraryImport,
@@ -423,7 +423,7 @@ impl<'a> ExportScanner<'a> {
 
             if ch == '{' || ch == '[' {
                 self.emit_diagnostic_at_current(
-                    "Destructuring parameters are not supported in Beanstalk JS library signatures.",
+                    "Destructuring parameters are not supported in Beanstalk JS module signatures.",
                     JsDiagnosticKind::UnsupportedParameterPattern,
                 );
                 self.skip_balanced_braces_and_parens();
@@ -432,7 +432,7 @@ impl<'a> ExportScanner<'a> {
 
             if self.peek_str("...") {
                 self.emit_diagnostic_at_current(
-                    "Rest parameters are not supported in Beanstalk JS library signatures.",
+                    "Rest parameters are not supported in Beanstalk JS module signatures.",
                     JsDiagnosticKind::UnsupportedParameterPattern,
                 );
                 self.skip_to_char(')');
@@ -453,14 +453,14 @@ impl<'a> ExportScanner<'a> {
                 self.skip_whitespace();
                 if self.consume_char('=') {
                     self.emit_diagnostic_at_current(
-                        "Default parameters are not supported in Beanstalk JS library signatures.",
+                        "Default parameters are not supported in Beanstalk JS module signatures.",
                         JsDiagnosticKind::UnsupportedParameterPattern,
                     );
                     in_default_value = true;
                 }
                 if self.consume_char('?') {
                     self.emit_diagnostic_at_current(
-                        "Optional parameters are not supported in Beanstalk JS library signatures.",
+                        "Optional parameters are not supported in Beanstalk JS module signatures.",
                         JsDiagnosticKind::UnsupportedParameterPattern,
                     );
                 }

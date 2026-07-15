@@ -685,10 +685,10 @@ Partitioning must be metadata-driven, not package-name-driven. This phase adds t
 
 - `src/compiler_frontend/external_packages/`
 - `src/backends/external_package_validation.rs`
-- `src/projects/html_project/external_libraries/`
+- `src/projects/html_project/binding_packages/`
 - `src/projects/html_project/external_js/`
 - `docs/language-overview.md`
-- `docs/src/docs/libraries/core/#page.bst` or relevant core docs
+- `docs/src/docs/packages/core/#page.bst` or relevant core docs
 
 #### New type
 
@@ -1459,7 +1459,7 @@ Console IO is neutral. Core compute/text/random helpers should be Wasm-native wh
 - `src/backends/wasm/runtime/imports.rs`
 - `src/projects/html_project/runtime_artifacts.rs`
 - `src/compiler_frontend/external_packages/`
-- `src/projects/html_project/external_libraries/`
+- `src/projects/html_project/binding_packages/`
 - tests
 
 #### Checklist
@@ -1684,7 +1684,7 @@ The compiler, user docs, roadmap, and progress matrix must reflect the final bac
 - `docs/language-overview.md`
 - `docs/memory-management-design.md`
 - `docs/src/docs/project-structure/#page.bst`
-- `docs/src/docs/libraries/#page.bst`
+- `docs/src/docs/packages/#page.bst`
 - `docs/src/docs/progress/#page.bst`
 - `docs/src/docs/async/#page.bst`
 - `docs/roadmap/roadmap.md`
@@ -1951,4 +1951,3 @@ These are explicitly out of scope for this implementation plan.
 - Deep compiler-owned Wasm optimization passes.
 
 The plan reserves runtime/linking seams for async and channels, but does not implement them.
-

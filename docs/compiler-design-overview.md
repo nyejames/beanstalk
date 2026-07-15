@@ -27,8 +27,8 @@ Use these related documents for adjacent concerns:
 User-facing docs-site pages contain examples and beginner-oriented explanations:
 
 - [`src/docs/project-structure/#page.bst`](src/docs/project-structure/#page.bst) for projects, config, modules, entries, and output folders
-- [`src/docs/libraries/#page.bst`](src/docs/libraries/#page.bst) for imports, libraries, source libraries, external packages, and JavaScript imports
-- [`src/docs/libraries/core/#page.bst`](src/docs/libraries/core/#page.bst) for core library pages
+- [`src/docs/packages/#page.bst`](src/docs/packages/#page.bst) for imports, source-backed packages, binding-backed packages and JavaScript imports
+- [`src/docs/packages/core/#page.bst`](src/docs/packages/core/#page.bst) for Core package pages
 - [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst) for template syntax, directives, markdown behavior, and slots
 - [`src/docs/beandown/#page.bst`](src/docs/beandown/#page.bst) for Beandown authoring and import rules
 - [`src/docs/markdown/#page.bst`](src/docs/markdown/#page.bst) for plain Markdown `.md` import rules
@@ -43,7 +43,7 @@ Build systems use the compiler through HIR and borrow validation, then apply the
   [`src/main.rs`](../src/main.rs),
   [`src/projects/`](../src/projects/),
   [`src/build_system/`](../src/build_system/),
-  and [`src/libraries/`](../src/libraries/).
+  and [`src/builder_surface/`](../src/builder_surface/).
 - Frontend driver and early stages:
   [`src/compiler_frontend/mod.rs`](../src/compiler_frontend/mod.rs),
   [`pipeline.rs`](../src/compiler_frontend/pipeline.rs),
@@ -60,7 +60,7 @@ Build systems use the compiler through HIR and borrow validation, then apply the
   [`traits/`](../src/compiler_frontend/traits/),
   [`builtins/`](../src/compiler_frontend/builtins/),
   [`external_packages/`](../src/compiler_frontend/external_packages/),
-  [`source_libraries/`](../src/compiler_frontend/source_libraries/),
+  [`source_packages/`](../src/compiler_frontend/source_packages/),
   and [`style_directives/`](../src/compiler_frontend/style_directives/).
 - AST owners:
   [`ast/mod.rs`](../src/compiler_frontend/ast/mod.rs),
@@ -109,7 +109,7 @@ Build systems use the compiler through HIR and borrow validation, then apply the
 - [`src/compiler_frontend/type_coercion/`](../src/compiler_frontend/type_coercion/) owns implicit contextual compatibility and promotion rules layered on top of type identity. Explicit `cast` resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the coercion path.
 - [`src/compiler_frontend/value_mode.rs`](../src/compiler_frontend/value_mode.rs) tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`. Runtime ownership is a later borrow/lowering concern.
 - [`src/compiler_frontend/traits/`](../src/compiler_frontend/traits/) owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path.
-- [`src/compiler_frontend/source_libraries/`](../src/compiler_frontend/source_libraries/) owns generic hash-root identity and prepared source-library root data shared across Stage 0, header import preparation, dependency sorting and AST visibility checks. Source-library root discovery and project-local library scanning are Stage 0 build-system responsibilities.
+- [`src/compiler_frontend/source_packages/`](../src/compiler_frontend/source_packages/) owns generic hash-root identity and prepared source-backed package root data shared across Stage 0, header import preparation, dependency sorting and AST visibility checks. Source-backed package root discovery and project-local package scanning are Stage 0 build-system responsibilities.
 - [`src/compiler_frontend/external_packages/`](../src/compiler_frontend/external_packages/) stores backend-provided virtual package metadata, package-local symbol paths, and stable external symbol IDs. External package symbols are resolved by package path plus symbol path. The prelude `io` namespace alias is the only bare-name external namespace exception.
 - [`src/compiler_frontend/builtins/`](../src/compiler_frontend/builtins/) owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages, including builtin cast target classification, policy metadata, runtime error codes, and core cast trait definitions/evidence.
 - [`src/compiler_frontend/style_directives/`](../src/compiler_frontend/style_directives/) owns the merged frontend and builder directive registry used by tokenizer and template parsing.
@@ -144,16 +144,16 @@ pub trait BackendBuilder {
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
-    fn libraries(&self) -> LibrarySet;
+    fn frontend_surface(&self) -> BuilderSurface;
 }
 
 pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
 }
 
-pub struct LibrarySet {
-    pub external_packages: ExternalPackageRegistry,
-    pub source_libraries: SourceLibraryRegistry,
+pub struct BuilderSurface {
+    pub binding_packages: ExternalPackageRegistry,
+    pub source_packages: SourcePackageRegistry,
     pub config_keys: ProjectConfigKeyRegistry,
     pub external_import_providers: ExternalImportProviderRegistry,
     pub external_import_cache: ExternalImportProviderCache,
@@ -167,8 +167,8 @@ Backend builders do not load source files, discover modules, load or parse `conf
 
 They declare the frontend-visible build surface:
 
-- source libraries
-- external packages
+- source-backed packages
+- binding-backed packages
 - config keys
 - style directives
 - external import providers
@@ -179,13 +179,15 @@ They receive a validated `Config`, may validate or interpret backend-owned confi
 
 `ProjectConfigKeyRegistry` is declarative Stage 0 metadata. It lists allowed core and backend-owned keys plus value shapes so `config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored.
 
+Source and binding registries stay separate. Shared `PackageMetadata` classifies every package by independent `PackageOrigin` and `PackageBacking` axes, while binding-specific runtime metadata remains in the binding and provider owners. Config keys, providers and source file kinds are also part of `BuilderSurface`.
+
 `config.bst` is a build-system-owned compile-time Beanstalk source file. It is parsed through the frontend up to AST so config values can use normal compile-time constants, folded templates, core/builder support imports, and typed diagnostics. It is not compiled as a module, does not produce HIR, does not create runtime `start` semantics, and does not export language-visible declarations.
 
 Authored config entries must be known top-level `#` constants. Plain top-level bindings are runtime Beanstalk syntax and are rejected in config. Imported constants and support types may participate in config expressions, but imported declarations are support surface only and never become config entries. Authored config may contain imports, type aliases, structs, and choices as support declarations. Traits, trait conformances, trait incompatibility declarations, functions, mutable bindings, runtime statements, local helper constants, standalone templates, project-local imports, relative imports, and `#[...]` page fragments are rejected.
 
 External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST. Provider results may also carry registered runtime imports discovered while parsing the external source.
 
-Builder-runtime package metadata covers builder-owned virtual packages such as `@web/canvas`. These packages are registered directly in `external_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
+Builder-runtime package metadata covers builder-owned virtual packages such as `@web/canvas`. These packages are registered directly in `binding_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
 
 Source file kind metadata lets builders opt in to source assets that participate in normal source import discovery without becoming Beanstalk modules. HTML registers Beandown `.bd` and plain Markdown `.md` content assets this way.
 
@@ -232,9 +234,9 @@ The frontend owns a single `TypeEnvironment` per module. It is the canonical sou
 - HIR `HirStruct` and `HirChoice` carry `frontend_type_id` to trace lowering-local layouts back to the canonical `TypeEnvironment` entry. Validation asserts these IDs resolve to real type definitions.
 - External package types that have no frontend mapping use `ExpectedParameterType::UnknownExternal` instead of sentinel `TypeId`s. Call validation skips type compatibility for unknown external parameters.
 
-### Import, library, and external package contract
+### Import, package and binding contract
 
-Stage 0 discovers source libraries, builder-supported source assets, and provider-backed external files as normal build inputs.
+Stage 0 discovers source-backed packages, builder-supported source assets, and provider-backed external files as normal build inputs.
 
 Header parsing/import preparation resolves imports, aliases, module public-surface boundaries, `export:` metadata, namespace/import records, receiver-method visibility, external package symbols, prelude symbols, builtins and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
 
@@ -244,22 +246,34 @@ AST consumes file-local visibility through `ScopeContext`. It validates semantic
 
 Compiler-facing rules:
 
-- Source libraries are normal modules with exactly one direct `#*.bst` root file and participate in module-level dependency sorting. The filename after `#` is cosmetic.
+- Source-backed packages are normal modules with exactly one direct `#*.bst` root file and participate in module-level dependency sorting. The filename after `#` is cosmetic.
 - Builder-supported source file kinds, such as Beandown `.bd`, resolve through the same extensionless source import path as `.bst` files when the active builder declares support. Recognized but unsupported source kinds are rejected with typed import diagnostics.
 - Module public API maps are built from declarations and grouped imports inside the root file's strict `export:` block. Root-file items outside that block remain private.
-- External packages are virtual typed symbols provided by backend metadata, not `.bst` source files.
-- External package membership uses stable `ExternalPackageId` values, readable package paths, structured package-local symbol paths, and origin metadata. Builtin and provider-created packages share one identity model.
+- Binding-backed packages are virtual typed symbols provided by backend metadata, not `.bst` source files.
+- Binding package membership uses stable `ExternalPackageId` values, readable package paths, structured package-local symbol paths and `PackageMetadata`. Builtin and provider-created packages share one identity model.
 - External package namespace imports may expose recursive child namespace records for package-local symbol paths such as `io.input.*`. Source and module namespace records remain shallow and field-access-only.
-- External import providers live under `LibrarySet` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
+- External import providers live under `BuilderSurface` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
 - Builder-runtime package metadata lets builder-owned packages share the same backend runtime asset/glue emission path as provider-created imports without pretending they were project-local files.
 - External imports resolve to stable frontend IDs such as `ExternalFunctionId`.
-- Grouped imports for virtual external packages resolve through external package metadata before source module-boundary enforcement. Source imports still go through public-surface checks before source target resolution, so virtual package lookup does not weaken source-library or module privacy.
+- Grouped imports for virtual external packages resolve through external package metadata before source module-boundary enforcement. Source imports still go through public-surface checks before source target resolution, so virtual package lookup does not weaken source-backed package or module privacy.
 - Header import preparation does not import source-authored receiver methods as independent symbols. Source-authored receiver methods belong to their receiver type's declaring file and become callable wherever the receiver type is visible. Namespace imports may make a receiver type visible, but methods are never namespace fields and cannot be grouped-imported or aliased independently.
-- External packages expose opaque types, constants, and free functions only. They do not register receiver methods or receiver-call visibility. Use source-owned wrapper types for method-style ergonomics over external handles.
+- Binding-backed packages expose opaque types, constants and free functions only. They do not register receiver methods or receiver-call visibility. Use source-owned wrapper types for method-style ergonomics over external handles.
 - Expression/type resolution uses the active `ScopeContext` visibility maps and import records, not global bare-name lookup.
 - HIR carries stable external call IDs only. Backends map those IDs to target-specific helpers, imports, generated glue, runtime names, or target-native operations.
 
-User-facing import syntax, module visibility, library categories and deferred package features are detailed in [`src/docs/libraries/#page.bst`](src/docs/libraries/#page.bst) and [`language-overview.md`](language-overview.md).
+User-facing import syntax, module visibility, package origin/backing and deferred package features are detailed in [`src/docs/packages/#page.bst`](src/docs/packages/#page.bst) and [`language-overview.md`](language-overview.md).
+
+Project-local and Builder source-backed packages resolve through `SourcePackageRegistry`. Core, Builder and ProjectLocal binding-backed packages resolve through `ExternalPackageRegistry`. Package metadata doesn't alter import syntax or module visibility. The prelude remains separate implicit-import policy for the bare `io` alias.
+
+| Package | Origin | Backing |
+|---|---|---|
+| `@html` | Builder | BeanstalkSource |
+| `@core/collections`, `@core/io`, `@core/math`, `@core/text`, `@core/random`, `@core/time` | Core | ExternalBinding |
+| `@web/canvas` | Builder | ExternalBinding |
+| configured package-folder child | ProjectLocal | BeanstalkSource |
+| annotated project-local `.js` import | ProjectLocal | ExternalBinding |
+
+`Standard` and `Dependency` remain reserved origins.
 
 ### Active-root start and page fragments
 
@@ -306,7 +320,7 @@ Binding-mode syntax, constant rules, module visibility and top-level template sy
 
 The compiler frontend and build system process modules through these stages:
 
-0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source libraries, and external package namespaces. Plain Markdown `.md` files are builder-supported source assets discovered through the same extensionless source import candidate path.
+0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source-backed packages, and external package namespaces. Plain Markdown `.md` files are builder-supported source assets discovered through the same extensionless source import candidate path.
 1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables and a source-kind-specific tokenizer entry mode. Plain Markdown `.md` files bypass tokenization because they are raw content assets, not Beanstalk syntax.
 2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, fixed-capacity reference edges, constant initializer reference edges and captures the active-root start body separately. Source-kind adapters such as Beandown and plain Markdown synthesize ordinary declaration headers here. In project builds this is fused with tokenization or source-kind preparation as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
 3. **Dependency Sorting**: orders top-level declaration headers by all header-provided top-level dependency edges.
@@ -326,21 +340,21 @@ Implementation map:
 - [`project_config.rs`](../src/build_system/project_config.rs) and [`project_config/`](../src/build_system/project_config/) own `config.bst` parsing, AST-backed value extraction, and shape validation.
 - [`compilation.rs`](../src/build_system/create_project_modules/compilation.rs), [`project_roots.rs`](../src/build_system/create_project_modules/project_roots.rs), and [`frontend_orchestration.rs`](../src/build_system/create_project_modules/frontend_orchestration.rs) own single-file/directory dispatch, root interpretation, path-resolver setup, and per-module frontend orchestration.
 - [`source_tree_index.rs`](../src/build_system/create_project_modules/source_tree_index.rs), [`module_inventory.rs`](../src/build_system/create_project_modules/module_inventory.rs), [`reachable_file_discovery.rs`](../src/build_system/create_project_modules/reachable_file_discovery.rs), [`import_scanning.rs`](../src/build_system/create_project_modules/import_scanning.rs) and [`source_loading.rs`](../src/build_system/create_project_modules/source_loading.rs) own the source-tree index, module inventory, import-graph traversal and source loading.
-- [`source_library_discovery.rs`](../src/build_system/create_project_modules/source_library_discovery.rs), [`root_validation.rs`](../src/build_system/create_project_modules/root_validation.rs), [`collision_detection.rs`](../src/build_system/create_project_modules/collision_detection.rs), [`project_structure_diagnostics.rs`](../src/build_system/create_project_modules/project_structure_diagnostics.rs) and [`source_discovery_error.rs`](../src/build_system/create_project_modules/source_discovery_error.rs) own source-library scanning, generic hash-root preflight, import-name collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
+- [`source_package_discovery.rs`](../src/build_system/create_project_modules/source_package_discovery.rs), [`root_validation.rs`](../src/build_system/create_project_modules/root_validation.rs), [`collision_detection.rs`](../src/build_system/create_project_modules/collision_detection.rs), [`project_structure_diagnostics.rs`](../src/build_system/create_project_modules/project_structure_diagnostics.rs) and [`source_discovery_error.rs`](../src/build_system/create_project_modules/source_discovery_error.rs) own source-backed package scanning, generic hash-root preflight, package-prefix collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
 
 Stage 0 owns:
 
-- parsing `config.bst` and reachable core/builder source-library support files through the frontend up to AST
+- parsing `config.bst` and reachable core/builder source-backed package support files through the frontend up to AST
 - extracting only authored known top-level `#` config-key constants from shared AST const facts
 - enforcing each config key's registered value shape before applying core fields or storing backend settings
-- allowing config imports only from core/builder libraries
+- allowing config imports only from Core or Builder packages
 - rejecting project-local and relative config imports by design
 - stopping config compilation at AST because config does not need HIR
-- building one source-tree index after config establishes entry, library and output roots
+- building one source-tree index after config establishes `entry_root`, `package_folders` and output roots
 - discovering exactly one non-config hash root per module directory from that index
 - expanding each module to reachable `.bst` files and builder-supported source assets through imports
-- detecting source-library roots visible to imports
-- preparing immutable source-library root identities before constructing the filesystem-free path resolver
+- detecting source-backed package roots visible to imports
+- preparing immutable source-backed package root identities before constructing the filesystem-free path resolver
 - recognizing external package prefixes so virtual imports are not treated as filesystem paths
 - resolving source-kind candidates through the builder-provided registry, including HTML `.bd` and `.md` content assets
 - resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
@@ -475,15 +489,15 @@ Dependency sorting orders constants using header-provided constant initializer d
 
 Same-file symbol hints that do not materialize as headers are not always dependency-sort errors. When a hint looks like a same-file declaration reference but no graph header exists, Stage 3 defers to AST type/expression resolution so the later stage can report the more precise semantic diagnostic.
 
-### Module public surfaces and source libraries in dependency sorting
+### Module public surfaces and source-backed packages in dependency sorting
 
 Module root files participate in dependency sorting like other top-level declaration providers. Their `export:` blocks define the visibility boundary, but public declarations, re-exports, constants and type surfaces must still be ordered before declarations in outside modules that import them through that boundary.
 
 Other files inside the same module should not depend on private symbols declared directly inside the module root. Header import visibility, not dependency sorting, enforces that boundary.
 
-Source-library roots provided by builder libraries such as `@html` also participate in dependency sorting. Their declarations are first-class providers to the consuming module, not opaque boundaries. Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
+Source-backed package roots provided by Builder packages such as `@html` also participate in dependency sorting. Their declarations are first-class providers to the consuming module, not opaque boundaries. Because source-backed packages have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
 
-Source-library export edges may use the public import path rather than the concrete cosmetic root-file path. Stage 3 treats those as satisfied public-export edges, not as new graph nodes. This allows public source-library API names to order consumers without leaking root-file filesystem identity into the dependency graph.
+Source-backed package export edges may use the public import path rather than the concrete cosmetic root-file path. Stage 3 treats those as satisfied public-export edges, not as new graph nodes. This allows public source-backed package API names to order consumers without leaking root-file filesystem identity into the dependency graph.
 
 ### Header/dependency/AST contract
 

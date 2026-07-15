@@ -11,12 +11,7 @@ use crate::compiler_frontend::external_packages::{
 
 pub fn register_core_math_package(registry: &mut ExternalPackageRegistry) {
     let package_id = registry
-        .register_package(
-            "@core/math",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Core,
-            ),
-        )
+        .register_package("@core/math", crate::builder_surface::PackageOrigin::Core)
         .expect("builtin package registration should not collide");
 
     let math_f64_param =

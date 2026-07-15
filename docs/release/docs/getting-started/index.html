@@ -783,7 +783,7 @@ body {
             
 
     </table></section>
-    <section class="container"><h2>Create a new HTML project</h2><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../project-structure">the project structure guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
+    <section class="container"><h2>Create a new HTML project</h2><p>The scaffold creates a complete default project including config, a starter page, package folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../project-structure">the project structure guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -869,7 +869,7 @@ body {
     ├── release<span class='bst-code-operator'>/</span>
     │   └── .beanstalk_manifest
     └── .gitignore
-    </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source libraries.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the conventional module root with a starter page. The filename is cosmetic.</li></ul><h3>Using --force</h3><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
+    </code></pre><ul><li><code>lib/</code> is created empty by default for project-local source-backed packages.</li><li><code>dev/</code> and <code>release/</code> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the conventional module root with a starter page. The filename is cosmetic.</li></ul><h3>Using --force</h3><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -1017,7 +1017,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Missing File or Directory</td>
      <td style="padding: 0.2em 0.5em;  "> The project references a file, directory, import path, or output path that cannot be resolved.</td>
-     <td style="padding: 0.2em 0.5em;  "> Check spelling, relative paths, <code>entry_root</code>, <code>library_folders</code>, and project config.</td>
+     <td style="padding: 0.2em 0.5em;  "> Check spelling, relative paths, <code>entry_root</code>, <code>package_folders</code> and project config.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1058,7 +1058,7 @@ body {
     bean suggest .
     bean fmt .
     </code></pre><p>For now, use <code>check</code> and the compiler&#39;s normal warnings as the practical baseline.</p></section>
-    <section class="container"><h2>Planned bean extensions</h2><p><code>bean</code> is expected to become the main Beanstalk project tool, not just a thin compiler launcher. Planned additions include:</p><ul><li>a package manager for Beanstalk libraries and project dependencies</li><li>a formatter for stable project-wide formatting</li><li><code>suggest</code>, a pedantic style and cleanup command to use alongside <code>check</code></li><li>richer <code>new</code> project options, including more complete config templates</li><li>stronger project maintenance commands as the build system matures</li></ul><p>The short-term rule is simple: <code>dev</code> for fast browser feedback, <code>check</code> for correctness, and <code>build</code> when you want output files.</p></section>
+    <section class="container"><h2>Planned bean extensions</h2><p><code>bean</code> is expected to become the main Beanstalk project tool, not just a thin compiler launcher. Planned additions include:</p><ul><li>a package manager for Beanstalk packages and project dependencies</li><li>a formatter for stable project-wide formatting</li><li><code>suggest</code>, a pedantic style and cleanup command to use alongside <code>check</code></li><li>richer <code>new</code> project options, including more complete config templates</li><li>stronger project maintenance commands as the build system matures</li></ul><p>The short-term rule is simple: <code>dev</code> for fast browser feedback, <code>check</code> for correctness, and <code>build</code> when you want output files.</p></section>
     <section class="container"><nav class="doc-pager doc-pager--single" aria-label="Language documentation">
         <a
             class="doc-pager__link doc-pager__link--next"

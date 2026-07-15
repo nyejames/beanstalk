@@ -50,16 +50,16 @@ Other files inside the same module should not depend on private symbols declared
 Header import visibility enforces that boundary.
 Dependency sorting should not make root-private implementation details look like normal cross-boundary dependencies.
 
-## Source libraries
+## Source-backed packages
 
-Source-library root surfaces, such as builder-provided `@html`, also participate in dependency sorting.
+Source-backed package root surfaces, such as builder-provided `@html`, also participate in dependency sorting.
 Their declarations are first-class providers to the consuming module, not opaque blobs.
 
-Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
+Because source-backed packages have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
 
-Source-library export edges may use the public import path rather than the concrete cosmetic root-file path.
+Source-backed package export edges may use the public import path rather than the concrete cosmetic root-file path.
 Stage 3 treats those as satisfied public-export edges, not as new graph nodes.
-This lets public source-library API names order consumers without leaking root-file filesystem identity into the dependency graph.
+This lets public source-backed package API names order consumers without leaking root-file filesystem identity into the dependency graph.
 
 ## Header/dependency/AST contract
 
@@ -91,4 +91,4 @@ Then the compiler has two declaration-order systems forever.
 
 - @../header-parsing (Stage 2: Header parsing): where dependency edges are discovered
 - @../ast-construction (Stage 4: AST construction): the consumer of sorted headers
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): module public-surface and source-library ordering rules
+- @../../imports-packages-and-bindings (Imports, packages and bindings): module public-surface and source-backed package ordering rules

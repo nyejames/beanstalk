@@ -4,7 +4,7 @@ A Beanstalk project has one config file, one source root, and generated output f
 
 - `config.bst` at the project root controls build settings.
 - `src/` (or whatever `entry_root` says) holds your source files.
-- `lib/` holds project-local source libraries by default.
+- `lib/` holds project-local source-backed packages by default. Each direct child becomes a package prefix.
 - `dev/` and `release/` are generated output. Do not edit them.
 
 ### One root file per module directory

@@ -79,7 +79,7 @@ page_head #= codebase_theme_head
     - @./build-system-and-frontend-boundary (Build-system and frontend boundary)
     - @./diagnostics-paths-and-symbols (Diagnostics, paths and symbols)
     - @./type-identity-and-coercion (Type identity and coercion)
-    - @./imports-libraries-and-external-packages (Imports, libraries and external packages)
+    - @./imports-packages-and-bindings (Imports, packages and bindings)
     - @./entry-start-and-page-fragments (Active-root start and page fragments)
     - @./parallelism-and-determinism (Parallelism and determinism)
     - @../memory-management (Memory management)

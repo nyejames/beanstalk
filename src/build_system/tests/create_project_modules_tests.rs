@@ -371,7 +371,7 @@ fn source_tree_index_ignores_collision_in_skipped_directories() {
 }
 
 #[test]
-fn source_tree_index_ignores_library_prefix_collision_in_skipped_directory() {
+fn source_tree_index_ignores_package_prefix_collision_in_skipped_directory() {
     let root = temp_dir("source_tree_index_skipped_prefix_collision");
     let entry_root = root.join("src");
     fs::create_dir_all(&entry_root).expect("should create entry root");
@@ -1101,12 +1101,43 @@ fn rejects_legacy_library_folders_config_key() {
 }
 
 #[test]
+fn configured_package_folder_registers_project_local_source_metadata() {
+    let root = temp_dir("configured_project_local_package_metadata");
+    let package_root = root.join("packages/widgets");
+    fs::create_dir_all(&package_root).expect("should create project-local package");
+
+    let mut config = Config::new(root.clone());
+    config.package_folders = vec![PathBuf::from("packages")];
+    config.has_explicit_package_folders = true;
+
+    let mut string_table = StringTable::new();
+    let discovered = super::source_package_discovery::discover_project_local_source_packages(
+        &config,
+        &root,
+        &mut string_table,
+    )
+    .expect("configured package folder should be discovered");
+    let package = discovered
+        .get_root("widgets")
+        .expect("widgets package should be registered");
+
+    assert_eq!(
+        package.metadata,
+        crate::builder_surface::PackageMetadata::source(
+            crate::builder_surface::PackageOrigin::ProjectLocal,
+        )
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn accepts_config_imported_builder_source_package_constant() {
-    let root = temp_dir("config_builder_library_constant");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_constant");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "export:\n    default_entry_root #= \"src\"\n;\n",
     )
     .expect("should write builder root");
@@ -1120,7 +1151,7 @@ fn accepts_config_imported_builder_source_package_constant() {
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1141,11 +1172,11 @@ fn accepts_config_imported_builder_source_package_constant() {
 
 #[test]
 fn accepts_config_imported_constant_that_depends_on_imported_constant() {
-    let root = temp_dir("config_builder_library_constant_chain");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_constant_chain");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "root_folder #= \"src\"\nexport:\n    default_entry_root #= root_folder\n;\n",
     )
     .expect("should write builder root");
@@ -1159,7 +1190,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1180,15 +1211,15 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
 
 #[test]
 fn accepts_config_imported_constant_reexported_from_builder_source_package_file() {
-    let root = temp_dir("config_builder_library_reexport");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_reexport");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "import @./values { root_folder as internal_root }\n\nexport:\n    default_entry_root #= internal_root\n;\n",
     )
     .expect("should write builder root");
-    fs::write(library_root.join("values.bst"), "root_folder #= \"src\"\n")
+    fs::write(package_root.join("values.bst"), "root_folder #= \"src\"\n")
         .expect("should write builder support file");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
     fs::write(
@@ -1200,7 +1231,7 @@ fn accepts_config_imported_constant_reexported_from_builder_source_package_file(
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1221,11 +1252,11 @@ fn accepts_config_imported_constant_reexported_from_builder_source_package_file(
 
 #[test]
 fn accepts_config_imported_type_declarations_as_support_surface() {
-    let root = temp_dir("config_builder_library_type_alias");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_type_alias");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "export:\n    EntryRoot as String\n    Config = |\n        value String,\n    |\n    Mode ::\n        Ready,\n    ;\n    default_entry_root #= \"src\"\n;\n",
     )
     .expect("should write builder root");
@@ -1239,7 +1270,7 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1260,11 +1291,11 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
 
 #[test]
 fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
-    let root = temp_dir("config_builder_library_duplicate");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_duplicate");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "default_entry_root #= \"src\"\ndefault_entry_root #= \"app\"\n",
     )
     .expect("should write duplicate builder root");
@@ -1278,7 +1309,7 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1307,11 +1338,11 @@ fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
 
 #[test]
 fn rejects_config_call_to_imported_builder_source_package_function() {
-    let root = temp_dir("config_builder_library_function_call");
-    let library_root = root.join("builder/defaults");
-    fs::create_dir_all(&library_root).expect("should create builder library");
+    let root = temp_dir("config_builder_package_function_call");
+    let package_root = root.join("builder/defaults");
+    fs::create_dir_all(&package_root).expect("should create Builder package");
     fs::write(
-        library_root.join("#mod.bst"),
+        package_root.join("#mod.bst"),
         "export:\n    default_entry_root || -> String:\n        return \"src\"\n    ;\n;\n",
     )
     .expect("should write builder root");
@@ -1325,7 +1356,7 @@ fn rejects_config_call_to_imported_builder_source_package_function() {
     let mut frontend_surface = crate::builder_surface::BuilderSurface::with_mandatory_core();
     frontend_surface.source_packages.register_filesystem_root(
         "defaults",
-        library_root,
+        package_root,
         PackageOrigin::Builder,
     );
 
@@ -1356,7 +1387,7 @@ fn rejects_config_call_to_imported_builder_source_package_function() {
 }
 
 #[test]
-fn library_prefix_collision_with_entry_root_folder_rejected() {
+fn package_prefix_collision_with_entry_root_folder_rejected() {
     let root = temp_dir("entry_root_lib_collision");
     fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
@@ -1908,7 +1939,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
         .expect("should write source");
     fs::write(
         lib.join("helpers/theme.bst"),
-        "io.line([: [\"library\"]])\n",
+        "io.line([: [\"package\"]])\n",
     )
     .expect("should write root-folder helper");
 
@@ -1927,8 +1958,8 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
     let source_theme = fs::canonicalize(src.join("helpers/theme.bst")).expect("canonical source");
-    let _library_theme =
-        fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical library");
+    let _package_theme =
+        fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical package file");
     let discovered_paths = modules[0]
         .input_files
         .iter()
@@ -2727,7 +2758,7 @@ fn project_local_lib_directory_is_discovered_as_source_package_root() {
 }
 
 #[test]
-fn library_prefix_collision_with_builder_library_rejected() {
+fn package_prefix_collision_with_builder_package_rejected() {
     let root = temp_dir("lib_collision");
     fs::create_dir_all(&root).expect("should create root dir");
     fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
@@ -2755,7 +2786,7 @@ fn library_prefix_collision_with_builder_library_rejected() {
 
     assert!(
         result.is_err(),
-        "should fail when builder-provided and project-local libraries collide"
+        "should fail when Builder and ProjectLocal package prefixes collide"
     );
     let messages = result.expect_err("checked above");
     let error_text = rendered_first_error(&messages);
@@ -2900,7 +2931,7 @@ fn explicit_package_folder_must_be_directory() {
         &mut string_table,
     );
 
-    let messages = result.expect_err("library scan root file should fail");
+    let messages = result.expect_err("package scan root file should fail");
     assert!(matches!(
         first_invalid_config_reason(&messages),
         InvalidConfigReason::ConfiguredPackageFolderNotDirectory { .. }
@@ -2951,10 +2982,10 @@ fn source_package_accepts_cosmetic_hash_root_name() {
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/#library.bst"), "foo #= 1\n")
+    fs::write(root.join("lib/helper/#package.bst"), "foo #= 1\n")
         .expect("should write cosmetic root");
     fs::write(root.join("lib/helper/utils.bst"), "bar #= 2\n")
-        .expect("should write library source");
+        .expect("should write package source");
     fs::write(root.join("config.bst"), "entry_root #= \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
@@ -2988,7 +3019,7 @@ fn source_package_accepts_cosmetic_hash_root_name() {
 
     assert_eq!(
         resolved.path,
-        fs::canonicalize(root.join("lib/helper/#library.bst")).unwrap()
+        fs::canonicalize(root.join("lib/helper/#package.bst")).unwrap()
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -3034,8 +3065,8 @@ fn source_package_rejects_multiple_generic_hash_roots() {
 }
 
 #[test]
-fn library_prefix_collision_across_scan_roots_rejected() {
-    let root = temp_dir("duplicate_library_prefixes");
+fn package_prefix_collision_across_scan_roots_rejected() {
+    let root = temp_dir("duplicate_package_prefixes");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::create_dir_all(root.join("vendor/helper")).expect("should create vendor/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
@@ -3257,7 +3288,7 @@ fn rejects_bst_file_and_folder_collision_in_source_package() {
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
     fs::write(root.join("lib/helper/#mod.bst"), "value #= 1\n").expect("should write root");
     fs::write(root.join("lib/helper/ui.bst"), "value #= 2\n")
-        .expect("should write colliding library file");
+        .expect("should write colliding package file");
     fs::write(
         root.join("config.bst"),
         "entry_root #= \"src\"\npackage_folders #= { \"lib\" }\n",

@@ -5,9 +5,9 @@
 //! WHY: separates builder surface definition from frontend parsing and backend
 //! lowering so each stage has one clear responsibility.
 
-pub mod definition;
 pub mod config_key_registry;
 pub mod core_packages;
+pub mod definition;
 pub mod external_import_providers;
 pub mod package_metadata;
 pub mod source_file_kind_registry;

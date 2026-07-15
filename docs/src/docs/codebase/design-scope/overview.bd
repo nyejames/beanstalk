@@ -35,7 +35,7 @@ This page explains whether the surface belongs in the language at all.
 | Static reuse | Generic functions and explicit trait bounds |
 | Runtime heterogeneity | Choices |
 | Expected failure | `Error!`, postfix propagation and `catch` |
-| Platform integration | Builder packages, external packages and source libraries |
+| Platform integration | Builder packages, external packages and source-backed packages |
 | Memory safety | GC baseline plus mandatory borrow validation |
 | Mutation | Explicit exclusive access rather than implicit mutation |
 | Ownership | Compiler-inferred transfer rather than source-visible move or lifetime syntax |

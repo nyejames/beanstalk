@@ -48,8 +48,8 @@ RELEVANT_CODE:
 - `src/build_system/create_project_modules/source_tree_index.rs` or the post-hash-root equivalent: Stage 0 source tree/config/module-root discovery; consume it, do not add another scan.
 - `src/build_system/project_config.rs`: Stage 0 config parse/load entry point; should load canonical `config.bst` after the prerequisite module plan.
 - `src/build_system/project_config/**`: config parsing, validation, grouped record extraction, public build globals, and migration diagnostics.
-- `src/libraries/library_set.rs`: builder-declared frontend surface; prefer adding builder global metadata here rather than a new `BackendBuilder` method unless this becomes clearly awkward.
-- `src/libraries/config_key_registry.rs`: current or post-prerequisite config-key schema; extend into top-level keys plus record-field paths instead of adding a parallel whitelist.
+- `src/builder_surface/definition.rs`: builder-declared frontend surface; prefer adding builder global metadata here rather than a new `BackendBuilder` method unless this becomes clearly awkward.
+- `src/builder_surface/config_key_registry.rs`: current config-key schema; extend into top-level keys plus record-field paths instead of adding a parallel whitelist.
 - `src/projects/settings.rs::Config`: final project settings consumed by builders; add public build globals and canonical setting locations.
 - `src/projects/html_project/html_project_builder.rs`: HTML builder config-key registration and validation; after grouping, keep builder parsers consuming final `Config` rather than AST config records.
 - `src/projects/html_project/new_html_project/start_page_scaffolding.rs::config_template`: update generated `config.bst`.
@@ -190,7 +190,7 @@ Implementation must preserve those outcomes. Do not reintroduce alternate config
 
 Expected architecture to preserve after prerequisites:
 
-- Stage 0 owns source tree discovery, config loading, build globals, source/library discovery, and frontend input preparation.
+- Stage 0 owns source tree discovery, config loading, build globals, source-package discovery and frontend input preparation.
 - The path resolver consumes source-tree/module-root data; it should not perform hidden filesystem scans during construction.
 - Header parsing owns top-level declaration discovery, module-root role handling, `export:` block public/private metadata, import shells, and dependency edges.
 - AST owns semantic type resolution, constant folding, template folding/handoff consumption, hidden anonymous type registration, and `#Import` constant resolution.
@@ -385,7 +385,7 @@ paths #= |
     entry_root = "src",
     dev_folder = "dev",
     output_folder = "release",
-    library_folders = {"lib"},
+    package_folders = {"lib"},
 |
 
 limits #= |
@@ -482,7 +482,7 @@ Use these constraints to keep the implementation direct.
 
 - Do not represent `Import` as a `DataType`/`TypeId`. Parse it as constant-source syntax and resolve the inner type normally.
 - Do not put raw or typed inputs inside `Flag`. Introduce explicit `BuildOptions` / `CheckOptions` / `DevServerOptions` fields.
-- Prefer adding a builder-global registry to `LibrarySet` over adding a new `BackendBuilder` method. `LibrarySet` is already the builder-declared frontend surface.
+- Prefer adding a builder-global registry to `BuilderSurface` over adding a new `BackendBuilder` method. `BuilderSurface` is already the builder-declared frontend surface.
 - Keep build input parsing and resolution in one small owner, for example `src/build_system/build_inputs.rs` plus submodules only if it grows.
 - Reuse `numeric_text` for CLI `Int`/`Float` parsing.
 - Reuse `Config.setting_locations` with dotted keys for nested config locations before adding nested location structures.
@@ -682,7 +682,7 @@ This phase creates the carrier for raw CLI inputs and builder globals. It should
   - [ ] `BuildScalarType` for supported primitive/optional types;
   - [ ] `BuildScalarValue` for `String`, `Int`, `Float`, `Char`, `Bool`, and `None`.
 - [ ] Keep raw strings outside `StringTable`; intern only when entering frontend/config diagnostic boundaries.
-- [ ] Add builder-provided global registry to `LibrarySet` if practical.
+- [ ] Add builder-provided global registry to `BuilderSurface` if practical.
 - [ ] Add repeated `--input name=value` parsing in `src/projects/cli.rs` for:
   - [ ] `build`;
   - [ ] `check`;
@@ -827,7 +827,7 @@ This is the clean config-shape break. It must land with scaffold/tests so the re
   - [ ] `paths.entry_root`;
   - [ ] `paths.dev_folder`;
   - [ ] `paths.output_folder`;
-  - [ ] `paths.library_folders`;
+  - [ ] `paths.package_folders`;
   - [ ] `limits.template_const_loop_iteration_limit`.
 - [ ] Register HTML record fields:
   - [ ] `html.origin`;
@@ -861,14 +861,14 @@ This is the clean config-shape break. It must land with scaffold/tests so the re
   - [ ] `paths.entry_root` -> `config.entry_root`;
   - [ ] `paths.dev_folder` -> `config.dev_folder`;
   - [ ] `paths.output_folder` -> `config.release_folder`;
-  - [ ] `paths.library_folders` -> `config.library_folders`;
+  - [ ] `paths.package_folders` -> `config.package_folders`;
   - [ ] `limits.template_const_loop_iteration_limit` -> `config.template_const_loop_iteration_limit`;
   - [ ] HTML fields -> `config.settings` with canonical names expected by existing HTML parsers, or update HTML parsers to read dotted names consistently.
 - [ ] Add migration diagnostics for old flat hidden keys:
   - [ ] `entry_root` -> `paths.entry_root`;
   - [ ] `dev_folder` -> `paths.dev_folder`;
   - [ ] `output_folder` -> `paths.output_folder`;
-  - [ ] `library_folders` -> `paths.library_folders`;
+  - [ ] `package_folders` -> `paths.package_folders`;
   - [ ] `template_const_loop_iteration_limit` -> `limits.template_const_loop_iteration_limit`;
   - [ ] `origin` -> `html.origin`;
   - [ ] `html_lang` -> `html.html_lang`;
@@ -946,7 +946,7 @@ This phase makes the feature understandable and removes stale public examples. I
   - [ ] `config.bst` is the only project config filename.
 - [ ] Update `docs/compiler-design-overview.md`:
   - [ ] builder/global input registry;
-  - [ ] `LibrarySet` build-global surface if implemented there;
+  - [ ] `BuilderSurface` build-global surface if implemented there;
   - [ ] Stage 0 config/public-global resolution;
   - [ ] source tree index consumption and no extra discovery pass;
   - [ ] unknown CLI input validation timing;
@@ -1004,7 +1004,7 @@ paths #= |
     entry_root = "src",
     dev_folder = "dev",
     output_folder = "release",
-    library_folders = {"lib"},
+    package_folders = {"lib"},
 |
 ```
 
@@ -1042,7 +1042,7 @@ This phase removes transitional code, checks boundaries, and proves the feature 
   - [ ] `entry_root #=`;
   - [ ] `dev_folder #=`;
   - [ ] `output_folder #=`;
-  - [ ] `library_folders #=`;
+  - [ ] `package_folders #=`;
   - [ ] `template_const_loop_iteration_limit #=`;
   - [ ] `origin #=`;
   - [ ] `html_lang #=`;

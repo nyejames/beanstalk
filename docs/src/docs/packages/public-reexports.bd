@@ -16,7 +16,7 @@ The `export:` block can re-export grouped imports from other files, creating a p
     ;
 ]
 
-The original symbol names (`CardData`, `render_card`, `PI`, `sin`) become accessible to cross-module imports. The public alias names (such as `Card`) are public names of the module's API surface.
+`Card`, `render_card`, `PI` and `sin` become accessible to cross-module imports. A grouped alias inside `export:` becomes the public name. The original `CardData` name is not also exported unless it is listed separately.
 
 ### Renamed public re-export
 

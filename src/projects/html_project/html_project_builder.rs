@@ -15,6 +15,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::binding_packages::web::canvas::register_web_canvas_package;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::diagnostics::{
     duplicate_html_output_path_messages, tracked_asset_builder_output_conflict_messages,
@@ -25,7 +26,6 @@ use crate::projects::html_project::external_js::js_import_provider::JsExternalIm
 use crate::projects::html_project::external_js::runtime_assets::emit_external_js_runtime_assets;
 use crate::projects::html_project::external_js::runtime_emission_plan::HtmlExternalRuntimeEmissionPlan;
 use crate::projects::html_project::external_js::runtime_glue::emit_build_runtime_modules;
-use crate::projects::html_project::external_libraries::web::canvas::register_web_canvas_package;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::path_policy::HtmlEntryPathPlan;
 use crate::projects::html_project::style_directives::html_project_style_directives;

@@ -1789,6 +1789,16 @@ path = "config_libraries_replaced_by_package_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
+id = "config_library_folders_replaced_by_package_folders_rejected"
+path = "config_library_folders_replaced_by_package_folders_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "raw_backtick_string_expression_rejected"
+path = "raw_backtick_string_expression_rejected"
+tags = ["integration","strings","diagnostics"]
+
+[[case]]
 id = "config_loading"
 path = "config_loading"
 tags = ["integration","config"]
@@ -6109,124 +6119,124 @@ path = "core_math_old_std_namespace_rejected"
 tags = ["integration", "math", "imports", "diagnostics"]
 
 [[case]]
-id = "source_lib_project_local"
-path = "source_lib_project_local"
-tags = ["integration", "source-libraries", "imports"]
+id = "source_package_project_local"
+path = "source_package_project_local"
+tags = ["integration", "source-packages", "imports"]
 
 [[case]]
 id = "config_package_folder_default_lib_success"
 path = "config_package_folder_default_lib_success"
-tags = ["integration", "config", "libraries", "imports"]
+tags = ["integration", "config", "packages", "imports"]
 
 [[case]]
 id = "config_custom_package_folder_success"
 path = "config_custom_package_folder_success"
-tags = ["integration", "config", "libraries", "imports"]
+tags = ["integration", "config", "packages", "imports"]
 
 [[case]]
 id = "config_multiple_package_folders_success"
 path = "config_multiple_package_folders_success"
-tags = ["integration", "config", "libraries", "imports"]
+tags = ["integration", "config", "packages", "imports"]
 
 [[case]]
 id = "config_package_folder_missing_rejected"
 path = "config_package_folder_missing_rejected"
-tags = ["integration", "config", "libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "diagnostics"]
 
 [[case]]
 id = "config_package_folder_absolute_path_rejected"
 path = "config_package_folder_absolute_path_rejected"
-tags = ["integration", "config", "libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "diagnostics"]
 
 [[case]]
 id = "config_package_folder_dotdot_rejected"
 path = "config_package_folder_dotdot_rejected"
-tags = ["integration", "config", "libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "diagnostics"]
 
 [[case]]
 id = "config_package_folder_duplicate_rejected"
 path = "config_package_folder_duplicate_rejected"
-tags = ["integration", "config", "libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "diagnostics"]
 
 [[case]]
 id = "config_package_folder_builder_collision_rejected"
 path = "config_package_folder_builder_collision_rejected"
-tags = ["integration", "config", "libraries", "builder-libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "builder-packages", "diagnostics"]
 
 [[case]]
 id = "config_package_folder_missing_default_ignored"
 path = "config_package_folder_missing_default_ignored"
-tags = ["integration", "config", "libraries"]
+tags = ["integration", "config", "packages"]
 
 [[case]]
 id = "config_package_folder_nested_path_rejected"
 path = "config_package_folder_nested_path_rejected"
-tags = ["integration", "config", "libraries", "diagnostics"]
+tags = ["integration", "config", "packages", "diagnostics"]
 
 [[case]]
 id = "custom_package_import_resolves_through_mod"
 path = "custom_package_import_resolves_through_mod"
-tags = ["integration", "config", "libraries", "imports", "facades"]
+tags = ["integration", "config", "packages", "imports", "facades"]
 
 [[case]]
-id = "source_lib_and_external_package"
-path = "source_lib_and_external_package"
-tags = ["integration", "source-libraries", "imports", "external-packages"]
+id = "source_package_and_external_package"
+path = "source_package_and_external_package"
+tags = ["integration", "source-packages", "imports", "external-packages"]
 
 [[case]]
-id = "source_lib_import_dotdot_rejected"
-path = "source_lib_import_dotdot_rejected"
-tags = ["integration", "source-libraries", "imports", "paths", "diagnostics"]
+id = "source_package_import_dotdot_rejected"
+path = "source_package_import_dotdot_rejected"
+tags = ["integration", "source-packages", "imports", "paths", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade"
-path = "source_lib_facade"
-tags = ["integration", "source-libraries", "facades", "imports"]
+id = "source_package_facade"
+path = "source_package_facade"
+tags = ["integration", "source-packages", "facades", "imports"]
 
 [[case]]
-id = "source_lib_facade_grouped"
-path = "source_lib_facade_grouped"
-tags = ["integration", "source-libraries", "facades", "imports"]
+id = "source_package_facade_grouped"
+path = "source_package_facade_grouped"
+tags = ["integration", "source-packages", "facades", "imports"]
 
 [[case]]
-id = "source_lib_facade_rejected_internal"
-path = "source_lib_facade_rejected_internal"
-tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+id = "source_package_facade_rejected_internal"
+path = "source_package_facade_rejected_internal"
+tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_private"
-path = "source_lib_facade_private"
-tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+id = "source_package_facade_private"
+path = "source_package_facade_private"
+tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_sibling"
-path = "source_lib_facade_sibling"
-tags = ["integration", "source-libraries", "facades", "imports"]
+id = "source_package_facade_sibling"
+path = "source_package_facade_sibling"
+tags = ["integration", "source-packages", "facades", "imports"]
 
 [[case]]
-id = "source_lib_facade_runtime_stmt"
-path = "source_lib_facade_runtime_stmt"
-tags = ["integration", "source-libraries", "facades", "diagnostics"]
+id = "source_package_facade_runtime_stmt"
+path = "source_package_facade_runtime_stmt"
+tags = ["integration", "source-packages", "facades", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_runtime_template"
-path = "source_lib_facade_runtime_template"
-tags = ["integration", "source-libraries", "facades", "diagnostics"]
+id = "source_package_facade_runtime_template"
+path = "source_package_facade_runtime_template"
+tags = ["integration", "source-packages", "facades", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_missing"
-path = "source_lib_facade_missing"
-tags = ["integration", "source-libraries", "facades", "diagnostics"]
+id = "source_package_facade_missing"
+path = "source_package_facade_missing"
+tags = ["integration", "source-packages", "facades", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_compile_time_constant_export"
-path = "source_lib_facade_compile_time_constant_export"
-tags = ["integration", "source-libraries", "facades"]
+id = "source_package_facade_compile_time_constant_export"
+path = "source_package_facade_compile_time_constant_export"
+tags = ["integration", "source-packages", "facades"]
 
 [[case]]
-id = "source_lib_facade_unprefixed_function_export"
-path = "source_lib_facade_unprefixed_function_export"
-tags = ["integration", "source-libraries", "facades"]
+id = "source_package_facade_unprefixed_function_export"
+path = "source_package_facade_unprefixed_function_export"
+tags = ["integration", "source-packages", "facades"]
 
 [[case]]
 id = "same_module_import_compile_time_constant"
@@ -6249,144 +6259,144 @@ path = "module_facade_import_not_auto_exported"
 tags = ["integration", "language", "imports", "facades", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_single"
-path = "source_lib_reexport_single"
+id = "source_package_reexport_single"
+path = "source_package_reexport_single"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_alias"
-path = "source_lib_reexport_alias"
+id = "source_package_reexport_alias"
+path = "source_package_reexport_alias"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_namespace_success"
-path = "source_lib_reexport_namespace_success"
+id = "source_package_reexport_namespace_success"
+path = "source_package_reexport_namespace_success"
 tags = ["integration", "language", "imports", "facade", "namespace-imports"]
 
 [[case]]
-id = "source_lib_facade_private_path_rejected"
-path = "source_lib_facade_private_path_rejected"
+id = "source_package_facade_private_path_rejected"
+path = "source_package_facade_private_path_rejected"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_alias_private_path_rejected"
-path = "source_lib_facade_alias_private_path_rejected"
+id = "source_package_facade_alias_private_path_rejected"
+path = "source_package_facade_alias_private_path_rejected"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_grouped"
-path = "source_lib_reexport_grouped"
+id = "source_package_reexport_grouped"
+path = "source_package_reexport_grouped"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_grouped_nested"
-path = "source_lib_reexport_grouped_nested"
+id = "source_package_reexport_grouped_nested"
+path = "source_package_reexport_grouped_nested"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_external"
-path = "source_lib_reexport_external"
+id = "source_package_reexport_external"
+path = "source_package_reexport_external"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_external_alias"
-path = "source_lib_reexport_external_alias"
+id = "source_package_reexport_external_alias"
+path = "source_package_reexport_external_alias"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_reexport_duplicate"
-path = "source_lib_reexport_duplicate"
+id = "source_package_reexport_duplicate"
+path = "source_package_reexport_duplicate"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_collision_decl"
-path = "source_lib_reexport_collision_decl"
+id = "source_package_reexport_collision_decl"
+path = "source_package_reexport_collision_decl"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_outside_facade"
-path = "source_lib_reexport_outside_facade"
+id = "source_package_reexport_outside_facade"
+path = "source_package_reexport_outside_facade"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_invalid_declaration"
-path = "source_lib_reexport_invalid_declaration"
+id = "source_package_reexport_invalid_declaration"
+path = "source_package_reexport_invalid_declaration"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_not_exported"
-path = "source_lib_reexport_not_exported"
+id = "source_package_reexport_not_exported"
+path = "source_package_reexport_not_exported"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_no_local_binding"
-path = "source_lib_reexport_no_local_binding"
+id = "source_package_reexport_no_local_binding"
+path = "source_package_reexport_no_local_binding"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
 id = "source_package_reexport_cross_package_single"
 path = "source_package_reexport_cross_package_single"
-tags = ["integration", "language", "imports", "facade", "source-libraries"]
+tags = ["integration", "language", "imports", "facade", "source-packages"]
 
 [[case]]
 id = "source_package_reexport_cross_package_alias"
 path = "source_package_reexport_cross_package_alias"
-tags = ["integration", "language", "imports", "facade", "source-libraries"]
+tags = ["integration", "language", "imports", "facade", "source-packages"]
 
 [[case]]
 id = "source_package_reexport_cross_package_not_exported"
 path = "source_package_reexport_cross_package_not_exported"
-tags = ["integration", "language", "imports", "facade", "source-libraries", "diagnostics"]
+tags = ["integration", "language", "imports", "facade", "source-packages", "diagnostics"]
 
 [[case]]
-id = "source_lib_reexport_grouped_alias"
-path = "source_lib_reexport_grouped_alias"
+id = "source_package_reexport_grouped_alias"
+path = "source_package_reexport_grouped_alias"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_lib_facade_direct_mod_external_rejected"
-path = "source_lib_facade_direct_mod_external_rejected"
-tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+id = "source_package_facade_direct_mod_external_rejected"
+path = "source_package_facade_direct_mod_external_rejected"
+tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
 
 [[case]]
-id = "source_lib_facade_direct_mod_internal_rejected"
-path = "source_lib_facade_direct_mod_internal_rejected"
-tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+id = "source_package_facade_direct_mod_internal_rejected"
+path = "source_package_facade_direct_mod_internal_rejected"
+tags = ["integration", "source-packages", "facades", "imports", "diagnostics"]
 
 [[case]]
-id = "source_lib_builder_html"
-path = "source_lib_builder_html"
-tags = ["integration", "source-libraries", "builder-libraries", "html"]
+id = "source_package_builder_html"
+path = "source_package_builder_html"
+tags = ["integration", "source-packages", "builder-packages", "html"]
 
 [[case]]
-id = "source_lib_builder_html_collision"
-path = "source_lib_builder_html_collision"
-tags = ["integration", "source-libraries", "builder-libraries", "diagnostics"]
+id = "source_package_builder_html_collision"
+path = "source_package_builder_html_collision"
+tags = ["integration", "source-packages", "builder-packages", "diagnostics"]
 
 [[case]]
-id = "source_lib_builder_html_direct_internal_rejected"
-path = "source_lib_builder_html_direct_internal_rejected"
-tags = ["integration", "source-libraries", "builder-libraries", "facades", "diagnostics"]
+id = "source_package_builder_html_direct_internal_rejected"
+path = "source_package_builder_html_direct_internal_rejected"
+tags = ["integration", "source-packages", "builder-packages", "facades", "diagnostics"]
 
 [[case]]
 id = "core_text_functions"
 path = "core_text_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_text_type_error"
 path = "core_text_type_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
 
 [[case]]
 id = "core_text_arity_error"
 path = "core_text_arity_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
 
 [[case]]
 id = "core_text_edge_cases"
 path = "core_text_edge_cases"
-tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
+tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm"]
 
 [[case]]
 id = "prelude_name_declaration_rejected"
@@ -6401,102 +6411,102 @@ tags = ["integration", "language", "diagnostics"]
 [[case]]
 id = "core_random_functions"
 path = "core_random_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_random_int_edge_cases"
 path = "core_random_int_edge_cases"
-tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
+tags = ["integration", "language", "external-packages", "core-packages", "js", "wasm"]
 
 [[case]]
 id = "core_random_type_error"
 path = "core_random_type_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
 
 [[case]]
 id = "core_random_arity_error"
 path = "core_random_arity_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "diagnostics"]
 
 [[case]]
 id = "core_time_functions"
 path = "core_time_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "wasm", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_time_arity_error"
 path = "core_time_arity_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics"]
 
 [[case]]
 id = "core_time_duration_conversions_success"
 path = "core_time_duration_conversions_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
 
 [[case]]
 id = "core_time_mark_delta_success"
 path = "core_time_mark_delta_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
 
 [[case]]
 id = "core_time_timestamp_conversions_success"
 path = "core_time_timestamp_conversions_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js"]
 
 [[case]]
 id = "core_time_timestamp_parse_success"
 path = "core_time_timestamp_parse_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "results"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "results"]
 
 [[case]]
 id = "core_time_timestamp_parse_invalid_catch_success"
 path = "core_time_timestamp_parse_invalid_catch_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "results"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "js", "results"]
 
 [[case]]
 id = "core_time_namespace_import_success"
 path = "core_time_namespace_import_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "imports", "namespace-imports"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "imports", "namespace-imports"]
 
 [[case]]
 id = "core_time_grouped_alias_success"
 path = "core_time_grouped_alias_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "imports", "aliases"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "imports", "aliases"]
 
 [[case]]
 id = "core_time_duration_free_functions_success"
 path = "core_time_duration_free_functions_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "receiver-methods", "imports"]
 
 [[case]]
 id = "core_time_old_api_rejected"
 path = "core_time_old_api_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "imports"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "imports"]
 
 [[case]]
 id = "core_time_wrong_argument_type_rejected"
 path = "core_time_wrong_argument_type_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "type-checking"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "type-checking"]
 
 [[case]]
 id = "core_time_opaque_field_access_rejected"
 path = "core_time_opaque_field_access_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "opaque-types"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "opaque-types"]
 
 [[case]]
 id = "core_time_raw_method_call_rejected"
 path = "core_time_raw_method_call_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "receiver-methods", "imports"]
 
 [[case]]
 id = "core_time_namespace_raw_method_call_rejected"
 path = "core_time_namespace_raw_method_call_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports", "namespace-imports"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "diagnostics", "receiver-methods", "imports", "namespace-imports"]
 
 [[case]]
 id = "core_time_unused_wasm_wrapper_success"
 path = "core_time_unused_wasm_wrapper_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "wasm", "reachability", "js"]
+tags = ["integration", "language", "external-packages", "core-packages", "time", "wasm", "reachability", "js"]
 
 [[case]]
 id = "import_core_package_skips_filesystem_resolution"
@@ -6801,7 +6811,7 @@ tags = ["integration", "constants", "dependency-resolution", "header-sorting"]
 [[case]]
 id = "const_template_head_imported_source_package"
 path = "const_template_head_imported_source_package"
-tags = ["integration", "constants", "templates", "source-libraries", "imports"]
+tags = ["integration", "constants", "templates", "source-packages", "imports"]
 
 [[case]]
 id = "unknown_value_name_rejected"
@@ -6986,22 +6996,22 @@ tags = ["integration", "html-wasm", "generics", "diagnostics", "reachability"]
 [[case]]
 id = "html_canvas_helper_unused_no_runtime_assets"
 path = "html_canvas_helper_unused_no_runtime_assets"
-tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html", "html-wasm", "reachability"]
+tags = ["integration", "source-packages", "external-imports", "web-canvas", "html", "html-wasm", "reachability"]
 
 [[case]]
 id = "html_canvas_helper_reachable_runtime_assets"
 path = "html_canvas_helper_reachable_runtime_assets"
-tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html", "reachability"]
+tags = ["integration", "source-packages", "external-imports", "web-canvas", "html", "reachability"]
 
 [[case]]
 id = "html_canvas_helper_reachable_wasm_unsupported"
 path = "html_canvas_helper_reachable_wasm_unsupported"
-tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html-wasm", "diagnostics", "reachability"]
+tags = ["integration", "source-packages", "external-imports", "web-canvas", "html-wasm", "diagnostics", "reachability"]
 
 [[case]]
 id = "html_canvas_raw_context_2d_not_reexported"
 path = "html_canvas_raw_context_2d_not_reexported"
-tags = ["integration", "source-libraries", "external-imports", "web-canvas", "diagnostics", "facade"]
+tags = ["integration", "source-packages", "external-imports", "web-canvas", "diagnostics", "facade"]
 
 [[case]]
 id = "receiver_method_source_visibility_rejected"
@@ -7434,8 +7444,8 @@ path = "beandown_facade_reexport_content"
 tags = ["integration", "beandown", "html", "imports"]
 
 [[case]]
-id = "beandown_source_lib_import"
-path = "beandown_source_lib_import"
+id = "beandown_source_package_import"
+path = "beandown_source_package_import"
 tags = ["integration", "beandown", "html", "imports"]
 
 [[case]]

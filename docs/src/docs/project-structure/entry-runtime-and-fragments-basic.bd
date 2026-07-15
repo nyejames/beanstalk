@@ -13,7 +13,7 @@ Direct top-level templates in the root become page fragments:
 
 ### Helpers
 
-Helper files export functions, types and constants. The root imports and uses them. Do not put page fragments in helper files.
+Helper files define functions, types and constants. They do not own an export block. The root imports them and chooses what becomes public. Do not put page fragments in helper files.
 
 ### Remember
 

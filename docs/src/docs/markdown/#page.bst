@@ -99,7 +99,7 @@ page_head #= language_theme_head
     [doc_pager:
         [$insert("previous_path"):../beandown/]
         [$insert("previous_title"):Beandown]
-        [$insert("next_path"):../libraries/core/]
-        [$insert("next_title"):Core libraries]
+        [$insert("next_path"):../packages/core/]
+        [$insert("next_title"):Core packages]
     ]
 ]

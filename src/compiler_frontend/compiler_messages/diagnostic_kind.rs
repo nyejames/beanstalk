@@ -367,7 +367,7 @@ pub enum ImportDiagnosticKind {
     InvalidBeandownApiScopeItem,
     DuplicateBeandownInputPath,
     UnsupportedExternalExtension,
-    InvalidExternalLibrary,
+    InvalidExternalModule,
 }
 
 #[cfg(test)]
@@ -397,7 +397,7 @@ impl ImportDiagnosticKind {
             Self::InvalidBeandownApiScopeItem,
             Self::DuplicateBeandownInputPath,
             Self::UnsupportedExternalExtension,
-            Self::InvalidExternalLibrary,
+            Self::InvalidExternalModule,
         ]
         .into_iter()
     }

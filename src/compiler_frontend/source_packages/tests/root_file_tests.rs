@@ -139,7 +139,7 @@ fn discovers_mod_and_cosmetic_hash_roots_as_the_same_unique_kind() {
     );
 
     fs::remove_file(directory.path().join("#mod.bst")).expect("should remove mod root");
-    let cosmetic_root = directory.path().join("#library.bst");
+    let cosmetic_root = directory.path().join("#package.bst");
     fs::write(&cosmetic_root, b"").expect("should write cosmetic root");
 
     assert_eq!(

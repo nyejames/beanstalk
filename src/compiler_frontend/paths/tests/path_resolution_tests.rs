@@ -46,20 +46,20 @@ impl TestHarness {
     fn with_source_packages(
         source_packages: &crate::builder_surface::SourcePackageRegistry,
     ) -> Self {
-        Self::with_libraries_and_source_file_kinds(
+        Self::with_packages_and_source_file_kinds(
             source_packages,
             &SourceFileKindRegistry::default(),
         )
     }
 
     fn with_source_file_kinds(source_file_kinds: &SourceFileKindRegistry) -> Self {
-        Self::with_libraries_and_source_file_kinds(
+        Self::with_packages_and_source_file_kinds(
             &crate::builder_surface::SourcePackageRegistry::default(),
             source_file_kinds,
         )
     }
 
-    fn with_libraries_and_source_file_kinds(
+    fn with_packages_and_source_file_kinds(
         source_packages: &crate::builder_surface::SourcePackageRegistry,
         source_file_kinds: &SourceFileKindRegistry,
     ) -> Self {
@@ -374,21 +374,21 @@ fn empty_path_resolves_as_entry_root_public_directory() {
 }
 
 #[test]
-fn source_package_import_resolves_to_library_root() {
+fn source_package_import_resolves_to_package_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -413,7 +413,7 @@ fn source_package_import_resolves_to_library_root() {
     assert_eq!(result.0.base, CompileTimePathBase::SourcePackageRoot);
     assert_eq!(
         result.1,
-        fs::canonicalize(library_root.join("utils.bst")).unwrap(),
+        fs::canonicalize(package_root.join("utils.bst")).unwrap(),
         "should resolve to source-backed package root file"
     );
 }
@@ -423,18 +423,18 @@ fn source_package_folder_import_uses_generic_hash_root_public_surface() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
-    let root_file = library_root.join("#library.bst");
+    let package_root = project_root.join("lib/helper");
+    let root_file = package_root.join("#mod.bst");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
+    fs::create_dir_all(&package_root).unwrap();
     fs::write(&root_file, b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -475,11 +475,11 @@ fn source_package_prefix_takes_priority_over_entry_root() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("utils.bst"), b"").unwrap();
     // Also create a conflicting file under entry root.
     fs::create_dir_all(entry_root.join("helper")).unwrap();
     fs::write(entry_root.join("helper/utils.bst"), b"").unwrap();
@@ -488,7 +488,7 @@ fn source_package_prefix_takes_priority_over_entry_root() {
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -513,7 +513,7 @@ fn source_package_prefix_takes_priority_over_entry_root() {
     assert_eq!(result.0.base, CompileTimePathBase::SourcePackageRoot);
     assert_eq!(
         result.1,
-        fs::canonicalize(library_root.join("utils.bst")).unwrap()
+        fs::canonicalize(package_root.join("utils.bst")).unwrap()
     );
 }
 
@@ -691,20 +691,20 @@ fn public_surface_fallback_preserves_beandown_folder_ambiguity() {
 
 #[cfg(windows)]
 #[test]
-fn canonicalized_source_package_file_resolves_to_library_prefixed_logical_path() {
+fn canonicalized_source_package_file_resolves_to_package_prefixed_logical_path() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/html");
+    let package_root = project_root.join("lib/html");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("#mod.bst"), b"").unwrap();
-    fs::write(library_root.join("helpers.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("#mod.bst"), b"").unwrap();
+    fs::write(package_root.join("helpers.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
-    source_packages.register_filesystem_root("html", library_root.clone(), PackageOrigin::Builder);
+    source_packages.register_filesystem_root("html", package_root.clone(), PackageOrigin::Builder);
 
     let resolver = ProjectPathResolver::new(
         project_root,
@@ -714,13 +714,13 @@ fn canonicalized_source_package_file_resolves_to_library_prefixed_logical_path()
     )
     .expect("resolver creation should succeed");
 
-    let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize package root");
+    let canonical_root = fs::canonicalize(&package_root).expect("should canonicalize package root");
     assert_eq!(
         resolver.source_package_roots().get("html"),
         Some(&canonical_root)
     );
 
-    let canonical_file = fs::canonicalize(library_root.join("helpers.bst"))
+    let canonical_file = fs::canonicalize(package_root.join("helpers.bst"))
         .expect("should canonicalize source-backed package file");
     let mut string_table = StringTable::new();
     let logical_path = resolver
@@ -735,15 +735,15 @@ fn canonicalized_source_package_file_resolves_to_library_prefixed_logical_path()
 // -----------------------------------------------------------------------
 
 #[test]
-fn library_scan_root_name_is_not_import_prefix() {
+fn package_scan_root_name_is_not_import_prefix() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("utils.bst"), b"").unwrap();
     fs::create_dir_all(entry_root.join("lib")).unwrap();
     fs::write(entry_root.join("lib/thing.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
@@ -751,7 +751,7 @@ fn library_scan_root_name_is_not_import_prefix() {
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -781,21 +781,21 @@ fn library_scan_root_name_is_not_import_prefix() {
 }
 
 #[test]
-fn library_direct_child_is_import_prefix() {
+fn package_direct_child_is_import_prefix() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("utils.bst"), b"").unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -866,11 +866,11 @@ fn source_package_prefix_wins_consistently() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
-    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+    fs::write(package_root.join("utils.bst"), b"").unwrap();
     // Also create a conflicting file under entry root.
     fs::create_dir_all(entry_root.join("helper")).unwrap();
     fs::write(entry_root.join("helper/utils.bst"), b"").unwrap();
@@ -879,7 +879,7 @@ fn source_package_prefix_wins_consistently() {
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 
@@ -908,7 +908,7 @@ fn source_package_prefix_wins_consistently() {
     );
     assert_eq!(
         result.1,
-        fs::canonicalize(library_root.join("utils.bst")).unwrap()
+        fs::canonicalize(package_root.join("utils.bst")).unwrap()
     );
 }
 
@@ -1040,20 +1040,20 @@ fn import_escape_project_root_rejected() {
 }
 
 #[test]
-fn import_escape_library_root_rejected() {
+fn import_escape_package_root_rejected() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
-    let library_root = project_root.join("lib/helper");
+    let package_root = project_root.join("lib/helper");
 
     fs::create_dir_all(&entry_root).unwrap();
-    fs::create_dir_all(&library_root).unwrap();
+    fs::create_dir_all(&package_root).unwrap();
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let mut source_packages = crate::builder_surface::SourcePackageRegistry::new();
     source_packages.register_filesystem_root(
         "helper",
-        library_root.clone(),
+        package_root.clone(),
         PackageOrigin::Builder,
     );
 

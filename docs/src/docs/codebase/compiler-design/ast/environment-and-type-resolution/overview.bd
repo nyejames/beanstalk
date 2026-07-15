@@ -20,4 +20,4 @@ Sorted shells become semantic identities and visibility.
 
 - `docs/src/docs/codebase/compiler-design/ast/environment-and-type-resolution/environment-and-type-resolution.bd`
 - `docs/src/docs/codebase/compiler-design/type-identity-and-coercion/overview.bd`
-- `docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/overview.bd`
+- `docs/src/docs/codebase/compiler-design/imports-packages-and-bindings/overview.bd`

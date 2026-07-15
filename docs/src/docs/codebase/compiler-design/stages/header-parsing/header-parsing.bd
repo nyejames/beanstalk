@@ -132,5 +132,5 @@ If AST needs a new kind of top-level dependency, add it to headers and dependenc
 
 - @../tokenization (Stage 1: Tokenization): tokenization and fused Stage 1/2 scheduling
 - @../dependency-sorting (Stage 3: Dependency sorting): how header-provided edges become declaration order
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): import visibility, module public surfaces and external packages
+- @../../imports-packages-and-bindings (Imports, packages and bindings): import visibility, module public surfaces and external packages
 - @../../entry-start-and-page-fragments (Active-root start and page fragments): start-body separation and top-level const fragments

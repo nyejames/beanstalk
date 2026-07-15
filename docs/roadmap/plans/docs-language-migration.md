@@ -4,7 +4,7 @@
 
 This project will replace the single long-form language reference with focused Beandown references embedded in the public documentation site.
 
-`docs/language-overview.md` remains untouched and authoritative throughout the migration. It is the parity baseline and backup reference until every language area has been migrated, reviewed and explicitly approved for an authority switch.
+`docs/language-overview.md` remains authoritative throughout the migration. It is the maintained parity baseline and backup reference until every language area has been migrated, reviewed and explicitly approved for an authority switch.
 
 The new structure separates three jobs:
 
@@ -16,7 +16,7 @@ The unsuffixed file intentionally has no `-advanced` suffix. It feeds the websit
 
 Presentation belongs to the page entry. Reusable teaching and semantic content belongs in Beandown.
 
-`AGENTS.md` and `docs/language-overview.md` are protected throughout the migration. Ordinary route workers must not edit either file.
+`AGENTS.md` remains protected throughout the migration. Ordinary route workers must not edit it or the monoliths. A dedicated, explicitly authorised parity or terminology synchronisation plan may update `docs/language-overview.md` and `docs/compiler-design-overview.md` after focused compiler verification. Canonical split compiler-design pages must be updated before the legacy compiler-design monolith.
 
 ---
 
@@ -44,7 +44,7 @@ These decisions are project constraints. Route-level implementation plans must n
 | Sidebar and glossary | Designed for later, not implemented now |
 | Cross-page level persistence | Not implemented now |
 | Migration cadence | Small, reviewable patches |
-| Monolith editing | Prohibited during migration |
+| Monolith editing | Prohibited for ordinary route workers. Explicit parity or terminology synchronisation plans may maintain verified facts |
 | `AGENTS.md` editing | Prohibited during migration |
 | Shadow authority files | Do not create alternate copies such as `language-review.md` or `language-overview-new.md` |
 | Monolith removal | Only after full parity review and explicit user approval |
@@ -80,10 +80,7 @@ The duplicate semantic coverage between the monolith and the new detailed files 
 
 The unsuffixed files must be complete enough to replace the monolith later. They remain replacement candidates until the whole migration has passed review.
 
-The monolith is stable evidence, not an infallible description of the current
-compiler surface. When focused compiler probes and implementation review show
-that a useful, coherent form is deliberately supported, the focused references
-should document current language behavior and record the monolith disparity.
+The monolith is stable evidence, not an infallible description of the current compiler surface. When focused compiler probes and implementation review establish deliberate behaviour, the focused references should document it and the authoritative monolith must be maintained through an explicitly authorised synchronisation plan. Known contradictions must not be preserved for final review.
 
 ### 3.2 Final authority model
 
@@ -435,9 +432,9 @@ Basic and detailed Beandown files:
 
 ## 8. Information preservation and parity review
 
-### 8.1 The monolith is read-only evidence
+### 8.1 Monolith maintenance policy
 
-`docs/language-overview.md` is the stable comparison target.
+`docs/language-overview.md` is the maintained comparison target.
 
 Route workers must:
 
@@ -461,7 +458,7 @@ Before and after each patch, inspect:
 git diff -- docs/language-overview.md AGENTS.md
 ```
 
-Any patch-created change is a blocking scope violation.
+Any ordinary route patch-created change is a blocking scope violation. A dedicated synchronisation plan records its compiler evidence, updates focused references first where needed and may then update the monolith without transferring authority.
 
 ### 8.2 Per-concept rule inventory
 
@@ -572,9 +569,9 @@ For each concept, review evidence in this order:
 5. Tests and implementation when documentation and behaviour appear inconsistent
 6. Existing website pages as non-authoritative teaching material
 
-When implementation conflicts with accepted design:
+When implementation conflicts with accepted design during ordinary route work:
 
-- do not edit the monolith
+- do not edit the monolith without an explicitly authorised synchronisation plan
 - do not silently document the implementation as final semantics
 - report the conflict
 - keep implementation status in the progress matrix when an update is actually required
@@ -864,7 +861,7 @@ Allowed repair owners may include:
 ```text
 docs/src/#page.bst
 docs/src/**/#mod.bst
-libraries/html/#mod.bst
+packages/html/#mod.bst
 ```
 
 Keep the repair tied to the exact diagnostic. Do not use export churn as an excuse to redesign unrelated facades or libraries.
@@ -1009,7 +1006,7 @@ The initial sequence is:
 17. Traits
 18. Reactivity
 19. Project Structure
-20. Libraries and Imports
+20. Packages and Imports
 21. Beandown
 22. Markdown Imports
 
@@ -1035,7 +1032,7 @@ Suggested routes:
 /docs/traits/
 /docs/reactivity/
 /docs/project-structure/
-/docs/libraries/
+/docs/packages/
 /docs/beandown/
 /docs/markdown/
 ```
@@ -1629,40 +1626,39 @@ output-layout-basic.bd
 
 Owns project config, entry roots, module entries, facades, runtime `start`, page fragments, output routes and build folders.
 
-### 13.19 Libraries and Imports
+### 13.19 Packages and Imports
 
 Route:
 
 ```text
-docs/src/docs/libraries/
+docs/src/docs/packages/
 ```
 
 Pairs:
 
 ```text
-import-forms.bd
-import-forms-basic.bd
+import-paths.bd
+import-paths-basic.bd
 
-source-libraries.bd
-source-libraries-basic.bd
+project-local-packages.bd
+project-local-packages-basic.bd
 
-facade-exports.bd
-facade-exports-basic.bd
+grouped-and-namespace-imports.bd
+grouped-and-namespace-imports-basic.bd
 
-builder-libraries.bd
-builder-libraries-basic.bd
+module-visibility.bd
+module-visibility-basic.bd
 
-external-packages.bd
-external-packages-basic.bd
+public-reexports.bd
+public-reexports-basic.bd
 
-javascript-libraries.bd
-javascript-libraries-basic.bd
-
-visibility-and-collisions.bd
-visibility-and-collisions-basic.bd
+package-origins-and-backing.bd
+package-origins-and-backing-basic.bd
 ```
 
-Owns import syntax, namespaces, source libraries, facades, builder libraries, external packages, JavaScript import metadata, visibility and collisions.
+Owns import syntax, namespaces, source-backed packages, module public surfaces, package origins and backing, prelude policy, JavaScript binding metadata, visibility and collisions.
+
+Package origin and backing are independent axes. Current origins are Core, Builder and ProjectLocal, with Standard and Dependency reserved. Backing is either BeanstalkSource or ExternalBinding. The prelude is separate implicit-import policy for the bare `io` alias and isn't a package kind.
 
 ### 13.20 Beandown and Markdown
 
@@ -1818,10 +1814,10 @@ Recommended order:
 15. Traits
 16. Reactivity
 17. Project Structure
-18. Libraries and Imports
+18. Packages and Imports
 19. Beandown
 20. Markdown
-21. Core-library language surfaces
+21. Core package language surfaces
 
 Loops is already the prototype and should receive only targeted follow-up corrections unless a review finds additional parity gaps.
 
@@ -2265,7 +2261,7 @@ The prototype established several requirements for later patches:
 - both language and codebase themes need the shared article stylesheet
 - the pager needs two-sided, Previous-only and Next-only forms
 - new docs helpers must be exported through the current explicit root export block
-- strict export syntax may require narrow entry or library repairs
+- strict export syntax may require narrow entry or package repairs
 - Advanced direct-read parity must include important monolith examples
 - high-level framing cannot live only in the public page
 - the monolith and `AGENTS.md` remain protected
@@ -2320,7 +2316,7 @@ Keep these visible until separately resolved. Classification:
 | 5 | Template-backed `String` payload equality | Accepted | May be indistinguishable from ordinary `String` | Unresolved design |
 | 6 | General capture exhaustiveness | Accepted as catch-all | Marks later arms unreachable but does not satisfy exhaustiveness | Probable implementation gap |
 | 7 | Inline map nesting beyond two levels | Not discussed | Rejected with explicit diagnostic | Confirmed Alpha restriction |
-| 8 | Raw string slices with backticks | Accepted | Rejected | Probable stale monolith |
+| 8 | Raw string slices with backticks | Rejected | Rejected with `BST-SYNTAX-0007` | Confirmed absent form |
 | 9 | Error-only `return!` inside nested blocks | Accepted | Rejected | Probable implementation gap |
 | 10 | Block value-producing `if` with `then` | Accepted | Infrastructure failure | Probable implementation gap |
 | 11 | Stored named inserts passed as loose contributions | Accepted | Rejected | Probable implementation gap |
@@ -2349,6 +2345,8 @@ Keep these visible until separately resolved. Classification:
 
 Ordinary documentation migration patches do not authorise compiler changes for
 these discrepancies.
+
+The dedicated package terminology synchronisation updated the language monolith for rows 2-3, 6-15, 25 and 31, plus comment context, explicit copy places, function-default folding, option equality and exhaustiveness, import cycles and Beanstalk-aware links. Remaining implementation gaps stay visible in this ledger even though the monolith now labels them accurately.
 
 ### 21.6 Aliases, Generics, Traits and Reactivity batch
 
@@ -2382,7 +2380,7 @@ review. The correction pass repaired the following findings:
   instead of same-page anchors `@#type-application`. Cross-page concept links such as
   `@../traits/generic-trait-bounds` were corrected to `@../traits/#generic-trait-bounds`.
 - stale `#mod.bst` wording: Aliases documentation referred to `#mod.bst` as a semantic facade.
-  Corrected to use neutral module-root wording and link to Project Structure and Libraries.
+  Corrected to use neutral module-root wording and link to Project Structure and Packages.
 - incomplete fallible cast conformance example: the Advanced `TRY_CASTABLE_TO_INT` example declared
   conformance without defining the required `try_to_int` method. Replaced with a complete verified
   implementation showing success with `return`, failure with `return!`, local recovery with
@@ -2435,14 +2433,14 @@ remain accurate:
 
 The Aliases, Generics, Traits and Reactivity batch is complete and has passed correction review.
 
-### Project Structure, Libraries, Beandown and Plain Markdown batch
+### Project Structure, Packages, Beandown and Plain Markdown batch
 
 This batch landed on the `main` branch after the hash-root module and strict `export:` refactor.
 
 Route pairs landed:
 
 - Project Structure: `project-layout`, `project-config`, `module-roots`, `public-api`, `entry-runtime-and-fragments`, `html-routing-and-artifacts`
-- Libraries and Imports: `import-paths`, `grouped-and-namespace-imports`, `module-visibility`, `public-reexports`, `source-libraries`, `core-builder-and-external-packages`
+- Packages and Imports: `import-paths`, `grouped-and-namespace-imports`, `module-visibility`, `public-reexports`, `project-local-packages`, `package-origins-and-backing`
 - Beandown: `beandown-files`, `implicit-markdown`, `content-imports`, `template-scope`, `beandown-limits`
 - Plain Markdown: `markdown-files`, `markdown-imports`, `rendering-contract`, `choosing-a-content-format`
 
@@ -2479,7 +2477,7 @@ All mandatory probes (7.1 through 7.17) were run and recorded. Key findings:
 - 7.6: Same-module imports see all declarations. Cross-module imports require export block. Re-exported original names accessible; alias names are public API names.
 - 7.7: Unknown config key rejected. Runtime binding rejected. Struct support declaration accepted. Const-record projection works inline. Separate helper constant rejected (not a config key).
 - 7.8: Routes are directory-based. `#home.bst` and `#api.bst` both produce `index.html` in their directory.
-- 7.9: Source libraries work with custom and default `lib/`. Internal files hidden cross-prefix.
+- 7.9: Source-backed packages work with custom and default `lib/`. Internal files hidden cross-prefix.
 - 7.10: Namespace, grouped and aliased imports verified.
 - 7.11: Import cycles between same-module files accepted. Circular constant dependencies rejected with `BST-RULE-0033`.
 - 7.12: `.bd` import exposes `content`. Extension import rejected with `BST-IMPORT-0024`.
@@ -2491,8 +2489,8 @@ All mandatory probes (7.1 through 7.17) were run and recorded. Key findings:
 
 Continue with:
 
-1. Core-library language surfaces
-2. HTML builder library surface
+1. Core package language surfaces
+2. HTML Builder package surface
 3. IO and input surface
 4. Final whole-language parity and authority review
 
@@ -2524,7 +2522,7 @@ The content migration is ready for final authority review only when:
 - implementation conflicts have been reported
 - the progress matrix remains the implementation-status authority
 - the roadmap remains the planning authority
-- `docs/language-overview.md` remains unchanged
+- `docs/language-overview.md` remains maintained and authoritative
 - `AGENTS.md` remains unchanged
 - sidebar and glossary work can be added later without changing content ownership
 

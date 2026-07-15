@@ -1,5 +1,5 @@
 use crate::projects::html_project::external_js::parser::{
-    parse_js_library, parsed_js_library::JsDiagnosticKind,
+    parse_js_module, parsed_js_module::JsDiagnosticKind,
 };
 use crate::projects::html_project::external_js::runtime_module_registry::RuntimeModuleRegistry;
 
@@ -9,16 +9,16 @@ use crate::projects::html_project::external_js::runtime_module_registry::Runtime
 
 fn parse(
     source: &str,
-) -> crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary {
+) -> crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule {
     let registry = RuntimeModuleRegistry::v1();
-    parse_js_library(source, &registry)
+    parse_js_module(source, &registry)
 }
 
 fn assert_opaque_types(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &[&str],
 ) {
-    let names: Vec<&str> = library
+    let names: Vec<&str> = parsed
         .opaque_types
         .iter()
         .map(|t| t.name.as_str())
@@ -27,10 +27,10 @@ fn assert_opaque_types(
 }
 
 fn assert_free_functions(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &[&str],
 ) {
-    let names: Vec<&str> = library
+    let names: Vec<&str> = parsed
         .free_functions
         .iter()
         .map(|f| f.beanstalk_name.as_str())
@@ -39,10 +39,10 @@ fn assert_free_functions(
 }
 
 fn assert_receiver_methods(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &[&str],
 ) {
-    let names: Vec<&str> = library
+    let names: Vec<&str> = parsed
         .receiver_methods
         .iter()
         .map(|f| f.beanstalk_name.as_str())
@@ -51,15 +51,15 @@ fn assert_receiver_methods(
 }
 
 fn assert_diagnostic_kinds(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &[JsDiagnosticKind],
 ) {
-    let kinds: Vec<JsDiagnosticKind> = library.diagnostics.iter().map(|d| d.kind.clone()).collect();
+    let kinds: Vec<JsDiagnosticKind> = parsed.diagnostics.iter().map(|d| d.kind.clone()).collect();
     assert_eq!(
         kinds,
         expected,
         "diagnostic kinds mismatch. Messages: {:?}",
-        library
+        parsed
             .diagnostics
             .iter()
             .map(|d| d.message.as_str())
@@ -68,16 +68,16 @@ fn assert_diagnostic_kinds(
 }
 
 fn assert_diagnostic_message_contains(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &str,
 ) {
     assert!(
-        library
+        parsed
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.message.contains(expected)),
         "expected diagnostic message containing {expected:?}, got {:?}",
-        library
+        parsed
             .diagnostics
             .iter()
             .map(|d| d.message.as_str())
@@ -86,16 +86,16 @@ fn assert_diagnostic_message_contains(
 }
 
 fn assert_runtime_imports(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
     expected: &[(&str, &[&str])],
 ) {
     assert_eq!(
-        library.runtime_imports.len(),
+        parsed.runtime_imports.len(),
         expected.len(),
         "runtime import count mismatch"
     );
     for (index, (module_name, names)) in expected.iter().enumerate() {
-        let runtime_import = &library.runtime_imports[index];
+        let runtime_import = &parsed.runtime_imports[index];
         assert_eq!(
             runtime_import.module_name, *module_name,
             "runtime import module name mismatch at index {index}"
@@ -109,12 +109,12 @@ fn assert_runtime_imports(
 }
 
 fn assert_no_diagnostics(
-    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    parsed: &crate::projects::html_project::external_js::parser::parsed_js_module::ParsedJsModule,
 ) {
     assert!(
-        library.diagnostics.is_empty(),
+        parsed.diagnostics.is_empty(),
         "expected no diagnostics, got: {:?}",
-        library.diagnostics
+        parsed.diagnostics
     );
 }
 
@@ -130,17 +130,17 @@ fn opaque_type_declarations_are_parsed() {
  * @bst.opaque Canvas2d
  */
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_opaque_types(&library, &["Canvas", "Canvas2d"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_opaque_types(&parsed, &["Canvas", "Canvas2d"]);
 }
 
 #[test]
 fn opaque_type_single_line_block() {
     let source = r#"/** @bst.opaque Handle */"#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_opaque_types(&library, &["Handle"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_opaque_types(&parsed, &["Handle"]);
 }
 
 // ------------------------
@@ -158,11 +158,11 @@ export function getCanvas(id) {
     return bstOk(document.getElementById(id));
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["get_canvas"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["get_canvas"]);
 
-    let func = &library.free_functions[0];
+    let func = &parsed.free_functions[0];
     assert_eq!(func.js_name, "getCanvas");
     assert_eq!(func.signature.parameters.len(), 1);
     assert_eq!(func.signature.parameters[0].name, "id");
@@ -183,10 +183,10 @@ export function logMessage(msg) {
     console.log(msg);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["log_message"]);
-    let func = &library.free_functions[0];
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["log_message"]);
+    let func = &parsed.free_functions[0];
     assert_eq!(func.signature.returns.len(), 0);
     assert!(!func.signature.has_error_return);
 }
@@ -201,11 +201,11 @@ export function doFallible() {
     return bstOk();
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["do_fallible"]);
-    assert!(library.free_functions[0].signature.has_error_return);
-    assert_eq!(library.free_functions[0].signature.returns.len(), 0);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["do_fallible"]);
+    assert!(parsed.free_functions[0].signature.has_error_return);
+    assert_eq!(parsed.free_functions[0].signature.returns.len(), 0);
 }
 
 #[test]
@@ -218,11 +218,11 @@ export const add = (a, b) => {
     return a + b;
 };
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["add"]);
-    assert_eq!(library.free_functions[0].js_name, "add");
-    assert_eq!(library.free_functions[0].signature.parameters.len(), 2);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["add"]);
+    assert_eq!(parsed.free_functions[0].js_name, "add");
+    assert_eq!(parsed.free_functions[0].signature.parameters.len(), 2);
 }
 
 #[test]
@@ -233,9 +233,9 @@ fn const_export_must_be_arrow_function() {
  */
 export const answer = 42;
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnsupportedParameterPattern,
             JsDiagnosticKind::MissingExportAfterSig,
@@ -261,11 +261,11 @@ export function fillRect(ctx, x, y, width, height) {
     ctx.fillRect(x, y, width, height);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_receiver_methods(&library, &["fill_rect"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_receiver_methods(&parsed, &["fill_rect"]);
 
-    let func = &library.receiver_methods[0];
+    let func = &parsed.receiver_methods[0];
     assert_eq!(func.js_name, "fillRect");
     assert_eq!(func.signature.parameters.len(), 5);
     assert!(func.signature.parameters[0].is_receiver);
@@ -284,10 +284,10 @@ export const describe = (self) => {
     return self;
 };
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_receiver_methods(&library, &["describe"]);
-    assert!(!library.receiver_methods[0].signature.parameters[0].is_mutable);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_receiver_methods(&parsed, &["describe"]);
+    assert!(!parsed.receiver_methods[0].signature.parameters[0].is_mutable);
 }
 
 #[test]
@@ -301,12 +301,12 @@ export function write(buffer, text) {
     buffer.value = text;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["write"]);
-    assert!(library.free_functions[0].signature.parameters[0].is_mutable);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["write"]);
+    assert!(parsed.free_functions[0].signature.parameters[0].is_mutable);
     assert_eq!(
-        library.free_functions[0].signature.parameters[0].type_name,
+        parsed.free_functions[0].signature.parameters[0].type_name,
         "Buffer"
     );
 }
@@ -324,12 +324,12 @@ fn receiver_parameter_must_be_first() {
  */
 export function bad(x, ctx) {}
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::InvalidReceiverParameter]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::InvalidReceiverParameter]);
     // Malformed `this` at index 1 means has_receiver() is false, so the function
     // lands in free_functions rather than receiver_methods.
-    assert_free_functions(&library, &["bad"]);
-    assert!(library.receiver_methods.is_empty());
+    assert_free_functions(&parsed, &["bad"]);
+    assert!(parsed.receiver_methods.is_empty());
 }
 
 #[test]
@@ -341,16 +341,16 @@ fn duplicate_receiver_parameter_rejected() {
  */
 export function bad(ctx, other) {}
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::InvalidReceiverParameter,
             JsDiagnosticKind::InvalidReceiverParameter,
         ],
     );
     // First parameter is a valid receiver, so it still becomes a receiver method.
-    assert_receiver_methods(&library, &["bad"]);
+    assert_receiver_methods(&parsed, &["bad"]);
 }
 
 #[test]
@@ -362,9 +362,9 @@ fn receiver_parameter_after_recovered_invalid_parameter_is_rejected() {
  */
 export function bad(values, ctx) {}
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnsupportedParameterPattern,
             JsDiagnosticKind::InvalidReceiverParameter,
@@ -381,9 +381,9 @@ fn receiver_parameter_missing_type_annotation_still_reported() {
  */
 export function bad(ctx) {}
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
-    assert_receiver_methods(&library, &["bad"]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
+    assert_receiver_methods(&parsed, &["bad"]);
 }
 
 // ------------------------
@@ -401,9 +401,9 @@ export function getCanvas(id) {
     return bstOk(id);
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArityMismatch]);
-    assert_free_functions(&library, &["get_canvas"]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArityMismatch]);
+    assert_free_functions(&parsed, &["get_canvas"]);
 }
 
 #[test]
@@ -417,9 +417,9 @@ export function fillRect(ctx, x, y) {
     ctx.fillRect(x, y);
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArityMismatch]);
-    assert_receiver_methods(&library, &["fill_rect"]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArityMismatch]);
+    assert_receiver_methods(&parsed, &["fill_rect"]);
 }
 
 // ------------------------
@@ -434,9 +434,9 @@ fn missing_export_after_sig_reported() {
  */
 // no export here
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::MissingExportAfterSig]);
-    assert!(library.free_functions.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::MissingExportAfterSig]);
+    assert!(parsed.free_functions.is_empty());
 }
 
 #[test]
@@ -449,8 +449,8 @@ export function getCanvas(id) {
     return bstOk(id);
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnknownExternalType]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnknownExternalType]);
 }
 
 #[test]
@@ -463,9 +463,9 @@ export function fillRect(ctx, x) {
     ctx.fillRect(x, x);
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnknownExternalType]);
-    assert_receiver_methods(&library, &["fill_rect"]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnknownExternalType]);
+    assert_receiver_methods(&parsed, &["fill_rect"]);
 }
 
 // ------------------------
@@ -485,8 +485,8 @@ export function getCanvas1(id) { return id; }
  */
 export function getCanvas2(name) { return name; }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::DuplicateBeanstalkName]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::DuplicateBeanstalkName]);
 }
 
 #[test]
@@ -502,8 +502,8 @@ export function getCanvas(id) { return id; }
  */
 export function getCanvas(name) { return name; }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::DuplicateJsExportName]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::DuplicateJsExportName]);
 }
 
 #[test]
@@ -514,8 +514,8 @@ fn duplicate_opaque_type_name_reported() {
  * @bst.opaque Handle
  */
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::DuplicateBeanstalkName]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::DuplicateBeanstalkName]);
 }
 
 // ------------------------
@@ -529,8 +529,8 @@ export function helper(x) {
     return x;
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnannotatedExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnannotatedExport]);
 }
 
 #[test]
@@ -543,9 +543,9 @@ export function publicFn(x) { return x; }
 
 export function privateHelper(x) { return x; }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnannotatedExport]);
-    assert_free_functions(&library, &["public_fn"]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnannotatedExport]);
+    assert_free_functions(&parsed, &["public_fn"]);
 }
 
 // ------------------------
@@ -560,9 +560,9 @@ fn bst_package_rejected() {
  */
 export function foo() {}
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnsupportedPackageTag,
             JsDiagnosticKind::UnannotatedExport,
@@ -578,9 +578,9 @@ fn unknown_bst_directive_rejected() {
  */
 export function foo() {}
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnknownBstDirective,
             JsDiagnosticKind::UnannotatedExport,
@@ -597,8 +597,8 @@ fn default_export_rejected() {
     let source = r#"
 export default function foo() {}
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::DefaultExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::DefaultExport]);
 }
 
 // ------------------------
@@ -610,8 +610,8 @@ fn re_export_rejected() {
     let source = r#"
 export { foo };
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ReExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ReExport]);
 }
 
 // ------------------------
@@ -623,8 +623,8 @@ fn commonjs_module_exports_rejected() {
     let source = r#"
 module.exports = { foo };
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::CommonJsExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::CommonJsExport]);
 }
 
 #[test]
@@ -632,8 +632,8 @@ fn commonjs_exports_dot_rejected() {
     let source = r#"
 exports.foo = function() {};
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::CommonJsExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::CommonJsExport]);
 }
 
 // ------------------------
@@ -645,8 +645,8 @@ fn class_export_rejected() {
     let source = r#"
 export class Widget {}
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ClassExport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ClassExport]);
 }
 
 // ------------------------
@@ -658,8 +658,8 @@ fn dynamic_import_rejected() {
     let source = r#"
 const m = import("./helper.js");
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::DynamicImport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::DynamicImport]);
 }
 
 #[test]
@@ -667,8 +667,8 @@ fn arbitrary_static_import_rejected() {
     let source = r#"
 import { foo } from "./helper.js";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArbitraryImport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArbitraryImport]);
 }
 
 #[test]
@@ -676,8 +676,8 @@ fn namespace_static_import_rejected() {
     let source = r#"
 import * as helper from "./helper.js";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArbitraryImport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArbitraryImport]);
 }
 
 #[test]
@@ -685,8 +685,8 @@ fn side_effect_static_import_rejected() {
     let source = r#"
 import "./helper.js";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArbitraryImport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArbitraryImport]);
 }
 
 #[test]
@@ -701,9 +701,9 @@ export function doThing() {
     return bstOk();
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["do_thing"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["do_thing"]);
 }
 
 #[test]
@@ -711,8 +711,8 @@ fn unregistered_runtime_looking_module_is_rejected() {
     let source = r#"
 import { foo } from "@beanstalk/other-runtime";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArbitraryImport]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArbitraryImport]);
 }
 
 #[test]
@@ -738,9 +738,9 @@ export function doThing() {
     return bstOk(7);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_runtime_imports(&parsed, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
 }
 
 #[test]
@@ -758,9 +758,9 @@ export function doThing() {
     return bstOk(7);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_runtime_imports(&parsed, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
 }
 
 #[test]
@@ -771,9 +771,9 @@ import {
     bar,
 } from "./helper.js";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::ArbitraryImport]);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::ArbitraryImport]);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -788,11 +788,11 @@ export function getNumber() {
     return bstOk(7).value;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_eq!(library.free_functions.len(), 1);
-    assert!(!library.free_functions[0].signature.has_error_return);
-    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstOk"])]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_eq!(parsed.free_functions.len(), 1);
+    assert!(!parsed.free_functions[0].signature.has_error_return);
+    assert_runtime_imports(&parsed, &[("@beanstalk/runtime", &["bstOk"])]);
 }
 
 #[test]
@@ -800,9 +800,9 @@ fn runtime_import_alias_rejected() {
     let source = r#"
 import { bstOk as ok } from "@beanstalk/runtime";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -810,9 +810,9 @@ fn runtime_default_import_rejected() {
     let source = r#"
 import runtime from "@beanstalk/runtime";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -820,9 +820,9 @@ fn runtime_namespace_import_rejected() {
     let source = r#"
 import * as runtime from "@beanstalk/runtime";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedRuntimeImportForm]);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -830,9 +830,9 @@ fn unknown_runtime_import_name_rejected() {
     let source = r#"
 import { nope } from "@beanstalk/runtime";
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnknownRuntimeImportName]);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnknownRuntimeImportName]);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -848,12 +848,12 @@ export function doThing() {
     return bstOk(7);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_eq!(library.runtime_imports.len(), 1);
-    assert_eq!(library.runtime_imports[0].module_name, "@beanstalk/runtime");
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_eq!(parsed.runtime_imports.len(), 1);
+    assert_eq!(parsed.runtime_imports[0].module_name, "@beanstalk/runtime");
     assert_eq!(
-        library.runtime_imports[0].imported_names,
+        parsed.runtime_imports[0].imported_names,
         vec!["bstErr", "bstOk"]
     );
 }
@@ -871,11 +871,11 @@ export function doThing() {
     return bstOk(7);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_eq!(library.runtime_imports.len(), 1);
-    assert_eq!(library.runtime_imports[0].module_name, "@beanstalk/runtime");
-    assert_eq!(library.runtime_imports[0].imported_names, vec!["bstOk"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_eq!(parsed.runtime_imports.len(), 1);
+    assert_eq!(parsed.runtime_imports[0].module_name, "@beanstalk/runtime");
+    assert_eq!(parsed.runtime_imports[0].imported_names, vec!["bstOk"]);
 }
 
 #[test]
@@ -891,13 +891,13 @@ export function doThing() {
 }
 "#;
     let registry = RuntimeModuleRegistry::v1();
-    let library = parse_js_library(source, &registry);
+    let parsed = parse_js_module(source, &registry);
     assert!(
-        library.diagnostics.is_empty(),
+        parsed.diagnostics.is_empty(),
         "got: {:?}",
-        library.diagnostics
+        parsed.diagnostics
     );
-    assert_eq!(library.free_functions.len(), 1);
+    assert_eq!(parsed.free_functions.len(), 1);
 }
 
 #[test]
@@ -906,9 +906,9 @@ fn explicit_empty_registry_rejects_all_imports() {
 import { bstOk } from "@beanstalk/runtime";
 "#;
     let registry = RuntimeModuleRegistry::empty();
-    let library = parse_js_library(source, &registry);
+    let parsed = parse_js_module(source, &registry);
     assert!(
-        library
+        parsed
             .diagnostics
             .iter()
             .any(|d| d.kind == JsDiagnosticKind::ArbitraryImport),
@@ -925,9 +925,9 @@ const text = "export function stringOnly() {}";
 export function blockCommented() {}
 */
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert!(library.free_functions.is_empty());
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert!(parsed.free_functions.is_empty());
 }
 
 #[test]
@@ -948,9 +948,9 @@ export function next() {
     return 1;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["tricky", "next"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["tricky", "next"]);
 }
 
 #[test]
@@ -964,9 +964,9 @@ export function tricky() {
     return text;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["tricky"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["tricky"]);
 }
 
 #[test]
@@ -974,9 +974,9 @@ fn export_inside_template_literal_is_ignored() {
     let source = r#"
 const hint = `export function fake() {}`;
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert!(library.free_functions.is_empty());
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert!(parsed.free_functions.is_empty());
 }
 
 #[test]
@@ -985,9 +985,9 @@ fn import_inside_line_comment_is_ignored() {
 // import { foo } from "./helper.js";
 const x = 1;
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -996,9 +996,9 @@ fn import_inside_block_comment_is_ignored() {
 /* import { foo } from "./helper.js"; */
 const x = 1;
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -1006,9 +1006,9 @@ fn import_inside_template_literal_is_ignored() {
     let source = r#"
 const hint = `import { foo } from "./helper.js";`;
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert!(library.runtime_imports.is_empty());
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert!(parsed.runtime_imports.is_empty());
 }
 
 #[test]
@@ -1023,9 +1023,9 @@ export function real() {
     return 1;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["real"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["real"]);
 }
 
 #[test]
@@ -1043,9 +1043,9 @@ export function doThing() {
     return bstOk(7);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_runtime_imports(&parsed, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
 }
 
 #[test]
@@ -1060,9 +1060,9 @@ export function tricky() {
     return 1;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["tricky"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["tricky"]);
 }
 
 #[test]
@@ -1076,9 +1076,9 @@ export function tricky() {
     return text;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["tricky"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["tricky"]);
 }
 
 #[test]
@@ -1092,9 +1092,9 @@ export const tricky = () => {
     return text;
 };
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["tricky"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["tricky"]);
 }
 
 #[test]
@@ -1105,15 +1105,15 @@ fn expression_bodied_arrow_export_rejected() {
  */
 export const add = (a, b) => a + b;
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::ExpressionBodiedArrowExport,
             JsDiagnosticKind::MissingExportAfterSig,
         ],
     );
-    assert!(library.free_functions.is_empty());
+    assert!(parsed.free_functions.is_empty());
 }
 
 // ------------------------
@@ -1130,9 +1130,9 @@ export function sum(...values) {
     return values.reduce((a, b) => a + b, 0);
 }
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnsupportedParameterPattern,
             JsDiagnosticKind::UnsupportedParameterPattern,
@@ -1150,8 +1150,8 @@ export function greet(name = "world") {
     return name;
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedParameterPattern]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedParameterPattern]);
 }
 
 #[test]
@@ -1164,9 +1164,9 @@ export function unpack({ x }) {
     return x;
 }
 "#;
-    let library = parse(source);
+    let parsed = parse(source);
     assert_diagnostic_kinds(
-        &library,
+        &parsed,
         &[
             JsDiagnosticKind::UnsupportedParameterPattern,
             JsDiagnosticKind::UnsupportedTypeSyntax,
@@ -1189,8 +1189,8 @@ export function process(items) {
     return items[0];
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
 }
 
 #[test]
@@ -1203,8 +1203,8 @@ export function maybe(name) {
     return name || "";
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
 }
 
 #[test]
@@ -1217,9 +1217,9 @@ export function identity(value) {
     return value;
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::GenericExternalFunction]);
-    assert_diagnostic_message_contains(&library, "External package functions cannot be generic");
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::GenericExternalFunction]);
+    assert_diagnostic_message_contains(&parsed, "External package functions cannot be generic");
 }
 
 #[test]
@@ -1229,10 +1229,10 @@ fn generic_external_opaque_type_rejected() {
  * @bst.opaque Canvas of Int
  */
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::GenericExternalType]);
-    assert_diagnostic_message_contains(&library, "External package types cannot be generic");
-    assert_opaque_types(&library, &[]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::GenericExternalType]);
+    assert_diagnostic_message_contains(&parsed, "External package types cannot be generic");
+    assert_opaque_types(&parsed, &[]);
 }
 
 #[test]
@@ -1243,8 +1243,8 @@ fn void_return_rejected() {
  */
 export function noop() {}
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::VoidReturn]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::VoidReturn]);
 }
 
 #[test]
@@ -1257,8 +1257,8 @@ export function pair() {
     return [1, "a"];
 }
 "#;
-    let library = parse(source);
-    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::MultiSuccessReturn]);
+    let parsed = parse(source);
+    assert_diagnostic_kinds(&parsed, &[JsDiagnosticKind::MultiSuccessReturn]);
 }
 
 // ------------------------
@@ -1275,13 +1275,13 @@ export function getCanvasContext(id) {
     return id;
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
     assert_eq!(
-        library.free_functions[0].beanstalk_name,
+        parsed.free_functions[0].beanstalk_name,
         "get_canvas_context"
     );
-    assert_eq!(library.free_functions[0].js_name, "getCanvasContext");
+    assert_eq!(parsed.free_functions[0].js_name, "getCanvasContext");
 }
 
 // ------------------------
@@ -1302,9 +1302,9 @@ export function double(x) {
     return privateHelper(x);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_free_functions(&library, &["double"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_free_functions(&parsed, &["double"]);
 }
 
 // ------------------------
@@ -1312,7 +1312,7 @@ export function double(x) {
 // ------------------------
 
 #[test]
-fn full_library_parse() {
+fn full_module_parse() {
     let source = r#"
 import { bstOk, bstErr } from "@beanstalk/runtime";
 
@@ -1339,21 +1339,21 @@ export function fillRect(ctx, x, y, width, height) {
     ctx.fillRect(x, y, width, height);
 }
 "#;
-    let library = parse(source);
-    assert_no_diagnostics(&library);
-    assert_opaque_types(&library, &["Canvas", "Canvas2d"]);
-    assert_free_functions(&library, &["get_canvas"]);
-    assert_receiver_methods(&library, &["fill_rect"]);
+    let parsed = parse(source);
+    assert_no_diagnostics(&parsed);
+    assert_opaque_types(&parsed, &["Canvas", "Canvas2d"]);
+    assert_free_functions(&parsed, &["get_canvas"]);
+    assert_receiver_methods(&parsed, &["fill_rect"]);
 }
 
 #[test]
-fn builtin_web_canvas_library_parses_expanded_surface() {
-    let source = include_str!("../../../external_libraries/web/canvas/canvas.js");
-    let library = parse(source);
+fn builtin_web_canvas_package_parses_expanded_surface() {
+    let source = include_str!("../../../binding_packages/web/canvas/canvas.js");
+    let parsed = parse(source);
 
-    assert_no_diagnostics(&library);
+    assert_no_diagnostics(&parsed);
     assert_opaque_types(
-        &library,
+        &parsed,
         &[
             "CanvasElement",
             "Canvas2d",
@@ -1364,9 +1364,9 @@ fn builtin_web_canvas_library_parses_expanded_surface() {
             "CanvasTextMetrics",
         ],
     );
-    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
+    assert_runtime_imports(&parsed, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
 
-    let free_function_names: Vec<&str> = library
+    let free_function_names: Vec<&str> = parsed
         .free_functions
         .iter()
         .map(|function| function.beanstalk_name.as_str())
@@ -1392,7 +1392,7 @@ fn builtin_web_canvas_library_parses_expanded_surface() {
     }
 
     assert!(
-        library.receiver_methods.is_empty(),
+        parsed.receiver_methods.is_empty(),
         "built-in @web/canvas must expose only opaque types and free functions"
     );
 }

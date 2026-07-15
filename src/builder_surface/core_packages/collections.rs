@@ -16,9 +16,7 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
     let package_id = registry
         .register_package(
             "@core/collections",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Core,
-            ),
+            crate::builder_surface::PackageOrigin::Core,
         )
         .expect("builtin package registration should not collide");
 

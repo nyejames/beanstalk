@@ -1,8 +1,8 @@
 Import aliases rename something you import so it fits better in the current file.
 
-### Two libraries called `render`
+### Two packages called `render`
 
-Suppose two libraries both export a function named `render`. You cannot import both as `render` because names must not collide.
+Suppose two packages both export a function named `render`. You cannot import both as `render` because names must not collide.
 
 [codeblock, $code("bst"):
     import @blog { render as render_blog }

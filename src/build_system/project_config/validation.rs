@@ -45,7 +45,7 @@ pub(super) fn validate_and_apply_config_ast(
     let mut seen_config_keys = HashSet::new();
 
     // Only top-level `#` constant declarations authored in `config.bst` are config keys.
-    // Imported library constants and types are support surface, not entries.
+    // Imported package constants and types are support surface, not entries.
     let authored_scope = parsed_config.authored_config_path.as_path();
 
     // 1. Extract from module_constants (top-level # bindings).
@@ -413,7 +413,7 @@ fn extract_string_collection_value(
 }
 
 // -------------------------
-//  Library Folders Application
+//  Package Folders Application
 // -------------------------
 
 /// Apply validated `package_folders` string collection values to the config.

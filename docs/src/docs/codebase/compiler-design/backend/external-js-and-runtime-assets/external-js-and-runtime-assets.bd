@@ -6,7 +6,7 @@ The backend later emits runtime assets and glue only when reachable compiled cod
 
 `src/projects/html_project/external_js/`
 
-Related registries live under `LibrarySet`:
+Related registries live under `BuilderSurface`:
 
 - `ExternalImportProviderRegistry`
 - `ExternalImportProviderCache`
@@ -33,7 +33,7 @@ External import providers resolve non-Beanstalk import sources into typed packag
 
 JavaScript export names are runtime implementation details.
 Beanstalk names come from annotations.
-Supported JS export forms and annotation rules belong to the language/library docs, but the compiler-design contract is simple: the frontend sees typed external package metadata, not arbitrary JavaScript source.
+Supported JS export forms and annotation rules belong to the package docs, but the compiler-design contract is simple: the frontend sees typed binding package metadata, not arbitrary JavaScript source.
 
 External packages expose opaque types, constants and free functions only.
 They don't expose receiver methods.
@@ -52,7 +52,7 @@ For standalone JS, the selected policy may include every function.
 ## Builder-runtime packages
 
 Builder-runtime packages such as builder-owned virtual `@web/*` packages use the same runtime asset/glue path as provider-created imports.
-They are registered directly in `external_packages` and attached to module external-import metadata when reachable HIR references them.
+They are registered directly in `binding_packages` and attached to module external-import metadata when reachable HIR references them.
 
 This keeps runtime asset planning consistent across provider-created external packages, builder-runtime packages and compiler-registered external package metadata, where applicable.
 
@@ -70,4 +70,4 @@ This keeps runtime asset planning consistent across provider-created external pa
 - @../ (Backend overview): backend boundaries
 - @../js-lowering (JavaScript lowering): the emitted JS bundle and referenced external functions
 - @../../stages/header-parsing (Stage 2: Header parsing): external import providers and source-kind preparation
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): external package identity and module-boundary rules
+- @../../imports-packages-and-bindings (Imports, packages and bindings): external package identity and module-boundary rules

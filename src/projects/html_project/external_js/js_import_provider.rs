@@ -1,7 +1,7 @@
 //! HTML JavaScript external import provider.
 //!
-//! WHAT: implements `ExternalImportProvider` for single-file JavaScript libraries annotated
-//!       with Beanstalk `@bst.*` metadata, turning parsed JS libraries into typed external
+//! WHAT: implements `ExternalImportProvider` for single-file JavaScript binding modules annotated
+//!       with Beanstalk `@bst.*` metadata, turning parsed JS modules into typed external
 //!       package registry entries.
 //! WHY: project-local `.js` imports and built-in JS-backed packages need a compiler frontend
 //!      surface before AST can resolve calls and types.
@@ -18,11 +18,11 @@ use crate::compiler_frontend::compiler_messages::source_location::{CharPosition,
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::external_js::package_registration::{
-    register_parsed_js_library, required_runtime_imports_from_parsed,
+    register_parsed_js_module, required_runtime_imports_from_parsed,
 };
-use crate::projects::html_project::external_js::parser::parse_js_library;
-use crate::projects::html_project::external_js::parser::parsed_js_library::{
-    JsParserDiagnostic, ParsedJsLibrary,
+use crate::projects::html_project::external_js::parser::parse_js_module;
+use crate::projects::html_project::external_js::parser::parsed_js_module::{
+    JsParserDiagnostic, ParsedJsModule,
 };
 use crate::projects::html_project::external_js::path_identity::{
     sanitized_path_stem, stable_path_hash_hex,
@@ -81,7 +81,7 @@ impl ExternalImportProvider for JsExternalImportProvider {
             }
         };
 
-        let parsed = parse_js_library(&source, &RuntimeModuleRegistry::v1());
+        let parsed = parse_js_module(&source, &RuntimeModuleRegistry::v1());
 
         let mut diagnostics = convert_js_parser_diagnostics(
             &parsed.diagnostics,
@@ -114,14 +114,14 @@ impl ExternalImportProvider for JsExternalImportProvider {
             .package_registry
             .register_package(
                 package_path,
-                crate::builder_surface::PackageMetadata::binding(
-                    crate::builder_surface::PackageOrigin::ProjectLocal,
-                ),
+                crate::builder_surface::PackageOrigin::ProjectLocal,
             )
             .map_err(|error| CompilerMessages::from_error(error, context.string_table.clone()))?;
 
-        let registered = register_parsed_js_library(package_id, &parsed, context.package_registry)
-            .map_err(|error| CompilerMessages::from_error(error, context.string_table.clone()))?;
+        let registered = register_parsed_js_module(package_id, &parsed, context.package_registry)
+            .map_err(|error| {
+            CompilerMessages::from_error(error, context.string_table.clone())
+        })?;
 
         let required_runtime_imports = required_runtime_imports_from_parsed(&parsed);
 
@@ -144,7 +144,7 @@ impl ExternalImportProvider for JsExternalImportProvider {
 // ------------------------------------------
 
 fn js_provider_package_path(canonical_source_path: &Path) -> String {
-    let safe_stem = sanitized_path_stem(canonical_source_path, "library");
+    let safe_stem = sanitized_path_stem(canonical_source_path, "module");
     let hash = stable_path_hash_hex(canonical_source_path);
 
     format!("@html-js/{safe_stem}-{hash}")
@@ -155,7 +155,7 @@ fn js_provider_package_path(canonical_source_path: &Path) -> String {
 // ------------------------------------------
 
 fn reject_receiver_methods_in_project_local_js(
-    parsed: &ParsedJsLibrary,
+    parsed: &ParsedJsModule,
     js_source_path: &Path,
     string_table: &mut StringTable,
 ) -> Vec<CompilerDiagnostic> {
@@ -164,13 +164,13 @@ fn reject_receiver_methods_in_project_local_js(
 
     for receiver_method in &parsed.receiver_methods {
         let message = format!(
-            "JS library signature for '{}' uses a 'this' receiver parameter. Project-local JS imports must expose free functions and opaque types only.",
+            "JS module signature for '{}' uses a 'this' receiver parameter. Project-local JS imports must expose free functions and opaque types only.",
             receiver_method.beanstalk_name
         );
         let message_id = string_table.intern(&message);
         let location = js_parser_source_location(path.clone(), &receiver_method.annotation_span);
 
-        diagnostics.push(CompilerDiagnostic::invalid_external_library(
+        diagnostics.push(CompilerDiagnostic::invalid_external_module(
             path.clone(),
             message_id,
             location,
@@ -196,7 +196,7 @@ fn convert_js_parser_diagnostics(
         let message_id = string_table.intern(&parser_diagnostic.message);
         let location = js_parser_source_location(path.clone(), &parser_diagnostic.span);
 
-        diagnostics.push(CompilerDiagnostic::invalid_external_library(
+        diagnostics.push(CompilerDiagnostic::invalid_external_module(
             path.clone(),
             message_id,
             location,
@@ -208,7 +208,7 @@ fn convert_js_parser_diagnostics(
 
 fn js_parser_source_location(
     path: InternedPath,
-    span: &crate::projects::html_project::external_js::parser::parsed_js_library::JsSourceSpan,
+    span: &crate::projects::html_project::external_js::parser::parsed_js_module::JsSourceSpan,
 ) -> SourceLocation {
     let start = CharPosition {
         line_number: span.line as i32,

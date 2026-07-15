@@ -1901,7 +1901,7 @@ fn constant_header_with_declared_type_captures_type_in_declaration() {
 /// Verifies that `parse_headers` correctly aggregates per-file outputs from multiple source files.
 ///
 /// WHAT: entry file contributes runtime templates, const templates, and a start function;
-///       a non-entry library file contributes declarations; a module-root file contributes its
+///       a non-entry package file contributes declarations; a module-root file contributes its
 ///       public surface.
 /// WHY: this is the primary observable boundary introduced by the per-file refactor.
 pub(crate) fn parse_multi_file_headers(sources: &[(String, String)], entry_path: &str) -> Headers {

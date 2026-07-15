@@ -1,16 +1,16 @@
 import @html {center}
 import @styles/docs {navbar, title, section, codeblock, theme_head}
 
-page_title #= "Core Prelude"
-page_description #= "The small core surface available without explicit imports."
+page_title #= "Prelude policy"
+page_description #= "The small implicit surface available without explicit imports."
 page_head #= theme_head
 
 #[navbar]
-#[title, center: CORE PRELUDE]
+#[title, center: PRELUDE POLICY]
 
 #[section, $md:
-    The prelude is the tiny set of names available without an explicit import.
-    It keeps common output and builtin error handling convenient without making every core library global.
+    The prelude is visibility policy, not an `@core/prelude` package. It defines the tiny set of names available without an explicit import.
+    It keeps common output and builtin error handling convenient without making every Core package global.
 
     The `io` namespace is available in normal source files and exposes Core IO helpers such as `io.line(...)`.
     Compiler-owned `Error` is also available for `Error!` flows.
@@ -19,7 +19,7 @@ page_head #= theme_head
         io.line("Hello from the prelude")
     ]
 
-    Most core libraries still require imports:
+    Most Core packages still require imports:
 
     [codeblock, $code("bst"):
         import @core/math {sin}

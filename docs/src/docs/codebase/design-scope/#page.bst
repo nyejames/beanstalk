@@ -73,7 +73,7 @@ page_head #= codebase_theme_head
 
         [td:
             [$md: Platform integration]
-            [$md: Builder packages, external packages and source libraries]
+            [$md: Builder packages, external packages and source-backed packages]
         ]
 
         [td:

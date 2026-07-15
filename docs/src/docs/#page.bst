@@ -37,8 +37,8 @@ page_head #= theme_head
     ## Projects and content
 
     - @./project-structure (Project structure)
-    - @./libraries (Libraries and imports)
-    - @./libraries/core (Core libraries)
+    - @./packages (Packages and imports)
+    - @./packages/core (Core packages)
     - @./beandown (Beandown)
     - @./markdown (Plain Markdown)
 

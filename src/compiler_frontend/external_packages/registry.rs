@@ -130,12 +130,14 @@ impl ExternalPackageRegistry {
     /// Registers a new virtual package in the registry, assigning a stable package ID.
     ///
     /// WHAT: creates the owned package identity and path-to-ID index entry.
+    /// The registry always constructs `PackageMetadata::binding(origin)` so a
+    /// `BeanstalkSource`-backed package is unrepresentable through this API.
     /// WHY: built-in packages and later dynamic provider results must flow through the
     /// same identity path.
     pub fn register_package(
         &mut self,
         path: impl Into<String>,
-        metadata: crate::builder_surface::PackageMetadata,
+        origin: crate::builder_surface::PackageOrigin,
     ) -> Result<ExternalPackageId, CompilerError> {
         let path = path.into();
         if self.package_id_by_path.contains_key(&path) {
@@ -143,6 +145,7 @@ impl ExternalPackageRegistry {
         }
         let id = ExternalPackageId(self.next_package_id);
         self.next_package_id += 1;
+        let metadata = crate::builder_surface::PackageMetadata::binding(origin);
         let package = ExternalPackage::new(id, path.clone(), metadata);
         self.packages.insert(id, package);
         self.package_id_by_path.insert(path, id);
@@ -584,9 +587,7 @@ impl ExternalPackageRegistry {
             Some(id) => id,
             None => self.register_package(
                 test_package_path,
-                crate::builder_surface::PackageMetadata::binding(
-                    crate::builder_surface::PackageOrigin::Builder,
-                ),
+                crate::builder_surface::PackageOrigin::Builder,
             )?,
         };
 
@@ -814,7 +815,7 @@ impl ExternalPackageRegistry {
     ///
     /// WHAT: recognizes compiler-known optional core package prefixes before path resolution falls
     /// back to filesystem imports.
-    /// WHY: `@core/text` missing from a builder is a library-surface error, not a confusing
+    /// WHY: `@core/text` missing from a builder is a package-surface error, not a confusing
     /// missing source file.
     pub fn unsupported_known_package_import(
         &self,

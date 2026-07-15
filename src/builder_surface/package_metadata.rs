@@ -15,7 +15,7 @@
 pub enum PackageOrigin {
     /// Compiler-owned core packages (e.g. `@core/io`, `@core/math`).
     Core,
-    /// Reserved for future standard-library packages.
+    /// Reserved for future Standard packages.
     Standard,
     /// Builder-owned packages (e.g. `@html`, `@web/canvas`).
     Builder,

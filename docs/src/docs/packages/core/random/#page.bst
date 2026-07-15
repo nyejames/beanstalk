@@ -2,7 +2,7 @@ import @html {center}
 import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Core Random"
-page_description #= "Random number helpers in the core library."
+page_description #= "Random number helpers in the Core package."
 page_head #= theme_head
 
 #[navbar]

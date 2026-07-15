@@ -15,22 +15,22 @@ Important owners:
 - `src/build_system/project_config.rs` and `src/build_system/project_config/` own `config.bst` parsing, AST-backed value extraction and shape validation.
 - `compilation.rs`, `project_roots.rs` and `frontend_orchestration.rs` own single-file/directory dispatch, root interpretation, prepared resolver setup and per-module frontend orchestration.
 - `source_tree_index.rs`, `module_inventory.rs`, `reachable_file_discovery.rs`, `import_scanning.rs` and `source_loading.rs` own one-pass root discovery, import-graph traversal and source loading.
-- `source_library_discovery.rs`, `root_validation.rs`, `collision_detection.rs`, `project_structure_diagnostics.rs` and `source_discovery_error.rs` own source-library root preflight, import-name collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
+- `source_package_discovery.rs`, `root_validation.rs`, `collision_detection.rs`, `project_structure_diagnostics.rs` and `source_discovery_error.rs` own source-backed package root preflight, package-prefix collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
 
 ## What Stage 0 owns
 
 Stage 0 owns:
 
-- parsing `config.bst` and reachable core/builder source-library support files through the frontend up to AST
+- parsing `config.bst` and reachable core/builder source-backed package support files through the frontend up to AST
 - extracting only authored known top-level `#` config-key constants from shared AST const facts
 - enforcing each config key's registered value shape before core fields are applied or backend settings are stored
-- allowing config imports only from core/builder libraries
+- allowing config imports only from Core or Builder packages
 - rejecting project-local and relative config imports by design
 - stopping config compilation at AST because config doesn't need HIR
-- building one source-tree index after config establishes `entry_root`, library folders and output folders
+- building one source-tree index after config establishes `entry_root`, `package_folders` and output folders
 - selecting exactly one cosmetic non-config `#*.bst` root per module directory
 - expanding each module to reachable `.bst` files and builder-supported source assets through imports
-- preparing canonical source-library roots and their unique hash-root public-surface files before resolver construction
+- preparing canonical source-backed package roots and their unique hash-root public-surface files before resolver construction
 - recognising external package prefixes so virtual imports aren't treated as filesystem paths
 - resolving source-kind candidates through the builder-provided registry
 - resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
@@ -54,7 +54,7 @@ The build system needs folded config values and typed errors, not backend-facing
 
 Stage 0 indexes directory projects once, then reuses that immutable root table for module inventory and nearest-root lookup. Output folders and irrelevant hidden or generated trees are skipped by the index owner.
 
-`ProjectPathResolver` consumes `PreparedSourceLibraryRoots` plus the source-tree index. Resolver construction performs no filesystem discovery. This keeps path resolution a lookup layer and prevents hidden rescans per module.
+`ProjectPathResolver` consumes `PreparedSourcePackageRoots` plus the source-tree index. Resolver construction performs no filesystem discovery. This keeps path resolution a lookup layer and prevents hidden rescans per module.
 
 Reachable-file discovery expands each selected module to imported `.bst` files and builder-supported source assets. It also recognises external package prefixes so virtual imports don't become filesystem lookups.
 
@@ -104,7 +104,7 @@ If Stage 0 starts needing semantic type facts from a normal module, something is
 
 ## Related reading
 
-- @../../build-system-and-frontend-boundary (Build-system and frontend boundary): the `BackendBuilder` and `LibrarySet` contract
+- @../../build-system-and-frontend-boundary (Build-system and frontend boundary): the `BackendBuilder` and `BuilderSurface` contract
 - @../header-parsing (Stage 2: Header parsing): source-kind headers and import preparation
 - @../tokenization (Stage 1: Tokenization): tokenization entry modes for discovered source kinds
 - @../../parallelism-and-determinism (Parallelism and determinism): string-table fork/merge rules for directory builds

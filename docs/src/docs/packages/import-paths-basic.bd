@@ -8,13 +8,13 @@ Imports make names visible. Each path reaches a declaration surface.
 
 `@./card` resolves to `card.bst` in the same directory as the importing file.
 
-### A library prefix import
+### A package prefix import
 
 [codeblock, $code("bst"):
     import @helper {double}
 ]
 
-`@helper` resolves from a configured source-library folder. Each direct child directory of `lib/` becomes a prefix.
+`@helper` resolves from a configured source-backed package folder. Each direct child directory of `lib/` becomes a prefix.
 
 ### Remember
 

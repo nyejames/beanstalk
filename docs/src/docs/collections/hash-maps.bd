@@ -127,7 +127,7 @@ that shared access is no longer used.
 - specialized map variants
 - user-defined key types
 
-More sophisticated maps belong in ordinary library structs.
+More sophisticated maps belong in ordinary package structs.
 
 ### Inline nesting limit
 

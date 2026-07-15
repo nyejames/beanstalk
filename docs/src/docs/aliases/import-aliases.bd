@@ -83,7 +83,7 @@ Use a namespace alias when the imported path would be awkward to repeat or when 
 
 ### Grouped symbol aliases
 
-Use grouped symbol aliases when two libraries export the same name.
+Use grouped symbol aliases when two packages export the same name.
 
 [codeblock, $code("bst"):
     import @blog { render as render_blog }
@@ -108,14 +108,14 @@ A grouped import cannot use a single alias for the whole group.
 
 ### Local and public-name distinction
 
-An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself has no semantic role. The current export syntax is owned by @../project-structure (Project Structure) and @../libraries (Libraries). Do not treat a local import alias as a public API rename.
+An ordinary import alias is private to the importing file. A public name chosen in a module root's export surface is a different operation. Cross-module visibility is controlled by the module root's explicit `export:` surface. The hash-root filename itself has no semantic role. The current export syntax is owned by @../project-structure (Project Structure) and @../packages (Packages). Do not treat a local import alias as a public API rename.
 
 [codeblock, $code("bst"):
     -- Ordinary local import alias
     import @models { User as ModelUser }
 ]
 
-The local `ModelUser` is visible only in this file. A public rename belongs inside the module root's current explicit `export:` block. See @../project-structure (Project Structure) and @../libraries (Libraries) for the exact current form.
+The local `ModelUser` is visible only in this file. A public rename belongs inside the module root's current explicit `export:` block. See @../project-structure (Project Structure) and @../packages (Packages) for the exact current form.
 
 ### Import aliases with type aliases
 
@@ -133,4 +133,4 @@ This combines a file-local import rename with a domain-specific type alias.
 
 - For type aliases see the previous section.
 - For payload capture aliases see the next section.
-- For import syntax and module roots see @../libraries (Libraries) and @../project-structure (Project Structure).
+- For import syntax and module roots see @../packages (Packages) and @../project-structure (Project Structure).

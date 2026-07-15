@@ -37,7 +37,7 @@ Source-authored receiver methods are rejected for:
 
 - builtin scalars
 - imported source types
-- dependency or library types
+- dependency package types
 - external opaque types
 - nominal types declared in another file
 

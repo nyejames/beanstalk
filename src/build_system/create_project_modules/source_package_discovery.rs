@@ -1,7 +1,7 @@
 //! Project-local source-backed package discovery for Stage 0.
 //!
 //! WHAT: scans configured package folders, merges project-local packages with builder-provided
-//! libraries, and rejects ambiguous import-prefix ownership.
+//! packages, and rejects ambiguous import-prefix ownership.
 //! WHY: source-backed package discovery is project input preparation. It should not live inside module
 //! inventory or frontend semantic import handling.
 
@@ -157,7 +157,7 @@ fn scan_project_package_folder(
 
     // Collect directory entries before registration so prefix collision diagnostics and
     // registration order are deterministic regardless of filesystem iteration order.
-    let mut library_entries: Vec<(String, PathBuf)> = Vec::new();
+    let mut package_entries: Vec<(String, PathBuf)> = Vec::new();
 
     for entry in entries {
         let entry = entry.map_err(|error| {
@@ -171,20 +171,20 @@ fn scan_project_package_folder(
             )
         })?;
 
-        let library_root = entry.path();
-        if !library_root.is_dir() {
+        let package_root = entry.path();
+        if !package_root.is_dir() {
             continue;
         }
 
-        let Some(prefix) = library_root.file_name().and_then(|value| value.to_str()) else {
+        let Some(prefix) = package_root.file_name().and_then(|value| value.to_str()) else {
             continue;
         };
-        library_entries.push((prefix.to_owned(), library_root));
+        package_entries.push((prefix.to_owned(), package_root));
     }
 
-    library_entries.sort_by(|(prefix_a, _), (prefix_b, _)| prefix_a.cmp(prefix_b));
+    package_entries.sort_by(|(prefix_a, _), (prefix_b, _)| prefix_a.cmp(prefix_b));
 
-    for (prefix, library_root) in library_entries {
+    for (prefix, package_root) in package_entries {
         // Prevent duplicate @prefixes across different project-local package roots.
         if let Some(previous_root) = discovered_prefixes.get(&prefix) {
             return Err(config_diagnostic_messages(
@@ -193,16 +193,16 @@ fn scan_project_package_folder(
                 InvalidConfigReason::SourcePackagePrefixCollision {
                     prefix: string_table.intern(&prefix),
                     first_root: path_id(previous_root, string_table),
-                    second_root: path_id(&library_root, string_table),
+                    second_root: path_id(&package_root, string_table),
                 },
                 string_table,
             ));
         }
 
-        discovered_prefixes.insert(prefix.clone(), library_root.clone());
+        discovered_prefixes.insert(prefix.clone(), package_root.clone());
         discovered_packages.register_filesystem_root(
             prefix,
-            library_root,
+            package_root,
             crate::builder_surface::PackageOrigin::ProjectLocal,
         );
     }

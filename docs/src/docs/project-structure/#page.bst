@@ -137,7 +137,7 @@ page_head #= language_theme_head
     [doc_pager:
         [$insert("previous_path"):../reactivity/]
         [$insert("previous_title"):Reactivity]
-        [$insert("next_path"):../libraries/]
-        [$insert("next_title"):Libraries and imports]
+        [$insert("next_path"):../packages/]
+        [$insert("next_title"):Packages and imports]
     ]
 ]

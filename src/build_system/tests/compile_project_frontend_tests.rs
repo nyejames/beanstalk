@@ -106,9 +106,7 @@ fn register_dummy_package(
         .package_registry
         .register_package(
             package_path,
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::ProjectLocal,
-            ),
+            crate::builder_surface::PackageOrigin::ProjectLocal,
         )
         .map_err(|error| provider_error_to_messages(error, context.string_table))
 }

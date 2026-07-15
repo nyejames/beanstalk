@@ -377,15 +377,15 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn invalid_external_library(
+    pub(crate) fn invalid_external_module(
         path: InternedPath,
         message: StringId,
         location: SourceLocation,
     ) -> Self {
         Self::new(
-            DiagnosticKind::Import(ImportDiagnosticKind::InvalidExternalLibrary),
+            DiagnosticKind::Import(ImportDiagnosticKind::InvalidExternalModule),
             location,
-            DiagnosticPayload::InvalidExternalLibrary { path, message },
+            DiagnosticPayload::InvalidExternalModule { path, message },
         )
     }
 

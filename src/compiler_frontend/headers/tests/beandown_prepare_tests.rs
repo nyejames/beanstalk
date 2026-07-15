@@ -181,7 +181,7 @@ impl BeandownScopeFixture {
         let temp_dir = tempfile::tempdir().expect("test project root should be created");
         let project_root = temp_dir.path().join("project");
         let entry_root = project_root.join("src");
-        let html_root = temp_dir.path().join("html_library");
+        let html_root = temp_dir.path().join("html_package");
 
         fs::create_dir_all(&entry_root).expect("entry root should be created");
         fs::create_dir_all(&html_root).expect("HTML source-backed package should be created");

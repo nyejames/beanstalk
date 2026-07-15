@@ -331,7 +331,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Resolve a bare import that names a public export namespace.
     ///
-    /// WHAT: `import @library` and cross-module `import @module` expose the target prepared root
+    /// WHAT: `import @package` and cross-module `import @module` expose the target prepared root
     /// file surface as a namespace record.
     /// WHY: namespace imports must obey the same public export boundary as grouped imports.
     pub(super) fn resolve_public_export_namespace_target(

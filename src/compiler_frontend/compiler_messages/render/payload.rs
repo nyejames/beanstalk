@@ -129,7 +129,7 @@ fn render_payload_message(
         | DiagnosticPayload::InvalidBeandownApiScopeItem { .. }
         | DiagnosticPayload::DuplicateBeandownInputPath { .. }
         | DiagnosticPayload::UnsupportedExternalExtension { .. }
-        | DiagnosticPayload::InvalidExternalLibrary { .. } => {
+        | DiagnosticPayload::InvalidExternalModule { .. } => {
             import_payload_message(payload, string_table)
         }
         DiagnosticPayload::BorrowConflict { .. }
@@ -765,7 +765,7 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
             match public_surface_type {
                 crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::SourcePackage => {
                     format!(
-                        "Cannot import '{path_text}' from source-backed package '@{public_surface_name}' because it is not exported by the library public surface."
+                        "Cannot import '{path_text}' from source-backed package '@{public_surface_name}' because it is not exported by the package public surface."
                     )
                 }
                 crate::compiler_frontend::compiler_messages::ImportPublicSurfaceType::ModuleRoot => {
@@ -825,8 +825,8 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
         DiagnosticPayload::UnsupportedExternalExtension { path, extension } => {
             unsupported_external_extension_message(path, *extension, string_table)
         }
-        DiagnosticPayload::InvalidExternalLibrary { path, message } => {
-            invalid_external_library_message(path, *message, string_table)
+        DiagnosticPayload::InvalidExternalModule { path, message } => {
+            invalid_external_module_message(path, *message, string_table)
         }
         _ => String::new(),
     }

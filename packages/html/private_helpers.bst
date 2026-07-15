@@ -1,4 +1,4 @@
--- Private helpers for the HTML builder library.
+-- Private helpers for the source-backed HTML Builder package.
 -- Not exported by #mod.bst; external importers cannot access these symbols.
 -- This is here for testing and demo purposes
 

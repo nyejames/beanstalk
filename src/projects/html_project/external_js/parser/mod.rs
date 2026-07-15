@@ -1,6 +1,6 @@
 //! HTML JavaScript `@bst.*` annotation parser.
 //!
-//! WHAT: turns a single JS source file into a `ParsedJsLibrary` containing opaque types,
+//! WHAT: turns a single JS source file into a `ParsedJsModule` containing opaque types,
 //!       free functions, receiver-shaped signatures, registered runtime imports, and diagnostics.
 //! WHY: this parser stays independent from compiler diagnostics and package registration so
 //!      provider and built-in package registration can share one source model while rejecting
@@ -8,7 +8,7 @@
 //!
 //! ## Module layout
 //!
-//! - `parsed_js_library`: parser-owned data model (spans, diagnostics, signatures).
+//! - `parsed_js_module`: parser-owned data model (spans, diagnostics, signatures).
 //! - `comment_extractor`: finds `/** ... */` blocks and extracts `@bst.opaque` / `@bst.sig`.
 //! - `export_scanner`: finds supported JS exports and rejects unsupported forms.
 //! - `signature_parser`: parses the Beanstalk parameter/return syntax inside `@bst.sig`.
@@ -16,7 +16,7 @@
 
 mod comment_extractor;
 mod export_scanner;
-pub(crate) mod parsed_js_library;
+pub(crate) mod parsed_js_module;
 mod signature_parser;
 
 #[cfg(test)]
@@ -24,8 +24,8 @@ mod tests;
 
 use comment_extractor::{AnnotationKind, ExtractedAnnotation, extract_annotations};
 use export_scanner::{JsExport, scan_exports};
-use parsed_js_library::{
-    JsDiagnosticKind, JsParserDiagnostic, ParsedJsFunction, ParsedJsLibrary, ParsedOpaqueType,
+use parsed_js_module::{
+    JsDiagnosticKind, JsParserDiagnostic, ParsedJsFunction, ParsedJsModule, ParsedOpaqueType,
     ParsedRuntimeImport,
 };
 use signature_parser::{SignatureParseInput, parse_signature};
@@ -33,7 +33,7 @@ use signature_parser::{SignatureParseInput, parse_signature};
 use crate::projects::html_project::external_js::runtime_module_registry::RuntimeModuleRegistry;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Parses a single JS source file into a `ParsedJsLibrary` using an explicit registry.
+/// Parses a single JS source file into a `ParsedJsModule` using an explicit registry.
 ///
 /// WHAT: extracts `@bst.*` annotations, scans for JS exports, matches each `@bst.sig`
 ///       to the immediately following supported export, parses signatures, and validates
@@ -41,7 +41,7 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// This function does not interact with `ExternalPackageRegistry` or `CompilerDiagnostic`.
 /// It returns parser-local data that package registration and provider code convert later.
-pub(crate) fn parse_js_library(source: &str, registry: &RuntimeModuleRegistry) -> ParsedJsLibrary {
+pub(crate) fn parse_js_module(source: &str, registry: &RuntimeModuleRegistry) -> ParsedJsModule {
     let mut orchestrator = ParseOrchestrator::new(source, registry);
     orchestrator.run()
 }
@@ -69,7 +69,7 @@ impl<'a> ParseOrchestrator<'a> {
         }
     }
 
-    fn run(&mut self) -> ParsedJsLibrary {
+    fn run(&mut self) -> ParsedJsModule {
         // Phase 1: extract annotations from doc comments.
         let comment_result = extract_annotations(self.source);
         self.annotations = comment_result.annotations;
@@ -81,21 +81,21 @@ impl<'a> ParseOrchestrator<'a> {
         self.diagnostics.extend(export_result.diagnostics);
 
         // Phase 3: bind annotations to exports, parse signatures, validate.
-        let mut library = self.bind_and_validate();
+        let mut parsed = self.bind_and_validate();
 
         // Deduplicate runtime imports deterministically by module specifier,
         // merging imported names across duplicate import statements.
-        library.runtime_imports = deduplicate_runtime_imports(export_result.runtime_imports);
+        parsed.runtime_imports = deduplicate_runtime_imports(export_result.runtime_imports);
 
-        library
+        parsed
     }
 
     // ------------------------
     //  Binding and validation
     // ------------------------
 
-    fn bind_and_validate(&mut self) -> ParsedJsLibrary {
-        let mut library = ParsedJsLibrary::empty();
+    fn bind_and_validate(&mut self) -> ParsedJsModule {
+        let mut parsed = ParsedJsModule::empty();
 
         // Collect opaque types (file-level annotations, no export binding needed).
         for annotation in &self.annotations {
@@ -103,7 +103,7 @@ impl<'a> ParseOrchestrator<'a> {
                 if self.seen_beanstalk_names.contains(type_name) {
                     self.diagnostics.push(JsParserDiagnostic {
                         message: format!(
-                            "Duplicate Beanstalk-facing name `{}` in JS library.",
+                            "Duplicate Beanstalk-facing name `{}` in JS module.",
                             type_name
                         ),
                         span: annotation.span.clone(),
@@ -113,7 +113,7 @@ impl<'a> ParseOrchestrator<'a> {
                     self.seen_beanstalk_names.push(type_name.clone());
                 }
 
-                library.opaque_types.push(ParsedOpaqueType {
+                parsed.opaque_types.push(ParsedOpaqueType {
                     name: type_name.clone(),
                     span: annotation.span.clone(),
                 });
@@ -152,7 +152,7 @@ impl<'a> ParseOrchestrator<'a> {
                 if self.seen_js_names.contains(&export.js_name) {
                     self.diagnostics.push(JsParserDiagnostic {
                         message: format!(
-                            "Duplicate JS export name `{}` in library.",
+                            "Duplicate JS export name `{}` in parsed.",
                             export.js_name
                         ),
                         span: export.span.clone(),
@@ -166,7 +166,7 @@ impl<'a> ParseOrchestrator<'a> {
                 if self.seen_beanstalk_names.contains(&beanstalk_name) {
                     self.diagnostics.push(JsParserDiagnostic {
                         message: format!(
-                            "Duplicate Beanstalk-facing name `{}` in JS library.",
+                            "Duplicate Beanstalk-facing name `{}` in JS module.",
                             beanstalk_name
                         ),
                         span: annotation_span.clone(),
@@ -191,7 +191,7 @@ impl<'a> ParseOrchestrator<'a> {
                     self.diagnostics.push(JsParserDiagnostic {
                         message: format!(
                             "Annotated JS export `{}` has {} Beanstalk ABI parameter(s) but {} JS parameter(s). \
-                             Receiver `this` counts as the first JS parameter. Beanstalk JS library exports must use one plain JS parameter per Beanstalk ABI parameter.",
+                             Receiver `this` counts as the first JS parameter. Beanstalk JS module exports must use one plain JS parameter per Beanstalk ABI parameter.",
                             export.js_name,
                             abi_count,
                             export.parameter_count
@@ -210,9 +210,9 @@ impl<'a> ParseOrchestrator<'a> {
                 };
 
                 if parsed_function.signature.has_receiver() {
-                    library.receiver_methods.push(parsed_function);
+                    parsed.receiver_methods.push(parsed_function);
                 } else {
-                    library.free_functions.push(parsed_function);
+                    parsed.free_functions.push(parsed_function);
                 }
             } else {
                 self.diagnostics.push(JsParserDiagnostic {
@@ -228,11 +228,11 @@ impl<'a> ParseOrchestrator<'a> {
 
         // Report unannotated exports
         for export in &self.exports {
-            let is_annotated = library
+            let is_annotated = parsed
                 .free_functions
                 .iter()
                 .any(|f| f.js_name == export.js_name)
-                || library
+                || parsed
                     .receiver_methods
                     .iter()
                     .any(|f| f.js_name == export.js_name);
@@ -241,7 +241,7 @@ impl<'a> ParseOrchestrator<'a> {
                 self.diagnostics.push(JsParserDiagnostic {
                     message: format!(
                         "JavaScript export `{}` is not annotated with `@bst.sig`. \
-                         Every export in a Beanstalk JS library must be explicitly annotated. Keep private helpers unexported.",
+                         Every export in a Beanstalk JS module must be explicitly annotated. Keep private helpers unexported.",
                         export.js_name
                     ),
                     span: export.span.clone(),
@@ -250,10 +250,10 @@ impl<'a> ParseOrchestrator<'a> {
             }
         }
 
-        self.validate_signature_type_names(&library);
+        self.validate_signature_type_names(&parsed);
 
-        library.diagnostics = std::mem::take(&mut self.diagnostics);
-        library
+        parsed.diagnostics = std::mem::take(&mut self.diagnostics);
+        parsed
     }
 
     /// Finds the next supported JS export whose span starts after the given byte offset.
@@ -267,17 +267,17 @@ impl<'a> ParseOrchestrator<'a> {
         None
     }
 
-    fn validate_signature_type_names(&mut self, library: &ParsedJsLibrary) {
-        let opaque_names = library
+    fn validate_signature_type_names(&mut self, parsed: &ParsedJsModule) {
+        let opaque_names = parsed
             .opaque_types
             .iter()
             .map(|opaque| opaque.name.as_str())
             .collect::<Vec<_>>();
 
-        for function in library
+        for function in parsed
             .free_functions
             .iter()
-            .chain(library.receiver_methods.iter())
+            .chain(parsed.receiver_methods.iter())
         {
             self.validate_function_signature_types(function, &opaque_names);
         }
@@ -315,7 +315,7 @@ impl<'a> ParseOrchestrator<'a> {
         &mut self,
         type_name: &str,
         function_name: &str,
-        span: &parsed_js_library::JsSourceSpan,
+        span: &parsed_js_module::JsSourceSpan,
         opaque_names: &[&str],
     ) {
         if !should_validate_known_type_name(type_name) {
@@ -328,7 +328,7 @@ impl<'a> ParseOrchestrator<'a> {
 
         self.diagnostics.push(JsParserDiagnostic {
             message: format!(
-                "Unknown external type `{}` in `@bst.sig` for `{}`. Declare it with `@bst.opaque {}` before using it in Beanstalk JS library signatures.",
+                "Unknown external type `{}` in `@bst.sig` for `{}`. Declare it with `@bst.opaque {}` before using it in Beanstalk JS module signatures.",
                 type_name, function_name, type_name
             ),
             span: span.clone(),
@@ -358,7 +358,7 @@ fn should_validate_known_type_name(type_name: &str) -> bool {
 /// WHY: parser may see duplicate import statements; the provider and backend
 ///      only need one `RequiredRuntimeImport` per module.
 fn deduplicate_runtime_imports(imports: Vec<ParsedRuntimeImport>) -> Vec<ParsedRuntimeImport> {
-    let mut by_module: BTreeMap<String, (BTreeSet<String>, parsed_js_library::JsSourceSpan)> =
+    let mut by_module: BTreeMap<String, (BTreeSet<String>, parsed_js_module::JsSourceSpan)> =
         BTreeMap::new();
 
     for import in imports {

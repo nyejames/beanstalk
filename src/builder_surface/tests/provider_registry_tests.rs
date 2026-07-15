@@ -48,9 +48,7 @@ impl ExternalImportProvider for DummyProvider {
             .package_registry
             .register_package(
                 "@test/dummy",
-                crate::builder_surface::PackageMetadata::binding(
-                    crate::builder_surface::PackageOrigin::Builder,
-                ),
+                crate::builder_surface::PackageOrigin::Builder,
             )
             .expect("test package registration should succeed");
 

@@ -52,4 +52,4 @@ Imported content participates in normal dependency tracking. The `.md` file is c
 
 - For the rendering contract see @#rendering-contract (Rendering contract).
 - For choosing between formats see @#choosing-a-content-format (Choosing a content format).
-- For import path resolution see @../libraries/#import-paths (Import paths).
+- For import path resolution see @../packages/#import-paths (Import paths).

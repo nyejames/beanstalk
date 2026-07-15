@@ -132,4 +132,4 @@ Type aliases follow ordinary module visibility rules. A type alias declared in a
 
 - For concrete generic application see @../generics (Generics).
 - For import aliasing see the next section.
-- For project visibility and module roots see @../project-structure (Project Structure) and @../libraries (Libraries).
+- For project visibility and module roots see @../project-structure (Project Structure) and @../packages (Packages).

@@ -156,7 +156,7 @@ pub enum DiagnosticPayload {
         extension: StringId,
     },
 
-    InvalidExternalLibrary {
+    InvalidExternalModule {
         path: InternedPath,
         message: StringId,
     },

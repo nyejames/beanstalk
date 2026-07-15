@@ -1,6 +1,6 @@
-//! HTML JavaScript external library support.
+//! HTML JavaScript external binding module support.
 //!
-//! WHAT: parses single-file JavaScript libraries annotated with Beanstalk `@bst.*`
+//! WHAT: parses single-file JavaScript binding modules annotated with Beanstalk `@bst.*`
 //!       metadata into a structured, parser-owned data model, and tracks builder-owned
 //!       core JS runtime modules such as `@beanstalk/runtime`.
 //! WHY: project-local `.js` imports and built-in JS-backed packages such as `@web/canvas`
@@ -8,7 +8,7 @@
 //!
 //! This module is intentionally isolated from compiler-stage machinery.
 //! The JS external import provider and built-in JS-backed packages convert
-//! `ParsedJsLibrary` into `ExternalPackageRegistry` entries before the frontend
+//! `ParsedJsModule` into `ExternalPackageRegistry` entries before the frontend
 //! consumes package visibility.
 //!
 //! ## Module layout

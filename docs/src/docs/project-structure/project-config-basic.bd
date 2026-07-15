@@ -15,7 +15,7 @@ Common keys:
 
 - `project`: selects the builder, currently only `"html"`.
 - `entry_root`: the source folder, usually `"src"`.
-- `library_folders`: where to find source libraries. Defaults to `lib` when omitted.
+- `package_folders`: where to find project-local source-backed packages. Defaults to `lib` when omitted.
 - `dev_folder` and `output_folder`: where builds are written.
 
 ### Remember

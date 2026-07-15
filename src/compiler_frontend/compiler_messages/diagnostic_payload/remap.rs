@@ -531,7 +531,7 @@ impl DiagnosticPayload {
                 *extension = remap.get(*extension);
             }
 
-            DiagnosticPayload::InvalidExternalLibrary { path, message } => {
+            DiagnosticPayload::InvalidExternalModule { path, message } => {
                 path.remap_string_ids(remap);
                 *message = remap.get(*message);
             }

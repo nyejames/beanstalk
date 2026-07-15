@@ -5,7 +5,7 @@
 //! frontend pipeline up to AST, then hands the folded AST off to config validation.
 //! WHY: config uses normal Beanstalk syntax, so reusing tokenizer → headers → dependency sort →
 //! AST keeps Stage 0 aligned with the rest of the language and lets config values benefit from
-//! constant folding and type checking, including imported library constants.
+//! constant folding and type checking, including imported package constants.
 
 use crate::build_system::create_project_modules::extract_source_code;
 use crate::build_system::create_project_modules::import_scanning::extract_import_paths;
@@ -106,8 +106,9 @@ pub(super) fn parse_config_file(
         prepared_source_package_roots,
         &services.frontend_surface.source_file_kinds,
     ) {
-        Ok(resolver) => resolver
-            .with_import_root_policy(ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly),
+        Ok(resolver) => {
+            resolver.with_import_root_policy(ImportRootPolicy::SourceAndBindingPackagesOnly)
+        }
         Err(error) => {
             log_config_stage_timing("config.parse.path_resolver", path_resolver_start);
             log_config_stage_timing("config.parse.total", parse_total_start);
@@ -330,7 +331,7 @@ fn log_config_stage_timing(metric: &str, start: crate::timing::PipelineTimingSta
 ///
 /// WHAT: starts from the authored `config.bst` and BFS-follows imports into builder/core
 /// source-backed package files only. External package imports are tracked but do not add files.
-/// WHY: config expressions may reference imported library constants, so those files must be
+/// WHY: config expressions may reference imported package constants, so those files must be
 /// parsed and folded, but project-local files and relative imports are rejected by policy.
 fn build_config_source_set(
     canonical_config: &Path,
@@ -454,7 +455,7 @@ fn prepare_one_config_file(
     }
 
     // Only the authored config file should be treated as the entry file.
-    // Imported library files must be non-entry so top-level runtime statements are rejected.
+    // Imported package files must be non-entry so top-level runtime statements are rejected.
     let entry_file_path = if is_authored_config {
         scope_path
     } else {
@@ -487,7 +488,7 @@ fn prepare_one_config_file(
     };
 
     // Only validate config structural restrictions for the authored config file.
-    // Imported library files may contain functions, types, and other support surfaces.
+    // Imported package files may contain functions, types, and other support surfaces.
     if is_authored_config {
         errors.extend(validate_authored_config_surface(&output.headers));
     }
@@ -571,7 +572,7 @@ fn is_authored_config_duplicate(
 /// Compare source paths exactly first, then by canonical filesystem identity.
 ///
 /// WHY: authored config diagnostics preserve the caller-provided path, while other
-/// config source-set paths may already be canonicalized or library-logical.
+/// config source-set paths may already be canonicalized or package-logical.
 fn paths_match(left: &Path, right: &Path) -> bool {
     if left == right {
         return true;

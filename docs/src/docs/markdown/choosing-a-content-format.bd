@@ -26,9 +26,9 @@ Choose the content format based on what the content needs.
 
 Raw asset files such as images, stylesheets or JavaScript files are not content imports. They are tracked assets handled by the builder. Use normal Beanstalk asset paths when a file should participate in tracked-asset output.
 
-### Distinguishing core and library source
+### Distinguishing package source
 
-Core library source and project source libraries are not content formats. They provide typed declarations and functions. See @../libraries/#core-builder-and-external-packages (Core, builder and external packages).
+Core packages and project-local source-backed packages are not content formats. They provide typed declarations and functions. See @../packages/#package-origins-and-backing (Package origins and backing).
 
 ### Related concepts
 

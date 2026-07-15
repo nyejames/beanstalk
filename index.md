@@ -6,9 +6,9 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 
 - [bean CLI entry](src/main.rs)
 - [crate module surface](src/lib.rs)
-- [Beanstalk source library packages](libraries/): #mod.bst roots.
-    - [@html builder source library](libraries/html/#mod.bst): HTML helper templates (`canvas`, `p`, `h1`–`h6`, `div`, `table`, etc.) and the `Canvas`/`get_canvas` wrapper. Internal helpers live in [libraries/html/private_helpers.bst](libraries/html/private_helpers.bst).
-    - [Core packages and prelude libraries](libraries/): shared language-adjacent source libraries.
+- [Beanstalk source packages](packages/): compiler-shipped source-backed packages.
+    - [@html Builder package](packages/html/#mod.bst): HTML helper templates (`canvas`, `p`, `h1`-`h6`, `div`, `table`, etc.) and the `Canvas`/`get_canvas` wrapper. Internal helpers live in [packages/html/private_helpers.bst](packages/html/private_helpers.bst).
+    - [Core binding packages](src/builder_surface/core_packages/): compiler-owned operations and prelude visibility policy.
 - [validate/bench/docs workflow](justfile)
 - [contributor workflow and validation commands](CONTRIBUTING.md)
 
@@ -30,15 +30,15 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
     - [create_project_modules](src/build_system/create_project_modules/): Stage 0 module/source discovery.
         - [frontend_orchestration.rs](src/build_system/create_project_modules/frontend_orchestration.rs): per-module frontend pipeline.
         - [module_inventory.rs](src/build_system/create_project_modules/module_inventory.rs), [reachable_file_discovery.rs](src/build_system/create_project_modules/reachable_file_discovery.rs), [import_scanning.rs](src/build_system/create_project_modules/import_scanning.rs): module graph.
-        - [source_library_discovery.rs](src/build_system/create_project_modules/source_library_discovery.rs), [facade_validation.rs](src/build_system/create_project_modules/facade_validation.rs): library roots/#mod.bst.
+        - [source_package_discovery.rs](src/build_system/create_project_modules/source_package_discovery.rs), [module_root_validation.rs](src/build_system/create_project_modules/module_root_validation.rs): package roots and module roots.
         - [source_tree_index.rs](src/build_system/create_project_modules/source_tree_index.rs), [source_loading.rs](src/build_system/create_project_modules/source_loading.rs), [compilation.rs](src/build_system/create_project_modules/compilation.rs): entry roots and source load.
         - [collision_detection.rs](src/build_system/create_project_modules/collision_detection.rs), [project_structure_diagnostics.rs](src/build_system/create_project_modules/project_structure_diagnostics.rs): layout/name conflicts.
         - [project_roots.rs](src/build_system/create_project_modules/project_roots.rs): project/entry roots.
         - [source_discovery_error.rs](src/build_system/create_project_modules/source_discovery_error.rs): diagnostic boundary.
     - [output_cleanup.rs](src/build_system/output_cleanup.rs): stale output manifest cleanup.
-- [backend-declared library set](src/libraries/): core packages, external import providers, source/library registries.
-    - [core/](src/libraries/core/): prelude, io, math, collections, text, random, time.
-    - [external_import_providers/](src/libraries/external_import_providers/): JS import provider, provider registry, resolution table.
+- [builder surface](src/builder_surface/): core packages, external import providers and package metadata.
+    - [core_packages/](src/builder_surface/core_packages/): prelude, io, math, collections, text, random and time.
+    - [external_import_providers/](src/builder_surface/external_import_providers/): provider registry and resolution table.
 
 ## Frontend stage map
 
@@ -50,7 +50,7 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [compiler_messages](src/compiler_frontend/compiler_messages/): CompilerDiagnostic/CompilerError/rendering. kw: diagnostic codes, labels.
 - [symbols](src/compiler_frontend/symbols/): StringId, InternedPath, compiler symbols, naming policy.
 - [paths](src/compiler_frontend/paths/): import/path normalization/format/resolution. kw: @imports, source roots.
-- [source_libraries](src/compiler_frontend/source_libraries/): #mod/#page/config identity and library import boundaries.
+- [source_packages](src/compiler_frontend/source_packages/): package-root registration and public import boundaries.
 - [external_packages](src/compiler_frontend/external_packages/): virtual package registry, external IDs. kw: @core, @web, opaque.
 - [builtins](src/compiler_frontend/builtins/): compiler-owned types/ops/casts/runtime error metadata.
 - [style_directives](src/compiler_frontend/style_directives/): frontend+builder template directive registry.
@@ -146,8 +146,8 @@ Flow: [projects](src/projects/) → [build_system](src/build_system/) → [compi
 - [compile_input.rs](src/projects/html_project/compile_input.rs), [diagnostics.rs](src/projects/html_project/diagnostics.rs), [js_path.rs](src/projects/html_project/js_path.rs), [path_policy.rs](src/projects/html_project/path_policy.rs), [style_directives.rs](src/projects/html_project/style_directives.rs): build inputs/policy.
 - [styles](src/projects/html_project/styles/): $html/$css/$escape_html/$code validation/rendering.
 - [external_js](src/projects/html_project/external_js/): provider-backed JS imports, runtime modules/assets/glue.
-- [external_libraries](src/projects/html_project/external_libraries/): builder-owned runtime libraries for HTML projects.
-    - [@web/canvas builder runtime library](src/projects/html_project/external_libraries/web/canvas/): built-in JS canvas asset (`canvas.js`) and `@web/canvas` package registration. Used by the `@html` canvas helpers.
+- [binding_packages](src/projects/html_project/binding_packages/): builder-owned binding packages for HTML projects.
+    - [@web/canvas binding package](src/projects/html_project/binding_packages/web/canvas/): built-in JS canvas asset (`canvas.js`) and `@web/canvas` registration. Used by the `@html` canvas helpers.
 - [beandown](src/projects/html_project/beandown/): direct .bd compile/extract support.
 - [tracked_assets.rs](src/projects/html_project/tracked_assets.rs): copied assets.
 - [new_html_project](src/projects/html_project/new_html_project/): scaffold command.

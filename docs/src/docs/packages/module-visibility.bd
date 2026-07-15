@@ -5,7 +5,7 @@ Module visibility controls which declarations cross a module boundary. Normal de
 Files within the same module can import each other's declarations directly. A module is defined by its root directory. All `.bst` files in that directory (and its subdirectories that do not have their own root) belong to the same module.
 
 [codeblock, $code("bst"):
-    -- src/components/utils.bst
+    -- lib/components/utils.bst
     internal_value #= 42
     internal_fn || -> String:
         return "internal"
@@ -13,8 +13,12 @@ Files within the same module can import each other's declarations directly. A mo
 ]
 
 [codeblock, $code("bst"):
-    -- src/#page.bst (same module)
-    import @components/utils {internal_value, internal_fn}
+    -- lib/components/#api.bst (same module)
+    import @./utils {internal_value, internal_fn}
+
+    export:
+        import @./utils {internal_value}
+    ;
 ]
 
 Same-module imports bypass the public-surface boundary. The importing file sees all declarations in the target file.
@@ -24,21 +28,11 @@ Same-module imports bypass the public-surface boundary. The importing file sees 
 A different module can only access declarations marked public by the module root's `export:` block. Cross-module imports cannot bypass the public API.
 
 [codeblock, $code("bst"):
-    -- src/#page.bst (root module)
-    export:
-        import @components/utils {
-            internal_value,
-            internal_fn,
-        }
-    ;
+    -- src/#site.bst (project module)
+    import @components {internal_value}
 ]
 
-[codeblock, $code("bst"):
-    -- src/pages/#page.bst (different module)
-    import @components/utils {internal_value}
-]
-
-The nested module can import `internal_value` because the root module's export block re-exports it. Without the export block, the import is rejected with `BST-IMPORT-0011`.
+The project module can import `internal_value` through the package root's public surface. It cannot bypass that boundary with `import @components/utils {internal_value}`. Without the root export block, the public import is rejected with `BST-IMPORT-0011`.
 
 ### Root-private declarations
 

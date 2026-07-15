@@ -129,7 +129,7 @@ impl<'hir> JsEmitter<'hir> {
             self.emit_function(function)?;
         }
 
-        self.emit_core_library_helpers();
+        self.emit_core_package_helpers();
 
         if self.used_choice_equality {
             self.emit_runtime_choice_helpers();

@@ -36,14 +36,14 @@ use std::path::{Path, PathBuf};
 /// Controls which import roots are acceptable for a given compilation context.
 ///
 /// WHAT: determines whether relative, entry-root fallback, and project-local imports are allowed.
-/// WHY: config files may only import from builder/core source libraries and external packages,
+/// WHY: config files may only import from Core or Builder packages,
 ///      while normal modules can use all import roots.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ImportRootPolicy {
     /// All import roots are allowed (normal project mode).
     Normal,
-    /// Only source-backed package roots and external package imports are allowed (config mode).
-    SourceLibrariesAndExternalPackagesOnly,
+    /// Only Core or Builder source-backed and binding-backed packages are allowed (config mode).
+    SourceAndBindingPackagesOnly,
 }
 
 /// Concrete source-file import selected by path resolution.
@@ -53,7 +53,7 @@ pub(crate) struct ResolvedImportFile {
     pub(crate) kind: SourceFileKind,
 }
 
-/// WHAT: resolves project-aware import paths using the configured entry root and source libraries.
+/// WHAT: resolves project-aware import paths using the configured entry root and source-backed packages.
 /// WHY: Stage 0 discovery and later frontend import normalization must use identical path rules.
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectPathResolver {
@@ -109,7 +109,7 @@ impl ProjectPathResolver {
 
     /// Set the import root policy for this resolver.
     ///
-    /// WHY: config files restrict imports to source libraries and external packages only.
+    /// WHY: config files restrict imports to Core or Builder packages only.
     pub(crate) fn with_import_root_policy(mut self, policy: ImportRootPolicy) -> Self {
         self.import_root_policy = policy;
         self
@@ -134,14 +134,14 @@ impl ProjectPathResolver {
     /// WHY: logical paths, header membership and provider boundaries must share one deterministic
     ///      owner when registered source-backed package roots overlap.
     pub(crate) fn source_package_for_file(&self, file: &Path) -> Option<(&str, &Path)> {
-        let mut nearest_library: Option<(&str, &Path)> = None;
+        let mut nearest_package: Option<(&str, &Path)> = None;
 
         for (prefix, root) in self.source_package_roots.roots() {
             if !file.starts_with(root) {
                 continue;
             }
 
-            let should_replace = match nearest_library {
+            let should_replace = match nearest_package {
                 None => true,
                 Some((nearest_prefix, nearest_root)) => {
                     let root_depth = root.components().count();
@@ -153,11 +153,11 @@ impl ProjectPathResolver {
             };
 
             if should_replace {
-                nearest_library = Some((prefix.as_str(), root.as_path()));
+                nearest_package = Some((prefix.as_str(), root.as_path()));
             }
         }
 
-        nearest_library
+        nearest_package
     }
 
     /// Returns each source-backed package's unique hash-root file as its public surface.
@@ -221,10 +221,10 @@ impl ProjectPathResolver {
         // Source-backed package files may live outside the project root (builder-provided).
         // Derive a logical path from the same nearest-root policy used by membership checks.
         if let Some((prefix, root)) = self.source_package_for_file(canonical_file)
-            && let Ok(relative_to_library_root) = canonical_file.strip_prefix(root)
+            && let Ok(relative_to_package_root) = canonical_file.strip_prefix(root)
         {
             let mut logical = PathBuf::from(prefix);
-            logical.push(relative_to_library_root);
+            logical.push(relative_to_package_root);
             return Ok(logical);
         }
 
@@ -294,9 +294,7 @@ impl ProjectPathResolver {
                         kind: SourceFileKind::Beanstalk,
                     })
                 } else {
-                    if self.import_root_policy
-                        == ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly
-                    {
+                    if self.import_root_policy == ImportRootPolicy::SourceAndBindingPackagesOnly {
                         return Err(original_error);
                     }
 
@@ -423,7 +421,7 @@ impl ProjectPathResolver {
             self.resolve_path_base(import_path, importer_file, string_table)?;
 
         // Enforce import root policy for config-mode restrictions.
-        if self.import_root_policy == ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly {
+        if self.import_root_policy == ImportRootPolicy::SourceAndBindingPackagesOnly {
             match base_kind {
                 CompileTimePathBase::RelativeToFile
                     if self.importer_is_inside_source_package(importer_file) => {}
@@ -550,7 +548,7 @@ impl ProjectPathResolver {
         self.source_package_roots
             .roots()
             .values()
-            .any(|library_root| canonical_importer.starts_with(library_root))
+            .any(|package_root| canonical_importer.starts_with(package_root))
     }
 
     // -----------------------------------------------------------------------
@@ -608,7 +606,7 @@ impl ProjectPathResolver {
     // -----------------------------------------------------------------------
 
     /// WHAT: exposes the normal path base calculation for provider-backed external files.
-    /// WHY: Stage 0 external providers need the same relative/library/module boundary base as
+    /// WHY: Stage 0 external providers need the same relative/package/module boundary base as
     /// Beanstalk imports, but they must not append `.bst` or use public-surface fallback.
     ///
     /// NOTE: `string_table` is only used on error paths to intern diagnostic file paths.
@@ -640,8 +638,8 @@ impl ProjectPathResolver {
                 CompileTimePathBase::RelativeToFile,
                 importer_dir.to_path_buf(),
             ))
-        } else if let Some(library_root) = self.matches_source_package_prefix(path, string_table) {
-            Ok((CompileTimePathBase::SourcePackageRoot, library_root))
+        } else if let Some(package_root) = self.matches_source_package_prefix(path, string_table) {
+            Ok((CompileTimePathBase::SourcePackageRoot, package_root))
         } else {
             Ok((CompileTimePathBase::EntryRoot, self.entry_root.clone()))
         }

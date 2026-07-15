@@ -1,18 +1,18 @@
 import @html {center}
 import @styles/docs {navbar, title, section, theme_head}
 
-page_title #= "Core Libraries"
-page_description #= "Overview of Beanstalk core libraries and their current HTML/JS support."
+page_title #= "Core Packages"
+page_description #= "Overview of Beanstalk Core packages and their current HTML/JS support."
 page_head #= theme_head
 
 #[navbar]
-#[title, center: CORE LIBRARIES]
+#[title, center: CORE PACKAGES]
 
 #[section, $md:
-    Core libraries are small, typed packages provided by a builder.
+    Core packages are small, typed packages owned by the compiler and selected for availability by a builder.
     They are not ordinary source files in your project, but they are imported with the same `import` syntax.
 
-    Most core libraries require explicit imports.
+    Most Core packages require explicit imports.
     The prelude keeps only the smallest always-available surface bare, such as `io`.
 
     Builder support can vary.
@@ -23,7 +23,7 @@ page_head #= theme_head
 #[section, $md:
     ## Current pages
 
-    - @./prelude (Prelude)
+    - @./prelude (Prelude policy)
     - @./io (Core IO)
     - @./collections (Collections)
     - @./math (Math)

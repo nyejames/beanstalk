@@ -438,9 +438,7 @@ fn create_registry_with_export(
     let package_id = registry
         .register_package(
             "test/pkg",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::ProjectLocal,
-            ),
+            crate::builder_surface::PackageOrigin::ProjectLocal,
         )
         .unwrap();
     let function_id = ExternalFunctionId::Synthetic(42);
@@ -477,9 +475,7 @@ fn create_registry_with_fallible_export(
     let package_id = registry
         .register_package(
             "test/pkg",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::ProjectLocal,
-            ),
+            crate::builder_surface::PackageOrigin::ProjectLocal,
         )
         .unwrap();
     let function_id = ExternalFunctionId::Synthetic(43);

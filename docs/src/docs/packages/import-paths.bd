@@ -4,11 +4,11 @@ Import paths resolve declaration surfaces, not file bytes. Each path family reac
 
 - **Relative current directory**: `@./file` resolves from the importing file's directory. The file extension is omitted.
 - **Relative parent directory**: `@../file` is not supported. Imports with `..` are rejected with `BST-IMPORT-0016`.
-- **Module path**: non-relative imports whose first segment does not match a source-library prefix resolve from the configured `entry_root`. Example: `@components/card` resolves to `src/components/card.bst` when `entry_root` is `src`.
-- **Source-library prefix**: a non-relative import whose first segment matches a configured source-library prefix resolves from that library root. Example: `@helper {double}` when `lib/helper/` is a source library.
-- **Core package**: `@core/math`, `@core/text`, etc. are registered by the builder as external packages.
-- **Builder source-library package**: `@html` is a builder-provided source library.
-- **External package**: `@web/canvas` is a builder-owned runtime package.
+- **Module path**: non-relative imports whose first segment does not match a source-backed package prefix resolve from the configured `entry_root`. Example: `@components/card` resolves to `src/components/card.bst` when `entry_root` is `src`.
+- **Source-package prefix**: a non-relative import whose first segment matches a configured source-backed package prefix resolves from that package root. Example: `@helper {double}` when `lib/helper/` is a source-backed package.
+- **Core binding-backed package**: `@core/math`, `@core/text` and current peers are registered by the builder.
+- **Builder source-backed package**: `@html` is a builder-provided source-backed package.
+- **Builder binding-backed package**: `@web/canvas` is a builder-owned runtime package.
 - **JavaScript file**: `@./drawing.js` imports a project-local annotated JavaScript file. The `.js` extension is kept.
 
 ### Resolution rules
@@ -16,7 +16,7 @@ Import paths resolve declaration surfaces, not file bytes. Each path family reac
 - `@./` resolves relative to the importing file.
 - `.bst`, `.bd` and `.md` source imports are extensionless.
 - Direct `.js` imports keep the `.js` extension.
-- Non-relative imports whose first segment matches a source-library prefix resolve from that library root.
+- Non-relative imports whose first segment matches a source-backed package prefix resolve from that package root.
 - Other non-relative imports resolve from the project's configured `entry_root`.
 - Core and builder runtime packages use their registered package path.
 - Specific symbol imports use grouped syntax. Direct symbol-path imports such as `import @core/math/sin` are rejected.
@@ -40,5 +40,5 @@ Beandown and plain Markdown content files are imported with the same extensionle
 
 - For grouped and namespace imports see @#grouped-and-namespace-imports (Grouped and namespace imports).
 - For visibility rules see @#module-visibility (Module visibility).
-- For source libraries see @#source-libraries (Source libraries).
-- For core, builder and external packages see @#core-builder-and-external-packages (Core, builder and external packages).
+- For project-local source-backed packages see @#project-local-packages (Project-local packages).
+- For package origin and backing see @#package-origins-and-backing (Package origins and backing).

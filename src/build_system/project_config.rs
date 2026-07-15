@@ -20,7 +20,7 @@ use std::path::Path;
 // -------------------------
 
 /// Focused frontend services passed into config parsing so `config.bst` can import from core and
-/// builder-provided libraries.
+/// Core or Builder packages.
 ///
 /// WHAT: bundles the style directives and the complete builder surface (external packages,
 /// source-backed packages, and config keys) that config parsing needs.

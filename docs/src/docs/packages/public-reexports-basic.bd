@@ -11,7 +11,7 @@ The export block can re-export imported symbols so other modules can use them.
     ;
 ]
 
-Other modules can now import `CardData` and `render_card` through the module's public surface.
+Other modules can now import `Card` and `render_card` through the module's public surface. `CardData` is not also exported unless the block lists it separately.
 
 ### Local alias is not public
 

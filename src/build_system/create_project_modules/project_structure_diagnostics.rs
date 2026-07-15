@@ -1,7 +1,7 @@
 //! Stage 0 project-structure diagnostic helpers.
 //!
 //! WHAT: builds typed config/project-structure diagnostics at the input-preparation boundary.
-//! WHY: resolver setup, library discovery, and module inventory all report the same
+//! WHY: resolver setup, package discovery, and module inventory all report the same
 //! `InvalidConfigReason` payloads, so the location and string-table rules belong in one small
 //! Stage 0 owner instead of being duplicated across those modules.
 

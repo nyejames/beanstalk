@@ -1,5 +1,32 @@
 # Agent implementation plan: package terminology, documentation corrections and monolith synchronisation
 
+## Current state
+
+ACTIVE_PLAN: `docs/roadmap/plans/package-terminology-docs-monolith-sync-plan.md`
+STATUS: complete
+CURRENT_SLICE: final audit accepted and complete
+LAST_ACCEPTED_COMMIT: completion checkpoint is the commit containing this state
+WORKTREE: `main` at `/Users/aneirinjames/projects/beanstalk/beanstalk`, package-plan diff only
+REQUIRED_RELOADS: startup files, this plan and current source/diff
+RELEVANT_CONTEXT_NOW:
+- docs: package, project-structure, Beandown, Markdown, language and compiler-design sources plus generated routes
+- code: binding/source package registries, build-system discovery, JS binding modules and focused tests
+ACCEPTANCE_CRITERIA:
+- all required audit findings are resolved
+- `just validate`, `just bench-check` and `git diff --check` passed after final corrections
+- completed roadmap entry removed after acceptance
+VALIDATION_STATE:
+- `cargo run --quiet -- build docs --release`: passed after repeat-audit corrections, 72 files
+- `cargo fmt --all --check`: passed
+- `git diff --check`: passed
+- `just validate`: passed after all corrections, including cross-target Clippy, 3,334 unit tests, 1,758 integration cases, docs checks and 28/28 benchmark cases
+- `just bench-check`: passed separately after all corrections, 28/28 cases
+DOCS_IMPACT: authorized by this plan and the user, including generated documentation and roadmap removal after final review
+BLOCKERS_OR_OPEN_DECISIONS: none
+DELEGATION_DECISION: codex-cli audit - independent first and repeated final audits completed
+NEXT_WORKER_ORDER: none
+STOP_REASON: active work source complete
+NEXT_RESUME_ACTION: none
 ## Objective
 
 Implement the accepted package terminology model across the compiler, project configuration,
@@ -36,148 +63,22 @@ The patch has four connected goals:
 
 ## Progress log
 
-### Completed (this session)
+### Completed
 
-- **Phase B (source-library rename):** All `SourceLibrary*` types, modules, functions, fields and diagnostics renamed to `SourcePackage*`. File moves: `source_libraries/` -> `source_packages/`, `source_library_discovery.rs` -> `source_package_discovery.rs`.
-- **Phase C (builder surface rename):** `src/libraries/` -> `src/builder_surface/` (files moved by prior session). `LibrarySet` -> `BuilderSurface`, `BackendBuilder::libraries()` -> `frontend_surface()`, `BuildBootstrap::libraries` -> `frontend_surface`. `library_set.rs` -> `builder_surface.rs`, `source_library_registry.rs` -> `source_package_registry.rs`, `core/` -> `core_packages/`. `external_packages` field -> `binding_packages`. `source_libraries` field -> `source_packages`. `libraries/html/` -> `packages/html/`.
-- **Phase E (package_folders):** `library_folders` config key -> `package_folders`. `has_explicit_library_folders` -> `has_explicit_package_folders`. All diagnostic types renamed (`UnsupportedLibraryFoldersValue` -> `UnsupportedPackageFoldersValue`, etc.). Added `ReplacedPackageFoldersKey` diagnostic for deprecated `library_folders` key. Added rejection test fixture.
-- **Phase F (diagnostics):** `ImportPublicSurfaceType::SourceLibrary` -> `SourcePackage`, `PublicExportSurfaceType::SourceLibrary` -> `SourcePackage`, `EscapesSourceLibraryRoot` -> `EscapesSourcePackageRoot`. Diagnostic render messages updated.
-- **Phase G (tests):** Test files renamed. New `rejects_legacy_library_folders_config_key` test added. Test path fixtures updated from `/libraries/` to `/packages/`.
-- **Validation:** `cargo check` passes. `cargo test --no-run` passes. `cargo test` passes with 3321 passed, 7 pre-existing TIR failures (unrelated to this work). `cargo fmt --all --check` passes.
-
-### Current blockers
-
-**TIR template composition failure (pre-existing, not caused by this plan):**
-
-The compiler has a `TirView::with_minimum_phase` error where template IR roots at phase `Parsed`
-do not satisfy minimum phase `Composed`. This affects:
-
-- `cargo run -- check docs` — docs-source checking fails because Beandown pages use templates
-- `cargo run -- build docs --release` — docs release build fails for the same reason
-- `just validate` — fails at the docs-check step
-- 7 unit tests and ~21 integration tests (all template/TIR related)
-
-The package terminology refactor does not touch template/TIR internals. These failures existed
-before this work and must be fixed by the TIR work stream before full validation can pass.
-
-**Workaround for documentation phases:** Documentation source edits (Phases 14-18) can proceed
-without running `bean check docs` or `bean build docs --release`. The source files can be edited
-directly and verified by inspection and focused probes. Generated docs under `docs/release/**`
-cannot be regenerated until the TIR blocker is resolved.
-
-### Remaining work (documentation phases, can proceed without docs build)
-
-The code refactor (Phases A-G) is complete. All remaining work is documentation and validation.
-
-**Phase 14: Focused documentation corrections**
-
-Edit the Beandown source files directly. Do not depend on `bean check docs` or `bean build docs`.
-
-1. Rename doc routes: `docs/src/docs/libraries/` -> `docs/src/docs/packages/` (files already
-   moved by prior session). Update every link, pager, navbar entry, generated route and codebase
-   index that references `/docs/libraries/`.
-2. Rename the page title: "Libraries and imports" -> "Packages and imports".
-3. Rename concepts: `source-libraries` -> `project-local-packages`,
-   `core-builder-and-external-packages` -> `package-origins-and-backing`.
-4. Fix public re-export alias docs in `docs/src/docs/packages/public-reexports.bd` and
-   `docs/src/docs/project-structure/public-api.bd`: remove the claim that `CardData as Card`
-   exposes both names. State the alias-wins rule.
-5. Fix cross-module example in `docs/src/docs/packages/module-visibility.bd` to use a real
-   package/module public surface.
-6. Fix helper file description in `docs/src/docs/project-structure/entry-runtime-and-fragments.bd`:
-   helper files do not own export blocks.
-7. Fix imported-root wording in `docs/src/docs/project-structure/module-roots.bd`: remove
-   "compiled only to validate" wording. Rename "Migrating facade-era projects" ->
-   "Migrating older module projects".
-8. Fix project-local package artifacts in `docs/src/docs/packages/project-local-packages.bd`:
-   source-backed package roots are imported, not active HTML routes.
-9. Replace old core/builder/external page with origin/backing explanation using the mapping table
-   from Section 1.6.
-10. Fix README: replace "@html is a core library" with "@html is the built-in, source-backed
-    Builder package for HTML projects."
-11. Fix Beandown `` link syntax in `docs/src/docs/beandown/implicit-markdown.bd`.
-12. Fix Beandown root example to use a neutral cosmetic filename.
-13. Complete Plain Markdown rendering contract in `docs/src/docs/markdown/`.
-14. Update `docs/src/docs/project-structure/project-config.bd` and
-    `project-config-basic.bd`: `library_folders` -> `package_folders`.
-15. Update `docs/src/docs/project-structure/project-layout.bd` and
-    `project-layout-basic.bd`: "source libraries" -> "source-backed packages".
-16. Update `docs/src/docs/getting-started/#page.bst`: `library_folders` -> `package_folders",
-    "source libraries" -> "source-backed packages".
-
-**Phase 15: Synchronise `docs/language-overview.md`**
-
-1. Replace all formal library terminology with package terminology.
-2. Add the origin/backing table and current package mapping.
-3. State that prelude is implicit-import policy.
-4. Update the bundled `@html` path from `libraries/html/` to `packages/html/`.
-5. Update route references to `/docs/packages/`.
-6. Apply all verified stale language fact corrections from Section 15.2 (comments, raw string
-   slices, explicit copies, function parameter defaults, fallible handling, error-only functions,
-   result scope, value-producing `if`, assertions, option equality/exhaustiveness, general
-   capture discrepancy, stored named inserts, map nesting, generics, type aliases, import cycles,
-   `` links).
-
-**Phase 16: Synchronise compiler-design docs**
-
-1. Update canonical split pages under `docs/src/docs/codebase/compiler-design/`:
-   - Rename route/concept: `imports-libraries-and-external-packages` -> `imports-packages-and-bindings`
-   - Replace `fn libraries(&self) -> LibrarySet` with `fn frontend_surface(&self) -> BuilderSurface`
-   - Show the final `BuilderSurface` struct
-   - Update all source-library references to source-backed package
-   - Update Stage 0 descriptions to use `package_folders` and `source_package_discovery.rs`
-2. Update `docs/compiler-design-overview.md` (legacy monolith mirror) after canonical pages are
-   correct. Update code-navigation paths, struct names, terminology, route links.
-
-**Phase 17: Update migration design plan**
-
-Edit `docs/roadmap/plans/docs-language-migration.md`:
-1. Replace absolute monolith edit prohibition with controlled-synchronisation policy.
-2. Update route terminology: "Libraries and Imports" -> "Packages and Imports",
-   `/docs/libraries/` -> `/docs/packages/`.
-3. Add package terminology lesson (origin/backing model, prelude policy).
-4. Mark monolith corrections from Section 15 as synchronised.
-
-**Phase 18: Progress matrix and generated docs**
-
-1. Update `docs/src/docs/progress/#page.bst` terminology (source packages, package prefixes,
-   package folders, binding-backed packages, builder surface).
-2. Regenerate all docs under `docs/release/**` — **BLOCKED by TIR failure**. Cannot run
-   `bean build docs --release` until TIR is fixed.
-3. After regeneration: confirm stale `/docs/libraries/` routes are removed and new
-   `/docs/packages/` routes exist.
-
-**Phase 19: Residual terminology audit**
-
-Code-side audit is complete. Remaining: run `rg` checks across `docs/` and `README.md` for
-residual `library`/`facade` references and justify or remove each.
-
-**Phase 20: Behaviour-preservation audit**
-
-Verify no import/module semantics changed. This refactor changed terminology and metadata only.
-Confirm: module root discovery, public export aliases, same-module visibility, imported-root
-suppression, API-only artifacts, package prefix resolution, prelude `io`, external call IDs,
-provider runtime assets, Beandown imports, plain Markdown imports, HTML builder package
-availability.
-
-**Phase 21: Full validation**
-
-Run `just validate` and `just bench-check`. **BLOCKED by TIR failure**. Can run partial
-validation:
-- `cargo fmt --all --check` — passes
-- `cargo test --quiet -- --format terse` — 3324 passed, 7 pre-existing TIR failures
-- `cargo run --quiet -- tests` — 98.8% pass, remaining failures all template/TIR
-- `cargo run --quiet -- check docs` — BLOCKED by TIR
-- `cargo run --quiet -- build docs --release` — BLOCKED by TIR
-- `just ci-clippy` — not yet run
-- `just bench-check` — not yet run
-
+- Phases A-G replaced formal source-library and builder-library identities with package, module, binding and prelude terminology across registries, diagnostics, backend owners and active fixtures.
+- Phases 14-18 corrected the package, project-structure, Beandown and Markdown pages, synchronized both maintained monoliths, updated migration policy and rebuilt generated documentation under package routes.
+- Phase 19 removed active formal library terminology. Exact `libraries` and `library_folders` spellings remain only in explicit legacy-key rejection paths. Generic Rust/software uses of library and narrow architectural facade types are not package-system categories.
+- Phase 20 preserved module roots, exports, imported-root suppression, artifact filtering, prefix resolution, prelude visibility, external IDs, runtime assets and content imports.
+- Phase 21 passed full validation and the non-recording benchmark gate after all audit corrections.
+- Final audit triage accepted the package metadata, registry ownership, diagnostics and focused coverage. Required raw-string teaching, locator, migration-ledger and plan-state drift was corrected. A direct compiler probe rejected the audit's proposed diagnostic change by confirming the existing `BST-SYNTAX-0007` contract.
+- Historical `facade` fixture IDs and tags remain stable test identities for pre-package module-surface regressions. They are not compiler concepts or user-facing terminology. Narrow architectural facades such as `AstTypeInterner`, the TIR builder and the Canvas browser bridge remain accurate local descriptions.
+- The previous TIR blocker is resolved and did not reproduce. Docs checking, release docs generation, unit tests, integration tests and benchmarks all pass.
 ### Phase A completed
 
 - Created `src/builder_surface/package_metadata.rs` with `PackageOrigin`, `PackageBacking`, `PackageMetadata`.
 - Replaced `ExternalPackageOrigin` on `ExternalPackage` with `PackageMetadata`.
-- Updated `register_package` to accept `PackageMetadata`.
-- Updated all registration calls: `ExternalPackageOrigin::Builtin` -> `PackageMetadata::binding(PackageOrigin::Core)`, `BuilderRuntime` -> `binding(PackageOrigin::Builder)`, `ProjectLocalJs` -> `binding(PackageOrigin::ProjectLocal)`.
+- Updated `ExternalPackageRegistry::register_package` to accept `PackageOrigin` and construct binding metadata internally.
+- Updated all binding registrations to pass their concrete Core, Builder or ProjectLocal origin.
 - Added `PackageMetadata` to `SourcePackageRoot` with `BeanstalkSource` backing.
 - Updated `register_filesystem_root` to accept `PackageOrigin`.
 - Removed `ExternalPackageOrigin` enum from `ids.rs`.
@@ -192,11 +93,11 @@ validation:
 
 ### Phase G completed
 
-- Test case directories renamed from `library` to `package` terminology.
+- Test case directories and manifest IDs renamed from `source_lib_*` to `source_package_*` terminology.
 - Manifest entries updated.
 - Test config fixtures updated from `library_folders` to `package_folders`.
 - Benchmark configs updated.
-- New unit tests: `source_registry_always_constructs_beanstalk_source_metadata`, `reserved_origins_are_representable_in_source_metadata`, `reserved_origins_are_representable_in_binding_metadata`, `rejects_legacy_library_folders_config_key`.
+- Added direct origin/backing mapping assertions, binding-registry invariants and distinct integration coverage for both legacy package-folder keys.
 
 ---
 
@@ -343,14 +244,14 @@ docs/roadmap/plans/docs-language-migration.md
 docs/roadmap/plans/hash-root-export-block-module-system-plan.md
 
 docs/src/docs/project-structure/**
-docs/src/docs/libraries/**
-docs/src/docs/libraries/core/**
+docs/src/docs/packages/**
+docs/src/docs/packages/core/**
 docs/src/docs/beandown/**
 docs/src/docs/markdown/**
 
 docs/src/docs/codebase/compiler-design/overview.bd
 docs/src/docs/codebase/compiler-design/build-system-and-frontend-boundary/**
-docs/src/docs/codebase/compiler-design/imports-libraries-and-external-packages/**
+docs/src/docs/codebase/compiler-design/imports-packages-and-bindings/**
 docs/src/docs/codebase/compiler-design/stages/project-structure/**
 docs/src/docs/codebase/compiler-design/stages/header-parsing/**
 docs/src/docs/codebase/compiler-design/stages/dependency-sorting/**
@@ -366,8 +267,8 @@ docs/src/docs/progress/#page.bst
 Read implementation owners:
 
 ```text
-src/libraries/
-src/compiler_frontend/source_libraries/
+src/builder_surface/
+src/compiler_frontend/source_packages/
 src/compiler_frontend/external_packages/
 src/compiler_frontend/headers/public_exports.rs
 src/compiler_frontend/headers/import_environment/
@@ -377,18 +278,18 @@ src/build_system/create_project_modules/
 src/build_system/project_config/
 src/projects/settings.rs
 src/projects/html_project/
-libraries/html/
+packages/html/
 ```
 
 Read focused tests and integration fixtures for:
 
 ```text
-source library
+source-backed package
 external package
 builder package
 project-local JavaScript import
 prelude
-library_folders
+package_folders and legacy package-folder keys
 source/public prefix collision
 grouped re-export alias
 module public surface
@@ -768,7 +669,7 @@ PackageBacking::ExternalBinding
 This includes:
 
 ```text
-@core/prelude policy target packages
+@core/collections
 @core/io
 @core/math
 @core/text
@@ -776,7 +677,7 @@ This includes:
 @core/time
 ```
 
-Do not register the prelude itself as a `PackageOrigin`.
+Do not register the prelude itself as a package or assign it a `PackageOrigin`.
 
 ## 10.2 Builder packages
 

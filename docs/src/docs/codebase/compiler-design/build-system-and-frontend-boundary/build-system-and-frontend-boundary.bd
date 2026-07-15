@@ -28,7 +28,7 @@ They declare the build surface the frontend is allowed to see.
 
         fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
-        fn libraries(&self) -> LibrarySet;
+        fn frontend_surface(&self) -> BuilderSurface;
     }
 
     pub struct ProjectBuilder {
@@ -38,8 +38,8 @@ They declare the build surface the frontend is allowed to see.
 
 A backend builder declares these frontend-visible surfaces:
 
-- source libraries
-- external packages
+- source-backed packages
+- binding-backed packages
 - config keys
 - style directives
 - external import providers
@@ -50,15 +50,15 @@ It receives a validated `Config`, may validate backend-owned config keys and low
 The frontend doesn't know the final project layout.
 The backend doesn't know how raw source files were discovered.
 
-## LibrarySet
+## BuilderSurface
 
-`LibrarySet` is the build surface exposed to the frontend.
+`BuilderSurface` is the build surface exposed to the frontend.
 It carries typed registries, not loose callbacks or strings.
 
 [codeblock, $code("rust"):
-    pub struct LibrarySet {
-        pub external_packages: ExternalPackageRegistry,
-        pub source_libraries: SourceLibraryRegistry,
+    pub struct BuilderSurface {
+        pub binding_packages: ExternalPackageRegistry,
+        pub source_packages: SourcePackageRegistry,
         pub config_keys: ProjectConfigKeyRegistry,
         pub external_import_providers: ExternalImportProviderRegistry,
         pub external_import_cache: ExternalImportProviderCache,
@@ -70,6 +70,8 @@ It carries typed registries, not loose callbacks or strings.
 
 `ProjectConfigKeyRegistry` is declarative Stage 0 metadata.
 It lists allowed core and backend-owned keys plus value shapes so `config.bst` can reject unknown declarations, shape-invalid folded values and closed-domain string values before core fields are applied or backend settings are stored.
+
+Source and binding registries stay separate because their resolution paths differ. Both carry shared `PackageMetadata`, whose independent `PackageOrigin` and `PackageBacking` axes let the frontend classify packages without conflating ownership with implementation. Config keys, providers and supported source kinds are builder surface too. Binding-specific lowering metadata remains with the binding and provider owners.
 
 ## Config compilation
 
@@ -87,7 +89,7 @@ Imported constants and support types may participate in config expressions, but 
 
 Config may contain these support declarations:
 
-- imports from core or builder libraries
+- imports from Core or Builder packages
 - type aliases
 - structs
 - choices
@@ -133,7 +135,7 @@ Parallel provider-backed discovery needs deterministic provider deltas and ID re
 ## Builder-runtime packages
 
 Builder-runtime package metadata covers builder-owned virtual packages such as `@web/canvas`.
-These packages are registered directly in `external_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
+These packages are registered directly in `binding_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
 
 This lets builder-owned packages share the same runtime asset and glue path as provider-created imports without pretending they were project-local source files.
 
@@ -161,5 +163,5 @@ This compiler is built for hot-reload development, so slow project-wide cleverne
 
 - @../stages/project-structure (Stage 0: Project structure): where Stage 0 applies this contract
 - @../stages/ast-construction (Stage 4: AST construction): where config compilation stops
-- @../imports-libraries-and-external-packages (Imports, libraries and external packages): source libraries, external packages and provider imports
+- @../imports-packages-and-bindings (Imports, packages and bindings): source-backed packages, binding-backed packages and provider imports
 - @../diagnostics-paths-and-symbols (Diagnostics, paths and symbols): `CompilerDiagnostic`/`CompilerError` lanes

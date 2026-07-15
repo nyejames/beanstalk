@@ -184,7 +184,7 @@ fn directory_scope_watches_js_files_under_entry_root() {
 
 #[test]
 fn directory_scope_watches_js_files_under_package_folders() {
-    let root = temp_dir("watch_js_library");
+    let root = temp_dir("watch_js_package");
     let output_dir = root.join("dev");
     fs::create_dir_all(root.join("src")).expect("should create src dir");
     fs::create_dir_all(root.join("lib/vendor")).expect("should create lib dir");

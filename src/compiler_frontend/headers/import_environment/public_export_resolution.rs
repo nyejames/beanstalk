@@ -1,6 +1,6 @@
 //! Header-stage public export boundary resolution.
 //!
-//! WHAT: resolves cross-library and cross-module-root imports through the target module's public
+//! WHAT: resolves cross-package and cross-module-root imports through the target module's public
 //! export maps.
 //! WHY: source-backed package modules and regular module roots expose symbols only through their
 //! prepared root files; external importers cannot bypass those public surfaces.
@@ -72,7 +72,7 @@ pub(crate) struct PublicExportResolutionInput<'a> {
 pub(crate) fn resolve_public_export_boundary(
     input: &PublicExportResolutionInput<'_>,
 ) -> Option<PublicExportLookupResult> {
-    // Try cross-library public export resolution first.
+    // Try cross-package public export resolution first.
     if let Some(result) = try_resolve_package_public_export(input) {
         return Some(result);
     }
@@ -81,10 +81,10 @@ pub(crate) fn resolve_public_export_boundary(
     try_resolve_module_root_public_export(input)
 }
 
-/// Cross-library public export lookup.
+/// Cross-package public export lookup.
 ///
 /// WHAT: when an import path starts with a package prefix and the importer is outside that
-/// library, the symbol must be exported by the module's root-file public surface.
+/// package, the symbol must be exported by the module's root-file public surface.
 fn try_resolve_package_public_export(
     input: &PublicExportResolutionInput<'_>,
 ) -> Option<PublicExportLookupResult> {
@@ -99,7 +99,7 @@ fn try_resolve_package_public_export(
         .keys()
         .find(|p| *p == first)?;
 
-    // Internal imports within the same library use normal file-based resolution.
+    // Internal imports within the same package use normal file-based resolution.
     let importer_package = input.file_package_membership.get(input.importer_file);
     if importer_package.map(|s| s.as_str()) == Some(package_prefix) {
         return Some(PublicExportLookupResult::NotAPublicExportBoundary);
@@ -273,7 +273,7 @@ pub(crate) struct SourcePackageBoundaryCheckInput<'a> {
 /// Enforces source-backed package public-surface privacy for concrete source-file imports.
 ///
 /// WHAT: after normal source resolution reaches a file inside a source-backed package, an importer
-/// outside that library may only import the library's prepared root file. Grouped public symbol
+/// outside that package may only import the package's prepared root file. Grouped public symbol
 /// imports should already have resolved through `resolve_public_export_boundary`.
 pub(crate) fn check_source_package_boundary(
     input: SourcePackageBoundaryCheckInput<'_>,

@@ -54,7 +54,7 @@ page_head #= codebase_theme_head
     Projects and imported content:
 
     - @../../project-structure (Project structure)
-    - @../../libraries (Libraries and imports)
+    - @../../packages (Packages and imports)
     - @../../beandown (Beandown)
     - @../../markdown (Plain Markdown)
 

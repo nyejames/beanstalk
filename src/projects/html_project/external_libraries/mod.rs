@@ -1,8 +1,0 @@
-//! HTML project builder-owned external JS libraries.
-//!
-//! WHAT: houses built-in JS-backed packages such as `@web/canvas` that the HTML builder
-//!       registers directly as virtual packages with runtime asset metadata.
-//! WHY: builder-owned JS libraries share the same parser and emission path as project-local
-//!      `.js` imports, but their package paths and registration are controlled by Rust code.
-
-pub mod web;

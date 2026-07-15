@@ -1,5 +1,5 @@
 -- Basic HTML components and utility formatters for HTML project builds.
--- Provided by the HTML project builder as a builder source library.
+-- Provided by the HTML project builder as a source-backed Builder package.
 import @web/canvas {
     Canvas2d,
     get_canvas as raw_get_canvas,

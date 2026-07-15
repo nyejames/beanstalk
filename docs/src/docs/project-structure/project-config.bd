@@ -7,7 +7,7 @@
     entry_root #= "src"
     dev_folder #= "dev"
     output_folder #= "release"
-    library_folders #= {
+    package_folders #= {
         "lib",
     }
     template_const_loop_iteration_limit #= 10_000
@@ -18,7 +18,7 @@
 - Only known top-level `#` constants are accepted as config entries.
 - Unknown keys are rejected with `BST-CONFIG-0001`.
 - Values must fold at compile time.
-- Config-key constants may reference earlier config keys or constants imported from core or builder source libraries.
+- Config-key constants may reference earlier config keys or constants imported from Core or Builder source-backed packages.
 - Config values fully fold before source-tree discovery begins.
 
 ### Key value shapes
@@ -26,7 +26,7 @@
 - String settings accept string literals and folded templates.
 - `project` currently accepts only `"html"`.
 - Boolean HTML settings such as `redirect_index_html` require folded `Bool`, not strings.
-- `library_folders` accepts one string or a collection of strings.
+- `package_folders` accepts one string or a collection of strings.
 - `template_const_loop_iteration_limit` requires a positive folded `Int` no greater than `1_000_000`. The default is `10_000`.
 
 ### Support declarations
@@ -59,7 +59,7 @@ A separate helper constant such as `defaults #= Defaults("src")` is rejected bec
 ### Important settings
 
 - `entry_root`: the source folder searched for module roots. Usually `"src"`.
-- `library_folders`: configures source-library scan roots. Each direct child directory becomes an import prefix. `/lib` is the default when omitted.
+- `package_folders`: configures project-local source-backed package scan roots. Each direct child directory becomes a package prefix. `/lib` is the default when omitted.
 - `dev_folder`: where development builds are written.
 - `output_folder`: where release builds are written.
 - `template_const_loop_iteration_limit`: per-loop compile-time template expansion guard.
@@ -70,9 +70,9 @@ Settings such as `origin`, `html_lang`, `html_title_postfix`, `page_url_style` a
 
 ### Config is loaded before module discovery
 
-`entry_root` and `library_folders` shape how the project is searched and how imports resolve. Config is parsed and validated before Stage 0 source-tree indexing begins.
+`entry_root` and `package_folders` shape how the project is searched and how imports resolve. Config is parsed and validated before Stage 0 source-tree indexing begins.
 
 ### Related concepts
 
 - For the source tree layout see @#project-layout (Project layout).
-- For source-library discovery see @../libraries/#source-libraries (Source libraries).
+- For package discovery see @../packages/#project-local-packages (Project-local packages).

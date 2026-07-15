@@ -15,11 +15,11 @@ or state it explicitly.
 - Whole-number literals are naturally `Int`.
 - Decimal-point literals are naturally `Float`.
 - Single-quoted literals create `Char` values.
-- Quoted slices, raw slices and string templates use the `String` type.
+- Quoted slices and string templates use the `String` type.
 - `none` requires an optional `T?` receiving context.
 
 The Numbers documentation owns exact numeric grammar and arithmetic behaviour.
-The Strings and characters section owns the three string source forms.
+The Strings and characters section owns the implemented string source forms.
 Options are documented with Errors and options.
 
 ### Composite values

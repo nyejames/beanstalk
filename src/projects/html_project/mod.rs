@@ -5,12 +5,12 @@
 //! pipeline.
 
 pub(crate) mod beandown;
+pub(crate) mod binding_packages;
 pub(crate) mod compile_input;
 pub(crate) mod diagnostics;
 pub(crate) mod document_config;
 pub(crate) mod document_shell;
 pub(crate) mod external_js;
-pub(crate) mod external_libraries;
 pub mod html_project_builder;
 pub(crate) mod js_path;
 pub mod new_html_project;

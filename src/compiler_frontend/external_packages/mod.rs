@@ -41,7 +41,7 @@ pub use symbol_path::*;
 /// populated `ExternalPackageRegistry`.
 /// WHY: the registry constructor should read like orchestration, not like a data dump.
 /// Keeping package definitions in `src/builder_surface/core_packages/` prevents the constructor from
-/// growing into an unmaintainable wall of struct literals and separates library
+/// growing into an unmaintainable wall of struct literals and separates package
 /// identity from registry mechanics.
 pub fn build_builtin_registry() -> ExternalPackageRegistry {
     let mut registry = ExternalPackageRegistry::default();

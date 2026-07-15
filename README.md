@@ -32,7 +32,7 @@ Web development is the current focus with the home-grown HTML project builder.
 
 ![Beanstalk code example 1](./docs/assets/code-snippet-2.webp)
 
-`@html` is a core library that gets you started with writing and generating HTML.
+`@html` is the built-in, source-backed Builder package for HTML projects.
 
 The HTML build system will generate an HTML page from this code:
 

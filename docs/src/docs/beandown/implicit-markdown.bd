@@ -5,7 +5,7 @@ Beandown uses Beanstalk's `$md` Markdown flavour. This is intentionally smaller 
 - Headings: `#`, `##`, `###` and deeper
 - Paragraphs: separated by blank lines
 - Emphasis: `*italic*` and `**bold**`
-- Links: standard Markdown link syntax
+- Beanstalk-aware links: `@path (label)`
 - Unordered lists: `- item`
 - Ordered lists: `1. item`
 - Inline code: paired isolated single backticks on the same line
@@ -23,6 +23,10 @@ Beandown escapes HTML characters in Markdown text. Raw HTML tags such as `<div>`
 ### Backticks are inline-code delimiters
 
 In `$md`, backticks delimit inline code, not raw strings. Empty spans, repeated backtick runs, unmatched backticks, multiline spans, variable-length delimiters and fenced code blocks are not part of the `$md` flavour.
+
+### Links use Beanstalk-aware syntax
+
+Use `@/docs/packages (Packages)` for internal routes or `@https://example.com (Example)` for external links. Ordinary ["[label](path)"] Markdown links belong to Plain Markdown and aren't parsed as links by Beandown's `$md` formatter.
 
 ### `--` is content
 

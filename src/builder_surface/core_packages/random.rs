@@ -15,12 +15,7 @@ use crate::compiler_frontend::external_packages::{
 
 pub fn register_core_random_package(registry: &mut ExternalPackageRegistry) {
     let package_id = registry
-        .register_package(
-            "@core/random",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Core,
-            ),
-        )
+        .register_package("@core/random", crate::builder_surface::PackageOrigin::Core)
         .expect("builtin package registration should not collide");
 
     registry

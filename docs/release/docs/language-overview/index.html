@@ -813,7 +813,7 @@ body {
     <span class='bst-code-struct'>UserProfile</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         display_name <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings/#shadowing">Values and bindings</a>. Import aliases and module API names have additional collision rules in the Libraries documentation.</p>
+    </code></pre><h3>Name collisions</h3><p>A visible name cannot be redeclared while it remains in scope.</p><p>The complete no-shadowing contract is documented by <a href="../bindings/#shadowing">Values and bindings</a>. Import aliases and module API names have additional collision rules in the Packages documentation.</p>
     </div>
     </fieldset></section>
     <section class="container"><fieldset class="doc-level">
@@ -885,7 +885,7 @@ body {
     ratio <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.5</span>
     letter <span class='bst-code-struct'>Char</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
     label <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
-    </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices, raw slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the three string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
+    </code></pre><h3>Core forms</h3><ul><li><code>true</code> and <code>false</code> are <code>Bool</code> values.</li><li>Whole-number literals are naturally <code>Int</code>.</li><li>Decimal-point literals are naturally <code>Float</code>.</li><li>Single-quoted literals create <code>Char</code> values.</li><li>Quoted slices and string templates use the <code>String</code> type.</li><li><code>none</code> requires an optional <code>T?</code> receiving context.</li></ul><p>The Numbers documentation owns exact numeric grammar and arithmetic behaviour. The Strings and characters section owns the implemented string source forms. Options are documented with Errors and options.</p><h3>Composite values</h3><p>Collections use braces. String templates use square brackets.</p><pre style=""><code class='codeblock'>
     names <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>}</span>
 
     message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
@@ -945,8 +945,8 @@ body {
 
             <p>Use double quotes for normal text:</p><pre style=""><code class='codeblock'>
     greeting <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello&quot;</span>
-    </code></pre><p>Use backticks when the text should stay raw:</p><pre style=""><code class='codeblock'>
-    windows_path <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
+    </code></pre><p>Expression-position backtick strings aren&#39;t implemented. Use an ordinary string with escapes when the text contains backslashes:</p><pre style=""><code class='codeblock'>
+    windows_path <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;C:\\docs\\site&quot;</span>
     </code></pre><p>Use single quotes for one character:</p><pre style=""><code class='codeblock'>
     seedling <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
     </code></pre><p>Use a template when text needs values or a larger structure:</p><pre style=""><code class='codeblock'>
@@ -959,16 +959,15 @@ body {
     </div>
 
     <div class="doc-level__panel doc-level__panel--advanced">
-        <p>Beanstalk has three main string source forms and one character form.</p><pre style=""><code class='codeblock'>
+        <p>Beanstalk has two string source forms and one character form.</p><pre style=""><code class='codeblock'>
     escaped_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello\nworld&quot;</span>
-    raw_slice <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span><span class='bst-code-struct'>C</span><span class='bst-code-operator'>:</span>\docs\site<span class='bst-code-operator'>`</span>
     letter <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;🌱&#39;</span>
 
     name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
     message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello,</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><h3>Quoted string slices</h3><p>Double quotes create escaped string slices. Escape sequences are interpreted by the string literal parser.</p><h3>Raw string slices</h3><p>Backticks create raw string slices in expression position. Their text is kept without normal quoted-string escaping.</p><p>Inside a template body, backticks are ordinary body text available to the active formatter.</p><h3>Characters</h3><p>Single quotes create <code>Char</code> values.</p><h3>String templates</h3><p>Square brackets create string templates. Templates produce owned strings and may fold at compile time or lower to runtime string construction.</p><p>Templates own interpolation, formatting, slots, wrappers and structured content. See <a href="../templates">Templates</a> for the complete system.</p><p>Quoted slices, raw slices and templates all participate in the language&#39;s <code>String</code> surface. Their storage and folding behaviour differs, but they do not create three unrelated source-level string types.</p>
+    </code></pre><h3>Quoted string slices</h3><p>Double quotes create escaped string slices. Escape sequences are interpreted by the string literal parser.</p><h3>Characters</h3><p>Single quotes create <code>Char</code> values.</p><h3>String templates</h3><p>Square brackets create string templates. Templates produce owned strings and may fold at compile time or lower to runtime string construction.</p><p>Templates own interpolation, formatting, slots, wrappers and structured content. See <a href="../templates">Templates</a> for the complete system.</p><p>Quoted slices and templates both participate in the language&#39;s <code>String</code> surface. Expression-position raw backtick slices aren&#39;t implemented. Inside a template body, backticks are ordinary body text available to the active formatter.</p>
     </div>
     </fieldset></section>
     <section class="container"><nav class="doc-pager" aria-label="Language documentation">

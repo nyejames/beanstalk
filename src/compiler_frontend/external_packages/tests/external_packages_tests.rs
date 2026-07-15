@@ -240,20 +240,10 @@ fn package_path_to_id_index_is_consistent() {
 fn package_prefix_lookup_returns_longest_registered_package() {
     let mut registry = ExternalPackageRegistry::new();
     registry
-        .register_package(
-            "@test",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test", crate::builder_surface::PackageOrigin::Builder)
         .expect("parent test package should register");
     let child_id = registry
-        .register_package(
-            "@test/pkg",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/pkg", crate::builder_surface::PackageOrigin::Builder)
         .expect("child test package should register");
 
     let mut string_table = StringTable::new();
@@ -313,12 +303,7 @@ fn empty_void_function(name: &str) -> ExternalFunctionDef {
 fn register_function_at_path_rejects_duplicate_path() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     registry
@@ -347,12 +332,7 @@ fn register_function_at_path_rejects_duplicate_path() {
 fn same_function_leaf_under_different_namespaces_allowed() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     registry
@@ -398,12 +378,7 @@ fn same_function_leaf_under_different_namespaces_allowed() {
 fn function_type_collision_at_same_path_rejected() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     registry
@@ -436,12 +411,7 @@ fn function_type_collision_at_same_path_rejected() {
 fn function_constant_collision_at_same_path_rejected() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     registry
@@ -474,12 +444,7 @@ fn function_constant_collision_at_same_path_rejected() {
 fn nested_function_path_registers_and_resolves() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     let path = ExternalSymbolPath::from_components(vec![
@@ -527,12 +492,7 @@ fn one_component_external_imports_still_resolve_by_path() {
 fn package_surface_iteration_exposes_one_component_paths_only() {
     let mut registry = ExternalPackageRegistry::new();
     let package_id = registry
-        .register_package(
-            "@test/path",
-            crate::builder_surface::PackageMetadata::binding(
-                crate::builder_surface::PackageOrigin::Builder,
-            ),
-        )
+        .register_package("@test/path", crate::builder_surface::PackageOrigin::Builder)
         .expect("test package registration should not collide");
 
     registry
@@ -998,4 +958,39 @@ fn core_io_input_last_key_pressed_returns_optional_string() {
         )))
     );
     assert!(last_key.error_return_type.is_none());
+}
+
+/// Verifies that every package registered through `register_package` always carries
+/// `PackageBacking::ExternalBinding` and preserves the supplied origin.
+///
+/// WHAT: the `ExternalPackageRegistry` API only accepts `PackageOrigin`, constructing
+///       `PackageMetadata::binding(origin)` internally so a `BeanstalkSource`-backed
+///       package is unrepresentable through this API.
+/// WHY: protects the boundary between source-backed packages (owned by
+///      `SourcePackageRegistry`) and binding-backed packages (owned here).
+#[test]
+fn register_package_always_produces_binding_backed_metadata() {
+    let mut registry = ExternalPackageRegistry::new();
+
+    let id = registry
+        .register_package(
+            "@test/binding-only",
+            crate::builder_surface::PackageOrigin::Builder,
+        )
+        .expect("test package should register");
+
+    let package = registry
+        .get_package_by_id(id)
+        .expect("registered package should be retrievable by ID");
+
+    assert_eq!(
+        package.metadata.backing,
+        crate::builder_surface::package_metadata::PackageBacking::ExternalBinding,
+        "register_package must always produce ExternalBinding backing"
+    );
+    assert_eq!(
+        package.metadata.origin,
+        crate::builder_surface::PackageOrigin::Builder,
+        "register_package must preserve the supplied origin"
+    );
 }

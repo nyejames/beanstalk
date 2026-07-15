@@ -76,7 +76,7 @@ fn is_authored_public_export(header: &Header) -> bool {
         && is_authored_public_export_declaration(&header.kind)
 }
 
-/// Build public export maps and file library/module membership from parsed headers and the path
+/// Build public export maps and file package/module membership from parsed headers and the path
 /// resolver.
 pub(super) fn build_public_exports(
     module_symbols: &mut ModuleSymbols,

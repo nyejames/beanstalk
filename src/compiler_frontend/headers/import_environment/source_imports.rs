@@ -79,8 +79,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
     /// Whether the importer and the target of an import are in the same module or source-backed package.
     ///
-    /// WHAT: same-module and same-library imports see all authored declarations by default;
-    /// cross-module/cross-library imports must go through public surfaces.
+    /// WHAT: same-module and same-package imports see all authored declarations by default;
+    /// cross-module/cross-package imports must go through public surfaces.
     /// WHY: boundary membership, rather than declaration flags, is the gate for same-module
     /// visibility.
     pub(super) fn is_internal_import(

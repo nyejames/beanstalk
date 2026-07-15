@@ -116,4 +116,4 @@ Common mistakes:
 - @../ (AST internals): AST phase owners and input/output boundary
 - @../../stages/ast-construction (Stage 4: AST construction): where environment construction lives
 - @../../type-identity-and-coercion (Type identity and coercion): `TypeId`, `DataType` and coercion boundaries
-- @../../imports-libraries-and-external-packages (Imports, libraries and external packages): `ScopeContext` visibility and module-boundary rules
+- @../../imports-packages-and-bindings (Imports, packages and bindings): `ScopeContext` visibility and module-boundary rules

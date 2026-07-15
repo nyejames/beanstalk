@@ -72,4 +72,4 @@ A `.bd` file's `content` is subject to the same module visibility rules as other
 
 - For Beandown file structure see @#beandown-files (Beandown files).
 - For scope rules see @#template-scope (Template scope).
-- For visibility rules see @../libraries/#module-visibility (Module visibility).
+- For visibility rules see @../packages/#module-visibility (Module visibility).

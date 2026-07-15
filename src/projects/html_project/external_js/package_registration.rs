@@ -1,6 +1,6 @@
-//! Shared helper for registering parsed JS library symbols in `ExternalPackageRegistry`.
+//! Shared helper for registering parsed JS module symbols in `ExternalPackageRegistry`.
 //!
-//! WHAT: converts `ParsedJsLibrary` into registry entries, used by both the JS external import
+//! WHAT: converts `ParsedJsModule` into registry entries, used by both the JS external import
 //!       provider and built-in package registration.
 //! WHY: avoids duplicating the conversion logic between project-local `.js` imports and
 //!      builder-owned packages such as `@web/canvas`.
@@ -12,33 +12,33 @@ use crate::compiler_frontend::external_packages::{
     ExternalJsLowering, ExternalPackageId, ExternalPackageRegistry, ExternalParameter,
     ExternalReturnSlot, ExternalSignatureType, ExternalTypeSpec,
 };
-use crate::projects::html_project::external_js::parser::parsed_js_library::{
-    ParsedJsFunction, ParsedJsLibrary, ParsedSignature,
+use crate::projects::html_project::external_js::parser::parsed_js_module::{
+    ParsedJsFunction, ParsedJsModule, ParsedSignature,
 };
 use std::collections::HashMap;
 
-/// Result of registering a parsed JS library in the external package registry.
+/// Result of registering a parsed JS module in the external package registry.
 ///
 /// WHAT: carries the assigned IDs produced from parsed JS annotations.
 /// WHY: the caller (provider or built-in registration) still owns package path, origin,
 ///      and runtime asset metadata.
-pub struct RegisteredJsLibrary {
+pub struct RegisteredJsModule {
     pub exported_types: Vec<crate::compiler_frontend::external_packages::ExternalTypeId>,
     pub exported_free_functions:
         Vec<crate::compiler_frontend::external_packages::ExternalFunctionId>,
 }
 
-/// Registers parsed JS library symbols into the external package registry.
+/// Registers parsed JS module symbols into the external package registry.
 ///
 /// WHAT: converts parsed opaque types and free functions into registry entries with
 ///       `ExternalModuleExport` JS lowerings.
 /// WHY: shared between the JS external import provider and built-in package registration,
 ///      while keeping external packages on one free-function-only surface.
-pub fn register_parsed_js_library(
+pub fn register_parsed_js_module(
     package_id: ExternalPackageId,
-    parsed: &ParsedJsLibrary,
+    parsed: &ParsedJsModule,
     registry: &mut ExternalPackageRegistry,
-) -> Result<RegisteredJsLibrary, CompilerError> {
+) -> Result<RegisteredJsModule, CompilerError> {
     let mut type_id_by_opaque_name: HashMap<
         String,
         crate::compiler_frontend::external_packages::ExternalTypeId,
@@ -72,7 +72,7 @@ pub fn register_parsed_js_library(
         exported_free_functions.push(function_id);
     }
 
-    Ok(RegisteredJsLibrary {
+    Ok(RegisteredJsModule {
         exported_types,
         exported_free_functions,
     })
@@ -82,9 +82,7 @@ pub fn register_parsed_js_library(
 ///
 /// WHAT: preserves the actual registered runtime modules imported by the JS source.
 /// WHY: runtime module emission must follow authored JS imports, not inferred fallibility.
-pub fn required_runtime_imports_from_parsed(
-    parsed: &ParsedJsLibrary,
-) -> Vec<RequiredRuntimeImport> {
+pub fn required_runtime_imports_from_parsed(parsed: &ParsedJsModule) -> Vec<RequiredRuntimeImport> {
     parsed
         .runtime_imports
         .iter()

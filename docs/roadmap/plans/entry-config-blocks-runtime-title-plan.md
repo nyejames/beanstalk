@@ -38,8 +38,8 @@ RELEVANT_CODE:
 - Post-prerequisite module-root header parser: must recognize and isolate one active-root `config:` block without emitting it into normal module declarations or `start`
 - Post-prerequisite active/imported root-role model: must apply entry config only for the active module root and suppress it when the same root is imported for public API validation
 - Current or post-prerequisite config compilation owner, likely under `src/build_system/project_config/**`: must become the single parser and validator used by `config.bst` and embedded entry config
-- Current or post-prerequisite config-key registry, currently `src/libraries/config_key_registry.rs`: must become one scoped registry instead of parallel project and entry registries
-- `src/libraries/library_set.rs` or its post-prerequisite equivalent: builder-declared config key surface
+- Current config-key registry at `src/builder_surface/config_key_registry.rs`: must become one scoped registry instead of parallel project and entry registries
+- `src/builder_surface/definition.rs`: builder-declared config key surface
 - Module frontend orchestration and backend handoff, currently `src/build_system/create_project_modules/frontend_orchestration.rs` and `src/build_system/build.rs::Module`: carry resolved entry config outside HIR
 - HTML page metadata resolution, currently `src/projects/html_project/page_metadata.rs`: replace reserved HIR constant scanning with resolved entry config consumption
 - Shared HTML document shell and JS/Wasm artifact paths: preserve identical initial metadata behavior across HTML-JS and HTML-Wasm
@@ -97,7 +97,7 @@ BLOCKERS / RISKS:
 - The New Module and Export System plan is a hard prerequisite. Do not start implementation while its root roles, `config.bst` migration, export block or module handoff remain incomplete
 - The `#Import` values and anonymous records plan may later extend config parsing. This plan must leave one reusable config compiler and registry for it rather than a conflicting abstraction
 - Current HTML pages often derive `page_head` from surrounding imports. Isolation means those imports must move inside the block and must satisfy the same import policy as `config.bst`
-- If current documentation metadata depends on project-local or relative imports that canonical `config.bst` rejects, do not silently broaden only the entry block. Move the dependency to an allowed core/builder source library or obtain a separate design decision to change both config surfaces together
+- If current documentation metadata depends on project-local or relative imports that canonical `config.bst` rejects, do not silently broaden only the entry block. Move the dependency to an allowed core/builder source-backed package or obtain a separate design decision to change both config surfaces together
 - Captured block tokens and resolved entry config locations must survive worker-local string-table merge/remap correctly
 - Imported module roots may contain their own `config:` block. It must be ignored by the importer without suppressing it when that module is compiled as the active root
 - Entry config must not accidentally create normal module symbols, exports, HIR constants or runtime statements
@@ -118,7 +118,7 @@ DOCS_IMPACT:
   - `docs/compiler-design-overview.md`
   - `docs/src/docs/project-structure/#page.bst`
   - HTML page/document metadata documentation
-  - `docs/src/docs/libraries/core/io/#page.bst`
+  - `docs/src/docs/packages/core/io/#page.bst`
   - generated HTML project scaffolding
   - `README.md`
   - docs source pages using legacy `page_*` constants
@@ -477,7 +477,7 @@ config:
 ;
 ```
 
-Scope the migration diagnostic narrowly enough that ordinary constants with these names in unrelated library files do not become globally reserved without reason.
+Scope the migration diagnostic narrowly enough that ordinary constants with these names in unrelated package files do not become globally reserved without reason.
 
 After migration:
 
@@ -755,7 +755,7 @@ The first code slice creates one declarative key registry for project and entry 
 - [ ] Reject conflicting duplicate registrations as an internal registry construction error
 - [ ] Decide and document whether identical duplicate registration is rejected or deduplicated
   - [ ] recommended: reject it as a builder/compiler invariant
-- [ ] Update `LibrarySet` or its accepted successor to expose the generalized registry
+- [ ] Update `BuilderSurface` or its accepted successor to expose the generalized registry
 - [ ] Update project config callers to request `Project` scope
 - [ ] Keep every current project key project-only unless a separate semantic reason exists
 - [ ] Add focused registry tests:
@@ -774,7 +774,7 @@ The first code slice creates one declarative key registry for project and entry 
 - [ ] Run `just validate`
 - [ ] Manual stage-boundary review:
   - [ ] registry remains declarative metadata
-  - [ ] no parser logic moved into `LibrarySet`
+  - [ ] no parser logic moved into `BuilderSurface`
   - [ ] user-facing scope failures still use `CompilerDiagnostic`
 - [ ] Style review:
   - [ ] descriptive names
@@ -805,7 +805,7 @@ Current project config validation commonly mixes generic value extraction with g
 - [ ] Extract shared compile-time-constant validation
 - [ ] Extract shared shape validation
 - [ ] Extract shared scope-aware key validation
-- [ ] Keep path-specific project validations, such as library folder rules, in the project config consumer
+- [ ] Keep path-specific project validations, such as package folder rules, in the project config consumer
 - [ ] Keep application to typed `Config` fields and project settings in the project config consumer
 - [ ] Replace project-specific prose in shared file/module docs
 - [ ] Use a named input/context struct for shared validation rather than a long parameter list
@@ -947,7 +947,7 @@ This phase connects the captured block to the shared config compiler. It proves 
 - [ ] Invoke the Phase 3 shared config compiler with:
   - [ ] `Entry` scope
   - [ ] the same config import policy as `config.bst`
-  - [ ] merged builder/core libraries and external packages
+  - [ ] merged source-backed and binding-backed packages
   - [ ] current style directives
   - [ ] current template const loop limit
   - [ ] original root source location
@@ -1119,7 +1119,7 @@ The old page metadata spellings must be removed across real Beanstalk sources. T
 - [ ] Move required imports inside each isolated block
 - [ ] Keep outer imports only when normal module code also needs them
 - [ ] Resolve import-policy blockers discovered in Phase 0:
-  - [ ] move shared metadata constants into an allowed core/builder config support library
+  - [ ] move shared metadata constants into an allowed Core or Builder config support package
   - [ ] or inline/compose folded values
   - [ ] do not broaden entry-only import policy
 - [ ] Update generated HTML project scaffolding
@@ -1314,7 +1314,7 @@ These features are in design scope but are **not** implemented by this plan. Add
 - automatic precedence for keys valid in both scopes
 - config key aliases
 - user-defined builder key schemas
-- implicit metadata side effects from importing a library
+- implicit metadata side effects from importing a package
 
 ### Structured and typed metadata
 

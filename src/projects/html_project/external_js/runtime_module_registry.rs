@@ -1,7 +1,7 @@
 //! Builder-owned registry of core JS runtime modules.
 //!
 //! WHAT: tracks which JS module specifiers are allowed in `import ... from "..."`
-//!       statements inside Beanstalk JS library files, and holds their authored source
+//!       statements inside Beanstalk JS module files, and holds their authored source
 //!       for later emission by the HTML builder.
 //! WHY: the HTML builder owns the set of core runtime modules; the parser only validates
 //!      that JS imports match the registered set. Keeping the registry in `external_js`
@@ -25,7 +25,7 @@ pub struct CoreJsRuntimeModule {
 impl CoreJsRuntimeModule {
     /// Creates a v1 `@beanstalk/runtime` module with `bstOk` and `bstErr` exports.
     ///
-    /// WHAT: provides the small plain JS source that fallible JS library functions
+    /// WHAT: provides the small plain JS source that fallible JS module functions
     ///       import to return structured success/error wrappers.
     /// WHY: the runtime wrapper contract must match the glue the backend generates.
     pub fn beanstalk_runtime_v1() -> Self {
