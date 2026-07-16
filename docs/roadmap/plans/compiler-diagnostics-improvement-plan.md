@@ -1,10 +1,5 @@
 # Beanstalk Compiler Diagnostics Improvement Plan
 
-> **Status:** Hardened and implementation-ready
-> **Audited against:** `main` at `7b0485ab56d74f0bb91c68668d5d725d4e675e33`
-> **Scope:** User-facing compiler diagnostics, parser recovery and the small language-behaviour fixes required for truthful diagnostics
-> **Primary owners:** `src/compiler_frontend/compiler_messages/` and the compiler stage that first has enough facts to identify each mistake
-
 ## Purpose
 
 Improve Beanstalk diagnostics without teaching invalid syntax, legacy behaviour or patterns that fight the language design.
@@ -923,6 +918,17 @@ Message:
 
 Do not imply every non-collection source was intended as a range.
 
+## Phase 8: Doc comments and code comments review
+
+Do an extensive review of comments across the codebase that may be stale, drifting from design docs or are enabling misunderstanding features or language surface.
+
+This review should focus on making sure areas where diagnostic improvements have been corrected by this plan are not also commented with incomplete or outdated information.
+
+This report should be created by exploring the codebase in parallel, then coalesing the reports into a file kept in the tmp/ folder and reviewing them for accuracy before implementing the corrections.
+
+Any bad, noisy or pointless comments that don't follow the style guide can be in scope for this review. Ideally, line counts for comments should be reduced, compressed and made more concise without losing important context rather than further bloated with much more information.
+
+
 ## Removed or superseded original findings
 
 These items must not be implemented as originally proposed.
@@ -957,7 +963,8 @@ Implement in this order to avoid parallel diagnostic paths:
 5. Phase 5 visibility-aware suggestions and match payload facts
 6. Phase 6 template compatibility and external-JS scanner binding
 7. Phase 7 remaining focused improvements
-8. Final repository-wide diagnostic audit and validation
+8. Phase 8 codebase comments audit
+9. Final repository-wide diagnostic audit and validation
 
 After each phase:
 
