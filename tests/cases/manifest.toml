@@ -1189,6 +1189,11 @@ path = "generic_parameterized_alias_rejected"
 tags = ["integration","generics","aliases","diagnostics"]
 
 [[case]]
+id = "generic_two_param_operator_rejected"
+path = "generic_two_param_operator_rejected"
+tags = ["integration", "generics", "diagnostics"]
+
+[[case]]
 id = "generic_receiver_rejected"
 path = "generic_receiver_rejected"
 tags = ["integration","generics","receiver-methods","diagnostics"]
@@ -3587,6 +3592,11 @@ tags = ["integration","imports","generics","structs","choices"]
 id = "simple_if_test"
 path = "simple_if_test"
 tags = ["integration","control-flow"]
+
+[[case]]
+id = "string_int_concatenation_rejected"
+path = "string_int_concatenation_rejected"
+tags = ["integration", "diagnostics"]
 
 [[case]]
 id = "string_operations"

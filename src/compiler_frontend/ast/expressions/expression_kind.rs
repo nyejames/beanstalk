@@ -427,7 +427,7 @@ impl Operator {
             Operator::NotEqual => "is not",
             Operator::Not => "not",
             Operator::Negate => "-",
-            Operator::Range => "..",
+            Operator::Range => "to",
         }
     }
 }

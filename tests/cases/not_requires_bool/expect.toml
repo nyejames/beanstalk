@@ -2,3 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-TYPE-0003"]
+message_contains = ["Operator `not` requires a `Bool` operand, found `Int`."]

@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, TypeMismatchContext, UnsupportedOperatorCategory,
+    DiagnosticOperator, DiagnosticPayload, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::ast_fixture_support::start_function_body;
@@ -68,7 +68,7 @@ fn rejects_float_integer_divide_assign_rhs() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnsupportedOperatorTypes {
-            category: UnsupportedOperatorCategory::Arithmetic,
+            operator: DiagnosticOperator::IntDivide,
             ..
         }
     ));

@@ -33,19 +33,20 @@ pub(crate) use syntax::*;
 pub(crate) use templates::*;
 
 use crate::compiler_frontend::compiler_messages::{
-    BorrowAccessKind, DeferredFeatureReason, DiagnosticPlace, GenericApplicationErrorReason,
-    IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
-    InvalidCompileTimePathReason, InvalidConfigReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidImportPathReason, InvalidMapLiteralReason,
-    InvalidMapTypeReason, InvalidMutableAccessReason, InvalidPackageFolderReason,
-    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidTemplateDirectiveReason,
-    NameNamespace, NamespaceTypeValueMisuseKind, PathKind, RangeOperandKind,
-    UnsupportedOperatorCategory,
+    BorrowAccessKind, DeferredFeatureReason, DiagnosticOperator, DiagnosticPlace,
+    GenericApplicationErrorReason, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
+    InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
+    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
+    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMutableAccessReason,
+    InvalidPackageFolderReason, InvalidPageMetadataReason, InvalidResultOperandReason,
+    InvalidTemplateDirectiveReason, NameNamespace, NamespaceTypeValueMisuseKind, PathKind,
+    RangeOperandKind, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::display::display_type;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::source_packages::root_file::{
     hash_root_file_name_from_import_component, import_component_is_config_file,
 };
@@ -253,33 +254,55 @@ pub(crate) fn namespace_misuse_message(
 }
 
 pub(crate) fn unsupported_operator_types_message(
-    category: UnsupportedOperatorCategory,
+    operator: DiagnosticOperator,
     lhs: TypeId,
     rhs: Option<TypeId>,
     context: DiagnosticRenderContext<'_>,
 ) -> String {
-    let category_name = unsupported_operator_category_name(category);
-
-    if let Some(message) = generic_parameter_operator_message(category_name, lhs, rhs, context) {
+    // Generic parameter operands explain that operators are compiler-owned and bounds do not
+    // grant operator support, then recommend a concrete type or bound-provided receiver method.
+    if let Some(message) = generic_parameter_operator_message(operator, lhs, rhs, context) {
         return message;
     }
 
+    let operator_spelling = operator.source_spelling();
+
+    // Unary `not` always requires a Bool operand.
+    if operator == DiagnosticOperator::Not {
+        let expected = diagnostic_type_name(builtin_type_ids::BOOL, context);
+        let found = diagnostic_type_name(lhs, context);
+        return format!(
+            "Operator `{operator_spelling}` requires a `{expected}` operand, found `{found}`."
+        );
+    }
+
+    // Mixed String `+` is not concatenation; templates own textual interpolation.
+    if operator == DiagnosticOperator::Add
+        && let Some(rhs) = rhs
+        && exactly_one_operand_is_plain_string(lhs, rhs)
+    {
+        let left = diagnostic_type_name(lhs, context);
+        let right = diagnostic_type_name(rhs, context);
+        return format!(
+            "Operator `{operator_spelling}` cannot concatenate `{left}` and `{right}`. Use a template for mixed textual interpolation."
+        );
+    }
+
+    // Factual exact-operator fallback for every other unsupported operand combination.
     if let Some(rhs) = rhs {
+        let left = diagnostic_type_name(lhs, context);
+        let right = diagnostic_type_name(rhs, context);
         format!(
-            "Unsupported operand types for {category_name} operator. Left: {}, Right: {}.",
-            diagnostic_type_name(lhs, context),
-            diagnostic_type_name(rhs, context)
+            "Operator `{operator_spelling}` does not support operand types `{left}` and `{right}`."
         )
     } else {
-        format!(
-            "Unsupported operand type for {category_name} operator. Operand: {}.",
-            diagnostic_type_name(lhs, context)
-        )
+        let operand = diagnostic_type_name(lhs, context);
+        format!("Operator `{operator_spelling}` does not support operand type `{operand}`.")
     }
 }
 
 fn generic_parameter_operator_message(
-    category_name: &str,
+    operator: DiagnosticOperator,
     lhs: TypeId,
     rhs: Option<TypeId>,
     context: DiagnosticRenderContext<'_>,
@@ -301,27 +324,23 @@ fn generic_parameter_operator_message(
         return None;
     }
 
+    let operator_spelling = operator.source_spelling();
     let subject = if parameter_names.len() == 1 {
-        format!("Generic parameter '{}'", parameter_names[0])
+        format!("generic parameter `{}`", parameter_names[0])
     } else {
         format!(
-            "Generic parameters {}",
-            parameter_names
-                .iter()
-                .map(|name| format!("'{name}'"))
-                .collect::<Vec<_>>()
-                .join(" and ")
+            "generic parameters `{}` and `{}`",
+            parameter_names[0], parameter_names[1]
         )
-    };
-    let operation_text = if category_name == "this" {
-        String::from("this operation")
-    } else {
-        format!("{category_name} operators")
     };
 
     Some(format!(
-        "{subject} cannot be used with {operation_text} before trait bounds are supported. This operation depends on behavior that is not guaranteed for every generic type. Use a concrete type or wait for trait bounds."
+        "Operator `{operator_spelling}` is not available for {subject}. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound."
     ))
+}
+
+fn exactly_one_operand_is_plain_string(lhs: TypeId, rhs: TypeId) -> bool {
+    (lhs == builtin_type_ids::STRING) != (rhs == builtin_type_ids::STRING)
 }
 
 fn generic_parameter_name(type_id: TypeId, context: DiagnosticRenderContext<'_>) -> Option<String> {

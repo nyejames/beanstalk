@@ -12,9 +12,9 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1.2a, carry exact operator facts and consolidate operator diagnostics
-LAST_ACCEPTED_COMMIT: none
-WORKTREE: `main` at `069a29acb`, Phase 1.1 accepted and awaiting checkpoint commit
+CURRENT_SLICE: Phase 1.2a accepted, awaiting checkpoint commit
+LAST_ACCEPTED_COMMIT: `df65c9ced`
+WORKTREE: `main` at `df65c9ced`, reviewed Phase 1.2a implementation and parent-owned plan findings
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler diagnostics ownership, generic and trait bounds, operator semantics, style, testing and validation contracts
@@ -24,15 +24,15 @@ ACCEPTANCE_CRITERIA:
 - `not`, mixed String `+` and generic-parameter failures use the Phase 1.2 wording
 - no user-facing message claims trait bounds are unsupported
 VALIDATION_STATE:
-- targeted compiler-message tests: passed, 36 tests
-- full Rust tests and Clippy: passed in the Phase 1.1 Ollama worker
-- `just validate`: passed for Phase 1.1, including 3,511 Rust tests and 1,764 integration cases
+- Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
+- Phase 1.2a focused compiler-message tests: passed, 36 tests
+- Phase 1.2a `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,766 integration cases, docs check and 28 benchmark cases
 DOCS_IMPACT: plan state only; progress matrix unaffected by Phase 1.1
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: run `just validate`, commit Phase 1.1 and launch the Phase 1.2a Ollama worker
+NEXT_RESUME_ACTION: commit the accepted Phase 1.2a slice, then reload for Phase 1.2b
 
 ## Confirmed design decisions
 
@@ -79,7 +79,7 @@ NEXT_RESUME_ACTION: run `just validate`, commit Phase 1.1 and launch the Phase 1
 ### 1.1 Guarantee non-empty terse messages
 
 **Original findings:** DIAG-013, DIAG-027
-**Status:** Complete, pending checkpoint commit
+**Status:** Complete in `df65c9ced`
 
 `render::terse` currently emits only `RenderedPayload.message`. Payloads such as `DiagnosticPayload::None` can therefore produce an empty final field even when the diagnostic descriptor has a useful title.
 
@@ -103,13 +103,13 @@ NEXT_RESUME_ACTION: run `just validate`, commit Phase 1.1 and launch the Phase 1
 ### 1.2 Remove stale source terminology and misleading guidance
 
 **Original findings consolidated:** DIAG-015, DIAG-025, DIAG-030, DIAG-043, DIAG-044
-**Additional confirmed drift:** generic operator guidance, standalone function-body templates, optional-type suggestion and statement-position `type`/`of` wording
+**Additional confirmed drift:** generic operator guidance, standalone function-body templates, optional-type suggestion, statement-position `type`/`of` wording and const-folded template diagnostics
 
 Audit all messages touched by this plan for source terminology that no longer matches Beanstalk.
 
 Implement this in two coherent slices:
 
-1. **1.2a exact operator facts:** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
+1. **1.2a exact operator facts (complete, pending checkpoint commit):** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
 2. **1.2b remaining terminology:** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
 
 #### Required corrections
@@ -125,24 +125,43 @@ Implement this in two coherent slices:
 
   > A standalone template is not a valid statement here. Assign it, return it or pass it to a receiving expression.
 
+  Move this case from `InvalidControlFlowStatementReason::TemplateInsideFunctionBody` to a template-specific `InvalidStandaloneStatementReason` variant. A standalone expression statement is owned by the existing `BST-SYNTAX-0025` family, not the control-flow rule family. Remove the stale control-flow reason, then add a focused integration case while preserving positive assigned, returned and argument templates.
+
 - Change the compile-time `none` guidance from `Option<Type>` to a real optional annotation such as `value String? = none`.
 - Change stale statement-position wording:
   - `type` is valid only in top-level generic declaration headers
   - `of` is valid only in generic type annotations
   - neither is a future reserved feature
+  - rename `ReservedGenericDeclaration` so the reason no longer encodes the obsolete implementation status
 - Change `InvalidResultHandlingReason::NotResultExpression`, which currently calls the operand a `Result`-valued expression, to source-visible `Error!` and fallible-expression terminology. Phase 4 still replaces the umbrella reason with authored-handler cases.
+- Rename `InvalidTemplateStructureReason::ResultInTemplateHead` to a fallible-value reason while correcting its rendered message. Internal fallible-carrier implementation terminology must not leak into the diagnostic taxonomy or prose for this source rule.
+- Rename `InvalidResultOperandReason::{ResultNotUnwrapped, OptionNotUnwrapped}` to fallible and optional source concepts while correcting their rendered messages. Keep the existing stable diagnostic code.
 - Remove internal-stage wording from `InvalidConfigReason::ValueCouldNotFold`. Explain only that the value could not be evaluated at compile time and cannot depend on runtime evaluation.
+- Replace `const-required template` and `current const value model` in template-structure diagnostics with the source-visible rule that the template must be fully evaluated at compile time. In particular, `TemplateOptionCaptureConstDeferred` must explain that the optional value's presence cannot be determined at compile time instead of describing `Option-present` folding internals.
+- Apply the same source-visible compile-time rule to `InvalidCastReason` messages that currently call a context or expression `const-required`.
+- Change the deferred `async:` message from future `async lowering` to future language support. Lowering is a compiler stage, not a source correction concept.
 
 #### Exact operator prerequisite and consolidated wording
 
 - Add a diagnostic-owned exact operator enum that is independent of AST storage and can be reused by tokenizer spacing diagnostics in Phase 2.2.
 - Map AST `Operator` to the diagnostic operator at the operator-policy emission boundary.
+- Use authored source spellings. In particular, range construction is `to`, not the stale `Operator::to_str()` spelling `..`. Correct that existing AST spelling while replacing the diagnostic path.
 - Replace `UnsupportedOperatorTypes { category, ... }` with exact operator facts. Derive broad families only where generic fallback wording still needs them.
-- Render exact operator messages in this slice:
-  - `Operator 'not' requires a 'Bool' operand, found 'Int'.`
-  - `Operator '+' cannot concatenate 'String' and 'Int'. Use a template for mixed textual interpolation.`
-  - `Operator '<op>' is not available for generic parameter '<T>'. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound.`
+- Render exact operator messages in this slice.
+
+  For `not`:
+
+  > Operator `not` requires a `Bool` operand, found `Int`.
+
+  For mixed String concatenation:
+
+  > Operator `+` cannot concatenate `String` and `Int`. Use a template for mixed textual interpolation.
+
+  For generic parameters:
+
+  > Operator `<op>` is not available for generic parameter `<T>`. Beanstalk operators are compiler-owned and generic bounds do not provide operator support. Use a concrete type or a receiver method provided by an explicit bound.
 - Update payload remapping, constructors, AST operator-policy emitters and focused tests as one API replacement. Do not retain the category-only payload as a compatibility path.
+- Correct stale comments in touched operator-policy files that describe logical operators as `&&` and `||`. The source operators are `and` and `or`.
 
 #### Acceptance
 
@@ -151,6 +170,8 @@ Implement this in two coherent slices:
 - No user-facing message claims templates are top-level-only.
 - No user-facing message calls an `Error!` expression a first-class `Result`.
 - No user-facing message exposes AST construction or finalization as a correction concept.
+- No user-facing message exposes a `const-required` template category or the compiler's const value model.
+- No user-facing message describes `async` lowering or calls a source context `const-required`.
 - Repository search finds no stale wording after superseded variants are removed.
 
 ### 1.3 Remove legacy `#import` completely
@@ -295,6 +316,7 @@ Cover every compound-assignment token at least once and cover before, after and 
 ### 2.4 Improve incomplete expression and declaration boundaries
 
 **Original findings:** DIAG-012, DIAG-016, DIAG-018, DIAG-024, DIAG-053, DIAG-054
+**Additional confirmed gap:** adjacent operands currently fall through to the generic `Invalid expression: no valid operands found during evaluation` message even though the source contains multiple valid operands and is missing an operator.
 **Original DIAG-034 disposition:** Removed. Current expression typing already emits `BinaryRight`.
 
 Add focused reasons at the parser that owns each boundary:
@@ -306,6 +328,7 @@ Add focused reasons at the parser that owns each boundary:
 - missing member name after `.`
 - missing return type after `->`
 - missing declaration initializer after an authored `=`
+- missing operator between adjacent expressions
 
 #### Required messages
 
@@ -316,6 +339,7 @@ Add focused reasons at the parser that owns each boundary:
 - `Expected a field or method name after '.', but this access ends here.`
 - `Function signature is missing a return type after '->'. Add a type followed by ':', or remove '->' for a no-value function.`
 - `Declaration 'value' is missing an initializer expression after '='.`
+- `Expected an operator before this expression.`
 
 #### Ownership
 
@@ -323,11 +347,13 @@ Add focused reasons at the parser that owns each boundary:
 - Reuse `InvalidFieldAccessReason::ExpectedNameAfterDot` but render it without the `field_name` fallback.
 - Add `InvalidFunctionSignatureReason::MissingReturnType`.
 - Add `InvalidDeclarationReason::MissingInitializerExpression`.
+- Add a structured adjacent-expression reason at the parser boundary. Point at the second expression and do not guess which operator the author intended.
 - Do not route empty expressions into an RPN stack and wait for `No nodes found in expression`.
+- Do not use the payload-free `InvalidExpression` fallback for a source sequence such as `value = 1 2`. If that generic diagnostic remains for defensive stack-shape validation, its prose must not falsely claim that no operands were found.
 
 #### Tests
 
-Use EOF, newline and closing-delimiter variants where they exercise distinct parser boundaries. Assert source location at the missing-value boundary rather than the next unrelated token.
+Use EOF, newline and closing-delimiter variants where they exercise distinct parser boundaries. Cover adjacent literal and identifier expressions without duplicating cosmetic cases. Assert source location at the missing-value or second-expression boundary rather than the next unrelated token.
 
 ### 2.5 Convert user-input infrastructure failures
 
@@ -959,6 +985,24 @@ Message:
 > Collection loop source must be a collection, found `Int`. Use a collection after `loop`. For numeric iteration, use range syntax such as `loop 0 to count |i|:`.
 
 Do not imply every non-collection source was intended as a range.
+
+### 7.4 Reject unsupported Wasm variant payloads before lowering
+
+**Additional audit finding:** `cast_optional_success_wraps_inner_value` currently expects `BST-INFRA-0001` because a reachable optional payload reaches Wasm LIR lowering, where `HirExpressionKind::VariantConstruct` with fields is rejected as a transformation error. This is valid Beanstalk source using a target feature that HTML-Wasm does not yet lower. The existing pre-lowering `UnsupportedBackendFeature` lane owns this failure.
+
+#### Implementation
+
+- Extend Wasm backend feature validation to detect reachable variant constructions with payload fields before LIR lowering.
+- Emit the existing `BST-RULE-0064` `UnsupportedBackendFeature` diagnostic at the source expression. Name the unsupported feature as variant payload values without exposing HIR or LIR.
+- Preserve reachability policy. An unsupported variant payload in an unreachable helper must not block the selected target.
+- Keep empty/unit variant construction on the supported path.
+- Do not convert the Wasm lowering invariant itself into a user diagnostic. Backend feature validation must prevent valid reachable source from reaching that invariant.
+
+#### Tests
+
+- Update `cast_optional_success_wraps_inner_value` to expect `BST-RULE-0064` for HTML-Wasm while preserving HTML success.
+- Add a focused backend-feature validation test for reachable and unreachable payload construction if the integration case cannot protect both reachability branches.
+- Review and update the progress matrix because the target rejection lane and coverage change.
 
 ## Phase 8: Doc comments and code comments review
 

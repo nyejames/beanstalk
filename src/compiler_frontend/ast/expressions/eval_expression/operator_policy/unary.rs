@@ -8,9 +8,7 @@ use super::super::result_type::ExpressionResultType;
 use crate::compiler_frontend::ast::expressions::eval_expression::typing_error::ExpressionTypingError;
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
-use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, UnsupportedOperatorCategory,
-};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticOperator};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 
 /// Resolve the result type of a unary operator application.
@@ -35,7 +33,7 @@ pub(super) fn resolve_unary_operator_type(
                 ))
             } else {
                 Err(CompilerDiagnostic::unsupported_operator_types(
-                    UnsupportedOperatorCategory::Unary,
+                    DiagnosticOperator::Not,
                     operand.type_id,
                     None,
                     location.clone(),

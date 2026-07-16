@@ -459,7 +459,7 @@ pub enum DiagnosticPayload {
     EmptyCollectionTypeAmbiguity,
 
     UnsupportedOperatorTypes {
-        category: UnsupportedOperatorCategory,
+        operator: DiagnosticOperator,
         lhs: TypeId,
         rhs: Option<TypeId>,
     },

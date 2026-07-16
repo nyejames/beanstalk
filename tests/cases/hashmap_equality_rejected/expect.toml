@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-TYPE-0003"]
-message_contains = ["Unsupported operand types"]
+message_contains = ["Operator `is` does not support operand types"]

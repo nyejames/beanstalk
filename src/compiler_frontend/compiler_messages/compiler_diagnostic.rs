@@ -8,15 +8,16 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, BorrowDiagnosticKind, CommonSyntaxMistakeReason, ConfigDiagnosticKind,
     DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticKind,
-    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticPayload, DiagnosticPlace,
-    DiagnosticSeverity, GenericApplicationErrorReason, GenericInferenceSubject, ImportClauseKind,
-    ImportDiagnosticKind, ImportPublicSurfaceType, IncompatibleChoiceComparisonReason,
-    InvalidCastReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
-    InvalidCompileTimePathReason, InvalidConfigReason, InvalidFunctionSignatureReason,
-    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
-    InvalidLoopHeaderReason, InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
-    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload,
+    DiagnosticPlace, DiagnosticSeverity, GenericApplicationErrorReason, GenericInferenceSubject,
+    ImportClauseKind, ImportDiagnosticKind, ImportPublicSurfaceType,
+    IncompatibleChoiceComparisonReason, InvalidCastReason, InvalidChoiceVariantReason,
+    InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
+    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
+    InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMapLiteralReason,
+    InvalidMapTypeReason, InvalidMatchArmReason, InvalidMutableAccessReason,
+    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason,
     InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
     InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
     NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
@@ -1745,7 +1746,7 @@ impl CompilerDiagnostic {
     }
 
     pub(crate) fn unsupported_operator_types(
-        category: UnsupportedOperatorCategory,
+        operator: DiagnosticOperator,
         lhs: TypeId,
         rhs: Option<TypeId>,
         location: SourceLocation,
@@ -1753,7 +1754,7 @@ impl CompilerDiagnostic {
         Self::new(
             DiagnosticKind::Type(TypeDiagnosticKind::UnsupportedOperatorTypes),
             location,
-            DiagnosticPayload::UnsupportedOperatorTypes { category, lhs, rhs },
+            DiagnosticPayload::UnsupportedOperatorTypes { operator, lhs, rhs },
         )
     }
 

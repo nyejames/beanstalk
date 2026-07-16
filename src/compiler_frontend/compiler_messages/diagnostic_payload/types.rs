@@ -1222,6 +1222,58 @@ pub enum UnsupportedOperatorCategory {
     Other,
 }
 
+/// Diagnostic-owned exact source operator for unsupported-operand diagnostics.
+///
+/// WHAT: carries the authored source spelling of the operator that failed type checking,
+///      independent of AST storage so the diagnostic layer never depends on `Operator`.
+/// WHY: replacing the broad operator-category payload with the exact operator lets rendered
+///      messages name the specific source construct the user wrote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DiagnosticOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    IntDivide,
+    Modulus,
+    Exponent,
+    And,
+    Or,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Equality,
+    NotEqual,
+    Not,
+    Range,
+}
+
+impl DiagnosticOperator {
+    /// Authored source spelling used in rendered diagnostics.
+    pub fn source_spelling(&self) -> &'static str {
+        match self {
+            Self::Add => "+",
+            Self::Subtract => "-",
+            Self::Multiply => "*",
+            Self::Divide => "/",
+            Self::IntDivide => "//",
+            Self::Modulus => "%",
+            Self::Exponent => "^",
+            Self::And => "and",
+            Self::Or => "or",
+            Self::GreaterThan => ">",
+            Self::GreaterThanOrEqual => ">=",
+            Self::LessThan => "<",
+            Self::LessThanOrEqual => "<=",
+            Self::Equality => "is",
+            Self::NotEqual => "is not",
+            Self::Not => "not",
+            Self::Range => "to",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidResultOperandReason {
     ResultNotUnwrapped,

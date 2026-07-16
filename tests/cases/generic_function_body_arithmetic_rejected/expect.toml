@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-TYPE-0003"]
-message_contains = ["Generic parameter 'T' cannot be used with arithmetic operators before trait bounds are supported"]
+message_contains = ["Operator `+` is not available for generic parameter `T`. Beanstalk operators are compiler-owned"]

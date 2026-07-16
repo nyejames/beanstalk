@@ -1,9 +1,9 @@
 use super::{
     BorrowAccessKind, BorrowDiagnosticKind, CompilerDiagnostic, ConfigDiagnosticKind,
     DeferredFeatureDiagnosticKind, DiagnosticBag, DiagnosticCategory, DiagnosticKind,
-    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticPayload, DiagnosticPlace,
-    DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
-    IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
+    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload,
+    DiagnosticPlace, DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind,
+    ImportDiagnosticKind, IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
     InvalidImportClauseReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
@@ -1043,13 +1043,13 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
         ),
         (
             CompilerDiagnostic::unsupported_operator_types(
-                UnsupportedOperatorCategory::Arithmetic,
+                DiagnosticOperator::Add,
                 builtin_type_ids::STRING,
                 Some(builtin_type_ids::INT),
                 location(source_path.clone()),
             ),
-            "Unsupported operand types for arithmetic operator",
-            "Arithmetic",
+            "Operator `+` cannot concatenate",
+            "Add",
         ),
         (
             CompilerDiagnostic::invalid_result_operand(

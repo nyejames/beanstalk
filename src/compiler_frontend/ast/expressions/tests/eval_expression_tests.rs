@@ -12,8 +12,8 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnIte
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, InvalidBuiltinCallReason, TypeDiagnosticKind,
-    UnsupportedOperatorCategory,
+    DiagnosticKind, DiagnosticOperator, DiagnosticPayload, InvalidBuiltinCallReason,
+    TypeDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -57,15 +57,15 @@ fn nth_start_declaration_expression(source: &str, index: usize) -> Expression {
     declaration.value.to_owned()
 }
 
-fn assert_unsupported_operator(source: &str, expected_category: UnsupportedOperatorCategory) {
+fn assert_unsupported_operator(source: &str, expected_operator: DiagnosticOperator) {
     let diagnostic = parse_single_file_ast_diagnostic(source);
 
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnsupportedOperatorTypes {
-            category,
+            operator,
             ..
-        } if category == expected_category
+        } if operator == expected_operator
     ));
 }
 
@@ -139,7 +139,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnsupportedOperatorTypes {
-            category: UnsupportedOperatorCategory::Arithmetic,
+            operator: DiagnosticOperator::Add,
             ..
         }
     ));
@@ -150,33 +150,27 @@ fn ordinary_expression_rejects_path_string_concatenation() {
 
 #[test]
 fn unary_not_requires_boolean_operand() {
-    assert_unsupported_operator("value = not 1\n", UnsupportedOperatorCategory::Unary);
+    assert_unsupported_operator("value = not 1\n", DiagnosticOperator::Not);
 }
 
 #[test]
 fn logical_and_requires_bool_operands() {
-    assert_unsupported_operator("value = true and 1\n", UnsupportedOperatorCategory::Logical);
+    assert_unsupported_operator("value = true and 1\n", DiagnosticOperator::And);
 }
 
 #[test]
 fn logical_and_reports_found_types_in_operand_order() {
-    assert_unsupported_operator("value = 1 and true\n", UnsupportedOperatorCategory::Logical);
+    assert_unsupported_operator("value = 1 and true\n", DiagnosticOperator::And);
 }
 
 #[test]
 fn logical_or_rejects_string_operands() {
-    assert_unsupported_operator(
-        "value = \"a\" or \"b\"\n",
-        UnsupportedOperatorCategory::Logical,
-    );
+    assert_unsupported_operator("value = \"a\" or \"b\"\n", DiagnosticOperator::Or);
 }
 
 #[test]
 fn logical_mix_rejects_non_bool_rhs_after_comparison() {
-    assert_unsupported_operator(
-        "value = 1 < 2 and 3\n",
-        UnsupportedOperatorCategory::Logical,
-    );
+    assert_unsupported_operator("value = 1 < 2 and 3\n", DiagnosticOperator::And);
 }
 
 #[test]
@@ -219,7 +213,7 @@ fn bool_constructor_is_rejected_with_removed_scalar_constructor_diagnostic() {
 fn logical_operator_rejects_option_operands_with_precise_found_type() {
     assert_unsupported_operator(
         "maybe String? = none\nvalue = maybe or true\n",
-        UnsupportedOperatorCategory::Logical,
+        DiagnosticOperator::Or,
     );
 }
 
@@ -233,10 +227,7 @@ fn comparison_operator_accepts_option_to_scalar_comparison() {
 
 #[test]
 fn comparison_operator_rejects_none_without_option_context() {
-    assert_unsupported_operator(
-        "value = none is none\n",
-        UnsupportedOperatorCategory::Comparison,
-    );
+    assert_unsupported_operator("value = none is none\n", DiagnosticOperator::Equality);
 }
 
 #[test]
@@ -262,18 +253,12 @@ fn integer_division_resolves_to_int() {
 
 #[test]
 fn integer_division_rejects_int_float_operands() {
-    assert_unsupported_operator(
-        "value = 5 // 2.0\n",
-        UnsupportedOperatorCategory::Arithmetic,
-    );
+    assert_unsupported_operator("value = 5 // 2.0\n", DiagnosticOperator::IntDivide);
 }
 
 #[test]
 fn integer_division_rejects_float_int_operands() {
-    assert_unsupported_operator(
-        "value = 5.0 // 2\n",
-        UnsupportedOperatorCategory::Arithmetic,
-    );
+    assert_unsupported_operator("value = 5.0 // 2\n", DiagnosticOperator::IntDivide);
 }
 
 #[test]
@@ -321,10 +306,7 @@ fn mixed_int_float_comparison_resolves_to_bool() {
 
 #[test]
 fn bool_relational_comparison_is_rejected() {
-    assert_unsupported_operator(
-        "value = true < false\n",
-        UnsupportedOperatorCategory::Comparison,
-    );
+    assert_unsupported_operator("value = true < false\n", DiagnosticOperator::LessThan);
 }
 
 #[test]
@@ -461,7 +443,7 @@ fn template_shaped_string_operand_is_rejected() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnsupportedOperatorTypes {
-            category: UnsupportedOperatorCategory::Arithmetic,
+            operator: DiagnosticOperator::Add,
             ..
         }
     ));

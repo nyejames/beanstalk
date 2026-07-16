@@ -474,8 +474,8 @@ fn render_payload_message(
             "Cannot infer the type of an empty `{}` literal. Add an explicit type annotation."
                 .to_owned()
         }
-        DiagnosticPayload::UnsupportedOperatorTypes { category, lhs, rhs } => {
-            unsupported_operator_types_message(*category, *lhs, *rhs, context)
+        DiagnosticPayload::UnsupportedOperatorTypes { operator, lhs, rhs } => {
+            unsupported_operator_types_message(*operator, *lhs, *rhs, context)
         }
         DiagnosticPayload::InvalidResultOperand {
             reason,
