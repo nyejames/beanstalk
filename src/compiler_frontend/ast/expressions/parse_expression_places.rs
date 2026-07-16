@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
     PlaceExpression, PlaceExpressionKind,
 };
 use crate::compiler_frontend::ast::field_access::{
-    ReceiverAccessMode, parse_field_access_expression_with_receiver_access,
+    PostfixChainAccess, parse_field_access_expression_with_receiver_access,
     parse_postfix_chain_expression, reference_expression_from_declaration,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -82,6 +82,8 @@ pub(super) fn parse_mutable_receiver_expression(
             InvalidReceiverCallReason::MutableMarkerOnNonReceiverCall,
             None,
             None,
+            None,
+            None,
             marker_location,
         )
         .into());
@@ -92,7 +94,7 @@ pub(super) fn parse_mutable_receiver_expression(
         token_stream,
         receiver_declaration.as_declaration(),
         context,
-        ReceiverAccessMode::Mutable,
+        PostfixChainAccess::mutable_marker(marker_location),
         type_interner,
         string_table,
     )?;
@@ -195,7 +197,7 @@ fn parse_copy_place_payload(
                         token_stream,
                         reference_expression,
                         reference_location,
-                        ReceiverAccessMode::Shared,
+                        PostfixChainAccess::shared(),
                         context,
                         type_interner,
                         string_table,

@@ -77,6 +77,7 @@ pub(super) struct SourceReceiverMethodCallInput<'a, 'interner> {
     pub(super) member_name: StringId,
     pub(super) member_location: SourceLocation,
     pub(super) receiver_access_mode: ReceiverAccessMode,
+    pub(super) authored_marker_location: Option<SourceLocation>,
     pub(super) scope_context: &'a ScopeContext,
     pub(super) source_method: SourceReceiverMethodTarget<'a>,
     pub(super) type_interner: &'a mut AstTypeInterner<'interner>,
@@ -92,6 +93,7 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
         member_name,
         member_location,
         receiver_access_mode,
+        authored_marker_location,
         scope_context,
         source_method,
         type_interner,
@@ -100,9 +102,11 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
 
     if receiver_node.expression_is_const_record_value()? {
         return Err(CompilerDiagnostic::invalid_receiver_call(
-            InvalidReceiverCallReason::ConstStructNoRuntimeCalls,
+            InvalidReceiverCallReason::ConstRecordNoRuntimeCalls,
             None,
             Some(member_name),
+            None,
+            None,
             member_location,
         )
         .into());
@@ -113,6 +117,8 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
             InvalidReceiverCallReason::MustUseParentheses,
             None,
             Some(member_name),
+            None,
+            None,
             member_location,
         )
         .into());
@@ -125,6 +131,7 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
         receiver_node,
         receiver_access_mode,
         &member_location,
+        authored_marker_location.as_ref(),
         ReceiverAccessRequirement {
             requires_mutable: source_method.receiver_mutable(),
             diagnostic: ReceiverAccessDiagnostic::ReceiverMethod {

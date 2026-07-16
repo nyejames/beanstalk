@@ -13,14 +13,15 @@ use crate::compiler_frontend::compiler_messages::{
     ImportClauseKind, ImportDiagnosticKind, ImportPublicSurfaceType,
     IncompatibleChoiceComparisonReason, InvalidCastReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
-    InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMapLiteralReason,
-    InvalidMapTypeReason, InvalidMatchArmReason, InvalidMutableAccessReason,
-    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
-    InvalidStandaloneStatementReason, InvalidStatementPositionReason, InvalidStringEscapeReason,
-    InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
-    InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
+    InvalidExpressionReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
+    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
+    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
+    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
+    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    InvalidStringEscapeReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
+    InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
+    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
+    NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
@@ -1011,11 +1012,14 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn invalid_expression(location: SourceLocation) -> Self {
+    pub(crate) fn invalid_expression(
+        reason: InvalidExpressionReason,
+        location: SourceLocation,
+    ) -> Self {
         Self::new(
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidExpression),
             location,
-            DiagnosticPayload::InvalidExpression,
+            DiagnosticPayload::InvalidExpression { reason },
         )
     }
 
@@ -1155,11 +1159,14 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn uninitialized_variable(name: StringId, location: SourceLocation) -> Self {
+    pub(crate) fn missing_declaration_initializer(
+        name: StringId,
+        location: SourceLocation,
+    ) -> Self {
         Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::UninitializedVariable),
+            DiagnosticKind::Rule(RuleDiagnosticKind::MissingDeclarationInitializer),
             location,
-            DiagnosticPayload::UninitializedVariable { name },
+            DiagnosticPayload::MissingDeclarationInitializer { name },
         )
     }
 
@@ -1622,6 +1629,8 @@ impl CompilerDiagnostic {
         reason: crate::compiler_frontend::compiler_messages::InvalidReceiverCallReason,
         receiver_type: Option<StringId>,
         method_name: Option<StringId>,
+        receiver_kind: Option<crate::compiler_frontend::compiler_messages::ReceiverCallKind>,
+        receiver_binding_name: Option<StringId>,
         location: SourceLocation,
     ) -> Self {
         Self::new(
@@ -1631,6 +1640,8 @@ impl CompilerDiagnostic {
                 reason,
                 receiver_type,
                 method_name,
+                receiver_kind,
+                receiver_binding_name,
             },
         )
     }

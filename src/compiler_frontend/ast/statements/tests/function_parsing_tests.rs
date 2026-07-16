@@ -351,7 +351,7 @@ fn start_function_distinguishes_user_and_host_calls() {
 // --------------------------
 
 #[test]
-fn rejects_missing_tilde_for_collection_place_argument_to_mutable_parameter() {
+fn rejects_immutable_collection_place_argument_to_mutable_parameter() {
     let payload = parse_function_diagnostic_payload(
         "touch |items ~{Int}| -> Int:\n    return items.length()\n;\n\nvalues = {1, 2, 3}\ncount = touch(values)\n",
     );
@@ -360,7 +360,7 @@ fn rejects_missing_tilde_for_collection_place_argument_to_mutable_parameter() {
         matches!(
             payload,
             DiagnosticPayload::InvalidCallShape {
-                reason: InvalidCallShapeReason::MutableAccessRequired { .. },
+                reason: InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired { .. },
                 ..
             }
         ),
@@ -539,7 +539,7 @@ fn rejects_free_function_call_syntax_for_receiver_methods() {
 fn rejects_const_record_method_calls() {
     assert_invalid_receiver_call(
         "Point = |\n    x Int = 0,\n|\n\nlength |this Point| -> Int:\n    return this.x\n;\n\norigin #= Point()\norigin.length()\n",
-        InvalidReceiverCallReason::ConstStructNoRuntimeCalls,
+        InvalidReceiverCallReason::ConstRecordNoRuntimeCalls,
     );
 }
 
@@ -547,7 +547,7 @@ fn rejects_const_record_method_calls() {
 fn rejects_mutable_receiver_methods_on_temporaries() {
     assert_invalid_receiver_call(
         "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\nmake || -> Point:\n    return Point()\n;\n\nmake().reset()\n",
-        InvalidReceiverCallReason::MutablePlaceRequired,
+        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod,
     );
 }
 
@@ -578,7 +578,15 @@ fn parses_result_propagation_for_receiver_method_call() {
 fn rejects_mutable_receiver_methods_without_explicit_receiver_tilde() {
     assert_invalid_receiver_call(
         "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\npoint.reset()\n",
-        InvalidReceiverCallReason::MissingMutableAccessMarker,
+        InvalidReceiverCallReason::MutableReceiverMissingMarker,
+    );
+}
+
+#[test]
+fn rejects_mutable_receiver_methods_on_immutable_bindings_without_marker() {
+    assert_invalid_receiver_call(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint = Point()\npoint.reset()\n",
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
     );
 }
 

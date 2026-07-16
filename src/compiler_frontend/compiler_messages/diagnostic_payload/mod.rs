@@ -353,7 +353,10 @@ pub enum DiagnosticPayload {
 
     InvalidStructDefaultValue,
 
-    UninitializedVariable {
+    /// A declaration that omitted `=` entirely. Distinct from an authored `=` with no
+    /// initializer expression, which uses `InvalidDeclaration` with
+    /// `MissingInitializerExpression`.
+    MissingDeclarationInitializer {
         name: StringId,
     },
 
@@ -420,6 +423,8 @@ pub enum DiagnosticPayload {
         reason: InvalidReceiverCallReason,
         receiver_type: Option<StringId>,
         method_name: Option<StringId>,
+        receiver_kind: Option<ReceiverCallKind>,
+        receiver_binding_name: Option<StringId>,
     },
 
     InvalidCopyTarget {
@@ -588,7 +593,9 @@ pub enum DiagnosticPayload {
         trait_name: StringId,
     },
 
-    InvalidExpression,
+    InvalidExpression {
+        reason: InvalidExpressionReason,
+    },
 
     MissingOperatorOperand {
         operator: StringId,

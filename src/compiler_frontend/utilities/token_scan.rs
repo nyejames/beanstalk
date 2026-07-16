@@ -245,6 +245,7 @@ pub(crate) fn collect_declaration_initializer_tokens(
     let mut catch_header_pending = false;
     let mut value_if_block_depth = 0usize;
     let mut value_if_header_pending = false;
+    let mut inline_value_if_missing_else_depth = 0usize;
     let mut initializer_closed_by_statement_block = false;
     let mut open_constructs = Vec::new();
 
@@ -261,10 +262,17 @@ pub(crate) fn collect_declaration_initializer_tokens(
             let prev_continues = collected
                 .last()
                 .is_some_and(|token: &Token| token.kind.continues_expression());
-            let next_continues = token_stream
-                .peek_next_token()
-                .is_some_and(|next| next.continues_expression());
-            prev_continues || next_continues
+            let next_non_newline = token_stream
+                .tokens
+                .iter()
+                .skip(token_stream.index + 1)
+                .find(|token| token.kind != TokenKind::Newline)
+                .map(|token| &token.kind);
+            let next_continues = next_non_newline.is_some_and(TokenKind::continues_expression);
+            let continues_to_authored_else = inline_value_if_missing_else_depth > 0
+                && matches!(next_non_newline, Some(TokenKind::Else));
+
+            prev_continues || next_continues || continues_to_authored_else
         } else {
             false
         };
@@ -275,6 +283,9 @@ pub(crate) fn collect_declaration_initializer_tokens(
                 TokenKind::Comma | TokenKind::End | TokenKind::Eof
             )
         {
+            if inline_value_if_missing_else_depth > 0 {
+                collected.push(token_stream.current_token());
+            }
             break;
         }
 
@@ -282,6 +293,9 @@ pub(crate) fn collect_declaration_initializer_tokens(
             && matches!(token_kind, TokenKind::Newline)
             && !continues_multiline_expression
         {
+            if inline_value_if_missing_else_depth > 0 {
+                collected.push(token_stream.current_token());
+            }
             break;
         }
 
@@ -332,6 +346,15 @@ pub(crate) fn collect_declaration_initializer_tokens(
                 TokenKind::Colon if value_if_block_depth > 0 => {
                     value_if_block_depth = value_if_block_depth.saturating_add(1);
                     open_constructs.push(OpenConstruct::ValueIfBlock);
+                }
+                TokenKind::Then if value_if_header_pending => {
+                    value_if_header_pending = false;
+                    inline_value_if_missing_else_depth =
+                        inline_value_if_missing_else_depth.saturating_add(1);
+                }
+                TokenKind::Else if inline_value_if_missing_else_depth > 0 => {
+                    inline_value_if_missing_else_depth =
+                        inline_value_if_missing_else_depth.saturating_sub(1);
                 }
                 TokenKind::End if catch_block_depth > 0 => {
                     let closing_outer_catch_block = catch_block_depth == 1;

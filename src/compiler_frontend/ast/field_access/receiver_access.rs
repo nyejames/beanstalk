@@ -1,8 +1,9 @@
 //! Shared receiver-access validation for postfix calls.
 //!
 //! WHAT: validates whether a receiver call needs `~`, a mutable place, or no mutable marker.
-//! WHY: collection builtins and user receiver methods share the same access policy but need
-//! caller-specific diagnostic wording.
+//! WHY: collection builtins, map builtins and user receiver methods share one access policy
+//! but need caller-specific diagnostic wording. One classifier distinguishes non-place,
+//! immutable-place and mutable-place receivers so each source state gets distinct guidance.
 //!
 //! All validation results are boxed `CompilerDiagnostic` values so this owner boundary does not
 //! propagate large `Err` payloads through `Result<(), CompilerDiagnostic>` at every caller.
@@ -11,15 +12,45 @@
 
 use super::ReceiverAccessMode;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReceiverCallReason};
+use crate::compiler_frontend::ast::place_access::{
+    ReceiverSourceState, classify_receiver_source_state,
+};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidReceiverCallReason, ReceiverCallKind,
+};
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
+/// Which receiver-call surface owns a receiver-access diagnostic, plus the method name.
+///
+/// WHAT: carries the method name and maps the access context to the `ReceiverCallKind` payload
+///       fact the renderer uses to name the receiver kind.
+/// WHY: source methods, collection builtins and map builtins share one classifier; the kind
+///      only selects the rendered noun, so it stays out of the reason enum.
 pub(super) enum ReceiverAccessDiagnostic {
     CollectionBuiltin { method_name: StringId },
     MapBuiltin { method_name: StringId },
     ReceiverMethod { method_name: StringId },
+}
+
+impl ReceiverAccessDiagnostic {
+    fn method_name(&self) -> StringId {
+        match self {
+            ReceiverAccessDiagnostic::CollectionBuiltin { method_name }
+            | ReceiverAccessDiagnostic::MapBuiltin { method_name }
+            | ReceiverAccessDiagnostic::ReceiverMethod { method_name } => *method_name,
+        }
+    }
+
+    fn receiver_kind(&self) -> ReceiverCallKind {
+        match self {
+            ReceiverAccessDiagnostic::CollectionBuiltin { .. } => {
+                ReceiverCallKind::CollectionBuiltin
+            }
+            ReceiverAccessDiagnostic::MapBuiltin { .. } => ReceiverCallKind::MapBuiltin,
+            ReceiverAccessDiagnostic::ReceiverMethod { .. } => ReceiverCallKind::SourceMethod,
+        }
+    }
 }
 
 pub(super) struct ReceiverAccessRequirement {
@@ -36,96 +67,177 @@ type ReceiverAccessResult = Result<(), Box<CompilerDiagnostic>>;
 pub(super) fn validate_receiver_access(
     receiver_node: &AstNode,
     access_mode: ReceiverAccessMode,
-    location: &SourceLocation,
+    method_boundary: &SourceLocation,
+    authored_marker_location: Option<&SourceLocation>,
     access_requirement: ReceiverAccessRequirement,
 ) -> ReceiverAccessResult {
+    // A call that does not require mutable access rejects an authored `~` at the marker, since
+    // the marker is the source the author must remove.
     if !access_requirement.requires_mutable {
         if access_mode == ReceiverAccessMode::Mutable {
-            return reject_unneeded_mutable_access_marker(&access_requirement.diagnostic, location);
+            return reject_unneeded_mutable_access_marker(
+                &access_requirement.diagnostic,
+                authored_marker_location,
+                method_boundary,
+            );
         }
         return Ok(());
     }
 
-    if !ast_node_is_place(receiver_node) {
-        return reject_receiver_requires_mutable(&access_requirement.diagnostic, location);
-    }
+    let source_state = classify_receiver_source_state(receiver_node);
 
-    if !ast_node_is_mutable_place(receiver_node) {
-        return reject_receiver_requires_mutable(&access_requirement.diagnostic, location);
+    match (access_mode, source_state) {
+        // An existing mutable place needs the explicit `~` marker. The method boundary is the
+        // call site the author must prefix; the authored marker is absent here. The binding name
+        // lets the renderer show a concrete `~name.method(...)` example when it is known.
+        (ReceiverAccessMode::Shared, ReceiverSourceState::MutablePlace { binding_name }) => {
+            reject_mutable_receiver_missing_marker(
+                &access_requirement.diagnostic,
+                binding_name,
+                method_boundary,
+            )
+        }
+        // An immutable existing place cannot be repaired by adding `~`: the binding itself must
+        // be declared mutable. No marker was authored, so point at the method boundary.
+        (ReceiverAccessMode::Shared, ReceiverSourceState::ImmutablePlace { binding_name }) => {
+            reject_immutable_receiver_mutable_method(
+                &access_requirement.diagnostic,
+                binding_name,
+                method_boundary,
+            )
+        }
+        // A temporary or non-place receiver cannot be mutated through. No marker was authored,
+        // so point at the method boundary.
+        (ReceiverAccessMode::Shared, ReceiverSourceState::Temporary) => {
+            reject_non_place_receiver_mutable_method(
+                &access_requirement.diagnostic,
+                method_boundary,
+            )
+        }
+        // An existing mutable place with an authored `~` satisfies the call.
+        (ReceiverAccessMode::Mutable, ReceiverSourceState::MutablePlace { .. }) => Ok(()),
+        // `~` authored on an immutable place: the marker is the source the author must change,
+        // and the binding must be declared mutable before the marker is valid.
+        (ReceiverAccessMode::Mutable, ReceiverSourceState::ImmutablePlace { binding_name }) => {
+            reject_mutable_marker_on_immutable_receiver(
+                &access_requirement.diagnostic,
+                binding_name,
+                authored_marker_location,
+                method_boundary,
+            )
+        }
+        // `~` authored on a temporary or non-place value: the marker is invalid because `~`
+        // accepts only an existing mutable place.
+        (ReceiverAccessMode::Mutable, ReceiverSourceState::Temporary) => {
+            reject_mutable_marker_on_non_place_receiver(
+                &access_requirement.diagnostic,
+                authored_marker_location,
+                method_boundary,
+            )
+        }
     }
-
-    if access_mode == ReceiverAccessMode::Shared {
-        return reject_missing_mutable_access_marker(&access_requirement.diagnostic, location);
-    }
-
-    Ok(())
 }
 
 // --------------------------
 //  Rejection helpers
 // --------------------------
 
-/// Rejects a receiver that must be mutable but is either not a place at all or is an
-/// immutable place. Both cases share the same diagnostic policy: the caller needs a mutable
-/// receiver, so the reason maps to the collection/map/method-specific "mutable required"
-/// diagnostic for the access context. The distinction between "not a place" and "immutable
-/// place" is not surfaced to the user — the fix is the same (bind a mutable variable).
-fn reject_receiver_requires_mutable(
+fn reject_mutable_receiver_missing_marker(
     access_diagnostic: &ReceiverAccessDiagnostic,
-    location: &SourceLocation,
+    binding_name: Option<StringId>,
+    method_boundary: &SourceLocation,
 ) -> ReceiverAccessResult {
-    let reason = match access_diagnostic {
-        ReceiverAccessDiagnostic::CollectionBuiltin { .. } => {
-            InvalidReceiverCallReason::MutableCollectionRequired
-        }
-        ReceiverAccessDiagnostic::MapBuiltin { .. } => {
-            InvalidReceiverCallReason::MutableMapRequired
-        }
-        ReceiverAccessDiagnostic::ReceiverMethod { .. } => {
-            InvalidReceiverCallReason::MutablePlaceRequired
-        }
-    };
-
-    let method_name = receiver_method_name(access_diagnostic);
-    Err(Box::new(CompilerDiagnostic::invalid_receiver_call(
-        reason,
-        None,
-        Some(method_name),
-        location.to_owned(),
-    )))
+    reject(
+        InvalidReceiverCallReason::MutableReceiverMissingMarker,
+        access_diagnostic,
+        binding_name,
+        method_boundary,
+    )
 }
 
-fn reject_missing_mutable_access_marker(
+fn reject_immutable_receiver_mutable_method(
     access_diagnostic: &ReceiverAccessDiagnostic,
-    location: &SourceLocation,
+    binding_name: Option<StringId>,
+    method_boundary: &SourceLocation,
 ) -> ReceiverAccessResult {
-    let method_name = receiver_method_name(access_diagnostic);
-    Err(Box::new(CompilerDiagnostic::invalid_receiver_call(
-        InvalidReceiverCallReason::MissingMutableAccessMarker,
+    reject(
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
+        access_diagnostic,
+        binding_name,
+        method_boundary,
+    )
+}
+
+fn reject_non_place_receiver_mutable_method(
+    access_diagnostic: &ReceiverAccessDiagnostic,
+    method_boundary: &SourceLocation,
+) -> ReceiverAccessResult {
+    reject(
+        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod,
+        access_diagnostic,
         None,
-        Some(method_name),
-        location.to_owned(),
-    )))
+        method_boundary,
+    )
+}
+
+fn reject_mutable_marker_on_immutable_receiver(
+    access_diagnostic: &ReceiverAccessDiagnostic,
+    binding_name: Option<StringId>,
+    authored_marker_location: Option<&SourceLocation>,
+    method_boundary: &SourceLocation,
+) -> ReceiverAccessResult {
+    reject(
+        InvalidReceiverCallReason::MutableMarkerOnImmutableReceiver,
+        access_diagnostic,
+        binding_name,
+        authored_marker_location.unwrap_or(method_boundary),
+    )
+}
+
+fn reject_mutable_marker_on_non_place_receiver(
+    access_diagnostic: &ReceiverAccessDiagnostic,
+    authored_marker_location: Option<&SourceLocation>,
+    method_boundary: &SourceLocation,
+) -> ReceiverAccessResult {
+    reject(
+        InvalidReceiverCallReason::MutableMarkerOnNonPlaceReceiver,
+        access_diagnostic,
+        None,
+        authored_marker_location.unwrap_or(method_boundary),
+    )
 }
 
 fn reject_unneeded_mutable_access_marker(
     access_diagnostic: &ReceiverAccessDiagnostic,
-    location: &SourceLocation,
+    authored_marker_location: Option<&SourceLocation>,
+    method_boundary: &SourceLocation,
 ) -> ReceiverAccessResult {
-    let method_name = receiver_method_name(access_diagnostic);
-    Err(Box::new(CompilerDiagnostic::invalid_receiver_call(
+    reject(
         InvalidReceiverCallReason::UnneededMutableAccessMarker,
+        access_diagnostic,
         None,
-        Some(method_name),
-        location.to_owned(),
-    )))
+        authored_marker_location.unwrap_or(method_boundary),
+    )
 }
 
-/// Extracts the shared `method_name` field from any access diagnostic variant.
-fn receiver_method_name(access_diagnostic: &ReceiverAccessDiagnostic) -> StringId {
-    match access_diagnostic {
-        ReceiverAccessDiagnostic::CollectionBuiltin { method_name }
-        | ReceiverAccessDiagnostic::MapBuiltin { method_name }
-        | ReceiverAccessDiagnostic::ReceiverMethod { method_name } => *method_name,
-    }
+/// Builds the shared receiver-access diagnostic from the reason, access context and location.
+///
+/// WHAT: threads the method name, receiver kind and optional simple receiver binding name into
+///       the structured payload, and never repurposes the type field as a value name.
+/// WHY: every receiver-access rejection shares one payload shape, so the renderer can name the
+///      receiver kind and binding from facts instead of guessing from a type label.
+fn reject(
+    reason: InvalidReceiverCallReason,
+    access_diagnostic: &ReceiverAccessDiagnostic,
+    receiver_binding_name: Option<StringId>,
+    location: &SourceLocation,
+) -> ReceiverAccessResult {
+    Err(Box::new(CompilerDiagnostic::invalid_receiver_call(
+        reason,
+        None,
+        Some(access_diagnostic.method_name()),
+        Some(access_diagnostic.receiver_kind()),
+        receiver_binding_name,
+        location.to_owned(),
+    )))
 }

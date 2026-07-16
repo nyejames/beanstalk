@@ -44,6 +44,19 @@ pub struct ProducedValuesParseInput<'a, 'b> {
     pub string_table: &'a mut StringTable,
 }
 
+/// Returns whether the current token proves that no produced value was authored.
+pub(crate) fn is_missing_produced_value_boundary(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Else
+            | TokenKind::Eof
+            | TokenKind::End
+            | TokenKind::Comma
+            | TokenKind::CloseParenthesis
+            | TokenKind::CloseCurly
+    )
+}
+
 /// Parses a list of expressions that must match the target's expected type/arity.
 ///
 /// WHAT: reads one or more expressions after `then`, validates that the count matches

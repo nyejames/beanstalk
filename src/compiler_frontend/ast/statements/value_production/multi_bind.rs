@@ -5,6 +5,7 @@
 //! WHY: multi-bind inference is specific to closed assignment/declaration receivers and would make
 //! the ordinary declaration/assignment value-block parser harder to follow if left inline.
 
+use super::parse_values::is_missing_produced_value_boundary;
 use super::receiver::{
     current_if_header_is_full_match, emit_collected_warnings, same_logical_line,
     try_parse_value_block_at_receiver, validate_value_match_completeness,
@@ -17,7 +18,9 @@ use crate::compiler_frontend::ast::expressions::parse_expression_input::{
 };
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::statements::branching::parse_match_block;
-use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::condition_validation::{
+    ensure_if_statement_condition, if_condition_is_missing,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::ast::statements::value_production::completeness::analyze_branch_flow;
 use crate::compiler_frontend::ast::statements::value_production::parse_values::parse_fixed_arity_inferred_values;
@@ -121,6 +124,15 @@ fn parse_inferred_multi_bind_value_block(
             string_table,
             location,
         });
+    }
+
+    if if_condition_is_missing(token_stream) {
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedConditionAfterIf,
+                token_stream.current_location(),
+            ),
+        ));
     }
 
     let mut condition_type = ExpectedType::Infer;
@@ -339,6 +351,17 @@ fn parse_inferred_inline_multi_bind_value_if(
         ));
     }
 
+    // A retained newline is a multiline form. Every other definite boundary means
+    // the branch has no first value.
+    if is_missing_produced_value_boundary(token_stream.current_token_kind()) {
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedValueAfterThen,
+                token_stream.current_location(),
+            ),
+        ));
+    }
+
     let then_values = parse_fixed_arity_inferred_values(
         token_stream,
         context,
@@ -379,6 +402,15 @@ fn parse_inferred_inline_multi_bind_value_if(
         return Err(Box::new(
             CompilerDiagnostic::invalid_control_flow_statement(
                 InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ),
+        ));
+    }
+
+    if is_missing_produced_value_boundary(token_stream.current_token_kind()) {
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedValueAfterElse,
                 token_stream.current_location(),
             ),
         ));

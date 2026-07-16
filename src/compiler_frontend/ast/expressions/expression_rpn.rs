@@ -102,13 +102,6 @@ pub struct PlaceExpression {
     pub location: SourceLocation,
 }
 
-impl PlaceExpression {
-    /// Returns true when this place resolves to a mutable local or field.
-    pub fn is_mutable(&self) -> bool {
-        self.value_mode.is_mutable()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum PlaceExpressionKind {
     /// A local variable by its interned path.

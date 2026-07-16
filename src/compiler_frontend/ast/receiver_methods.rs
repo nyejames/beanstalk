@@ -111,6 +111,8 @@ pub(crate) fn free_function_receiver_method_call_error(
         InvalidReceiverCallReason::CalledAsFreeFunction,
         Some(receiver_type_id),
         Some(method_name),
+        None,
+        None,
         location,
     )
 }

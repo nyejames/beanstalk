@@ -9,7 +9,7 @@ use super::{
 use crate::compiler_frontend::compiler_messages::{
     InvalidAssignmentTargetReason, InvalidBuiltinCallReason, InvalidCallShapeReason,
     InvalidCastReason, InvalidCopyTargetReason, InvalidFieldAccessReason, InvalidMultiBindReason,
-    InvalidReceiverCallReason, InvalidReturnShapeReason,
+    InvalidReceiverCallReason, InvalidReturnShapeReason, ReceiverCallKind,
 };
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -33,12 +33,7 @@ fn parameter_label(
 ) -> String {
     parameter_name
         .map(|name| format!("parameter '{}'", string_table.resolve(name)))
-        .unwrap_or_else(|| {
-            format!(
-                "parameter {parameter_index} (1-based: #{})",
-                parameter_index + 1
-            )
-        })
+        .unwrap_or_else(|| format!("parameter {}", parameter_index + 1))
 }
 
 pub(crate) fn invalid_call_shape_message(
@@ -101,28 +96,38 @@ pub(crate) fn invalid_call_shape_message(
             parameter_index,
         } => {
             let label = parameter_label(parameter_name, parameter_index, string_table);
-            format!("{prefix} requires mutable access (~) for {label}, but it was not provided. Prefix an existing mutable place with ~, for example `~value`.")
+            format!("{prefix} requires explicit mutable access for {label}. Prefix the existing mutable place with `~`.")
         }
         InvalidCallShapeReason::MutableAccessNotAllowed {
             parameter_name,
             parameter_index,
         } => {
             let label = parameter_label(parameter_name, parameter_index, string_table);
-            format!("{prefix} does not allow mutable access (~) for {label}, but it was provided. Remove the ~ prefix from this argument.")
+            format!("{prefix} does not accept mutable access for {label}. Remove the authored `~` from this argument.")
         }
         InvalidCallShapeReason::MutableAccessOnNonPlace {
             parameter_name,
             parameter_index,
         } => {
             let label = parameter_label(parameter_name, parameter_index, string_table);
-            format!("{prefix} requires mutable access (~) for {label}, but a non-place expression was provided. Mutable access needs a variable or field, not a literal or computed value.")
+            format!("{prefix} cannot use `~` on a fresh or computed value for {label}. Remove `~` and pass the value directly.")
         }
         InvalidCallShapeReason::MutableAccessOnImmutablePlace {
             parameter_name,
             parameter_index,
+            binding_name,
+        }
+        | InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+            parameter_name,
+            parameter_index,
+            binding_name,
         } => {
-            let label = parameter_label(parameter_name, parameter_index, string_table);
-            format!("{prefix} requires mutable access (~) for {label}, but an immutable place was provided. Declare the binding with ~ to allow mutation.")
+            immutable_place_mutable_access_message(
+                &prefix,
+                parameter_label(parameter_name, parameter_index, string_table),
+                binding_name,
+                string_table,
+            )
         }
         InvalidCallShapeReason::ReactiveSourceRequired {
             parameter_name,
@@ -130,6 +135,33 @@ pub(crate) fn invalid_call_shape_message(
         } => {
             let label = parameter_label(parameter_name, parameter_index, string_table);
             format!("{prefix} requires an existing reactive source for {label}. Pass a value declared with `$Type` or `$=` instead of an ordinary value.")
+        }
+    }
+}
+
+/// Render the shared immutable-place mutable-access message.
+///
+/// WHAT: used both for an immutable place passed without `~` and for an authored `~` on an
+///       immutable place, since the binding declaration is the real mistake in both cases.
+/// WHY: the two reasons differ only in which authored source the primary label points at; the
+/// prose guidance is identical.
+fn immutable_place_mutable_access_message(
+    prefix: &str,
+    parameter_label: String,
+    binding_name: Option<StringId>,
+    string_table: &StringTable,
+) -> String {
+    match binding_name {
+        Some(binding) => {
+            let binding_text = string_table.resolve(binding);
+            format!(
+                "{prefix} requires mutable access for {parameter_label}, but `{binding_text}` is immutable. Declare the binding as mutable, then pass `~{binding_text}`."
+            )
+        }
+        None => {
+            format!(
+                "{prefix} requires mutable access for {parameter_label}, but this argument comes from an immutable binding or field. The binding must be mutable before it is passed with `~`."
+            )
         }
     }
 }
@@ -406,53 +438,189 @@ pub(crate) fn invalid_receiver_call_message(
     reason: InvalidReceiverCallReason,
     receiver_type: Option<StringId>,
     method_name: Option<StringId>,
+    receiver_kind: Option<ReceiverCallKind>,
+    receiver_binding_name: Option<StringId>,
     string_table: &StringTable,
 ) -> String {
-    let receiver_text = named_value_or_default(receiver_type, string_table, "this receiver");
+    // `receiver_type` carries the rendered type label for type-named diagnostics such as
+    // `CalledAsFreeFunction`. Receiver-access diagnostics use the simple binding name and
+    // receiver kind instead, so the type field is never rendered as an authored value name.
+    let receiver_type_text = named_value_or_default(receiver_type, string_table, "this receiver");
     let method_text = named_value_or_default(method_name, string_table, "this method");
 
     match reason {
         InvalidReceiverCallReason::CalledAsFreeFunction => {
-            format!("{method_text} is a receiver method for {receiver_text} and cannot be called as a free function.")
+            format!("{method_text} is a receiver method for {receiver_type_text} and cannot be called as a free function.")
         }
         InvalidReceiverCallReason::MustUseParentheses => {
             format!("{method_text} is a receiver method and must be called with parentheses.")
         }
-        InvalidReceiverCallReason::ConstStructNoRuntimeCalls => {
+        InvalidReceiverCallReason::ConstRecordNoRuntimeCalls => {
             format!(
-                "Const struct records are data-only and do not support runtime method calls like {method_text}."
+                "Const records are data-only and do not support runtime method calls like {method_text}."
             )
         }
-        InvalidReceiverCallReason::MutablePlaceRequired => {
-            format!("Mutable receiver method {method_text} requires a mutable place receiver.")
+        InvalidReceiverCallReason::MutableReceiverMissingMarker => {
+            let method = backtick_name(method_name, string_table, "this method");
+            match receiver_kind {
+                Some(ReceiverCallKind::CollectionBuiltin)
+                | Some(ReceiverCallKind::MapBuiltin) => {
+                    let kind_noun = receiver_kind_noun(receiver_kind);
+                    format!("{method} requires a mutable {kind_noun} receiver. Call it with explicit `~` access.")
+                }
+                // Source methods name the receiver method form directly. When the simple
+                // receiver binding name is known, show the concrete `~name.method(...)` form
+                // so the guidance is source-visible rather than an internal placeholder.
+                _ => {
+                    let binding = backtick_name(receiver_binding_name, string_table, "");
+                    if binding.is_empty() {
+                        format!("Mutable receiver method {method} requires explicit mutable access. Prefix the receiver with `~`.")
+                    } else {
+                        // The concrete example uses raw authored names inside one code span so
+                        // the rendered form matches Beanstalk source (`~p.move(...)`) instead of
+                        // nesting backticks around each token.
+                        let raw_binding =
+                            raw_name(receiver_binding_name, string_table, "");
+                        let raw_method =
+                            raw_name(method_name, string_table, "method");
+                        format!("Mutable receiver method {method} requires explicit mutable access. Prefix the receiver with `~`, for example `~{raw_binding}.{raw_method}(...)`.")
+                    }
+                }
+            }
         }
-        InvalidReceiverCallReason::MutableCollectionRequired => {
-            format!(
-                "Collection mutating method {method_text} requires a mutable collection receiver."
-            )
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod => render_immutable_receiver(
+            method_name,
+            receiver_kind,
+            receiver_binding_name,
+            string_table,
+            /*authored_marker*/ false,
+        ),
+        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod => {
+            let method = backtick_name(method_name, string_table, "this method");
+            let kind_noun = receiver_kind_noun(receiver_kind);
+            match receiver_kind {
+                Some(ReceiverCallKind::SourceMethod) | None => format!("Mutable receiver method {method} requires a mutable place receiver. Bind this value in a mutable binding first, then call it with `~`."),
+                _ => format!("{method} requires a mutable {kind_noun} receiver. Bind this value in a mutable binding first, then call it with `~`."),
+            }
         }
-        InvalidReceiverCallReason::MutableMapRequired => {
-            format!(
-                "Map mutating method {method_text} requires a mutable map receiver."
-            )
-        }
-        InvalidReceiverCallReason::MissingMutableAccessMarker => {
-            format!(
-                "{method_text} expects mutable access at the receiver call site. Call this with '~{receiver_text}'."
-            )
+        InvalidReceiverCallReason::MutableMarkerOnImmutableReceiver => render_immutable_receiver(
+            method_name,
+            receiver_kind,
+            receiver_binding_name,
+            string_table,
+            /*authored_marker*/ true,
+        ),
+        InvalidReceiverCallReason::MutableMarkerOnNonPlaceReceiver => {
+            let method = backtick_name(method_name, string_table, "this method");
+            let kind_noun = receiver_kind_noun(receiver_kind);
+            match receiver_kind {
+                Some(ReceiverCallKind::SourceMethod) | None => format!("`~` accepts only an existing mutable place. Mutable receiver method {method} cannot be called on a temporary value. Bind this value in a mutable binding first, then call it with `~`."),
+                _ => format!("`~` accepts only an existing mutable place. {method} requires a mutable {kind_noun} receiver and cannot be called on a temporary value. Bind this value in a mutable binding first, then call it with `~`."),
+            }
         }
         InvalidReceiverCallReason::UnneededMutableAccessMarker => {
-            format!("{method_text} does not accept explicit mutable access marker '~'.")
+            let method = backtick_name(method_name, string_table, "this method");
+            format!("{method} does not accept an explicit mutable access marker `~`. Remove the `~` from this call.")
         }
         InvalidReceiverCallReason::MutableMarkerOnNonReceiverCall => {
-            "Mutable receiver marker '~' is only valid for receiver calls like '~value.method(...)' or '~values.push(...)'."
+            "Mutable receiver marker `~` is only valid for receiver calls like `~value.method(...)` or `~values.push(...)`."
                 .to_string()
         }
         InvalidReceiverCallReason::AmbiguousGenericBoundMethod => {
             format!(
-                "{method_text} is provided by more than one generic bound for {receiver_text}. Add a more specific bound or rename one of the trait requirements."
+                "{method_text} is provided by more than one generic bound for {receiver_type_text}. Add a more specific bound or rename one of the trait requirements."
             )
         }
+    }
+}
+
+/// Render an immutable-receiver diagnostic for either the missing-marker or authored-marker case.
+///
+/// WHAT: shares the kind-aware noun and binding-name wording between the two immutable-receiver
+///       reasons, varying only the leading clause by whether `~` was authored.
+/// WHY: both reasons name the binding to declare mutable; the authored-marker case additionally
+///      explains that `~` accepts only an existing mutable place and points at the marker.
+fn render_immutable_receiver(
+    method_name: Option<StringId>,
+    receiver_kind: Option<ReceiverCallKind>,
+    receiver_binding_name: Option<StringId>,
+    string_table: &StringTable,
+    authored_marker: bool,
+) -> String {
+    let method = backtick_name(method_name, string_table, "this method");
+    let kind_noun = receiver_kind_noun(receiver_kind);
+    let binding = backtick_name(receiver_binding_name, string_table, "");
+    let (requirement_phrase, access_command, access_gerund) = match receiver_kind {
+        Some(ReceiverCallKind::SourceMethod) | None => (
+            format!("Mutable receiver method {method} requires a mutable receiver"),
+            "call it with `~`",
+            "calling it with `~`",
+        ),
+        _ => (
+            format!("{method} requires a mutable {kind_noun} receiver"),
+            "call it with explicit `~` access",
+            "calling it with explicit `~` access",
+        ),
+    };
+
+    let declare_phrase = if binding.is_empty() {
+        match receiver_kind {
+            Some(ReceiverCallKind::SourceMethod) | None => {
+                "Declare the binding as mutable".to_string()
+            }
+            _ => format!("Declare the {kind_noun} binding as mutable"),
+        }
+    } else {
+        format!("Declare {binding} as mutable")
+    };
+
+    let state_clause = if binding.is_empty() {
+        "the receiver is immutable".to_string()
+    } else {
+        format!("{binding} is immutable")
+    };
+
+    if authored_marker {
+        format!(
+            "`~` accepts only an existing mutable place. {requirement_phrase}, but {state_clause}. {declare_phrase} before {access_gerund}."
+        )
+    } else {
+        format!(
+            "{requirement_phrase}, but {state_clause}. {declare_phrase}, then {access_command}."
+        )
+    }
+}
+
+/// Render a payload name in backticks, falling back to `fallback` when the fact is absent.
+///
+/// WHAT: receiver-access diagnostics render authored source names (method, binding) as code
+///       spans rather than the single-quoted labels used by type-named diagnostics.
+/// WHY: the active diagnostics plan specifies source-visible code spans for receiver-access
+///      guidance so the rendered example matches authored Beanstalk syntax.
+fn backtick_name(name: Option<StringId>, string_table: &StringTable, fallback: &str) -> String {
+    name.map(|n| format!("`{}`", string_table.resolve(n)))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// Resolve a payload name to its raw source spelling, falling back to `fallback` when absent.
+///
+/// WHAT: used inside a single rendered code span where the name should not carry its own
+///       backtick delimiters.
+fn raw_name(name: Option<StringId>, string_table: &StringTable, fallback: &str) -> String {
+    name.map(|n| string_table.resolve(n).to_string())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+/// The rendered noun for a receiver-call kind, used by receiver-access diagnostics.
+///
+/// WHAT: maps the receiver kind payload fact to the source-facing noun.
+/// WHY: collection and map builtins name their receiver kind, while source methods use the
+///      "receiver method" phrasing inline, so this helper supplies the kind noun only.
+fn receiver_kind_noun(kind: Option<ReceiverCallKind>) -> &'static str {
+    match kind {
+        Some(ReceiverCallKind::CollectionBuiltin) => "collection",
+        Some(ReceiverCallKind::MapBuiltin) => "map",
+        Some(ReceiverCallKind::SourceMethod) | None => "receiver",
     }
 }
 
@@ -508,7 +676,9 @@ pub(crate) fn invalid_field_access_message(
 
     match reason {
         InvalidFieldAccessReason::ExpectedNameAfterDot => {
-            format!("Expected property or method name after '.', found {field_text}.")
+            // The optional field-name fallback is intentionally unused here: the access ended
+            // at the dot, so there is no authored member name to echo back to the user.
+            "Expected a field or method name after '.', but this access ends here.".to_owned()
         }
         InvalidFieldAccessReason::FieldNotMethod => {
             format!(

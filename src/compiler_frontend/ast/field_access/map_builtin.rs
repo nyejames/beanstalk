@@ -58,6 +58,7 @@ pub(super) fn parse_map_builtin_member_typed(
         member_name,
         member_location,
         receiver_access_mode,
+        authored_marker_location,
         scope_context,
     } = context;
 
@@ -92,6 +93,7 @@ pub(super) fn parse_map_builtin_member_typed(
             receiver_node,
             receiver_access_mode,
             &member_location,
+            authored_marker_location.as_ref(),
             ReceiverAccessRequirement {
                 requires_mutable: false,
                 diagnostic: ReceiverAccessDiagnostic::MapBuiltin {
@@ -150,6 +152,7 @@ pub(super) fn parse_map_builtin_member_typed(
         receiver_node,
         receiver_access_mode,
         &member_location,
+        authored_marker_location.as_ref(),
         ReceiverAccessRequirement {
             requires_mutable: mutating_receiver_required,
             diagnostic: ReceiverAccessDiagnostic::MapBuiltin {

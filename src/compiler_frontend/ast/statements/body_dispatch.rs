@@ -25,7 +25,8 @@ use crate::compiler_frontend::ast::statements::scoped_blocks::{
     parse_scoped_block_statement, reserved_block_keyword_as_name_error,
 };
 use crate::compiler_frontend::ast::statements::value_production::{
-    ProducedValues, ProducedValuesParseInput, ValueReceiverKind, parse_produced_values_typed,
+    ProducedValues, ProducedValuesParseInput, ValueReceiverKind,
+    is_missing_produced_value_boundary, parse_produced_values_typed,
 };
 use crate::compiler_frontend::ast::templates::template::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -278,14 +279,13 @@ pub(crate) fn parse_function_body_statements(
                     ));
                 };
 
-                if matches!(
-                    token_stream.current_token_kind(),
-                    TokenKind::Newline | TokenKind::End | TokenKind::Eof
-                ) {
+                if token_stream.current_token_kind() == &TokenKind::Newline
+                    || is_missing_produced_value_boundary(token_stream.current_token_kind())
+                {
                     return Err(statement_dispatch_error(
                         CompilerDiagnostic::invalid_result_handling(
                             InvalidResultHandlingReason::ThenRequiresValues,
-                            then_location,
+                            token_stream.current_location(),
                         ),
                     ));
                 }

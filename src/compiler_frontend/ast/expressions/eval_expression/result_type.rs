@@ -11,7 +11,9 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, OperatorOperandPosition};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidExpressionReason, OperatorOperandPosition,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -146,7 +148,11 @@ pub(super) fn resolve_expression_result_type(
     // ------------------------
 
     if stack.len() != 1 {
-        return Err(CompilerDiagnostic::invalid_expression(expression_location.clone()).into());
+        return Err(CompilerDiagnostic::invalid_expression(
+            InvalidExpressionReason::UnresolvedStackShape,
+            expression_location.clone(),
+        )
+        .into());
     }
 
     // ------------------------

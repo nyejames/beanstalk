@@ -27,6 +27,7 @@ use crate::compiler_frontend::syntax_errors::signature_position::check_signature
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 use crate::compiler_frontend::value_mode::ValueMode;
+use rustc_hash::FxHashMap;
 
 /// Boxed diagnostic result for signature member/parameter parsing.
 ///
@@ -238,6 +239,7 @@ pub fn parse_signature_members_syntax(
     let mut members = Vec::with_capacity(1);
     let mut expecting_member = true;
     let mut member_index = 0;
+    let mut seen_member_names: FxHashMap<StringId, SourceLocation> = FxHashMap::default();
 
     fn ensure_member_slot(
         expecting_member: bool,
@@ -289,6 +291,7 @@ pub fn parse_signature_members_syntax(
                     member_context,
                 )?;
 
+                record_ordinary_member_name(&mut seen_member_names, &member)?;
                 members.push(member);
                 expecting_member = false;
                 member_index += 1;
@@ -428,6 +431,36 @@ pub fn parse_signature_members_syntax(
     }
 
     Ok(members)
+}
+
+/// Reject a duplicate member name in one shared `| ... |` member list.
+///
+/// WHAT: the current member is primary and the first member is secondary, reusing
+/// `DuplicateDeclaration` (`BST-RULE-0002`) so ordinary function parameters, struct fields,
+/// choice payload fields and ordinary trait-requirement parameters share one owner. Reserved
+/// receivers keep their receiver-specific validation.
+/// WHY: keeping duplicate-name detection in the shared signature-member parser prevents
+/// duplicate members from reaching HIR or infrastructure invariants, and avoids
+/// function-, struct- or choice-specific duplicate validators.
+fn record_ordinary_member_name(
+    seen_member_names: &mut FxHashMap<StringId, SourceLocation>,
+    member: &SignatureMemberSyntax,
+) -> SignatureMemberParseResult<()> {
+    let Some(member_name) = member.id.name() else {
+        return Ok(());
+    };
+
+    if let Some(first_location) = seen_member_names.get(&member_name) {
+        return Err(CompilerDiagnostic::duplicate_declaration(
+            member_name,
+            Some(first_location.clone()),
+            member.location.clone(),
+        )
+        .into());
+    }
+
+    seen_member_names.insert(member_name, member.location.clone());
+    Ok(())
 }
 
 fn parse_signature_member_syntax(
@@ -619,9 +652,33 @@ fn parse_trait_this_member_syntax(
     })
 }
 
+/// A token kind that can only follow an authored `=` when the default value is missing:
+/// top-level comma, closing pipe, newline, block end or EOF.
+fn is_missing_default_boundary(token_kind: &TokenKind) -> bool {
+    matches!(
+        token_kind,
+        TokenKind::Comma
+            | TokenKind::TypeParameterBracket
+            | TokenKind::Newline
+            | TokenKind::End
+            | TokenKind::Eof
+    )
+}
+
 fn collect_member_default_tokens(
     token_stream: &mut FileTokens,
 ) -> SignatureMemberParseResult<Vec<Token>> {
+    // A member/EOF boundary before any expression token is a missing default, not an empty
+    // one, so report it here rather than letting a newline reach the infra error path. Only
+    // fires before the first expression token, so valid multiline defaults still pass.
+    if is_missing_default_boundary(token_stream.current_token_kind()) {
+        return Err(CompilerDiagnostic::invalid_signature_member(
+            InvalidSignatureMemberReason::MissingDefaultValue,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
     let mut tokens = Vec::new();
     let mut depth = NestingDepth::default();
 
@@ -673,6 +730,12 @@ fn parse_trait_requirement_return_list(
     let mut return_slots = Vec::new();
 
     token_stream.advance(); // past ->
+    if let Some(diagnostic) = missing_return_type_after_arrow(
+        token_stream,
+        InvalidFunctionSignatureReason::MissingTraitRequirementReturnType,
+    ) {
+        return Err(diagnostic);
+    }
 
     loop {
         return_slots.push(parse_single_return_item_syntax(
@@ -748,6 +811,29 @@ pub fn parse_trait_requirement_signature_syntax(
     })
 }
 
+/// Report a missing return type when the token after an authored `->` cannot start one.
+///
+/// WHAT: returns the caller-selected `reason` for `:`, newline, block end and EOF, the
+///       boundaries where the signature parser owns the missing-type diagnosis instead of
+///       delegating to a generic type-annotation error. The diagnostic points at the first
+///       missing-type boundary after the arrow, never at the arrow itself.
+/// WHY: function-signature and trait-requirement return lists share this boundary but need
+///      different guidance. A function signature ends its body with `:`, while a bodyless
+///      trait requirement does not. The caller selects the factual reason so the shared
+///      boundary predicate stays in one place.
+fn missing_return_type_after_arrow(
+    token_stream: &FileTokens,
+    reason: InvalidFunctionSignatureReason,
+) -> Option<Box<CompilerDiagnostic>> {
+    match token_stream.current_token_kind() {
+        TokenKind::Colon | TokenKind::Newline | TokenKind::End | TokenKind::Eof => Some(
+            CompilerDiagnostic::invalid_function_signature(reason, token_stream.current_location())
+                .into(),
+        ),
+        _ => None,
+    }
+}
+
 fn parse_return_list_syntax(
     token_stream: &mut FileTokens,
     parameters: &[SignatureMemberSyntax],
@@ -756,12 +842,11 @@ fn parse_return_list_syntax(
     let mut return_slots = Vec::new();
 
     token_stream.advance();
-    if token_stream.current_token_kind() == &TokenKind::Colon {
-        return Err(CompilerDiagnostic::invalid_function_signature(
-            InvalidFunctionSignatureReason::UnexpectedColonAfterArrow,
-            token_stream.current_location(),
-        )
-        .into());
+    if let Some(diagnostic) = missing_return_type_after_arrow(
+        token_stream,
+        InvalidFunctionSignatureReason::MissingReturnType,
+    ) {
+        return Err(diagnostic);
     }
 
     loop {
@@ -1079,3 +1164,7 @@ pub(crate) fn alias_return_type_mismatch_diagnostic(
         location,
     )
 }
+
+#[cfg(test)]
+#[path = "tests/signature_member_duplicate_tests.rs"]
+mod signature_member_duplicate_tests;

@@ -12,7 +12,9 @@ use crate::compiler_frontend::ast::expressions::expression_rpn::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidExpressionReason, TypeMismatchContext,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -118,7 +120,11 @@ pub fn evaluate_expression(
 
     // Folding consumed every node but produced no result (e.g. empty input).
     if stack.is_empty() {
-        return Err(CompilerDiagnostic::invalid_expression(location).into());
+        return Err(CompilerDiagnostic::invalid_expression(
+            InvalidExpressionReason::UnresolvedStackShape,
+            location,
+        )
+        .into());
     }
 
     // Partial fold: assemble the reduced stack into runtime RPN.

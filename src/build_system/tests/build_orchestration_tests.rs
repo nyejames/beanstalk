@@ -566,7 +566,7 @@ fn build_directory_project_rejects_invalid_page_url_style() {
     assert!(
         rendered_errors
             .iter()
-            .any(|message| message.contains("#page_url_style")),
+            .any(|message| message.contains("'page_url_style'")),
         "expected page_url_style validation message"
     );
 

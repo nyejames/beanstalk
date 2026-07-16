@@ -99,10 +99,6 @@ pub enum InvalidMutableAccessReason {
 pub enum InvalidConfigReason {
     MissingKey,
     DuplicateKey,
-    DeprecatedSrcKey,
-    ReplacedLibrariesKey,
-    ReplacedRootFoldersKey,
-    ReplacedPackageFoldersKey,
     FunctionUnsupported,
     TraitDeclarationUnsupported,
     TraitConformanceUnsupported,
@@ -330,10 +326,6 @@ impl InvalidConfigReason {
 
             Self::MissingKey
             | Self::DuplicateKey
-            | Self::DeprecatedSrcKey
-            | Self::ReplacedLibrariesKey
-            | Self::ReplacedRootFoldersKey
-            | Self::ReplacedPackageFoldersKey
             | Self::FunctionUnsupported
             | Self::TraitDeclarationUnsupported
             | Self::TraitConformanceUnsupported
@@ -674,13 +666,17 @@ pub enum InvalidSignatureMemberReason {
     TraitRequirementDefaultValue,
     ReactiveAccessNotAllowed,
     ReactiveParameterDefaultValue,
+    /// An authored `=` introduced a parameter or struct-field default but no value
+    /// followed it before a top-level comma, closing pipe, newline, block end or EOF.
+    MissingDefaultValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InvalidFunctionSignatureReason {
     MissingArrowOrColon { found: TokenKind },
     UnexpectedEndAfterParameters,
-    UnexpectedColonAfterArrow,
+    MissingReturnType,
+    MissingTraitRequirementReturnType,
     TrailingCommaInReturns,
     UnexpectedEndAfterComma,
     UnexpectedEndInReturns,
@@ -765,6 +761,7 @@ pub enum InvalidControlFlowStatementReason {
     ReturnOutsideFunction,
     ReturnBangOutsideErrorFunction,
     ExpectedColonAfterCondition,
+    ExpectedConditionAfterIf,
     UnexpectedEndOfFileInMatch,
     CaseRequiredBeforeElse,
     DuplicateElseArm,
@@ -777,6 +774,8 @@ pub enum InvalidControlFlowStatementReason {
     ValueBlockOutsideReceiver,
     ValueIfOptionNonePredicate,
     ValueIfOptionLiteralPredicate,
+    ExpectedValueAfterThen,
+    ExpectedValueAfterElse,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -799,6 +798,7 @@ pub enum InvalidDeclarationReason {
     TraitConformanceSemicolon,
     TraitIncompatibilityMissingTrait,
     TraitIncompatibilitySemicolon,
+    MissingInitializerExpression,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -976,16 +976,44 @@ pub enum InvalidCastReason {
     CatchHandlerNotConstFoldable,
 }
 
+/// Which receiver-call surface produced a receiver-access diagnostic.
+///
+/// WHAT: distinguishes user source receiver methods from compiler-owned collection and map
+///       builtins so the shared renderer can name the receiver kind without per-kind reason
+///       variants.
+/// WHY: collection builtins, map builtins and source methods share one access classifier, and
+///      the kind only affects the rendered noun, not the source-state logic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ReceiverCallKind {
+    SourceMethod,
+    CollectionBuiltin,
+    MapBuiltin,
+}
+
+/// Structured reasons behind the stable invalid-receiver-call diagnostic family.
+///
+/// WHAT: encodes the receiver source state and whether `~` was authored, independent of the
+///       receiver kind. The receiver kind is carried as a separate payload fact.
+/// WHY: a temporary receiver, an immutable existing place and a mutable place missing `~` are
+///      distinct user mistakes with different repairs, so they must not share one reason.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidReceiverCallReason {
     CalledAsFreeFunction,
     MustUseParentheses,
-    ConstStructNoRuntimeCalls,
-    MutablePlaceRequired,
-    MutableCollectionRequired,
-    MutableMapRequired,
-    MissingMutableAccessMarker,
+    ConstRecordNoRuntimeCalls,
+    /// An existing mutable receiver used without the required `~` marker.
+    MutableReceiverMissingMarker,
+    /// An existing immutable receiver used for a mutable-requiring call without `~`.
+    ImmutableReceiverMutableMethod,
+    /// A temporary or non-place receiver used for a mutable-requiring call without `~`.
+    NonPlaceReceiverMutableMethod,
+    /// `~` authored on an existing immutable receiver for a mutable-requiring call.
+    MutableMarkerOnImmutableReceiver,
+    /// `~` authored on a temporary or non-place receiver for a mutable-requiring call.
+    MutableMarkerOnNonPlaceReceiver,
+    /// `~` authored on a call that does not require mutable access.
     UnneededMutableAccessMarker,
+    /// `~` authored with no receiver call following it.
     MutableMarkerOnNonReceiverCall,
     AmbiguousGenericBoundMethod,
 }
@@ -1167,9 +1195,7 @@ impl InvalidResultHandlingReason {
                 "`then` cannot target a value-producing block across this construct."
             }
 
-            InvalidResultHandlingReason::ThenRequiresValues => {
-                "`then` must produce at least one value."
-            }
+            InvalidResultHandlingReason::ThenRequiresValues => "Expected a value after 'then'.",
 
             InvalidResultHandlingReason::DirectOptionFallbackSyntax => {
                 "Optional values do not support direct fallback syntax. Use `if option is |value| ... else ...`."
@@ -1371,6 +1397,18 @@ pub enum InvalidCallShapeReason {
     MutableAccessOnImmutablePlace {
         parameter_name: Option<StringId>,
         parameter_index: usize,
+        binding_name: Option<StringId>,
+    },
+
+    /// An immutable existing place passed to a mutable parameter without `~`.
+    ///
+    /// WHAT: distinct from `MutableAccessOnImmutablePlace`, which covers an authored `~`.
+    /// WHY: the missing marker and the authored marker are different user mistakes, so the
+    /// diagnostic points at the value expression here and at the `~` marker there.
+    ImmutablePlaceMutableAccessRequired {
+        parameter_name: Option<StringId>,
+        parameter_index: usize,
+        binding_name: Option<StringId>,
     },
 
     ReactiveSourceRequired {
@@ -1442,6 +1480,15 @@ pub enum OperatorOperandPosition {
     Unary,
     BinaryLeft,
     BinaryRight,
+}
+
+/// Structured reasons behind the stable invalid-expression diagnostic family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidExpressionReason {
+    /// Two operands appeared with no operator between them.
+    ExpectedOperatorBeforeExpression,
+    /// Defensive evaluator fallback after structural parser checks.
+    UnresolvedStackShape,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

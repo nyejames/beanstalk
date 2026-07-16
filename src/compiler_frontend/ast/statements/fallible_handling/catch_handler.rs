@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::expressions::expression_types::CatchErrorBind
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::value_production::{
     ActiveValueProductionTarget, ProducedValues, ProducedValuesParseInput, ValueReceiverKind,
-    parse_produced_values_typed,
+    is_missing_produced_value_boundary, parse_produced_values_typed,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
@@ -345,12 +345,19 @@ fn parse_inline_catch_handler_body(
     let then_location = token_stream.current_location();
     token_stream.advance();
 
-    if matches!(
-        token_stream.current_token_kind(),
-        TokenKind::Newline | TokenKind::End | TokenKind::Eof
-    ) {
+    // A retained newline proves a multiline form. Other empty boundaries use the
+    // shared missing-value diagnostic before expression evaluation.
+    if token_stream.current_token_kind() == &TokenKind::Newline {
         return Err(CompilerDiagnostic::invalid_result_handling(
             InvalidResultHandlingReason::InlineCatchMultiline,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    if is_missing_produced_value_boundary(token_stream.current_token_kind()) {
+        return Err(CompilerDiagnostic::invalid_result_handling(
+            InvalidResultHandlingReason::ThenRequiresValues,
             token_stream.current_location(),
         )
         .into());

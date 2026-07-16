@@ -34,7 +34,7 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 
 pub(super) struct ParsedConfigFile {
@@ -47,6 +47,11 @@ pub(super) struct ParsedConfigFile {
     /// identity used for tokenization, duplicate diagnostic classification and AST entry identity,
     /// so authored-scope comparisons never re-canonicalize or convert back to `PathBuf`.
     pub(super) authored_scope: InternedPath,
+    /// Header-owned key-name spans keyed by the full declaration path.
+    ///
+    /// Preserved before AST consumes the headers so key diagnostics can underline the authored
+    /// name while downstream setting diagnostics keep using the declaration value location.
+    pub(super) authored_key_name_locations: HashMap<InternedPath, SourceLocation>,
 }
 
 // -------------------------
@@ -344,6 +349,14 @@ pub(super) fn parse_config_file(
     log_config_stage_timing("config.parse.dependency_sort", dependency_sort_start);
 
     // -------------------------
+    //  Authored Key-Name Spans
+    // -------------------------
+    // Preserve key-name spans before AST consumes the headers. The full header path becomes the
+    // declaration ID, so validation can recover the exact span without rebuilding an identity.
+    let authored_key_name_locations =
+        collect_authored_config_key_name_locations(&sorted.headers, &authored_scope);
+
+    // -------------------------
     //  AST Construction
     // -------------------------
     let ast_start = crate::timing::start_pipeline_timing();
@@ -385,6 +398,7 @@ pub(super) fn parse_config_file(
         ast,
         errors,
         authored_scope,
+        authored_key_name_locations,
     })
 }
 
@@ -567,6 +581,33 @@ fn prepare_one_config_file(
     }
 
     Ok(Some(output))
+}
+
+// -------------------------
+//  Authored Key-Name Spans
+// -------------------------
+
+/// Collect the authored key-name spans for config key-identity diagnostics.
+///
+/// Imported support declarations are excluded because they are not config entries.
+fn collect_authored_config_key_name_locations(
+    headers: &[Header],
+    authored_scope: &InternedPath,
+) -> HashMap<InternedPath, SourceLocation> {
+    let mut key_name_locations = HashMap::new();
+    for header in headers {
+        let HeaderKind::Constant { .. } = &header.kind else {
+            continue;
+        };
+        if header.source_file != *authored_scope {
+            continue;
+        }
+        key_name_locations.insert(
+            header.tokens.src_path.to_owned(),
+            header.name_location.clone(),
+        );
+    }
+    key_name_locations
 }
 
 // -------------------------

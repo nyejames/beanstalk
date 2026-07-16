@@ -257,6 +257,6 @@ pub(crate) fn duplicate_declaration_message(name: StringId, string_table: &Strin
     let name_str = string_table.resolve(name);
 
     format!(
-        "There is already a top-level declaration using the name '{name_str}'. Functions, structs, and compile-time constants must use unique names within a file."
+        "Cannot declare '{name_str}' because that name is already visible in this scope. Beanstalk does not allow duplicate names or shadowing."
     )
 }

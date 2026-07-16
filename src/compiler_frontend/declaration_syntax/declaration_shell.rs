@@ -7,7 +7,9 @@
 //! references, while AST resolves the full expression semantics later.
 //! MUST NOT: perform type checking, constant folding, or semantic validation.
 
-use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, CompilerDiagnostic};
+use crate::compiler_frontend::compiler_messages::{
+    CommonSyntaxMistakeReason, CompilerDiagnostic, InvalidDeclarationReason,
+};
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -91,10 +93,12 @@ pub fn parse_declaration_syntax(
             token_stream.advance();
         }
         TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
-            return Err(Box::new(CompilerDiagnostic::uninitialized_variable(
-                name,
-                token_stream.current_location(),
-            )));
+            return Err(Box::new(
+                CompilerDiagnostic::missing_declaration_initializer(
+                    name,
+                    token_stream.current_location(),
+                ),
+            ));
         }
         _ => {
             return Err(Box::new(CompilerDiagnostic::expected_token(
@@ -107,12 +111,30 @@ pub fn parse_declaration_syntax(
 
     // Transitive mutation: the token scanner may intern EOF delimiters for diagnostics
     // when the initializer is unclosed at end-of-file.
-    let initializer_tokens = collect_declaration_initializer_tokens(token_stream, string_table)?;
+    let mut initializer_tokens =
+        collect_declaration_initializer_tokens(token_stream, string_table)?;
     if initializer_tokens.is_empty() {
-        return Err(Box::new(CompilerDiagnostic::uninitialized_variable(
-            name,
-            target.location.clone(),
+        // The author wrote `=` but supplied no initializer expression. Point at the real
+        // boundary after `=` (newline, end, EOF or comma) rather than the declaration name
+        // or target type, so the diagnostic anchors where the initializer is missing.
+        return Err(Box::new(CompilerDiagnostic::invalid_declaration(
+            InvalidDeclarationReason::MissingInitializerExpression,
+            Some(name),
+            token_stream.current_location(),
         )));
+    }
+
+    // Retain the real boundary after an incomplete inline value-`if` tail. AST otherwise
+    // appends a synthetic EOF at the declaration location, losing both multiline context
+    // and the source location of an authored block close.
+    if matches!(
+        initializer_tokens.last().map(|token| &token.kind),
+        Some(TokenKind::Then | TokenKind::Else)
+    ) && matches!(
+        token_stream.current_token_kind(),
+        TokenKind::Newline | TokenKind::End | TokenKind::Eof | TokenKind::Comma
+    ) {
+        initializer_tokens.push(token_stream.current_token());
     }
 
     Ok(DeclarationSyntax {
@@ -210,3 +232,7 @@ pub(crate) fn require_binding_marker_adjacent(
 #[cfg(test)]
 #[path = "tests/shell_remap_tests.rs"]
 mod shell_remap_tests;
+
+#[cfg(test)]
+#[path = "tests/initializer_boundary_tests.rs"]
+mod initializer_boundary_tests;

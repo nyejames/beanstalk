@@ -36,6 +36,9 @@ pub(crate) fn invalid_control_flow_statement_message(
         InvalidControlFlowStatementReason::ExpectedColonAfterCondition => {
             "Expected ':' after the condition to open a new scope.".to_string()
         }
+        InvalidControlFlowStatementReason::ExpectedConditionAfterIf => {
+            "Expected a condition after 'if'.".to_string()
+        }
         InvalidControlFlowStatementReason::UnexpectedEndOfFileInMatch => {
             "Unexpected end of file in match statement.".to_string()
         }
@@ -71,6 +74,12 @@ pub(crate) fn invalid_control_flow_statement_message(
         }
         InvalidControlFlowStatementReason::ValueIfOptionLiteralPredicate => {
             "Inline value-producing optional checks must use `|value|`; literal option matching belongs in full `if option is:` matches.".to_string()
+        }
+        InvalidControlFlowStatementReason::ExpectedValueAfterThen => {
+            "Expected a value after 'then'.".to_string()
+        }
+        InvalidControlFlowStatementReason::ExpectedValueAfterElse => {
+            "Expected a value after 'else'.".to_string()
         }
     }
 }

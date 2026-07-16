@@ -45,8 +45,8 @@ pub(crate) use diagnostic_payload::{
     InvalidAssignmentTargetReason, InvalidBuiltinCallReason, InvalidCallShapeReason,
     InvalidCastReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidCompileTimePathReason, InvalidConfigReason, InvalidControlFlowStatementReason,
-    InvalidCopyTargetReason, InvalidDeclarationReason, InvalidFieldAccessReason,
-    InvalidFunctionSignatureReason, InvalidGenericInstantiationReason,
+    InvalidCopyTargetReason, InvalidDeclarationReason, InvalidExpressionReason,
+    InvalidFieldAccessReason, InvalidFunctionSignatureReason, InvalidGenericInstantiationReason,
     InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
     InvalidLoopHeaderReason, InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
     InvalidMatchPatternReason, InvalidMultiBindReason, InvalidMutableAccessReason,
@@ -59,8 +59,8 @@ pub(crate) use diagnostic_payload::{
     InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, MissingWhitespace, NameNamespace,
     NamespaceTypeValueMisuseKind, NamingConvention, NonExhaustiveMatchReason,
     NumberLiteralErrorReason, OperatorOperandPosition, PathKind, RangeOperandKind,
-    ReservedNameOwner, SymbolicSpacingConstruct, SymbolicSpacingError, TypeAnnotationContext,
-    TypeMismatchContext, UnsupportedOperatorCategory,
+    ReceiverCallKind, ReservedNameOwner, SymbolicSpacingConstruct, SymbolicSpacingError,
+    TypeAnnotationContext, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 pub(crate) use diagnostic_severity::DiagnosticSeverity;
 

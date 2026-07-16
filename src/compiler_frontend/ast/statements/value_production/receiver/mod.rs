@@ -15,7 +15,9 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
-use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::condition_validation::{
+    ensure_if_statement_condition, if_condition_is_missing,
+};
 use crate::compiler_frontend::ast::statements::value_production::types::ValueReceiverKind;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -178,6 +180,15 @@ fn parse_bool_value_if_after_condition(
     string_table: &mut StringTable,
     location: SourceLocation,
 ) -> ReceiverResult<Expression> {
+    if if_condition_is_missing(token_stream) {
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedConditionAfterIf,
+                token_stream.current_location(),
+            ),
+        ));
+    }
+
     let mut condition_type = ExpectedType::Infer;
     let condition_context = context.new_child_control_flow(ContextKind::Condition, string_table);
     let mut cast_target_context = CastTargetContext::None;

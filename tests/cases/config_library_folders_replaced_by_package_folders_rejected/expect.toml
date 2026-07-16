@@ -1,7 +1,0 @@
-entry = "."
-
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-diagnostic_codes = ["BST-CONFIG-0001"]
-message_contains = ["Config key 'library_folders' has been replaced", "Use 'package_folders' instead"]

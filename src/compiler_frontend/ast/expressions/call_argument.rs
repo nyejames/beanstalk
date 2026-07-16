@@ -47,6 +47,14 @@ pub struct CallArgument {
 
     /// For named arguments, the source location of the parameter name token.
     pub target_location: Option<SourceLocation>,
+
+    /// Optional source location of the authored `~` mutable-access marker.
+    ///
+    /// WHAT: preserves the location of the `~` token when the author wrote it.
+    /// WHY: mutable-access diagnostics point at the marker when it is the real mistake, and at
+    /// the value expression when the marker is absent, so the primary label stays on the
+    /// authored source that the author must change.
+    pub marker_location: Option<SourceLocation>,
 }
 
 impl CallArgument {
@@ -75,6 +83,7 @@ impl CallArgument {
             passing_mode: Self::passing_mode_from_access_mode(access_mode),
             location,
             target_location: None,
+            marker_location: None,
         }
     }
 
@@ -93,12 +102,22 @@ impl CallArgument {
             passing_mode: Self::passing_mode_from_access_mode(access_mode),
             location,
             target_location: Some(target_location),
+            marker_location: None,
         }
     }
 
     /// Override the passing mode after validation has refined the provisional parse-time classification.
     pub fn with_passing_mode(mut self, passing_mode: CallPassingMode) -> Self {
         self.passing_mode = passing_mode;
+        self
+    }
+
+    /// Attach the source location of the authored `~` mutable-access marker.
+    ///
+    /// WHAT: only the parse owner populates this, because only it sees the `~` token.
+    /// WHY: synthetic/test constructors that do not parse authored tokens leave it `None`.
+    pub fn with_marker_location(mut self, marker_location: SourceLocation) -> Self {
+        self.marker_location = Some(marker_location);
         self
     }
 }

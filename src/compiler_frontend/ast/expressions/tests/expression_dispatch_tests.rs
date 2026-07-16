@@ -22,7 +22,9 @@ use crate::compiler_frontend::ast::templates::tir::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
-use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticPayload, InvalidExpressionReason,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::numeric_text::token::NumericLiteralToken;
@@ -275,7 +277,9 @@ fn hash_from_tokenized_source_rejected() {
     );
 }
 
-use crate::compiler_frontend::tests::parse_support::parse_single_file_ast_diagnostic;
+use crate::compiler_frontend::tests::parse_support::{
+    parse_single_file_ast, parse_single_file_ast_diagnostic,
+};
 
 #[test]
 fn full_frontend_stray_hash_error() {
@@ -372,4 +376,199 @@ fn constant_identifier_uses_foreign_effective_tir() {
         parsed_template.tir_reference.root.store_id,
         foreign_store_id
     );
+}
+
+// ----------------------------------
+//  Adjacent operand source locations
+// ----------------------------------
+
+/// Converts a byte offset to the lexer's 1-indexed source column.
+fn one_indexed_column(byte_index: usize) -> i32 {
+    (byte_index as i32).saturating_add(1)
+}
+
+fn assert_adjacent_operand_reason(diagnostic: &CompilerDiagnostic) {
+    assert!(
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidExpression {
+                reason: InvalidExpressionReason::ExpectedOperatorBeforeExpression,
+            }
+        ),
+        "adjacent operands must use the structured missing-operator reason, got {:?}",
+        diagnostic.payload,
+    );
+}
+
+#[test]
+fn adjacent_numeric_literals_report_missing_operator_at_second_expression() {
+    let source = "value = 1 2";
+    let second_expression_column = one_indexed_column(
+        source
+            .rfind('2')
+            .expect("source must contain second operand"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_expression_column,
+        "primary location must start at the second expression, not the first operand",
+    );
+}
+
+#[test]
+fn adjacent_grouped_expression_reports_missing_operator_at_second_group() {
+    let source = "value = (1) (2)";
+    let second_group_column = one_indexed_column(
+        source
+            .rfind('(')
+            .expect("source must contain a second group opening"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_group_column,
+        "primary location must start at the second group opening, the second operand",
+    );
+}
+
+#[test]
+fn operand_before_template_reports_missing_operator_at_template_start() {
+    let source = "value = 1 [: two]";
+    let template_start_column = one_indexed_column(
+        source
+            .find("[:")
+            .expect("source must contain template start"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, template_start_column,
+        "primary location must start at the template, the second operand",
+    );
+}
+
+#[test]
+fn template_before_operand_reports_missing_operator_at_second_expression() {
+    let source = "value = [: one] 2";
+    let second_expression_column = one_indexed_column(
+        source
+            .rfind('2')
+            .expect("source must contain second operand"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_expression_column,
+        "primary location must start at the literal after the template",
+    );
+}
+
+#[test]
+fn comment_template_after_operand_stays_valid() {
+    let _ = parse_single_file_ast("value = 1 [$note:ignored]");
+}
+
+#[test]
+fn standalone_template_stays_valid() {
+    let _ = parse_single_file_ast("value = [: one]");
+}
+
+#[test]
+fn binary_expression_with_operator_between_operands_stays_valid() {
+    let _ = parse_single_file_ast("value = 1 + 2");
+}
+
+#[test]
+fn adjacent_identifier_reports_missing_operator_before_unknown_name_lookup() {
+    let source = "value = 1 missing_name";
+    let second_expression_column = one_indexed_column(
+        source
+            .find("missing_name")
+            .expect("source must contain the second operand"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_expression_column,
+        "primary location must start at the second identifier, not the first operand",
+    );
+}
+
+#[test]
+fn adjacent_symbol_led_call_reports_missing_operator_at_identifier_start() {
+    let source = "value = 1 identity(2)";
+    let identifier_column = one_indexed_column(
+        source
+            .find("identity")
+            .expect("source must contain the call identifier"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, identifier_column,
+        "primary location must start at the call identifier, not the completed call",
+    );
+}
+
+#[test]
+fn adjacent_value_templates_report_missing_operator_at_second_template() {
+    let source = "value = [: one] [: two]";
+    let second_template_column = one_indexed_column(
+        source
+            .rfind("[:")
+            .expect("source must contain a second template"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_template_column,
+        "primary location must start at the second template opening",
+    );
+}
+
+#[test]
+fn adjacent_curly_literal_reports_missing_operator_at_second_operand() {
+    let source = "value = 1 {1}";
+    let second_expression_column = one_indexed_column(
+        source
+            .rfind('{')
+            .expect("source must contain a curly literal opening"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_expression_column,
+        "primary location must start at the curly literal opening, the second operand",
+    );
+}
+
+#[test]
+fn adjacent_copy_reports_missing_operator_at_copy_keyword() {
+    let source = "value = 1 copy place";
+    let second_expression_column = one_indexed_column(
+        source
+            .find("copy")
+            .expect("source must contain the copy keyword"),
+    );
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_adjacent_operand_reason(&diagnostic);
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, second_expression_column,
+        "primary location must start at the copy keyword, the second operand",
+    );
+}
+
+#[test]
+fn value_template_followed_by_comment_template_stays_valid() {
+    let _ = parse_single_file_ast("value = [: one] [$note:ignored]");
 }

@@ -291,8 +291,11 @@ fn render_payload_message(
             string_table,
         ),
         DiagnosticPayload::InvalidStructDefaultValue => "Invalid struct default value".to_owned(),
-        DiagnosticPayload::UninitializedVariable { name } => {
-            format!("Uninitialized variable '{}'", string_table.resolve(*name))
+        DiagnosticPayload::MissingDeclarationInitializer { name } => {
+            format!(
+                "Declaration '{}' requires '=' followed by an initializer expression.",
+                string_table.resolve(*name)
+            )
         }
         DiagnosticPayload::CircularDependency { path } => {
             format!(
@@ -437,7 +440,16 @@ fn render_payload_message(
             reason,
             receiver_type,
             method_name,
-        } => invalid_receiver_call_message(*reason, *receiver_type, *method_name, string_table),
+            receiver_kind,
+            receiver_binding_name,
+        } => invalid_receiver_call_message(
+            *reason,
+            *receiver_type,
+            *method_name,
+            *receiver_kind,
+            *receiver_binding_name,
+            string_table,
+        ),
         DiagnosticPayload::InvalidCopyTarget { reason } => invalid_copy_target_message(*reason),
         DiagnosticPayload::InvalidFieldAccess {
             reason,
@@ -512,7 +524,7 @@ fn render_payload_message(
         DiagnosticPayload::InvalidCompileTimePath { path, reason } => {
             invalid_compile_time_path_message(path, *reason, string_table)
         }
-        DiagnosticPayload::InvalidExpression => invalid_expression_message(),
+        DiagnosticPayload::InvalidExpression { reason } => invalid_expression_message(*reason),
         DiagnosticPayload::CommonSyntaxMistake { reason } => {
             common_syntax_mistake_message(reason, string_table)
         }

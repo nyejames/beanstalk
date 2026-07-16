@@ -325,3 +325,31 @@ fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
         "expected text after nested inline template"
     );
 }
+
+#[test]
+fn children_directive_argument_ending_at_template_boundary_uses_children_reason() {
+    // The `]` closes the outer template before any argument expression is
+    // authored. This stays on the directive owner (`InvalidChildrenArgument`),
+    // not true file EOF, which header balancing owns as `BST-SYNTAX-0017`.
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$children(]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("empty $children argument at a template boundary should fail to parse");
+
+    match &error.payload {
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: InvalidTemplateDirectiveReason::InvalidChildrenArgument,
+            ..
+        } => {}
+        payload => panic!(
+            "expected InvalidChildrenArgument for $children argument ending at a template boundary, found {payload:?}"
+        ),
+    }
+    assert!(
+        !is_default_error_location(&error.primary_location),
+        "$children argument ending at a template boundary should carry a meaningful source location, got {:?}",
+        error.primary_location
+    );
+}

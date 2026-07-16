@@ -81,6 +81,20 @@ pub(crate) fn reject_empty_directive_parens(
     Ok(())
 }
 
+/// Identifies template boundaries that end a directive argument before its expression begins.
+/// This keeps empty arguments with the directive parser while header balancing retains true EOF.
+fn ends_directive_argument_without_expression(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::TemplateClose
+            | TokenKind::StartTemplateBody
+            | TokenKind::Colon
+            | TokenKind::CloseCurly
+            | TokenKind::Else
+            | TokenKind::End
+    )
+}
+
 /// Expects the current token to be `)`. Returns a syntax error with a
 /// suggestion if it is not.
 pub(crate) fn expect_directive_close_paren(token_stream: &FileTokens) -> DirectiveArgsResult<()> {
@@ -115,6 +129,20 @@ fn parse_single_expression_in_directive_parens(
     string_table: &mut StringTable,
 ) -> DirectiveArgsResult<Expression> {
     reject_empty_directive_parens(directive_name, token_stream)?;
+
+    // Skip leading newlines after `(` so a whitespace-only empty argument
+    // stays on the empty-arguments owner instead of a close-paren diagnostic.
+    token_stream.skip_newlines();
+    reject_empty_directive_parens(directive_name, token_stream)?;
+
+    // Keep empty template-boundary arguments on the directive-specific diagnostic path.
+    if ends_directive_argument_without_expression(token_stream.current_token_kind()) {
+        return Err(Box::new(CompilerDiagnostic::invalid_template_directive(
+            Some(directive_name),
+            InvalidTemplateDirectiveReason::EmptyArguments,
+            token_stream.current_location(),
+        )));
+    }
 
     let mut inferred = ExpectedType::Infer;
     let expression = create_expression(

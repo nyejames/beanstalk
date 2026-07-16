@@ -12,34 +12,50 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 2.2, accepted and ready to commit
-LAST_ACCEPTED_COMMIT: `979703ea7`
-WORKTREE: `main` at `979703ea7` with the reviewed Phase 2.2 implementation, tests, canonical docs, generated docs, hard-removal audit cleanup and plan updates
+CURRENT_SLICE: Phase 3.1b accepted, checkpoint ready to commit
+LAST_ACCEPTED_COMMIT: `bd2fa6328`
+WORKTREE: `main` at `bd2fa6328` with the accepted Phase 3.1b checkpoint ready to commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: symbolic operator, assignment, compound-assignment and mutable-declaration spacing contracts plus tokenizer, diagnostics, testing and validation ownership
-- code: tokenizer symbolic-operator scanning and tests, `DiagnosticOperator`, syntax diagnostic payload/reason/constructor/render/remap and existing spacing fixtures
+- docs: access-and-aliasing and assignment contracts distinguish immutable root bindings from assignment-target syntax; no general documentation edits are allowed
+- code: Phase 3.1b uses one receiver-access classifier for source methods, collection builtins and map builtins with distinct temporary, immutable, missing-marker and invalid-marker states
 ACCEPTANCE_CRITERIA:
-- `BST-SYNTAX-0031` carries the exact binary operator, assignment, compound assignment or adjacent `~=` mutable declaration plus the missing whitespace side
-- complete tokens such as `//=` are classified before spacing is checked
-- internal whitespace in `name ~ = value` remains owned by `InvalidMutableBindingSpacing`
-- valid operators, assignment, compound assignment and `name ~= value` tokenization are unchanged
+- source methods, collection builtins and map builtins use one receiver-access classifier
+- non-place temporaries, immutable receivers, mutable receivers missing `~` and invalid authored markers remain distinct
+- authored receiver-marker failures point at `~` and named receiver guidance is shown only from factual payload data
+- const-record receiver wording uses the current `const record` source term and `ConstRecordNoRuntimeCalls`
 VALIDATION_STATE:
-- Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
-- Phase 1.2a focused compiler-message tests: passed, 36 tests
-- Phase 1.2a `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,766 integration cases, docs check and 28 benchmark cases
-- Phase 1.2b `just validate`: passed, including cross-target Clippy, 3,512 Rust tests, 1,767 integration cases, docs check and 28 benchmark cases
-- Phase 1.3 `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,755 integration cases, docs check and 28 benchmark cases
-- Phase 2.1 `just validate`: passed, including cross-target Clippy, 3,520 Rust tests, 1,756 integration cases, docs check and 28 benchmark cases
-- Phase 2.1 docs release build: passed, 72 files built before the final full gate
-- Phase 2.2 `just validate`: passed, including cross-target Clippy, 3,523 Rust tests, 1,756 integration cases, docs check and 28 benchmark cases
-- Phase 2.2 dev and release docs builds: passed, 72 files built in each mode before the final full gate
-DOCS_IMPACT: canonical spacing docs now distinguish binary operators, assignment, compound assignment and adjacent `~=` outer spacing; generated docs were rebuilt; architecture/config docs now use only current postfix constant examples
+- Accepted commits `df65c9ced` through `636ea3070`: every checkpoint passed its required focused checks and `just validate`; completed phase notes retain the design and correction details
+- Phase 2.4c4 Ollama correction: passed `cargo fmt`, 3,573 library tests, 1,631 HTML cases and library Clippy
+- Phase 2.4c4 parent probes: passed every missing-default boundary, specific prohibition and valid multiline form
+- Phase 2.4c4 `just validate`: passed cross-target Clippy, 3,573 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
+- Phase 2.5a initial Ollama patch: passed 3,574 library tests, 1,632 HTML cases and library Clippy; parent probes corrected true unclosed-template EOF ownership and retained the patch for a focused correction
+- Phase 2.5a Ollama correction: passed 3,575 library tests, 1,632 HTML cases and library Clippy; focused generic and `$children` boundary tests passed
+- Phase 2.5a parent probes: template-close before an expression uses `BST-SYNTAX-0021`; true EOF and begun inner templates use `BST-SYNTAX-0017`; valid templates compile
+- Phase 2.5a `just validate`: passed cross-target Clippy, 3,575 Rust tests, 1,774 integration cases, docs check and 28 benchmark cases
+- Phase 2.5b Ollama patch: passed `cargo fmt`, 3,580 library tests, 1,634 HTML cases and library Clippy
+- Phase 2.5b parent probes: function, struct, choice-payload and trait-requirement duplicates use `BST-RULE-0002` with both member locations; duplicate reserved receivers retain `BST-RULE-0040`
+- Phase 2.5b `just validate`: passed cross-target Clippy, 3,580 Rust tests, 1,776 integration cases, docs check and 28 benchmark cases
+- Phase 2.6 Ollama patch: passed `cargo fmt`, 3,580 library tests, 1,630 HTML integration cases and library Clippy
+- Phase 2.6 parent probe: all four unregistered config names use ordinary `BST-CONFIG-0001` with exact authored names and no replacement guidance
+- Phase 2.6 `just validate`: passed cross-target Clippy, 3,579 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
+- Phase 2.6b Ollama patch: passed `cargo fmt`, the focused key-span test, 3,579 library tests, 1,772 integration cases and library Clippy
+- Phase 2.6b parent probes: unknown keys underline the authored key name while invalid registered values still underline the initializer
+- Phase 2.6b `just validate`: passed cross-target Clippy, 3,579 Rust tests, 1,772 integration cases, docs check and 28 benchmark cases
+- Phase 3.1a Ollama patch: passed `cargo fmt`, 3,589 Rust tests, 1,632 HTML integration cases and library Clippy
+- Phase 3.1a Ollama wording correction: passed focused tests, 3,595 Rust tests, 1,632 HTML integration cases and library Clippy; parent review requires one classifier consolidation before acceptance
+- Phase 3.1a Ollama classifier cleanup: passed focused tests, 3,595 Rust tests, 1,632 HTML integration cases and library Clippy
+- Phase 3.1a parent probes: passed mutable/immutable marked and unmarked arguments, plain fresh values, copied fresh values, invalid marked copies, named markers and one-based unnamed host parameters
+- Phase 3.1a `just validate`: passed on the formatted tree with cross-target Clippy, 3,595 Rust tests, 1,774 integration cases, docs check and 28 benchmark cases
+- Phase 3.1b Ollama patch: finished receiver source-state classification, authored-marker location threading, const-record rename and focused coverage; parent review accepted the slice
+- Phase 3.1b parent probes: source-method missing marker, immutable with/without `~`, temporary receivers, collection/map immutable and temporary receivers, and map missing-marker all use distinct `BST-RULE-0047` wording and point authored-marker failures at `~`
+- Phase 3.1b `just validate`: passed cross-target Clippy, 3,609 Rust tests, 1,777 integration cases, docs check and 28 benchmark cases
+DOCS_IMPACT: diagnostics-plan tracking only; general design and language docs remain unchanged unless they explicitly name a diagnostic being changed
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit Phase 2.2, reload the plan and startup context, then prepare the bounded Phase 2.3 Ollama worker
+NEXT_RESUME_ACTION: commit Phase 3.1b, record its hash, then launch Phase 3.2 through Ollama
 
 ## Confirmed design decisions
 
@@ -112,14 +128,12 @@ branches were removed rather than preserved as compatibility aliases.
 **Decision:** Strict removal
 **Status:** Complete in `2189b2107`
 
-Compatibility-only diagnostic kinds, payloads, constructors, recognisers, pre-scans, fixtures and
-migration prose for discontinued declaration syntax were deleted. Current binding, constant,
-template and module-root syntax retained its existing positive coverage. Canonical docs were
-updated and generated docs were rebuilt through the compiler.
+Compatibility-only diagnostic kinds, payloads, constructors, recognisers, pre-scans and fixtures
+were deleted. Current binding, constant, template and module-root syntax retained its existing
+positive coverage.
 
-The Phase 2.2 hard-removal audit also deleted the obsolete diagnostic display `#Config` for const
-records and replaced ambiguous “top-level `#` constant” prose with exact current postfix examples.
-Const-record diagnostics now render source-visible `const record Config` terminology.
+The Phase 2.2 hard-removal audit also made const-record diagnostics use the source-visible
+`const record Config` terminology.
 
 ## Phase 2: Tokenizer and structural syntax diagnostics
 
@@ -141,183 +155,106 @@ and raw-token preservation.
 ### 2.2 Make symbolic spacing diagnostics exact
 
 **Original findings:** DIAG-004, DIAG-005
-**Status:** Accepted, commit pending
-**Additional confirmed gap:** the same umbrella diagnostic currently labels plain assignment `=` and malformed mutable declaration spacing around `~=` as binary-operator errors, even though neither construct is a binary operator
-**Additional confirmed doc drift:** canonical spacing prose groups assignment with binary operators
-and says spacing is required around both tokens in `~=`, which can teach the invalid
-`name ~ = value` form. This slice must state that `~=` stays adjacent and requires only outer
-whitespace.
+**Status:** Complete in `4e2b3e31c`
 
-The tokenizer currently uses one `InvalidSymbolicBinaryOperatorSpacing` reason for binary operators and compound assignment. It does not carry the operator or missing side.
-
-#### Implementation
-
-Replace the umbrella reason with structured facts. The construct enum must own the
-exact symbolic spelling so invalid construct/operator combinations cannot be formed:
-
-```rust
-enum SymbolicSpacingConstruct {
-    BinaryOperator { operator: DiagnosticOperator },
-    Assignment,
-    CompoundAssignment { operator: DiagnosticCompoundAssignmentOperator },
-    MutableDeclaration,
-}
-
-enum MissingWhitespace {
-    Before,
-    After,
-    Both,
-}
-
-struct SymbolicSpacingError {
-    construct: SymbolicSpacingConstruct,
-    missing: MissingWhitespace,
-}
-```
-
-`DiagnosticCompoundAssignmentOperator` contains only `+`, `-`, `*`, `/`, `//`, `%` and `^`.
-This keeps unsupported combinations such as word-operator compound assignments unrepresentable.
-
-- Determine the complete token first, including `//=`.
-- Record leading and trailing whitespace independently.
-- Render the exact construct and side:
-  - `Binary operator '+' requires whitespace after it.`
-  - `Assignment '=' requires whitespace before it.`
-  - `Compound assignment '+=' requires whitespace before it.`
-  - `Compound assignment '//=' requires whitespace on both sides.`
-  - `Mutable declaration '~=' requires whitespace after it.`
-- Keep the correction example minimal and valid.
-- Do not describe compound assignment as a binary operator.
-- Do not describe ordinary assignment or `~=` mutable declaration syntax as a binary operator.
-- Keep valid `name ~= value` tokenization unchanged. This spacing diagnostic does not decide
-  whether the name is a fresh declaration. Existing-name rejection remains owned by the normal
-  no-shadowing path.
-- Preserve `InvalidMutableBindingSpacing` as the declaration parser's owner for whitespace inside
-  the marker pair, such as `name ~ = value`. `SymbolicSpacingConstruct::MutableDeclaration` owns
-  only missing outer whitespace around the adjacent `~=` spelling. Do not merge these structurally
-  different mistakes or weaken the marker-adjacency check.
-- Preserve the existing `BST-SYNTAX-0031` family unless descriptor policy requires a dedicated compound-assignment code.
-
-#### Tests
-
-Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Also cover plain `=`, both outer sides of adjacent `~=` and the preserved internal-whitespace rejection so none can regress to binary-operator prose. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
-`name~=value` must report `Both`, not whichever side the tokenizer encounters first.
-Rename the stale `constant_mutable_spacing_error` integration owner to describe mutable-binding
-internal spacing without calling a runtime binding a constant.
+`SymbolicSpacingConstruct` now distinguishes binary operators, ordinary assignment, compound
+assignment and the adjacent `~=` mutable-declaration marker. It carries the exact operator plus
+`MissingWhitespace::{Before, After, Both}`, including complete `//=` recognition. Outer spacing
+uses `BST-SYNTAX-0031`, while the declaration parser still owns whitespace inside `~ =` through
+`InvalidMutableBindingSpacing`. Valid `name ~= value` and ordinary operator tokenization are
+unchanged. Table-driven tokenizer coverage protects every compound assignment and each missing-side
+classification, with integration owners for source-visible assignment and mutable-marker wording.
 
 ### 2.3 Recognise a missing `@` import prefix before `/` becomes an operator error
 
 **Original finding:** DIAG-038
-**Additional confirmed gap:** a payload-free reason cannot render the exact correction for the longer bare paths required by this phase and would misleadingly replace every path with the fixed `core/math` example
-**Additional confirmed gap:** `import ./utils` is the same missing-`@` mistake but currently reaches
-the generic `BST-SYNTAX-0019` "expected a path" branch. The structured reason must cover relative
-bare paths as well as identifier-led paths.
-**Additional confirmed path family:** direct JavaScript provider imports keep their `.js`
-extension, so a missing-prefix path such as `import ./drawing.js` or
-`import vendor/drawing.js as drawing` must preserve the extension and stop before the alias.
-**Additional confirmed doc drift:** the canonical import-path reference and current compiler use
-`@./file` for file-relative imports, but `docs/compiler-design-overview.md` still says `@./...`
-has no supported meaning. Correct that architecture bullet in this slice. The narrow language
-reference is authoritative.
+**Status:** Complete in `3b9fdd914`
 
-`import core/math` currently reaches symbolic `/` spacing logic before header import parsing can explain the import mistake.
-
-#### Implementation
-
-- Extend the lexer's small left-context model so it recognises a bare identifier-led path
-  immediately following `import`, including a single component such as `import core`, and
-  recognises a relative `./...` spelling in the same import position before the generic
-  import-clause fallback. A later `/` must not become the first point at which the compiler
-  realises that the prefix is missing.
-- Emit a dedicated structured `CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path }` carrying the complete bare path spelling. Remap its `StringId` through the existing payload path.
-- Message:
-
-  > Import paths must begin with `@`. Write `import @<authored_path>`.
-
-- Point the primary label at the bare path, not only the `/` that exposed the mistake.
-- The lexer may scan this narrow path-like sequence to preserve the correction fact, but must not duplicate general import-path parsing or resolution.
-- Keep ordinary division tokenization unchanged outside this structural import context.
-- Do not move general import parsing into the tokenizer.
-
-#### Tests
-
-- `import core/math`
-- a single-component bare path such as `import core`
-- a longer bare path whose rendered correction preserves every authored component
-- a bare path followed by a grouped import clause, proving the narrow scan stops before `{`
-- a relative bare path such as `import ./utils`
-- a relative `.js` provider path and a non-relative `.js` provider path followed by `as`, proving
-  the scan preserves extensions and stops before aliases
-- valid `import @core/math`
-- ordinary division after a value
-- `//` integer division and comments remain unaffected
+The lexer's narrow import left-context scan now recognises identifier-led and `./` bare paths
+before `/` can become an operator-spacing error. `ImportPathMissingAtPrefix { authored_path }`
+preserves the complete source spelling, including `.js`, stops before grouped clauses or aliases
+and renders the exact `import @...` correction at the path. General import parsing remains in
+headers. Focused coverage protects single and multi-component paths, relative/provider paths,
+valid `@` imports, division, integer division and comments.
 
 ### 2.4 Improve incomplete expression and declaration boundaries
 
 **Original findings:** DIAG-012, DIAG-016, DIAG-018, DIAG-024, DIAG-053, DIAG-054
-**Additional confirmed gap:** adjacent operands currently fall through to the generic `Invalid expression: no valid operands found during evaluation` message even though the source contains multiple valid operands and is missing an operator.
-**Original DIAG-034 disposition:** Removed. Current expression typing already emits `BinaryRight`.
 
-Add focused reasons at the parser that owns each boundary:
+- `69cdd7831`: missing statement, value-producing and inferred multi-bind `if` conditions now use
+  `ExpectedConditionAfterIf` at colon, `then`, `else`, newline, end and EOF boundaries.
+- `04f9f4431`, `66e4d7bce` and `8fda8c728`: missing `then`/`else`/catch values and absent inline
+  value-`if` branches now use exact structured reasons at the first missing-value boundary. Real
+  multiline forms keep their distinct diagnostics and unrelated later `else` tokens cannot attach.
+- `60e032672`: definite adjacent operands use `ExpectedOperatorBeforeExpression` at dispatch entry.
+  Comment templates stay value-less, adjacent value templates share the same path and the defensive
+  evaluator fallback no longer claims that no operands were authored.
+- `d3a76a61e`: postfix field and namespace access ending after `.` uses `ExpectedNameAfterDot` at
+  the authored dot while other invalid member boundaries retain their offending-token locations.
+- `2485d961d`: function signatures and trait requirements share the missing-return boundary check
+  but retain source-accurate function-body versus bodyless-requirement guidance.
+- `bcbdd73aa`: authored `=` with no declaration value uses `MissingInitializerExpression`. The
+  no-`=` family is `MissingDeclarationInitializer`, keeps `BST-RULE-0031` and has no compatibility
+  aliases.
+- `a21396762`: parameter and struct-field `=` boundaries use `MissingDefaultValue` and
+  `BST-RULE-0028`. Reactive, trait and choice prohibitions still win, while complete and
+  operator-continued multiline defaults remain valid.
 
-- missing condition after `if`
-- missing `else` branch in a value-producing `if`
-- missing value after `then`
-- missing value after `else`
-- missing member name after `.`
-- missing return type after `->`
-- missing declaration initializer after an authored `=`
-- missing operator between adjacent expressions
-
-#### Required messages
-
-- `Expected a condition after 'if'.`
-- `Value-producing 'if' requires an 'else' branch.`
-- `Expected a value after 'then'.`
-- `Expected a value after 'else'.`
-- `Expected a field or method name after '.', but this access ends here.`
-- `Function signature is missing a return type after '->'. Add a type followed by ':', or remove '->' for a no-value function.`
-- `Declaration 'value' is missing an initializer expression after '='.`
-- `Expected an operator before this expression.`
-
-#### Ownership
-
-- Reuse `InvalidControlFlowStatement` for value-`if` structure.
-- Reuse `InvalidFieldAccessReason::ExpectedNameAfterDot` but render it without the `field_name` fallback.
-- Add `InvalidFunctionSignatureReason::MissingReturnType`.
-- Add `InvalidDeclarationReason::MissingInitializerExpression`.
-- Add a structured adjacent-expression reason at the parser boundary. Point at the second expression and do not guess which operator the author intended.
-- Do not route empty expressions into an RPN stack and wait for `No nodes found in expression`.
-- Do not use the payload-free `InvalidExpression` fallback for a source sequence such as `value = 1 2`. If that generic diagnostic remains for defensive stack-shape validation, its prose must not falsely claim that no operands were found.
-
-#### Tests
-
-Use EOF, newline and closing-delimiter variants where they exercise distinct parser boundaries. Cover adjacent literal and identifier expressions without duplicating cosmetic cases. Assert source location at the missing-value or second-expression boundary rather than the next unrelated token.
+Focused boundary tables and integration owners protect exact messages, stable codes and source
+locations across EOF, newline, delimiter and block-end paths. DIAG-034 remains removed because the
+existing `BinaryRight` reason already owns a missing right operand.
 
 ### 2.5 Convert user-input infrastructure failures
 
 **Original findings:** DIAG-011, DIAG-012, DIAG-035
+**Additional confirmed gap:** duplicate struct field names currently survive the shared record-body
+parser and fail as a HIR invariant. Choice payload fields already run a later duplicate scan, so
+adding another struct-only validator would preserve duplicate ownership.
+**Additional confirmed gap:** duplicate function parameter names also reach `BST-INFRA-0001` from
+function-scope local registration. Both failures must move to the shared signature-member parser.
+**Additional confirmed gap:** duplicate trait-requirement parameter names currently compile
+successfully. The same shared signature-member owner must reject them before trait registration.
+**Additional confirmed gap:** the reusable `DuplicateDeclaration` renderer currently describes
+every duplicate as a top-level function, struct or compile-time constant. That wording is already
+wrong for choice payload fields and local bindings and would make an earlier member diagnostic
+misleading.
 
 #### Malformed `$children(...)`
 
-Use the existing `InvalidTemplateDirectiveReason::InvalidChildrenArgument`.
+**Phase 2.5a status:** Complete in `636ea3070`.
 
-- Reject an empty, truncated or malformed argument before the general expression parser reaches an impossible empty stack.
-- Primary label: malformed argument or closing delimiter.
-- Secondary label: `$children(` opening location when available.
-- Keep `BST-SYNTAX-0021`.
+The shared directive-argument parser now classifies a closing parenthesis, leading-newline-only
+argument and template boundary before an expression as `EmptyArguments`. The `$children` owner
+reclassifies that fact to `InvalidChildrenArgument` with `BST-SYNTAX-0021`. True file EOF remains
+the header balancer's unclosed-template diagnostic and begun argument expressions keep their own
+delimiter failures. Focused parser coverage protects generic versus `$children` wording, with one
+integration owner for the template-boundary case. Phase 6.2 owns adding opening context to the
+general unclosed-template lane.
 
 #### Duplicate function parameters
 
-Duplicate parameter names are source declarations, not HIR invariants.
+**Phase 2.5b status:** Complete in `b763b7069`.
 
-- Detect them while parsing or registering the function signature.
+Duplicate parameter and record-field names are source declarations, not HIR invariants.
+
+- Detect duplicate member paths in the shared signature-member parser used by function parameters,
+  struct fields, choice payload fields and trait requirements.
 - Reuse `DuplicateDeclaration` and include:
   - duplicate name
-  - current parameter location
-  - previous parameter location
-  - function name when available
+  - current member location
+  - previous member location
+- Make the shared renderer scope-neutral and accurate for top-level declarations, visible local
+  bindings, parameters, fields and variants. Prefer: `Cannot declare 'name' because that name is
+  already visible in this scope. Beanstalk does not allow duplicate names or shadowing.`
+- Remove the later choice-payload-only duplicate scan once the shared owner covers it.
 - Do not create a function-scope `CompilerError`.
+- Do not let duplicate struct fields reach the HIR duplicate-field invariant.
+
+The shared signature-member parser now owns ordinary member-name uniqueness for function
+parameters, struct fields, choice payload fields and trait-requirement parameters. It keeps the
+current member primary and the first member secondary through `DuplicateDeclaration`. The later
+choice-payload-only scan is removed. Reserved `this` and `This` receiver forms retain their more
+specific receiver-position and duplicate-receiver validation.
 
 #### Value-producing `if`
 
@@ -328,6 +265,8 @@ The incomplete-value cases in 2.4 must return typed diagnostics before expressio
 The retained malformed-source fixtures produce no `BST-INFRA-0001`.
 
 ### 2.6 Delete config-key migration diagnostics
+
+**Status:** Complete in `996fb8b17`.
 
 **Additional audit finding:** `InvalidConfigReason::{DeprecatedSrcKey, ReplacedLibrariesKey,
 ReplacedRootFoldersKey, ReplacedPackageFoldersKey}` and their Stage 0 name checks exist only to
@@ -344,6 +283,41 @@ accepted cleanup.
   coverage.
 - Do not reserve the removed names or add aliases, compatibility parsing or replacement
   diagnostics.
+- Render current config key names exactly as authored in `EmptyProjectSetting` and
+  `InvalidProjectSettingValue`.
+- Apply the same cleanup to compiler comments and test expectations that name current config keys.
+  Comments should name the `origin` key directly.
+- Search compiler sources and tests after the change to confirm every current config key is rendered
+  exactly as authored.
+
+### 2.6b Point config-key diagnostics at the authored key
+
+**Status:** Complete in `efbffa183`.
+
+**Additional confirmed location gap:** the ordinary `UnknownKey` diagnostic currently uses the
+folded declaration value's location. A direct config probe underlines the initializer, even though
+the invalid source fact is the authored key name. Header parsing already owns the exact
+`Header::name_location`, but config parsing discards it when sorted headers are consumed by AST.
+
+- Preserve authored config constant name locations in `ParsedConfigFile` before `Ast::new` consumes
+  the sorted headers. Key the narrow Stage 0 map by the existing full declaration
+  `InternedPath`.
+- Use the authored name location for key-identity diagnostics such as `UnknownKey` and the
+  validation-layer duplicate fallback. Keep a defensive value-location fallback for declarations
+  without an authored header entry.
+- Do not change `Config::setting_locations`: builder-owned invalid-value diagnostics should
+  continue to point at the authored initializer value.
+- Do not add a location to the shared AST `Declaration` type or create a global header-to-AST side
+  table for this Stage 0-only need.
+- Strengthen generic unknown-key coverage to assert the key span and keep `BST-CONFIG-0001`.
+- Preserve the exact authored-key payload and ordinary unknown-key message established in Phase
+  2.6.
+
+`ParsedConfigFile` now preserves authored constant-name locations before AST construction consumes
+the sorted headers. Config validation uses that Stage 0-local map for `UnknownKey` and its duplicate
+fallback, keyed by the declaration's existing full path. `Config::setting_locations` remains
+value-based for downstream builder diagnostics. Focused coverage asserts the key span and direct
+probes protect both diagnostic lanes.
 
 ## Phase 3: Mutability, assignment and explicit copy
 
@@ -351,6 +325,21 @@ accepted cleanup.
 
 **Original findings:** DIAG-001, DIAG-008, DIAG-046
 **Original DIAG-007 corrected below**
+
+**Phase 3.1a call-argument status:** Complete in `bd2fa6328`.
+**Phase 3.1b receiver status:** Complete in this checkpoint.
+
+Call arguments now preserve distinct named-target, value and authored-`~` locations. One
+call-boundary classifier distinguishes fresh values, existing immutable places and existing mutable
+places without repeated expression walks. Plain fresh and explicit-copy values satisfy mutable
+parameters without `~`, while invalid markers and immutable sources retain precise reasons and
+source-facing guidance. Unnamed host parameters render one-based positions only.
+
+Receiver calls now share one source-state classifier across source methods, collection builtins and
+map builtins. Temporary receivers, immutable places, mutable places missing `~` and invalid authored
+markers remain distinct. Authored-marker failures point at `~`, named `~binding.method(...)`
+guidance is emitted only from factual payload data, and const-record runtime calls use
+`ConstRecordNoRuntimeCalls` with the current `const record` source term.
 
 Mutable access diagnostics must distinguish these source states:
 
@@ -363,6 +352,28 @@ Mutable access diagnostics must distinguish these source states:
 7. immutable receiver for a mutating method
 
 State 5 is valid and must not be diagnosed.
+
+The current shared-argument/mutable-parameter branch checks only whether the expression is a
+place. An immutable existing place without `~` therefore reaches the same marker-only repair as an
+already-mutable place. The validator must classify place mutability before choosing the reason.
+
+**Additional confirmed fresh-value gap:** `copy source` currently enters the existing-place branch
+and receives missing-`~` guidance. `copy` creates an independent value, so a plain copied value is a
+valid fresh argument for a mutable parameter. The call-boundary classifier must treat
+`ExpressionKind::Copy` as `FreshMutableValue`, while authored `~copy source` remains invalid because
+`~` accepts only an existing mutable place.
+
+**Additional confirmed rendering gaps:** the shared unnamed-parameter fallback currently exposes
+the internal zero-based slot before translating it to a one-based position. It must render only the
+one-based source position. The authored-`~` non-place branch also says `non-place expression` and
+`variable`, even though a plain fresh value is valid for the mutable parameter. Render this as an
+invalid marker on a fresh or computed value and tell the author to remove `~`. Generic immutable
+fallbacks must describe an immutable binding or field without compiler-facing place terminology.
+
+The common Rust-style `&` syntax-mistake guidance has the same terminology drift: it says shared
+borrows are automatic and tells the author to prefix a place. Add a final narrow Phase 3.1 wording
+slice that says existing values use shared access automatically, and that `~` is valid only on an
+existing mutable binding or field at a mutable call or receiver boundary.
 
 #### Implementation
 
@@ -395,17 +406,23 @@ When the receiver is a simple named place, guidance may show `~p.move(...)`. Do 
 
 Immutable collection or map receiver:
 
-> `push` requires a mutable collection receiver. Declare the collection binding as mutable, then call it with `~values.push(...)`.
+> `push` requires a mutable collection receiver. Declare the collection binding as mutable, then call it with explicit `~` access.
+
+Show a concrete receiver call only when the payload owns the simple receiver name.
 
 Fallible collection and map examples must include `!` or `catch` when a complete example is shown.
 
+Const-record receiver diagnostics now use `ConstRecordNoRuntimeCalls` without an alias and render
+the current source term `const record`.
+
 #### Required AST correction
 
-`receiver_access.rs` currently merges non-place and immutable-place receivers because it assumes the repair is identical. Split them. A temporary mutating receiver and an immutable named receiver have different explanations.
+`receiver_access.rs` no longer merges non-place and immutable-place receivers. A temporary mutating
+receiver and an immutable named receiver use distinct reasons and repairs.
 
 #### Tests
 
-Use one matrix covering user functions, source receiver methods, collection builtins and map builtins. Include positive fresh-rvalue calls to prevent the change from requiring illegal `~` on fresh values.
+Use one matrix covering user functions, source receiver methods, collection builtins and map builtins. Include positive fresh-rvalue calls, including `copy source`, to prevent the change from requiring illegal `~` on fresh values.
 
 ### 3.2 Correct immutable assignment and field-write guidance
 
@@ -435,16 +452,25 @@ p.x = 10
   > Cannot assign to field `x` because root binding `p` is immutable. Declare `p` as mutable before this assignment.
 
 - A secondary label should point to the immutable declaration.
+- Body-local lookup currently retains only `Declaration`, whose expression location identifies the
+  initializer rather than the binding target. Preserve the authored binding location in the
+  scope-frame's local declaration entry and expose it through `ScopeDeclarationRef`. Do not add a
+  location field to the shared `Declaration` type solely for this diagnostic.
 - Keep a generic immutable-place fallback for projections whose root cannot be named cleanly.
+- Rename the temporary-assignment fallback away from `NotMutablePlace` and remove `place` and
+  `rvalue` from its renderer. A temporary value cannot be assigned through: receive it in a mutable
+  binding first, then assign through that binding.
 - Replace the vague direct-binding `ImmutableVariable` message in the same assignment-target
   family. It currently says only to use `~`, which can be mistaken for assignment-target syntax or
-  an illegal redeclaration. Carry the original binding location and render:
+  an illegal redeclaration. Carry the original binding location and render without assuming whether
+  the declaration inferred or explicitly named its type:
 
-  > Cannot reassign `value` because its binding is immutable. Declare it with `~=` at the original declaration, then reassign it with ordinary `=`.
+  > Cannot reassign `value` because its binding is immutable. Make the original binding mutable, then reassign it with ordinary `=`.
 
-- When an explicit type is relevant, guidance may mention the existing `name ~Type = value`
-  declaration form. Do not fabricate a full replacement declaration without its original
-  initializer and type facts.
+- Do not fabricate a replacement declaration without the original initializer, authored type and
+  binding-mode facts. Focused labels may still identify the original declaration.
+- In the same assignment family, say `binding` rather than `variable` when an assignment operator
+  is missing after a resolved source binding.
 - Strengthen the existing direct immutable reassignment and immutable struct-field integration
   cases so the current declaration and assignment guidance is contractual. Remove fixture
   comments that call an ordinary immutable runtime binding a constant.
@@ -463,7 +489,7 @@ x = 1
 
 render:
 
-> `~` is not written on assignment targets. Declare the binding as mutable, then reassign it with ordinary `=`.
+> `~` is not written on assignment targets. Reassignment uses ordinary `=` and requires an already-mutable binding.
 
 A complete correction is:
 
@@ -473,6 +499,9 @@ x = 2
 ```
 
 Add a dedicated assignment-target reason. Do not reuse `MutableMarkerOnNonReceiverCall`, whose message is call-specific.
+Do not universally tell the author to redeclare the binding: the marked target may already be
+mutable. Phase 3.2 owns the separate diagnostic for an ordinary assignment whose root binding is
+immutable.
 
 ### 3.4 Diagnose `copy ~place` as an unnecessary access marker
 
@@ -482,7 +511,11 @@ Add a dedicated assignment-target reason. Do not reuse `MutableMarkerOnNonReceiv
 
 Add `InvalidCopyTargetReason::MutableMarkerNotAllowed`:
 
-> `copy` does not take `~`. Use `copy x` to copy the value of a mutable binding.
+> `copy` does not take `~`. Copy the existing binding or field projection without the access marker.
+
+Use this reason only when the operand after `~` is otherwise a valid binding or field-projection
+copy target. A marked literal, call or computed expression still needs the factual non-place
+diagnostic because removing `~` would not make it copyable.
 
 Keep the internal place classification, but make every rendered correction source-visible:
 
@@ -510,7 +543,19 @@ Borrow diagnostics should explain source ordering and aliases, not tell users to
 #### Implementation
 
 - Preserve the conflicting place and add its originating access location where known.
+- `StatementAccessTracker` currently retains only `AccessKind` per root even though both record
+  sites own the current source location. Retain the first conflicting location with the access
+  kind so same-statement conflicts can label the earlier access without changing transfer rules.
 - Add a secondary label at the access that remains live.
+- Delete the stale `ExistingBorrow` label variant and its `existing borrow here` rendering. These
+  diagnostics describe an earlier conflicting source access, so use one source-visible
+  `ConflictingAccess` label such as `earlier conflicting access here` for both shared/mutable and
+  duplicate-mutable conflicts.
+- Keep the stable borrow diagnostic codes, but make their rendered descriptor titles use the same
+  source-visible access vocabulary. `Borrow conflict`, `Multiple mutable borrows`, `Move while
+  borrowed` and `Whole-object borrow conflict` currently expose analysis terminology before the
+  payload message is rendered. Prefer `Access conflict`, `Conflicting mutable access`, `Ownership
+  transfer conflicts with active access` and `Whole-value access conflict` respectively.
 - Render by access pair.
 
 Mutable alias blocks shared read:
@@ -544,9 +589,11 @@ source rule. These are ordinary invalid assignment targets, not compatibility di
   `MapGetTargetNotWritable` and `ReadOnlyMapProperty`.
 - Render collection access as:
 
-  > Cannot assign through collection `get(...)`. Use `~items.set(index, value)!` or recover from `~items.set(index, value) catch:`.
+  > Cannot assign through collection `get(...)`. Call `set(index, value)` with explicit `~` access on the collection instead, then recover with `catch` or propagate with `!` inside a compatible `Error!` function.
 
-- Render map access with the equivalent `~map.set(key, value)` guidance.
+- Render map access with the equivalent `set(key, value)` and explicit `~` access guidance. Do
+  not fabricate a receiver name that the diagnostic payload does not own. Keep the correction valid
+  at top level, where postfix `!` cannot propagate because there is no `Error!` return slot.
 - Keep the read-only `length` message, but remove migration wording from its reason name.
 - Rename the integration fixture to describe current rejection rather than removal.
 - Preserve the existing stable diagnostic code and valid `set` coverage. Do not add a parser path
@@ -557,6 +604,38 @@ source rule. These are ordinary invalid assignment targets, not compatibility di
 ### 4.1 Replace the umbrella `NotResultExpression` path
 
 **Original findings:** DIAG-025, DIAG-043, DIAG-044
+
+**Additional confirmed terminology gap:** incompatible custom error propagation still uses
+`TypeMismatchContext::ResultError`, which renders `Type mismatch in result error`. A direct
+`FirstError!` through `SecondError!` probe reaches this path. The source contract calls this the
+function's error return or error slot, never a Result error.
+
+**Additional confirmed descriptor gap:** the stable `BST-RULE-0051` title still renders
+`Invalid result handling` even when its message correctly names an unhandled `Error!` call. Keep
+the code but change the user-facing descriptor title to `Invalid fallible handling` when the
+operand matrix lands.
+
+**Additional confirmed operand-family gap:** `BST-TYPE-0004` still renders the descriptor title
+`Invalid result operand`, and its internal kind, payload and reason family repeat the same stale
+term even though the only production path is an unhandled fallible operand. The
+`OptionalValueNotInspected` reason has no compiler production site and exists only in renderer/model
+tests. Rename the diagnostic family outright to fallible-operand terminology, render a title such
+as `Unhandled fallible operand` and delete the dead optional reason rather than preserving an
+unused parallel path. Keep `BST-TYPE-0004`.
+
+**Additional confirmed propagation-shape gap:** postfix `?` requires exactly one optional success
+return slot. The current validator collapses top-level code, zero-return functions, non-optional
+functions and functions with multiple success slots into `FunctionHasNoOptionalReturn`. Add a
+distinct multiple-success return-shape reason carrying the authored success-slot count. Preserve a
+narrow enclosing-boundary fact in `ScopeContext` so `?` and `!` inside nested branches can still
+distinguish a real function from top-level module work without guessing from the immediate
+`ContextKind`.
+
+**Additional confirmed terminology gap:** `InvalidBuiltinCallReason::MustHandleFallibleResult`
+still names an internal Result despite rendering a fallible call, and cast diagnostics say
+`Error! result` and `result slot`. Rename the builtin reason to `UnhandledFallibleCall` without an
+alias. Tell authors to handle the fallible operand before casting and call multi-value outputs
+`success return slots`.
 
 The current `InvalidResultHandlingReason::NotResultExpression` hardcodes postfix `!` wording and calls the source carrier a Result even when the authored construct is `catch` or the operand is optional.
 
@@ -576,6 +655,7 @@ enum InvalidFallibleHandlingReason {
     ErrorPropagationInNonFallibleFunction,
     OptionPropagationAtTopLevel,
     OptionPropagationInNonOptionalFunction,
+    OptionPropagationInMultipleSuccessFunction { success_count: usize },
     // retain other structurally distinct catch and propagation cases
 }
 ```
@@ -588,6 +668,16 @@ only to identify discontinued handling syntax. The ordinary current grammar may 
 sequence without a migration-specific reason. Do not carry either reason into the replacement
 matrix.
 
+Rename `TypeMismatchContext::ResultError` to `ErrorReturn` and render `error return`. Apply the
+same source-visible context to incompatible postfix `!` call propagation and `cast!` propagation.
+Keep the expected and found error types as semantic `TypeId`s and preserve `BST-TYPE-0001`.
+
+Render the `BST-RULE-0051` descriptor title as `Invalid fallible handling`. Internal reason-family
+identifiers must also change coherently in this slice: rename `InvalidResultHandlingReason`, its
+payload, constructor and kind to fallible-handling terminology without aliases or compatibility
+wrappers. AST expression and HIR type names outside the diagnostic family are not part of this
+mechanical rename. No renderer title or message may call the source feature result handling.
+
 #### Messages
 
 - `catch` on plain value:
@@ -596,7 +686,7 @@ matrix.
 
 - `catch` on optional:
 
-  > `catch` does not recover an optional value. Inspect it with `if value is |present| ... else ...`.
+  > `catch` does not recover an optional value. Inspect the optional value with an `if ... is |present| ... else ...` expression.
 
 - `!` on optional:
 
@@ -604,7 +694,7 @@ matrix.
 
 - `?` on fallible call:
 
-  > Postfix `?` propagates absence from an optional value, but this call can return `Error!`. Use `!` to propagate the error or `catch` to recover.
+  > Postfix `?` propagates absence from an optional value, but this call can return `Error!`. Recover with `catch`, or use `!` only inside a compatible `Error!` function.
 
 - top-level `!`:
 
@@ -616,11 +706,39 @@ matrix.
 
 Keep the stable `BST-RULE-0051` family unless a branch belongs to an existing more precise code.
 
+#### Reclassify invalid public carrier type spellings
+
+**Additional confirmed design mismatch:** the canonical generic type-application contract states
+that `Option of T` and `Result of T, E` are not Beanstalk language syntax. The compiler instead
+routes both through `DeferredFeatureReason` and `BST-DEFERRED-0001`, which falsely reserves a future
+public carrier syntax. First-class public result values are outside language design scope, while
+optional types use the current `T?` suffix.
+
+- Delete `DeferredFeatureReason::{PublicOptionTypeSyntax, PublicResultTypeSyntax}` and the helper
+  that classifies these authored forms as deferred.
+- Route the two generic-position spellings through factual structured
+  `InvalidGenericInstantiationReason` variants and existing `BST-RULE-0057` ownership.
+- Render:
+  - `` `Option of T` is not Beanstalk type syntax. Use the `T?` optional suffix. ``
+  - `` `Result of T, E` is not Beanstalk type syntax. Fallible functions declare a final `E!`
+    error return slot. ``
+- Rename the `_deferred` unit tests and integration fixtures around current rejection.
+- Delete the old reason names and deferred prose without aliases, reserved-future comments or a
+  compatibility diagnostic path.
+- Preserve ordinary user-defined generic type application and canonical `T?` / `E!` coverage.
+- Do not edit the generic type-application documentation. It already states the accepted design.
+
 ### 4.2 Add catch-recovery type context
 
 **Original finding:** DIAG-026
 
 Add `TypeMismatchContext::CatchRecovery`.
+
+The shared produced-value checker already carries `ValueReceiverKind::CatchHandler`, but
+`mismatch_context_for_receiver` currently collapses it into `TypeMismatchContext::General`.
+Change that one mapping and update the existing fallible-handling unit test that currently
+asserts `General`. Keep declaration, assignment, return, multi-bind and nested-`then` contexts
+unchanged.
 
 Message:
 
@@ -651,6 +769,12 @@ Tests need:
 
 **Original finding:** DIAG-031
 
+A direct probe confirms `value = pair()` currently compiles when `pair` returns two success
+slots. Call expressions retain those slots in `ExpressionKind::*Call::result_type_ids`, but their
+general `Expression::type_id` becomes an internal tuple. Declaration, assignment, return and
+produced-`then` receivers must check the typed slot count before coercion or lowering can treat that
+tuple as one source value.
+
 Do not silently discard success slots.
 
 #### Implementation
@@ -666,15 +790,26 @@ Carry:
 
 Message:
 
-> This expression produces 2 values, but the declaration has 1 target. Use one target per return slot, for example `name, count = pair()`.
+> This expression produces 2 values, but the declaration has 1 target. Use one target per return slot with a multi-bind declaration.
 
 Do not suggest `_` or another discard syntax. None is part of the current language.
+Do not fabricate target or callee names that the diagnostic payload does not own.
 
 Tests should cover declaration, assignment and nested value-producing block receivers if those paths are distinct.
+Keep `left, right = pair()` as positive multi-bind coverage. This diagnostic slice does not add
+tuple values, implicit slot discards or multi-return forwarding.
+
+Implement this as two reviewable slices: introduce the diagnostic and protect declaration plus
+assignment receivers first, then extend the accepted family to return and nested `then` receivers.
 
 ### 4.5 Use the same `then` diagnostic at top level and in functions
 
 **Original finding:** DIAG-032
+
+Current routing already uses `ThenWithNoActiveValueTarget` in both module and function body
+dispatch. The remaining change is source-visible wording and ownership cleanup: the existing
+`result_then_outside_catch_rejected` fixture and `rejects_then_outside_catch_block` test name still
+describe `then` as catch-specific even though value-producing `if`, full match and catch all own it.
 
 Route top-level `then` through the existing structured `ThenWithNoActiveValueTarget` reason:
 
@@ -685,6 +820,9 @@ Do not leave top-level parsing on generic `UnexpectedToken`.
 ### 4.6 Reject bodyless non-`else` match arms
 
 **Original finding:** DIAG-052
+
+A direct exhaustive-choice probe confirmed that `Ready =>` followed by `else =>` currently
+compiles successfully. This is a missing rejection, not only weak wording.
 
 Only bodyless `else =>` is the explicit statement no-op arm.
 
@@ -710,6 +848,20 @@ grammar. They preserve migration history in the current parser and renderer.
 - Preserve `InvalidArrow` for authored `->`. That reason factually identifies the current token
   mistake and suggests `=>` without describing a former language feature.
 - Do not add replacement recognisers, fixtures or compatibility messages.
+
+### 4.8 Delete the removed `in` loop compatibility diagnostic
+
+**Additional audit finding:** `InvalidLoopHeaderReason::RemovedInSyntax`,
+`reject_removed_in_loop_syntax` and their migration-only unit test exist only to recognise the
+discontinued `loop <binding> in ...` grammar. The ordinary loop-header parser already owns malformed
+current headers.
+
+- Delete the reason variant, renderer branch and dedicated pre-scan.
+- Delete the migration-only unit test.
+- Let the authored tokens reach the ordinary current loop-header diagnostic path.
+- Preserve factual current diagnostics for missing pipes, missing sources and invalid binding
+  shapes.
+- Do not add a replacement recogniser or describe any loop syntax as old or removed.
 
 ## Phase 5: Names, imports, calls and match context
 
@@ -787,10 +939,21 @@ Rules:
 - Source namespace records remain shallow.
 - External namespace records may expose recursive package-local namespaces.
 - Suggest only members of the exact resolved namespace node.
+- Filter candidates by the source role at the failing segment. A dotted path with another `.`
+  may suggest child namespaces only, while a final value-position member may suggest value members
+  only. Do not suggest a type or child namespace as though it were a value.
+- For an unqualified unknown value, offer namespace qualification only when exactly one visible
+  namespace has that direct value member. If several namespace aliases expose the same name, keep
+  the ordinary unknown-value diagnostic rather than choosing one arbitrarily.
 - Do not suggest receiver methods as namespace fields.
 - A grouped import suggestion is valid only for a direct export.
+- Sort and deduplicate candidate names before rendering so hash-map iteration cannot affect the
+  chosen suggestion or available-member list.
 
 Extend `MissingPackageSymbol` with the same bounded direct-export suggestion policy so `import @core/math { pi }` may suggest `PI` rather than claiming grouped imports are unsupported.
+Build those grouped-import candidates from one-component function, constant and type paths on the
+matched external package. Nested package-local paths are not direct exports and must not be
+offered as grouped imports.
 
 ### 5.4 Include actual and expected argument counts
 
@@ -839,6 +1002,11 @@ Imported aliases must render using the visible source name where possible.
 #### Payload captures
 
 Carry expected field names, provided capture names and expected/found counts.
+
+Count mismatches must point at the authored pattern's capture-list boundary. The current too-few
+path uses the choice variant declaration location, which identifies the related declaration rather
+than the mistake. Keep the declaration as secondary context when useful, but make the closing `)`
+or first extra capture the primary location.
 
 Messages:
 
@@ -1013,20 +1181,55 @@ Render:
 
 ## Phase 7: Remaining focused quality improvements
 
-### 7.1 Duplicate reactive declarations should use the normal no-shadowing path
+### 7.1 Body-local redeclarations should use the normal no-shadowing path
 
 **Original finding:** DIAG-023
 
+**Additional confirmed gap:** ordinary body-local typed and mutable redeclarations still use the
+parallel `ShadowedName` family and `BST-RULE-0038`. That path duplicates `DuplicateDeclaration`,
+labels the first initializer rather than the authored binding and leaves the scope-neutral message
+from Phase 2.5 unused for normal local bindings.
+
+**Additional confirmed dispatch gap:** the existing-symbol branch recognises only builtin type
+tokens and the mutable marker as declaration starts. A redeclaration with a nominal, alias,
+generic, qualified or collection annotation, the current postfix compile-time marker or a reactive
+marker can fall through to expression parsing. Declaration-shape detection must reuse the canonical
+binding-target parser rather than grow another token whitelist. Plain `name = value` remains
+reassignment, not a second inferred declaration.
+
 A second reactive declaration is not invalid because `$` is unexpected. It is invalid because the visible name already exists.
 
-- Parse the declaration shape before duplicate registration rejects it.
+- Delete `RuleDiagnosticKind::ShadowedName`, its descriptor, payload, constructor, remapping and
+  renderer branch.
+- Route ordinary body-local typed and mutable redeclarations through `DuplicateDeclaration`.
+- Parse every unambiguous current body-local binding declaration shape before duplicate
+  registration rejects it, including user-defined/constructed type annotations and postfix
+  compile-time or reactive binding markers. Keep plain `name = value` on reassignment.
 - Reuse `DuplicateDeclaration`.
-- Message should state the general Beanstalk rule:
-
-  > Cannot redeclare `name` while the existing binding is visible. Beanstalk does not allow shadowing.
-
-- Label both declarations.
+- Reuse the scope-neutral duplicate-name message established in Phase 2.5. Do not reintroduce a
+  reactive-specific renderer branch.
+- Use the authored binding location preserved by Phase 3.2 and label both declarations.
+- Update the existing `BST-RULE-0038` fixtures to `BST-RULE-0002`. Do not reserve or retain the
+  superseded code through an alias.
 - Do not invent a separate reactive uniqueness rule.
+
+### 7.1b Pattern captures should use the normal no-shadowing path
+
+**Additional confirmed gap:** option-present captures, choice payload captures and general match
+captures currently use `InvalidMatchPatternReason::CaptureBindingShadowsVariable`. That parallel
+reason carries neither the authored capture name nor the previous declaration location, uses
+source-inaccurate `variable` terminology and reports `BST-RULE-0049` for the ordinary language-wide
+no-shadowing rule.
+
+- Delete `CaptureBindingShadowsVariable` and its renderer branch.
+- When a capture collides with a visible binding, reuse `DuplicateDeclaration` with the capture name
+  and capture location.
+- Use the factual authored binding location exposed by `ScopeDeclarationRef` after Phase 3.2 for the
+  secondary label. Omit the secondary label when a visible symbol has no authored binding location.
+- Preserve distinct `DuplicateCaptureBinding` handling for two captures inside the same pattern.
+- Keep the current capture location primary and preserve option, choice and general-capture parsing.
+- Update the existing capture-shadowing integration owners to `BST-RULE-0002` rather than adding
+  cosmetic duplicate fixtures.
 
 ### 7.2 Exact operator diagnostics consolidated into Phase 1.2
 
@@ -1043,7 +1246,7 @@ Keep the found semantic `TypeId`.
 
 Message:
 
-> Collection loop source must be a collection, found `Int`. Use a collection after `loop`. For numeric iteration, use range syntax such as `loop 0 to count |i|:`.
+> Collection loop source must be a collection, found `Int`. Use a collection after `loop`. For numeric iteration, use range syntax such as `loop 0 to 10 |i|:`.
 
 Do not imply every non-collection source was intended as a range.
 
@@ -1068,7 +1271,6 @@ through the ordinary current grammar without a compatibility message.
 
 - Update `cast_optional_success_wraps_inner_value` to expect `BST-RULE-0064` for HTML-Wasm while preserving HTML success.
 - Add a focused backend-feature validation test for reachable and unreachable payload construction if the integration case cannot protect both reachability branches.
-- Review and update the progress matrix because the target rejection lane and coverage change.
 
 ## Phase 8: Doc comments and code comments review
 
@@ -1079,6 +1281,15 @@ This review should focus on making sure areas where diagnostic improvements have
 This report should be created by exploring the codebase in parallel, then coalesing the reports into a file kept in the tmp/ folder and reviewing them for accuracy before implementing the corrections.
 
 Any bad, noisy or pointless comments that don't follow the style guide can be in scope for this review. Ideally, line counts for comments should be reduced, compressed and made more concise without losing important context rather than further bloated with much more information.
+
+**Confirmed cleanup:** `headers/tests/parse_file_headers_tests.rs` still calls current postfix
+constant declarations "`#`-prefixed declarations", and `headers/header_dispatch.rs` says dispatch
+classifies a declaration by its "leading token" while `#` is the marker after the declaration name.
+`headers/hash_items.rs` also describes its separate `#[]` const-template owner as a general
+"hash-prefixed top-level forms" path, while another header test describes an ordinary runtime
+template as having "no `#` prefix". Rewrite these comments around the exact current constructs:
+postfix constant markers, the token after a declaration name and the distinct `#[]` const-template
+form. No compiler or test wording may imply the discontinued leading-marker constant form.
 
 
 ## Removed or superseded original findings
@@ -1124,7 +1335,6 @@ After each phase:
 - search for duplicate messages that encode the same rule
 - check that no later stage compensates for a now-earlier diagnostic
 - review fixture overlap and keep one primary owner
-- review the progress matrix if accepted or rejected source behaviour changed
 
 ## Test strategy
 
@@ -1172,20 +1382,12 @@ Use focused subsystem tests for:
 - Do not use benchmark fixtures as diagnostic coverage.
 - Remove fixtures tied only to deleted legacy paths.
 
-## Documentation updates required during implementation
+## Documentation exclusion
 
-Update the narrowest canonical source documents:
-
-- quoted-string escape set and raw-string preservation
-- template directive incompatibility rule
-- removal of obsolete compatibility migration references
-- any progress-matrix rows affected by:
-  - newly rejected invalid string escapes
-  - newly rejected single-target multi-return receiving
-  - newly rejected bodyless non-`else` match arms
-  - corrected infrastructure failures becoming structured diagnostics
-
-Do not edit generated files under `docs/release/**`. Rebuild them through the compiler when documentation source changes.
+Do not update general design docs, language docs, the progress matrix or generated documentation
+as part of this plan. A narrow documentation edit is allowed only when the file explicitly names
+the exact diagnostic being changed and would otherwise become inaccurate. The active roadmap plan
+continues to record slice state and confirmed implementation findings.
 
 ## Final validation
 
@@ -1206,8 +1408,6 @@ Also perform the manual diagnostic audit required by the compiler style guide:
 - no duplicate diagnostic owner remains across tokenizer, headers, AST, HIR or borrow validation
 - no type decision compares rendered syntax instead of `TypeId`
 - no borrow diagnostic exposes compiler-internal lifetime or ownership machinery
-- the progress matrix reflects changed rejection and coverage
-- generated documentation was rebuilt rather than edited
 
 ## Completion criteria
 

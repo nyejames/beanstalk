@@ -64,6 +64,41 @@ fn rejects_same_line_else_if_statement() {
     );
 }
 
+#[test]
+fn rejects_missing_if_conditions_at_the_first_boundary() {
+    let cases = [
+        ("if:\n    io.line([: [\"ready\"]])\n;\n", 3),
+        ("if\nio.line([: [\"ready\"]])\n;\n", 2),
+        ("if;\n", 3),
+        ("if then 1\n", 4),
+        ("if else\n", 4),
+        ("if", 2),
+        ("value = if then 1 else 0\n", 12),
+        ("value = if:\n    then 1\nelse\n    then 0\n;\n", 11),
+        ("a, b = if then 1, 2 else 3, 4\n", 11),
+    ];
+
+    for (source, expected_column) in cases {
+        let diagnostic = parse_single_file_ast_diagnostic(source);
+
+        assert!(
+            matches!(
+                &diagnostic.payload,
+                DiagnosticPayload::InvalidControlFlowStatement {
+                    reason: InvalidControlFlowStatementReason::ExpectedConditionAfterIf,
+                }
+            ),
+            "expected ExpectedConditionAfterIf for {source:?}, got {:?}",
+            diagnostic.payload
+        );
+        assert_eq!(diagnostic.primary_location.start_pos.line_number, 0);
+        assert_eq!(
+            diagnostic.primary_location.start_pos.char_column, expected_column,
+            "unexpected boundary location for {source:?}"
+        );
+    }
+}
+
 fn runtime_operator_sequence(expression: &Expression) -> Vec<Operator> {
     fn collect_operators_from_rpn(rpn: &ExpressionRpn, out: &mut Vec<Operator>) {
         for item in &rpn.items {
@@ -861,5 +896,89 @@ fn case_is_valid_as_normal_identifier() {
     assert!(
         matches!(&body[0].kind, NodeKind::VariableDeclaration { .. }),
         "should parse `case = 42` as a normal variable declaration"
+    );
+}
+
+// Inline value-if missing-else routing.
+
+/// Asserts the first diagnostic is the requested inline control-flow reason.
+fn assert_inline_control_flow_reason(source: &str, expected: InvalidControlFlowStatementReason) {
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidControlFlowStatement),
+        "expected BST-RULE-0042 for {source:?}, got {:?}",
+        diagnostic.kind,
+    );
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidControlFlowStatement { reason } if *reason == expected,
+        ),
+        "expected {expected:?} for {source:?}, got {:?}",
+        diagnostic.payload,
+    );
+}
+
+#[test]
+fn routes_missing_inline_else_at_declaration_boundary_through_value_if_missing_else() {
+    for source in ["value = if true then 1", "value = if true then 1\n"] {
+        let diagnostic = parse_single_file_ast_diagnostic(source);
+
+        assert!(matches!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidControlFlowStatement {
+                reason: InvalidControlFlowStatementReason::ValueIfMissingElse,
+            }
+        ));
+        assert_eq!(diagnostic.primary_location.start_pos.line_number, 0);
+        assert_eq!(diagnostic.primary_location.start_pos.char_column, 22);
+    }
+}
+
+#[test]
+fn routes_missing_inline_else_at_assignment_boundary_through_value_if_missing_else() {
+    // The assignment receiver keeps a real newline before the next statement,
+    // so the absent `else` must be routed through the structured reason.
+    assert_inline_control_flow_reason(
+        "choose |condition Bool| -> Int:\n    result ~= 0\n    result = if condition then 10\n    return result\n;\nvalue = choose(false)\n",
+        InvalidControlFlowStatementReason::ValueIfMissingElse,
+    );
+}
+
+#[test]
+fn routes_missing_inline_else_at_return_boundary_through_value_if_missing_else() {
+    // The return receiver keeps a real newline before the block close, so the
+    // absent `else` must be routed through the structured reason.
+    assert_inline_control_flow_reason(
+        "choose |condition Bool| -> Int:\n    return if condition then 10\n;\nvalue = choose(false)\n",
+        InvalidControlFlowStatementReason::ValueIfMissingElse,
+    );
+}
+
+#[test]
+fn preserves_inline_multiline_when_newline_precedes_an_authored_else() {
+    // A real newline before an authored `else` stays the multiline inline form
+    // at both assignment and return receivers, not a missing-`else` diagnostic.
+    assert_inline_control_flow_reason(
+        "choose |condition Bool| -> Int:\n    result ~= 0\n    result = if condition then 10\nelse 0\n    return result\n;\nvalue = choose(false)\n",
+        InvalidControlFlowStatementReason::InlineValueIfMultiline,
+    );
+    assert_inline_control_flow_reason(
+        "choose |condition Bool| -> Int:\n    return if condition then 10\nelse 0\n;\nvalue = choose(false)\n",
+        InvalidControlFlowStatementReason::InlineValueIfMultiline,
+    );
+    assert_inline_control_flow_reason(
+        "value = if true then 1\nelse 0\n",
+        InvalidControlFlowStatementReason::InlineValueIfMultiline,
+    );
+}
+
+#[test]
+fn ignores_else_owned_by_a_later_statement() {
+    assert_inline_control_flow_reason(
+        "choose |condition Bool| -> Int:\n    result ~= 0\n    result = if condition then 10\n    if condition:\n        result = 1\n    else\n        result = 2\n    ;\n    return result\n;\nvalue = choose(false)\n",
+        InvalidControlFlowStatementReason::ValueIfMissingElse,
     );
 }

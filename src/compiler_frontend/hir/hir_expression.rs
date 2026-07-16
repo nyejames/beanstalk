@@ -187,7 +187,7 @@ impl<'a> HirBuilder<'a> {
             #[cfg(test)]
             ExpressionKind::Path(compile_time_paths) => {
                 // Compile-time path values lower to string literals in HIR.
-                // Formatting applies #origin for root-based paths and trailing
+                // Formatting applies the origin prefix for root-based paths and trailing
                 // slash for directories through the shared path formatter.
                 let path_string = format_compile_time_paths(
                     compile_time_paths,

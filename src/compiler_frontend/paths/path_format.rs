@@ -1,7 +1,7 @@
 //! Build-system-aware path string formatting for compile-time path values.
 //!
 //! WHAT: formats resolved `CompileTimePath` values into public string
-//! representations, applying `#origin` and output style policies.
+//! representations, applying the origin prefix and output style policies.
 //!
 //! WHY: path-to-string coercion rules (origin prefix, trailing slash,
 //! relative preservation) belong in one shared module so all builders
@@ -23,11 +23,11 @@ pub enum OutputPathStyle {
 
 /// Configuration for path string formatting.
 ///
-/// WHAT: carries `#origin` and output style so formatting is deterministic.
+/// WHAT: carries the origin prefix and output style so formatting is deterministic.
 /// WHY: builders must agree on one source of truth for these policies.
 #[derive(Debug, Clone)]
 pub struct PathStringFormatConfig {
-    /// The `#origin` value from project config (e.g. `"/beanstalk"`).
+    /// The `origin` config key value (e.g. `"/beanstalk"`).
     /// A bare `"/"` means no prefix is added.
     pub origin: String,
     /// Separator style for the formatted output.
@@ -44,7 +44,7 @@ impl Default for PathStringFormatConfig {
 }
 
 /// WHAT: formats a compile-time path into a public string representation.
-/// WHY: this is the single place where `#origin`, trailing slash, and
+/// WHY: this is the single place where the origin prefix, trailing slash, and
 /// relative-path preservation rules are applied.
 ///
 /// Rules:
@@ -129,7 +129,7 @@ pub fn format_compile_time_paths(
         .join(", ")
 }
 
-/// Applies the `#origin` prefix to an absolute site path.
+/// Applies the origin prefix to an absolute site path.
 fn apply_origin(site_path: &str, origin: &str) -> String {
     if origin == "/" {
         return site_path.to_owned();

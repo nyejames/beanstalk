@@ -36,11 +36,11 @@ use crate::compiler_frontend::compiler_messages::{
     BorrowAccessKind, DeferredFeatureReason, DiagnosticOperator, DiagnosticPlace,
     GenericApplicationErrorReason, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidImportPathReason,
-    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMutableAccessReason,
-    InvalidPackageFolderReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidTemplateDirectiveReason, NameNamespace, NamespaceTypeValueMisuseKind, PathKind,
-    RangeOperandKind, UnsupportedOperatorCategory,
+    InvalidExpressionReason, InvalidGenericParameterReason, InvalidImportClauseReason,
+    InvalidImportPathReason, InvalidMapLiteralReason, InvalidMapTypeReason,
+    InvalidMutableAccessReason, InvalidPackageFolderReason, InvalidPageMetadataReason,
+    InvalidResultOperandReason, InvalidTemplateDirectiveReason, NameNamespace,
+    NamespaceTypeValueMisuseKind, PathKind, RangeOperandKind, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::display::display_type;
@@ -618,8 +618,15 @@ pub(crate) fn invalid_page_metadata_message(
     }
 }
 
-pub(crate) fn invalid_expression_message() -> String {
-    "Invalid expression: no valid operands found during evaluation.".to_string()
+pub(crate) fn invalid_expression_message(reason: InvalidExpressionReason) -> String {
+    match reason {
+        InvalidExpressionReason::ExpectedOperatorBeforeExpression => {
+            "Expected an operator before this expression.".to_owned()
+        }
+        InvalidExpressionReason::UnresolvedStackShape => {
+            "This expression does not resolve to exactly one value.".to_owned()
+        }
+    }
 }
 
 /// Determine which special file name is referenced by an import path.

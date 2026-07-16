@@ -18,13 +18,14 @@ use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidConfigReason, InvalidPackageFolderReason,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::projects::settings::{
     Config, IMPLICIT_START_FUNC_NAME, MAX_TEMPLATE_CONST_LOOP_ITERATIONS,
     TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY,
 };
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 // -------------------------
@@ -50,7 +51,7 @@ pub(super) fn validate_and_apply_config_ast(
     // direct interned equality rather than by converting paths back to `PathBuf`.
     let authored_scope = &parsed_config.authored_scope;
 
-    // 1. Extract from module_constants (top-level # bindings).
+    // 1. Extract authored top-level compile-time constants.
     for declaration in &parsed_config.ast.module_constants {
         // A module constant's source file is the parent of its symbol path.
         // WHY: the value expression's location scope may be normalized to an imported
@@ -69,7 +70,8 @@ pub(super) fn validate_and_apply_config_ast(
             errors.push(config_diagnostic(
                 Some(string_table.intern(&key)),
                 InvalidConfigReason::DuplicateKey,
-                declaration.value.location.clone(),
+                key_identity_location(declaration, &parsed_config.authored_key_name_locations)
+                    .clone(),
             ));
             continue;
         }
@@ -79,6 +81,7 @@ pub(super) fn validate_and_apply_config_ast(
             declaration,
             config_keys,
             &parsed_config.ast.const_facts,
+            &parsed_config.authored_key_name_locations,
             string_table,
         ) {
             errors.append(&mut decl_errors);
@@ -150,6 +153,7 @@ fn extract_config_declaration(
     declaration: &Declaration,
     config_keys: &ProjectConfigKeyRegistry,
     const_facts: &AstConstFacts,
+    authored_key_name_locations: &HashMap<InternedPath, SourceLocation>,
     string_table: &mut StringTable,
 ) -> Result<(), Vec<CompilerDiagnostic>> {
     let key = declaration
@@ -171,50 +175,15 @@ fn extract_config_declaration(
         .setting_locations
         .insert(key.clone(), location.clone());
 
-    // Deprecated key: `libraries` was renamed to `package_folders`.
-    if key == "libraries" {
-        return Err(vec![config_diagnostic(
-            Some(string_table.intern(&key)),
-            InvalidConfigReason::ReplacedLibrariesKey,
-            location,
-        )]);
-    }
-
-    // Replaced key: `root_folders` has been replaced by `package_folders`.
-    if key == "root_folders" {
-        return Err(vec![config_diagnostic(
-            Some(string_table.intern(&key)),
-            InvalidConfigReason::ReplacedRootFoldersKey,
-            location,
-        )]);
-    }
-
-    // Deprecated key: `library_folders` was renamed to `package_folders`.
-    if key == "library_folders" {
-        return Err(vec![config_diagnostic(
-            Some(string_table.intern(&key)),
-            InvalidConfigReason::ReplacedPackageFoldersKey,
-            location,
-        )]);
-    }
-
-    // Deprecated key: `src` was renamed to `entry_root`.
-    if key == "src" {
-        return Err(vec![config_diagnostic(
-            Some(string_table.intern(&key)),
-            InvalidConfigReason::DeprecatedSrcKey,
-            location,
-        )]);
-    }
-
-    // Every config declaration must be a known key before Stage 0 stores it.
+    // Every config declaration must be a known key before Stage 0 stores it. All unregistered
+    // names flow through the ordinary `UnknownKey` reason.
     let Some(config_key) = config_keys.lookup(&key) else {
         let key_id = string_table.intern(&key);
 
         return Err(vec![config_diagnostic(
             Some(key_id),
             InvalidConfigReason::UnknownKey { key: key_id },
-            location,
+            key_identity_location(declaration, authored_key_name_locations).clone(),
         )]);
     };
 
@@ -733,4 +702,21 @@ fn config_diagnostic(
     location: SourceLocation,
 ) -> CompilerDiagnostic {
     CompilerDiagnostic::invalid_config_reason(key, reason, location)
+}
+
+// -------------------------
+//  Key-Identity Location Lookup
+// -------------------------
+
+/// Resolve the source location for a config key-identity diagnostic.
+///
+/// Authored name spans are keyed by `Declaration::id`. The declaration value remains a defensive
+/// fallback for declarations without a preserved header span.
+fn key_identity_location<'a>(
+    declaration: &'a Declaration,
+    authored_key_name_locations: &'a HashMap<InternedPath, SourceLocation>,
+) -> &'a SourceLocation {
+    authored_key_name_locations
+        .get(&declaration.id)
+        .unwrap_or(&declaration.value.location)
 }

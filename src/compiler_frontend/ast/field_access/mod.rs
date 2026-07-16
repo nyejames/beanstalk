@@ -34,6 +34,38 @@ pub(crate) enum ReceiverAccessMode {
     Mutable,
 }
 
+/// Access context for entering a postfix chain.
+///
+/// WHAT: pairs the receiver access mode with the optional authored `~` marker location that
+///       opened the chain.
+/// WHY: explicit mutable receiver access (`~name.method(...)`) carries the marker location so
+///      authored-marker diagnostics can point at `~`; shared entries carry no marker. Grouping
+///      the two keeps the chain entry signature small and threads the marker through the
+///      postfix-chain context in one value.
+#[derive(Clone)]
+pub(crate) struct PostfixChainAccess {
+    pub(crate) mode: ReceiverAccessMode,
+    pub(crate) authored_marker_location: Option<SourceLocation>,
+}
+
+impl PostfixChainAccess {
+    /// Shared access with no authored mutable marker.
+    pub(crate) fn shared() -> Self {
+        PostfixChainAccess {
+            mode: ReceiverAccessMode::Shared,
+            authored_marker_location: None,
+        }
+    }
+
+    /// Explicit mutable receiver access opened by an authored `~` marker.
+    pub(crate) fn mutable_marker(marker_location: SourceLocation) -> Self {
+        PostfixChainAccess {
+            mode: ReceiverAccessMode::Mutable,
+            authored_marker_location: Some(marker_location),
+        }
+    }
+}
+
 /// Shared parse state for one postfix member step.
 #[derive(Clone)]
 pub(super) struct MemberStepContext<'a> {
@@ -42,5 +74,9 @@ pub(super) struct MemberStepContext<'a> {
     pub member_name: StringId,
     pub member_location: SourceLocation,
     pub receiver_access_mode: ReceiverAccessMode,
+    /// The authored `~` marker location when the chain was entered through explicit mutable
+    /// receiver access. Authored-marker receiver diagnostics point here instead of the method
+    /// boundary.
+    pub(crate) authored_marker_location: Option<SourceLocation>,
     pub scope_context: &'a ScopeContext,
 }

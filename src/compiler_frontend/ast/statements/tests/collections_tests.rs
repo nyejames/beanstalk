@@ -347,7 +347,7 @@ fn rejects_mutating_collection_method_without_explicit_receiver_tilde() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
             ..
         }
     ));
@@ -397,7 +397,7 @@ fn rejects_set_on_immutable_collection() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MutableCollectionRequired,
+            reason: InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
             ..
         }
     ));
@@ -1036,7 +1036,7 @@ fn rejects_map_set_without_mutable_receiver_marker() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
             ..
         }
     ));
@@ -1051,7 +1051,7 @@ fn rejects_map_remove_without_mutable_receiver_marker() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
             ..
         }
     ));
@@ -1066,7 +1066,7 @@ fn rejects_map_clear_without_mutable_receiver_marker() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            reason: InvalidReceiverCallReason::MutableReceiverMissingMarker,
             ..
         }
     ));
@@ -1081,7 +1081,7 @@ fn rejects_map_mutation_on_immutable_binding() {
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::InvalidReceiverCall {
-            reason: InvalidReceiverCallReason::MutableMapRequired,
+            reason: InvalidReceiverCallReason::MutableMarkerOnImmutableReceiver,
             ..
         }
     ));

@@ -324,6 +324,26 @@ fn optional_expression_empty_parens_errors() {
 }
 
 #[test]
+fn optional_expression_whitespace_only_parens_use_generic_empty_arguments() {
+    // A whitespace-only argument stays on the generic empty-arguments owner
+    // rather than the `$children`-specific reason, proving non-`$children`
+    // directives do not receive children wording.
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$code(\n)]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result =
+        parse_optional_parenthesized_expression_for_test(&mut tokens, &context, &mut string_table);
+    let diagnostic = *result.expect_err("whitespace-only directive argument should error");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidTemplateDirective {
+            reason: crate::compiler_frontend::compiler_messages::InvalidTemplateDirectiveReason::EmptyArguments,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn optional_expression_extra_comma_errors() {
     let mut string_table = StringTable::new();
     let mut tokens = directive_tokens("[$children(\"a\", \"b\")]", &mut string_table);

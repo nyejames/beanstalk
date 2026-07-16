@@ -1,0 +1,3 @@
+label |prefix String =
+| -> String:
+;

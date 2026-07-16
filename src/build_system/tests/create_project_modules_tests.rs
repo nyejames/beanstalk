@@ -742,16 +742,39 @@ fn rejects_unknown_config_key() {
         .expect_err("config should fail");
 
     let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::UnknownKey { .. },
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
+    let DiagnosticPayload::InvalidConfig {
+        reason: InvalidConfigReason::UnknownKey { key },
+        ..
+    } = &diagnostic.payload
+    else {
+        panic!(
+            "expected UnknownKey diagnostic, got: {:?}",
+            diagnostic.payload
+        );
+    };
+    assert_eq!(
+        messages.string_table.resolve(*key),
+        "custom_key",
+        "UnknownKey should retain the authored key name in the structured payload"
+    );
+
+    // The key occupies columns 1 through 10. The initializer begins later on the same line, so
+    // this exact span protects the Stage 0 key-location handoff.
+    assert_eq!(
+        diagnostic
+            .primary_location
+            .scope
+            .to_path_buf(&messages.string_table),
+        config_path.as_path(),
+        "UnknownKey should point at the authored config file scope"
+    );
+    assert_eq!(
+        diagnostic.primary_location.start_pos.char_column, 1,
+        "UnknownKey should start at the authored key name"
+    );
+    assert_eq!(
+        diagnostic.primary_location.end_pos.char_column, 10,
+        "UnknownKey should end at the authored key name span, not the initializer value"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -1054,35 +1077,6 @@ fn rejects_provider_backed_js_config_imports() {
             }
         ),
         "expected config import-root diagnostic for JS import, got: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_legacy_library_folders_config_key() {
-    let root = temp_dir("config_library_folders_rename");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "library_folders #= { \"lib\" }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::ReplacedPackageFoldersKey,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
         diagnostic.payload
     );
 
@@ -1416,64 +1410,6 @@ fn package_prefix_collision_with_entry_root_folder_rejected() {
         first_invalid_config_reason(&messages),
         InvalidConfigReason::EntryRootPackagePrefixCollision { .. }
     ));
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_deprecated_src_config_key() {
-    let root = temp_dir("config_src_rename");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "src #= \"src\"\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::DeprecatedSrcKey,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_legacy_libraries_config_key() {
-    let root = temp_dir("config_libraries_rename");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "libraries #= { \"lib\" }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostic = first_error_diagnostic(&messages);
-    assert!(
-        matches!(
-            &diagnostic.payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::ReplacedLibrariesKey,
-                ..
-            }
-        ),
-        "unexpected diagnostic payload: {:?}",
-        diagnostic.payload
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
@@ -2570,50 +2506,6 @@ fn rejects_closed_string_set_config_key_with_unsupported_value() {
         ),
         "unexpected diagnostic payload: {:?}",
         diagnostic.payload
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn deprecated_and_replaced_keys_still_diagnosed_before_shape_check() {
-    // WHY: validation ordering must stay stable — deprecated/replaced keys are rejected
-    // before shape extraction runs.
-    let root = temp_dir("config_deprecated_before_shape");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "src #= true\nlibraries #= 123\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let diagnostics: Vec<_> = messages.error_diagnostics().collect();
-    assert_eq!(diagnostics.len(), 2, "expected two errors");
-
-    assert!(
-        matches!(
-            &diagnostics[0].payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::DeprecatedSrcKey,
-                ..
-            }
-        ),
-        "first error should be deprecated key: {:?}",
-        diagnostics[0].payload
-    );
-    assert!(
-        matches!(
-            &diagnostics[1].payload,
-            DiagnosticPayload::InvalidConfig {
-                reason: InvalidConfigReason::ReplacedLibrariesKey,
-                ..
-            }
-        ),
-        "second error should be replaced key: {:?}",
-        diagnostics[1].payload
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");

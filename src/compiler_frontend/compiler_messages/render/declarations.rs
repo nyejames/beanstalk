@@ -48,6 +48,9 @@ pub(crate) fn invalid_signature_member_message(reason: InvalidSignatureMemberRea
         InvalidSignatureMemberReason::ReactiveParameterDefaultValue => {
             "Reactive parameters require an existing reactive source argument and cannot have default values.".to_string()
         }
+        InvalidSignatureMemberReason::MissingDefaultValue => {
+            "Expected a default value after '='.".to_string()
+        }
     }
 }
 
@@ -65,8 +68,11 @@ pub(crate) fn invalid_function_signature_message(
         InvalidFunctionSignatureReason::UnexpectedEndAfterParameters => {
             "Function signature ended unexpectedly after parameters.".to_string()
         }
-        InvalidFunctionSignatureReason::UnexpectedColonAfterArrow => {
-            "Functions without return values must omit the return signature.".to_string()
+        InvalidFunctionSignatureReason::MissingReturnType => {
+            "Function signature is missing a return type after '->'. Add a type followed by ':', or remove '->' for a no-value function.".to_string()
+        }
+        InvalidFunctionSignatureReason::MissingTraitRequirementReturnType => {
+            "Trait requirement is missing a return type after '->'. Add a type, or remove '->' for a no-value requirement.".to_string()
         }
         InvalidFunctionSignatureReason::TrailingCommaInReturns => {
             "Trailing commas are not allowed in function return declarations.".to_string()
@@ -199,6 +205,9 @@ pub(crate) fn invalid_declaration_message(
         InvalidDeclarationReason::TraitIncompatibilitySemicolon => {
             "Trait incompatibility declarations are newline-terminated and must not end with ';'."
                 .to_string()
+        }
+        InvalidDeclarationReason::MissingInitializerExpression => {
+            format!("Declaration {name_text} is missing an initializer expression after '='.")
         }
     }
 }

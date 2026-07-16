@@ -2,3 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0047"]
+message_contains = ["`v` is immutable", "before calling it with `~`"]

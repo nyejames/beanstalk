@@ -20,7 +20,9 @@ pub(crate) mod types;
 
 pub(crate) use completeness::analyze_branch_flow;
 pub(crate) use multi_bind::try_parse_multi_bind_value_block;
-pub(crate) use parse_values::{ProducedValuesParseInput, parse_produced_values_typed};
+pub(crate) use parse_values::{
+    ProducedValuesParseInput, is_missing_produced_value_boundary, parse_produced_values_typed,
+};
 pub(crate) use receiver::try_parse_value_block_at_receiver;
 pub(crate) use types::{
     ActiveValueProductionTarget, BranchFlow, ProducedValues, ValueReceiverKind,

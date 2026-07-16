@@ -1412,6 +1412,106 @@ fn function_signature_reports_missing_colon_after_return_list() {
 }
 
 #[test]
+fn function_signature_reports_missing_return_type_after_arrow_colon() {
+    // An authored `->` immediately followed by `:` has no return type. The signature
+    // parser owns this boundary and must report `MissingReturnType` at the colon rather
+    // than the function name or parameter list.
+    let result =
+        parse_single_file_headers_with_entry("f|| -> :\n;\n", "src/#page.bst", "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "an arrow immediately followed by ':' must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidFunctionSignature {
+            reason: InvalidFunctionSignatureReason::MissingReturnType
+        }
+    )));
+}
+
+#[test]
+fn function_signature_reports_missing_return_type_after_arrow_newline() {
+    // A newline immediately after `->` is a missing-return-type boundary, not a valid
+    // empty return list. The signature parser reports `MissingReturnType` at the newline.
+    let result =
+        parse_single_file_headers_with_entry("f|| ->\n;\n", "src/#page.bst", "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "an arrow immediately followed by a newline must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidFunctionSignature {
+            reason: InvalidFunctionSignatureReason::MissingReturnType
+        }
+    )));
+}
+
+#[test]
+fn trait_requirement_reports_missing_return_type_after_arrow_colon() {
+    // A trait requirement is bodyless, so an authored `->` followed by `:` is a missing
+    // return type. The shared boundary predicate routes the trait-requirement parser to
+    // `MissingTraitRequirementReturnType`, which never tells a bodyless requirement to add
+    // the function-body `:` terminator. The diagnostic points at the first missing-type
+    // boundary after the arrow, not at the requirement name or `This` receiver.
+    let result = parse_single_file_headers_with_entry(
+        "DISPLAYABLE must:\n    display |This| -> :\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        result.is_err(),
+        "a trait requirement arrow followed by ':' must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    let diagnostic = errors
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidFunctionSignature {
+                    reason: InvalidFunctionSignatureReason::MissingTraitRequirementReturnType
+                }
+            )
+        })
+        .expect("expected MissingTraitRequirementReturnType");
+
+    assert_eq!(diagnostic.primary_location.start_pos.line_number, 1);
+    assert_eq!(diagnostic.primary_location.start_pos.char_column, 23);
+}
+
+#[test]
+fn trait_requirement_reports_missing_return_type_after_arrow_newline() {
+    // A newline after `->` is also a missing-return-type boundary for a trait requirement.
+    // The requirement-specific reason is used so the guidance never suggests the function
+    // body `:` terminator.
+    let result = parse_single_file_headers_with_entry(
+        "DISPLAYABLE must:\n    display |This| ->\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        result.is_err(),
+        "a trait requirement arrow followed by a newline must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidFunctionSignature {
+            reason: InvalidFunctionSignatureReason::MissingTraitRequirementReturnType
+        }
+    )));
+}
+
+#[test]
 fn duplicate_top_level_function_names_error_during_header_parsing() {
     let result = parse_single_file_headers_with_entry(
         "simple_function |number Int| -> Int:\n\
@@ -2875,4 +2975,148 @@ fn header_parsing_rejects_module_public_surface_re_export_with_core_cast_trait_n
             ..
         }
     )));
+}
+
+#[test]
+fn missing_default_value_after_assign_points_at_member_boundary() {
+    // An authored `=` for an ordinary parameter or struct field must be followed by a
+    // default expression. Each case below reaches a distinct member/EOF boundary before
+    // any expression token begins, so the shared member-default owner reports
+    // `MissingDefaultValue` (BST-RULE-0028) pointing at that boundary, not a generic
+    // unexpected-token or end-of-file failure.
+    let cases: &[(&str, i32, i32)] = &[
+        // function parameter ending at the closing pipe
+        ("label |prefix String =| -> String:\n;\n", 0, 23),
+        // struct field ending at a comma
+        ("Config = |\n    width Int =,\n|\n", 1, 16),
+        // struct field ending at the closing pipe
+        ("Config = |\n    width Int =|\n", 1, 16),
+        // newline immediately after the authored `=`
+        ("label |prefix String =\n| -> String:\n;\n", 0, 22),
+        // block end (`;`) immediately after the authored `=`
+        ("label |prefix String =;\n", 0, 23),
+        // end of file immediately after the authored `=`
+        ("label |prefix String =", 0, 22),
+    ];
+
+    for (source, expected_line, expected_column) in cases {
+        let result = parse_single_file_headers_with_entry(source, "src/#page.bst", "src/#page.bst");
+        let errors =
+            expect_header_error(result, "an authored `=` with no value should be rejected");
+        let diagnostic = errors
+            .diagnostics
+            .iter()
+            .find(|diagnostic| {
+                matches!(
+                    diagnostic.payload,
+                    DiagnosticPayload::InvalidSignatureMember {
+                        reason: InvalidSignatureMemberReason::MissingDefaultValue
+                    }
+                )
+            })
+            .expect("expected a MissingDefaultValue signature-member diagnostic");
+        assert_eq!(
+            diagnostic.kind.code(),
+            "BST-RULE-0028",
+            "MissingDefaultValue must keep the stable signature-member code"
+        );
+        assert_eq!(
+            diagnostic.primary_location.start_pos.line_number, *expected_line,
+            "MissingDefaultValue should point at the boundary line for: {source}"
+        );
+        assert_eq!(
+            diagnostic.primary_location.start_pos.char_column, *expected_column,
+            "MissingDefaultValue should point at the boundary column for: {source}"
+        );
+    }
+}
+
+#[test]
+fn special_member_default_reasons_win_over_missing_default_value() {
+    // Reactive parameters, trait requirements and choice payload fields keep their own
+    // more specific default-value reasons even when no expression follows the authored
+    // `=`, so they never fall through to `MissingDefaultValue`.
+    let reactive = parse_single_file_headers_with_entry(
+        "label |event $String =| -> String:\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let reactive_errors =
+        expect_header_error(reactive, "reactive parameter defaults must be rejected");
+    assert!(
+        reactive_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidSignatureMember {
+                    reason: InvalidSignatureMemberReason::ReactiveParameterDefaultValue
+                }
+            ))
+    );
+
+    let trait_requirement = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |This, value Int =|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let trait_errors = expect_header_error(
+        trait_requirement,
+        "trait requirement defaults must be rejected",
+    );
+    assert!(trait_errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidSignatureMember {
+            reason: InvalidSignatureMemberReason::TraitRequirementDefaultValue
+        }
+    )));
+
+    let choice = parse_single_file_headers_with_entry(
+        "Response ::\n    Err |\n        message String =|,\n    Success,\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let choice_errors =
+        expect_header_error(choice, "choice payload field defaults must be rejected");
+    assert!(choice_errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidSignatureMember {
+            reason: InvalidSignatureMemberReason::ChoicePayloadDefaultValue
+        }
+    )));
+}
+
+#[test]
+fn authored_default_expression_survives_newline_and_multiline_continuation() {
+    // A default that begins with a real expression token before any boundary stays valid.
+    // The early missing-default check only fires before the first expression token, so a
+    // value followed by a newline member boundary and an operator-continued multiline
+    // default both parse successfully.
+    let (single_line_then_newline, _string_table) =
+        parse_single_file_headers_with_table("label |prefix String = \"a\"\n| -> String:\n;\n");
+    let signature = first_function_signature(&single_line_then_newline);
+    assert!(
+        signature.parameters.iter().any(|parameter| parameter
+            .default_tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::StringSliceLiteral(_)))),
+        "a default that begins before a newline should be captured"
+    );
+
+    let (multiline, _string_table) = parse_single_file_headers_with_table(
+        "label |prefix String = \"a\" +\n    \"b\"| -> String:\n;\n",
+    );
+    let multiline_signature = first_function_signature(&multiline);
+    assert!(
+        multiline_signature
+            .parameters
+            .iter()
+            .any(|parameter| parameter
+                .default_tokens
+                .iter()
+                .filter(|token| matches!(token.kind, TokenKind::StringSliceLiteral(_)))
+                .count()
+                == 2),
+        "an operator-continued multiline default should fold both string literals"
+    );
 }

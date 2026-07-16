@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0021"]
+message_contains = ["children"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0021"]

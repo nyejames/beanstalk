@@ -30,7 +30,7 @@ pub(crate) const DEFAULT_LARGE_TRACKED_ASSET_WARNING_BYTES: u64 = 10 * 1024 * 10
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HtmlTrackedAssetReferenceKind {
-    /// WHAT: the rendered URL is site-rooted (`/assets/logo.png` plus optional `#origin`).
+    /// WHAT: the rendered URL is site-rooted (`/assets/logo.png` plus optional origin prefix).
     /// WHY: rooted and entry-root paths keep one stable emitted location independent of page path.
     SiteRelative,
     /// WHAT: the rendered URL stays relative to the page that emitted it (`./img/logo.png`).

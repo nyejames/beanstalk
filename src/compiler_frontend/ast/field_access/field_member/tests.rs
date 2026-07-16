@@ -19,13 +19,18 @@ use crate::compiler_frontend::ast::templates::tir::{
     TemplateIrBuilder, TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateOverlaySet,
     TemplateOverlaySetId, TemplateRef, TemplateTirPhase, TemplateTirReference,
 };
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticPayload, InvalidFieldAccessReason,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::definitions::{FieldDefinition, StructTypeDefinition};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::NominalTypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::tokenizer::tokens::{
+    CharPosition, FileTokens, SourceLocation, Token, TokenKind,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 fn slot_template(store: &mut TemplateIrStore) -> Template {
@@ -95,6 +100,49 @@ fn receiver_authored_field_uses_foreign_effective_tir() {
 
     assert!(matches!(inlined.kind, ExpressionKind::Template(_)));
     assert_eq!(inlined.value_mode, ValueMode::ImmutableOwned);
+}
+
+#[test]
+fn missing_member_name_after_dot_points_at_offending_token_boundary() {
+    // A non-EOF token after the dot is the immediate missing-member boundary. The diagnostic
+    // must point at that offending token, not the authored dot or the receiver start. This
+    // complements the integration case, which pins the EOF location at the authored dot.
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let offending_position = CharPosition {
+        line_number: 4,
+        char_column: 12,
+    };
+    let offending_location =
+        SourceLocation::new(scope.clone(), offending_position, offending_position);
+    let end_location = SourceLocation::new(
+        scope.clone(),
+        CharPosition::default(),
+        CharPosition::default(),
+    );
+
+    let stream = FileTokens::new(
+        scope,
+        vec![
+            Token::new(TokenKind::Comma, offending_location.clone()),
+            Token::new(TokenKind::Eof, end_location),
+        ],
+    );
+
+    let error = super::parse_member_name_typed(&stream, &string_table)
+        .expect_err("a non-name token after '.' must be rejected as a missing member name");
+
+    let diagnostic = CompilerDiagnostic::from(error);
+    assert_eq!(diagnostic.primary_location, offending_location);
+
+    match diagnostic.payload {
+        DiagnosticPayload::InvalidFieldAccess {
+            reason: InvalidFieldAccessReason::ExpectedNameAfterDot,
+            ..
+        } => {}
+        other => panic!("expected InvalidFieldAccess::ExpectedNameAfterDot, got {other:?}"),
+    }
 }
 
 #[test]

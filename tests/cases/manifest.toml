@@ -149,9 +149,19 @@ path = "function_call_mutable_param_fresh_collection_arg"
 tags = ["integration","functions","collections"]
 
 [[case]]
+id = "function_call_mutable_param_copy_arg"
+path = "function_call_mutable_param_copy_arg"
+tags = ["integration","functions"]
+
+[[case]]
 id = "function_call_mutable_param_fresh_struct_arg"
 path = "function_call_mutable_param_fresh_struct_arg"
 tags = ["integration","functions","structs"]
+
+[[case]]
+id = "function_call_immutable_place_missing_tilde"
+path = "function_call_immutable_place_missing_tilde"
+tags = ["integration","functions","diagnostics"]
 
 [[case]]
 id = "function_call_tilde_on_immutable_place"
@@ -1744,6 +1754,11 @@ path = "collection_mutating_method_temporary_receiver_rejected"
 tags = ["integration","collections","diagnostics"]
 
 [[case]]
+id = "collection_immutable_receiver_rejected"
+path = "collection_immutable_receiver_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
 id = "collection_mutation_inside_branch"
 path = "collection_mutation_inside_branch"
 tags = ["integration", "collections", "control-flow"]
@@ -1814,21 +1829,6 @@ path = "config_current_keys_success"
 tags = ["integration","config"]
 
 [[case]]
-id = "config_deprecated_src_key_rejected"
-path = "config_deprecated_src_key_rejected"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
-id = "config_libraries_replaced_by_package_folders_rejected"
-path = "config_libraries_replaced_by_package_folders_rejected"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
-id = "config_library_folders_replaced_by_package_folders_rejected"
-path = "config_library_folders_replaced_by_package_folders_rejected"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
 id = "raw_backtick_string_expression_rejected"
 path = "raw_backtick_string_expression_rejected"
 tags = ["integration","strings","diagnostics"]
@@ -1846,11 +1846,6 @@ tags = ["integration","config"]
 [[case]]
 id = "config_multi_error"
 path = "config_multi_error"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
-id = "config_root_folders_replaced_by_package_folders_rejected"
-path = "config_root_folders_replaced_by_package_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -2189,6 +2184,11 @@ path = "diagnostic_signature_missing_colon"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "function_signature_missing_return_type_after_arrow_rejected"
+path = "function_signature_missing_return_type_after_arrow_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
 id = "diagnostic_undeclared_call_target"
 path = "diagnostic_undeclared_call_target"
 tags = ["integration","diagnostics"]
@@ -2216,6 +2216,16 @@ tags = ["integration","functions","diagnostics"]
 [[case]]
 id = "duplicate_struct_names"
 path = "duplicate_struct_names"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "duplicate_function_parameters_rejected"
+path = "duplicate_function_parameters_rejected"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "duplicate_struct_fields_rejected"
+path = "duplicate_struct_fields_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
@@ -2736,6 +2746,16 @@ tags = ["integration","diagnostics","hashmaps"]
 [[case]]
 id = "hashmap_mutation_without_tilde_rejected"
 path = "hashmap_mutation_without_tilde_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "map_immutable_receiver_rejected"
+path = "map_immutable_receiver_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "map_temporary_receiver_rejected"
+path = "map_temporary_receiver_rejected"
 tags = ["integration","diagnostics","hashmaps"]
 
 [[case]]
@@ -3417,6 +3437,11 @@ tags = ["integration","results","value-blocks","diagnostics"]
 id = "value_catch_missing_producing_path"
 path = "value_catch_missing_producing_path"
 tags = ["integration","results","value-blocks","diagnostics"]
+
+[[case]]
+id = "value_catch_inline_then_eof_rejected"
+path = "value_catch_inline_then_eof_rejected"
+tags = ["integration","results","value-blocks","diagnostics","then"]
 
 [[case]]
 id = "value_catch_assert_false_terminal"
@@ -5514,6 +5539,11 @@ path = "structured_match_converge"
 tags = ["integration", "control-flow", "js-backend", "structured"]
 
 [[case]]
+id = "diagnostic_expression_adjacent_operands"
+path = "diagnostic_expression_adjacent_operands"
+tags = ["integration", "diagnostics"]
+
+[[case]]
 id = "diagnostic_expression_and_and"
 path = "diagnostic_expression_and_and"
 tags = ["integration", "diagnostics"]
@@ -7239,6 +7269,11 @@ path = "value_then_no_values_rejected"
 tags = ["integration", "diagnostics", "value-blocks", "then"]
 
 [[case]]
+id = "value_then_before_else_no_values_rejected"
+path = "value_then_before_else_no_values_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "then", "if"]
+
+[[case]]
 id = "value_then_crosses_loop_rejected"
 path = "value_then_crosses_loop_rejected"
 tags = ["integration", "diagnostics", "value-blocks", "then", "loop"]
@@ -7282,6 +7317,36 @@ tags = ["integration", "diagnostics", "value-blocks", "if"]
 id = "value_if_inline_multiline_rejected"
 path = "value_if_inline_multiline_rejected"
 tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_missing_then_value_rejected"
+path = "value_if_inline_missing_then_value_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_missing_else_rejected"
+path = "value_if_inline_missing_else_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_missing_else_value_eof_rejected"
+path = "value_if_inline_missing_else_value_eof_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_then_eof_rejected"
+path = "value_if_inline_then_eof_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_multiline_else_rejected"
+path = "value_if_inline_multiline_else_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_multi_bind_missing_then_value_rejected"
+path = "value_if_multi_bind_missing_then_value_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if", "multi-bind"]
 
 [[case]]
 id = "value_catch_inline_return_bang_rejected"
@@ -7597,6 +7662,11 @@ tags = ["integration", "language", "reactivity", "functions"]
 id = "reactive_declaration_missing_initializer_rejected"
 path = "reactive_declaration_missing_initializer_rejected"
 tags = ["integration", "language", "reactivity", "diagnostics"]
+
+[[case]]
+id = "declaration_authored_assign_missing_initializer_rejected"
+path = "declaration_authored_assign_missing_initializer_rejected"
+tags = ["integration", "language", "diagnostics"]
 
 [[case]]
 id = "reactive_declaration_mixed_markers_rejected"
@@ -8029,6 +8099,11 @@ path = "template_directive_children_empty_parens"
 tags = ["integration", "templates", "directives", "diagnostics"]
 
 [[case]]
+id = "template_directive_children_truncated_argument"
+path = "template_directive_children_truncated_argument"
+tags = ["integration", "templates", "directives", "diagnostics"]
+
+[[case]]
 id = "function_call_named_args_did_you_mean"
 path = "function_call_named_args_did_you_mean"
 tags = ["integration", "diagnostics", "calls"]
@@ -8047,6 +8122,16 @@ tags = ["integration", "diagnostics", "functions"]
 id = "field_access_did_you_mean"
 path = "field_access_did_you_mean"
 tags = ["integration", "diagnostics", "field-access"]
+
+[[case]]
+id = "field_access_missing_name_after_dot_rejected"
+path = "field_access_missing_name_after_dot_rejected"
+tags = ["integration", "diagnostics", "field-access"]
+
+[[case]]
+id = "namespace_access_missing_name_after_dot_rejected"
+path = "namespace_access_missing_name_after_dot_rejected"
+tags = ["integration", "diagnostics", "imports", "namespaces"]
 
 [[case]]
 id = "choice_variant_did_you_mean"
@@ -8121,3 +8206,13 @@ tags = ["integration", "config", "html", "module-roots"]
 id = "skipped_directory_collision_ignored"
 path = "skipped_directory_collision_ignored"
 tags = ["integration", "config", "module-roots", "collisions"]
+
+[[case]]
+id = "if_missing_condition_rejected"
+path = "if_missing_condition_rejected"
+tags = ["integration", "diagnostics", "control-flow"]
+
+[[case]]
+id = "signature_member_missing_default_value"
+path = "signature_member_missing_default_value"
+tags = ["integration", "diagnostics", "signatures"]

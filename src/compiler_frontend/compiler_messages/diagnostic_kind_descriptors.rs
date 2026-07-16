@@ -324,9 +324,9 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid struct default value",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::UninitializedVariable => DiagnosticDescriptor::new(
+        RuleDiagnosticKind::MissingDeclarationInitializer => DiagnosticDescriptor::new(
             "BST-RULE-0031",
-            "Uninitialized variable",
+            "Missing declaration initializer",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::MissingImportTarget => DiagnosticDescriptor::new(

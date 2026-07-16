@@ -27,7 +27,7 @@ use super::collection_builtin::parse_collection_builtin_member_typed;
 use super::field_member::{parse_field_member_access_typed, parse_member_name_typed};
 use super::map_builtin::parse_map_builtin_member_typed;
 use super::receiver_calls::parse_receiver_method_call_typed;
-use super::{MemberStepContext, ReceiverAccessMode};
+use super::{MemberStepContext, PostfixChainAccess, ReceiverAccessMode};
 
 /// Builds the expression payload for a declaration reference without choosing an AST node shape.
 ///
@@ -124,7 +124,7 @@ pub(crate) fn parse_postfix_chain_expression(
     token_stream: &mut FileTokens,
     receiver_expression: Expression,
     receiver_location: SourceLocation,
-    receiver_access_mode: ReceiverAccessMode,
+    chain_access: PostfixChainAccess,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
@@ -138,7 +138,7 @@ pub(crate) fn parse_postfix_chain_expression(
     let postfix_node = parse_postfix_chain_typed(
         token_stream,
         receiver_node,
-        receiver_access_mode,
+        chain_access,
         context,
         type_interner,
         string_table,
@@ -163,11 +163,13 @@ pub(crate) fn expression_from_postfix_node(
 fn parse_postfix_chain_typed(
     token_stream: &mut FileTokens,
     mut receiver_node: AstNode,
-    receiver_access_mode: ReceiverAccessMode,
+    chain_access: PostfixChainAccess,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, ExpressionParseError> {
+    let receiver_access_mode = chain_access.mode;
+    let authored_marker_location = chain_access.authored_marker_location;
     let mut encountered_receiver_call = false;
 
     // ----------------------------
@@ -178,18 +180,21 @@ fn parse_postfix_chain_typed(
     {
         token_stream.advance();
 
-        if token_stream.index >= token_stream.length {
-            let fallback_location = token_stream
-                .tokens
-                .last()
-                .map(|token| token.location.clone())
-                .unwrap_or_default();
+        // An access that ends immediately after the authored dot has no member name. The dot
+        // we just consumed is the owning boundary: point at it directly so EOF (or a stream
+        // with no trailing Eof token) never falls back to the receiver start or a default
+        // location. Non-EOF missing-member boundaries keep their offending-token location
+        // through `parse_member_name_typed` below.
+        if token_stream.index >= token_stream.length
+            || matches!(token_stream.current_token_kind(), TokenKind::Eof)
+        {
+            let dot_location = token_stream.tokens[token_stream.index - 1].location.clone();
             return Err(CompilerDiagnostic::invalid_field_access(
                 InvalidFieldAccessReason::ExpectedNameAfterDot,
                 None,
                 None,
                 Vec::new(),
-                fallback_location,
+                dot_location,
             )
             .into());
         }
@@ -203,6 +208,7 @@ fn parse_postfix_chain_typed(
             member_name,
             member_location: member_location.clone(),
             receiver_access_mode,
+            authored_marker_location: authored_marker_location.clone(),
             scope_context: context,
         };
 
@@ -303,11 +309,19 @@ fn parse_postfix_chain_typed(
     }
 
     if receiver_access_mode == ReceiverAccessMode::Mutable && !encountered_receiver_call {
+        // The authored `~` marker is the source the author must change when no receiver call
+        // followed it. Fall back to the receiver boundary only when the marker was not threaded
+        // through this chain entry.
+        let marker_location = authored_marker_location
+            .clone()
+            .unwrap_or_else(|| receiver_node.location.clone());
         return Err(CompilerDiagnostic::invalid_receiver_call(
             InvalidReceiverCallReason::MutableMarkerOnNonReceiverCall,
             None,
             None,
-            receiver_node.location.clone(),
+            None,
+            None,
+            marker_location,
         )
         .into());
     }
@@ -326,7 +340,7 @@ pub fn parse_field_access(
         token_stream,
         base_arg,
         context,
-        ReceiverAccessMode::Shared,
+        PostfixChainAccess::shared(),
         type_interner,
         string_table,
     )?;
@@ -338,7 +352,7 @@ fn parse_field_access_with_receiver_access(
     token_stream: &mut FileTokens,
     base_arg: &Declaration,
     context: &ScopeContext,
-    receiver_access_mode: ReceiverAccessMode,
+    chain_access: PostfixChainAccess,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, ExpressionParseError> {
@@ -351,7 +365,7 @@ fn parse_field_access_with_receiver_access(
     parse_postfix_chain_typed(
         token_stream,
         receiver_reference_node(base_arg, context, type_interner, base_location),
-        receiver_access_mode,
+        chain_access,
         context,
         type_interner,
         string_table,
@@ -362,7 +376,7 @@ pub(crate) fn parse_field_access_expression_with_receiver_access(
     token_stream: &mut FileTokens,
     base_arg: &Declaration,
     context: &ScopeContext,
-    receiver_access_mode: ReceiverAccessMode,
+    chain_access: PostfixChainAccess,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
@@ -383,7 +397,7 @@ pub(crate) fn parse_field_access_expression_with_receiver_access(
         token_stream,
         receiver_expression,
         base_location,
-        receiver_access_mode,
+        chain_access,
         context,
         type_interner,
         string_table,

@@ -268,7 +268,7 @@ impl DiagnosticPayload {
                 }
             }
 
-            DiagnosticPayload::UninitializedVariable { name } => {
+            DiagnosticPayload::MissingDeclarationInitializer { name } => {
                 *name = remap.get(*name);
             }
 
@@ -363,6 +363,7 @@ impl DiagnosticPayload {
             DiagnosticPayload::InvalidReceiverCall {
                 receiver_type,
                 method_name,
+                receiver_binding_name,
                 ..
             } => {
                 if let Some(receiver_type) = receiver_type {
@@ -370,6 +371,9 @@ impl DiagnosticPayload {
                 }
                 if let Some(method_name) = method_name {
                     *method_name = remap.get(*method_name);
+                }
+                if let Some(receiver_binding_name) = receiver_binding_name {
+                    *receiver_binding_name = remap.get(*receiver_binding_name);
                 }
             }
 
@@ -473,13 +477,26 @@ impl DiagnosticPayload {
                     | InvalidCallShapeReason::MutableAccessRequired { parameter_name, .. }
                     | InvalidCallShapeReason::MutableAccessNotAllowed { parameter_name, .. }
                     | InvalidCallShapeReason::MutableAccessOnNonPlace { parameter_name, .. }
-                    | InvalidCallShapeReason::MutableAccessOnImmutablePlace {
-                        parameter_name,
-                        ..
-                    }
                     | InvalidCallShapeReason::ReactiveSourceRequired { parameter_name, .. } => {
                         if let Some(parameter_name) = parameter_name {
                             *parameter_name = remap.get(*parameter_name);
+                        }
+                    }
+                    InvalidCallShapeReason::MutableAccessOnImmutablePlace {
+                        parameter_name,
+                        binding_name,
+                        ..
+                    }
+                    | InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+                        parameter_name,
+                        binding_name,
+                        ..
+                    } => {
+                        if let Some(parameter_name) = parameter_name {
+                            *parameter_name = remap.get(*parameter_name);
+                        }
+                        if let Some(binding_name) = binding_name {
+                            *binding_name = remap.get(*binding_name);
                         }
                     }
                     InvalidCallShapeReason::ExtraPositionalArgument { .. }
@@ -616,7 +633,7 @@ impl DiagnosticPayload {
                 *trait_name = remap.get(*trait_name);
             }
 
-            DiagnosticPayload::InvalidExpression
+            DiagnosticPayload::InvalidExpression { .. }
             | DiagnosticPayload::ExpectedSymbolStatement
             | DiagnosticPayload::MissingCollectionItem => {}
 

@@ -70,12 +70,17 @@ pub(super) fn parse_namespace_access(
     } = input;
 
     token_stream.advance(); // move from namespace name to '.'
+    let mut dot_location = token_stream.current_location();
     token_stream.advance(); // move from '.' to first member name
 
     let mut current_record = root_record;
 
     loop {
-        let member_location = token_stream.current_location();
+        let member_location = if matches!(token_stream.current_token_kind(), TokenKind::Eof) {
+            dot_location.clone()
+        } else {
+            token_stream.current_location()
+        };
         let TokenKind::Symbol(member_name) = token_stream.current_token_kind().to_owned() else {
             return Err(CompilerDiagnostic::invalid_field_access(
                 InvalidFieldAccessReason::ExpectedNameAfterDot,
@@ -106,6 +111,7 @@ pub(super) fn parse_namespace_access(
             NamespaceMemberLookup::ChildNamespace(child_record) => {
                 if has_following_dot {
                     token_stream.advance(); // to '.'
+                    dot_location = token_stream.current_location();
                     token_stream.advance(); // to next member name
                     current_record = child_record;
                     continue;

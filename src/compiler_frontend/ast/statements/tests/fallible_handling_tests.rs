@@ -345,6 +345,41 @@ fn rejects_inline_catch_handler_chaining() {
     );
 }
 
+#[test]
+fn rejects_unbound_inline_catch_then_at_eof() {
+    // A missing inline catch fallback at a real EOF boundary must report the shared
+    // missing-value reason at the boundary, not the multiline recovery reason.
+    let source = "can_error || -> Int, Error!:\n    return 1\n;\n\nvalue = can_error() catch then";
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling { reason }
+            if reason == InvalidResultHandlingReason::ThenRequiresValues
+    ));
+    // The primary location points at the EOF boundary past `then`, not at `then`.
+    assert_eq!(diagnostic.primary_location.start_pos.line_number, 4);
+    assert_eq!(diagnostic.primary_location.start_pos.char_column, 30);
+}
+
+#[test]
+fn rejects_bound_inline_catch_then_at_eof() {
+    // The bound `catch |err| then` form reaches the same boundary routing through its
+    // own binding-parse path and must report the same missing-value reason at the EOF
+    // boundary.
+    let source =
+        "can_error || -> Int, Error!:\n    return 1\n;\n\nvalue = can_error() catch |err| then";
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling { reason }
+            if reason == InvalidResultHandlingReason::ThenRequiresValues
+    ));
+    assert_eq!(diagnostic.primary_location.start_pos.line_number, 4);
+    assert_eq!(diagnostic.primary_location.start_pos.char_column, 36);
+}
+
 // --------------------------
 //  Fallback arity validation
 // --------------------------

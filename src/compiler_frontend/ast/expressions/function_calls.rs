@@ -452,12 +452,14 @@ fn parse_call_arguments_inner(
             argument_location: argument_location.clone(),
         })?;
 
-        let access_mode = if token_stream.current_token_kind() == &TokenKind::Mutable {
-            token_stream.advance();
-            CallAccessMode::Mutable
-        } else {
-            CallAccessMode::Shared
-        };
+        let (access_mode, marker_location) =
+            if token_stream.current_token_kind() == &TokenKind::Mutable {
+                let marker_location = token_stream.current_location();
+                token_stream.advance();
+                (CallAccessMode::Mutable, Some(marker_location))
+            } else {
+                (CallAccessMode::Shared, None)
+            };
 
         // A named target or access mode without a following value is an error.
         if token_stream.current_token_kind() == &TokenKind::Comma
@@ -497,11 +499,21 @@ fn parse_call_arguments_inner(
         );
         let value = create_expression_with_trailing_newline_policy(input)?;
 
-        args.push(if let Some((name, target_location)) = named_target {
-            CallArgument::named(value, name, access_mode, argument_location, target_location)
+        // `CallArgument::location` is the value-expression location. The named-parameter token
+        // stays in `target_location`, and the authored `~` marker (when present) stays in
+        // `marker_location`, so diagnostics can point at whichever source the author must change.
+        let value_location = value.location.clone();
+        let argument = if let Some((name, target_location)) = named_target {
+            CallArgument::named(value, name, access_mode, value_location, target_location)
         } else {
-            CallArgument::positional(value, access_mode, argument_location)
-        });
+            CallArgument::positional(value, access_mode, value_location)
+        };
+        let argument = if let Some(marker_location) = marker_location {
+            argument.with_marker_location(marker_location)
+        } else {
+            argument
+        };
+        args.push(argument);
 
         match token_stream.current_token_kind() {
             TokenKind::Comma => {

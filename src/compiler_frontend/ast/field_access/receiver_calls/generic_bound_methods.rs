@@ -181,6 +181,8 @@ pub(super) fn lookup_generic_bound_receiver_method(
             InvalidReceiverCallReason::AmbiguousGenericBoundMethod,
             None,
             Some(member_name),
+            None,
+            None,
             member_location.clone(),
         )
         .into()),

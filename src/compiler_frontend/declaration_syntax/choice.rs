@@ -212,25 +212,12 @@ pub(crate) fn parse_choice_shell(
                             .into());
                         }
 
-                        // Check for duplicate field names within this variant.
-                        let mut seen_field_names: FxHashMap<StringId, SourceLocation> =
-                            FxHashMap::default();
+                        // Reject direct non-generic recursive choice declarations.
+                        // Generic recursion is diagnosed after generic applications are
+                        // resolved, so `Tree of T` can receive the generic-specific message.
+                        // Duplicate payload field names are rejected by the shared
+                        // signature-member parser before this loop runs.
                         for field in &fields {
-                            if let Some(field_name) = field.id.name() {
-                                if let Some(first_loc) = seen_field_names.get(&field_name) {
-                                    return Err(CompilerDiagnostic::duplicate_declaration(
-                                        field_name,
-                                        Some(first_loc.clone()),
-                                        field.location.clone(),
-                                    )
-                                    .into());
-                                }
-                                seen_field_names.insert(field_name, field.location.clone());
-                            }
-
-                            // Reject direct non-generic recursive choice declarations.
-                            // Generic recursion is diagnosed after generic applications are
-                            // resolved, so `Tree of T` can receive the generic-specific message.
                             if contains_non_generic_choice_self_reference(
                                 &field.type_annotation,
                                 choice_path.name(),

@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 
 /// Stage-local result for condition-type validation helpers.
 ///
@@ -60,4 +60,17 @@ pub(crate) fn ensure_loop_condition(
     type_environment: &TypeEnvironment,
 ) -> ConditionValidationResult {
     ensure_boolean_condition(condition, &condition.location, type_environment)
+}
+
+/// Return whether the token after `if` is a boundary rather than a condition.
+pub(crate) fn if_condition_is_missing(token_stream: &FileTokens) -> bool {
+    matches!(
+        token_stream.current_token_kind(),
+        TokenKind::Colon
+            | TokenKind::Then
+            | TokenKind::Else
+            | TokenKind::Newline
+            | TokenKind::End
+            | TokenKind::Eof
+    )
 }

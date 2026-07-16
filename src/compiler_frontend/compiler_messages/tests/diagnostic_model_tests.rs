@@ -6,15 +6,16 @@ use super::{
     DiagnosticOperator, DiagnosticPayload, DiagnosticPlace, DiagnosticSeverity,
     GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
-    InvalidAssignmentTargetReason, InvalidCastReason, InvalidChoiceVariantReason,
-    InvalidCollectionTypeReason, InvalidConfigReason, InvalidFunctionSignatureReason,
-    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidResultHandlingReason,
+    InvalidAssignmentTargetReason, InvalidCallShapeReason, InvalidCastReason,
+    InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidConfigReason,
+    InvalidExpressionReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
+    InvalidImportClauseReason, InvalidReceiverCallReason, InvalidResultHandlingReason,
     InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
     InvalidStatementPositionReason, InvalidStringEscapeReason, InvalidTemplateDirectiveReason,
     InvalidTemplateStructureReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    MissingWhitespace, NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind,
-    SymbolicSpacingConstruct, SymbolicSpacingError, SyntaxDiagnosticKind, TypeAnnotationContext,
-    TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
+    MissingWhitespace, NameNamespace, NumberLiteralErrorReason, PathKind, ReceiverCallKind,
+    RuleDiagnosticKind, SymbolicSpacingConstruct, SymbolicSpacingError, SyntaxDiagnosticKind,
+    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -959,7 +960,7 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
                 Some(location(source_path.clone())),
                 location(source_path.clone()),
             ),
-            "There is already a top-level declaration using the name 'Card'",
+            "Cannot declare 'Card' because that name is already visible in this scope",
             "StringId",
         ),
         (
@@ -998,12 +999,36 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
             "ChoicePayloadDefaultValue",
         ),
         (
+            CompilerDiagnostic::invalid_signature_member(
+                InvalidSignatureMemberReason::MissingDefaultValue,
+                location(source_path.clone()),
+            ),
+            "Expected a default value after '='.",
+            "MissingDefaultValue",
+        ),
+        (
             CompilerDiagnostic::invalid_function_signature(
                 InvalidFunctionSignatureReason::MissingColonAfterReturns,
                 location(source_path.clone()),
             ),
             "Function return declarations must end with ':'",
             "MissingColonAfterReturns",
+        ),
+        (
+            CompilerDiagnostic::invalid_function_signature(
+                InvalidFunctionSignatureReason::MissingReturnType,
+                location(source_path.clone()),
+            ),
+            "Function signature is missing a return type after '->'. Add a type followed by ':', or remove '->' for a no-value function.",
+            "MissingReturnType",
+        ),
+        (
+            CompilerDiagnostic::invalid_function_signature(
+                InvalidFunctionSignatureReason::MissingTraitRequirementReturnType,
+                location(source_path.clone()),
+            ),
+            "Trait requirement is missing a return type after '->'. Add a type, or remove '->' for a no-value requirement.",
+            "MissingTraitRequirementReturnType",
         ),
         (
             CompilerDiagnostic::invalid_generic_application(
@@ -1142,6 +1167,54 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
             ),
             "arithmetic operator cannot use a fallible value that has not been handled",
             "FallibleValueNotHandled",
+        ),
+    ];
+    let render_context = DiagnosticRenderContext::new(&string_table);
+
+    for (diagnostic, expected_message, debug_name) in diagnostics {
+        let guidance = terminal::format_payload_guidance(&diagnostic.payload, render_context);
+        let terse_line = terse::format_terse_diagnostic_with_context(&diagnostic, render_context);
+
+        assert!(
+            guidance.iter().any(|line| line.contains(expected_message)),
+            "Expected guidance to contain '{expected_message}', got {guidance:?}",
+        );
+        assert!(
+            terse_line.contains(expected_message),
+            "Expected terse line to contain '{expected_message}', got {terse_line}",
+        );
+        assert!(
+            !guidance.iter().any(|line| line.contains(debug_name)),
+            "Guidance should not expose '{debug_name}': {guidance:?}",
+        );
+        assert!(
+            !terse_line.contains(debug_name),
+            "Terse output should not expose '{debug_name}': {terse_line}",
+        );
+    }
+}
+
+#[test]
+fn invalid_expression_renderers_keep_structured_reason_prose() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+
+    let diagnostics = [
+        (
+            CompilerDiagnostic::invalid_expression(
+                InvalidExpressionReason::ExpectedOperatorBeforeExpression,
+                location(source_path.clone()),
+            ),
+            "Expected an operator before this expression.",
+            "ExpectedOperatorBeforeExpression",
+        ),
+        (
+            CompilerDiagnostic::invalid_expression(
+                InvalidExpressionReason::UnresolvedStackShape,
+                location(source_path),
+            ),
+            "This expression does not resolve to exactly one value.",
+            "UnresolvedStackShape",
         ),
     ];
     let render_context = DiagnosticRenderContext::new(&string_table);
@@ -1374,6 +1447,600 @@ fn incompatible_choice_comparison_renderer_hides_reason_debug_names() {
             .any(|line| line.contains("ChoiceWithNonChoice"))
     );
     assert!(!terse_line.contains("ChoiceWithNonChoice"));
+}
+
+fn render_invalid_call_shape(
+    string_table: &mut StringTable,
+    reason: InvalidCallShapeReason,
+    callee_name: &str,
+) -> String {
+    let source_path = InternedPath::from_single_str("main.bst", string_table);
+    let callee = string_table.intern(callee_name);
+    let diagnostic =
+        CompilerDiagnostic::invalid_call_shape(reason, Some(callee), location(source_path));
+    let render_context = DiagnosticRenderContext::new(string_table);
+    terminal::format_payload_guidance(&diagnostic.payload, render_context)
+        .into_iter()
+        .next()
+        .unwrap_or_default()
+}
+
+#[test]
+fn mutable_access_required_renders_explicit_marker_guidance() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("value");
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessRequired {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+        },
+        "consume",
+    );
+
+    assert!(
+        message
+            .contains("Call to 'consume' requires explicit mutable access for parameter 'value'."),
+        "{message}"
+    );
+    assert!(
+        message.contains("Prefix the existing mutable place with `~`"),
+        "{message}"
+    );
+}
+
+#[test]
+fn immutable_place_mutable_access_renders_binding_name_for_missing_marker() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("values");
+    let binding = string_table.intern("values");
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+            binding_name: Some(binding),
+        },
+        "consume",
+    );
+
+    assert!(
+        message
+            .contains("requires mutable access for parameter 'values', but `values` is immutable."),
+        "{message}"
+    );
+    assert!(
+        message.contains("Declare the binding as mutable, then pass `~values`."),
+        "{message}"
+    );
+}
+
+#[test]
+fn immutable_place_mutable_access_renders_authored_marker_with_binding_name() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("value");
+    let binding = string_table.intern("x");
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessOnImmutablePlace {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+            binding_name: Some(binding),
+        },
+        "mutate",
+    );
+
+    assert!(
+        message.contains("requires mutable access for parameter 'value', but `x` is immutable."),
+        "{message}"
+    );
+    assert!(message.contains("then pass `~x`."), "{message}");
+}
+
+#[test]
+fn immutable_place_mutable_access_uses_generic_fallback_without_binding_name() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("value");
+    let missing_marker = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+            binding_name: None,
+        },
+        "mutate",
+    );
+    let authored_marker = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessOnImmutablePlace {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+            binding_name: None,
+        },
+        "mutate",
+    );
+
+    let expected_fallback = "but this argument comes from an immutable binding or field.";
+    assert!(
+        missing_marker.contains(expected_fallback),
+        "{missing_marker}"
+    );
+    assert!(
+        authored_marker.contains(expected_fallback),
+        "{authored_marker}"
+    );
+
+    // The fallback must not expose compiler-facing place terminology.
+    for message in [missing_marker.as_str(), authored_marker.as_str()] {
+        assert!(
+            !message.contains("place"),
+            "fallback must not say place: {message}"
+        );
+        assert!(
+            !message.contains("non-place"),
+            "fallback must not say non-place: {message}"
+        );
+        assert!(
+            !message.contains("rvalue"),
+            "fallback must not say rvalue: {message}"
+        );
+        assert!(
+            !message.contains("variable"),
+            "fallback must not say variable: {message}"
+        );
+    }
+}
+
+#[test]
+fn mutable_access_on_non_place_renders_fresh_value_guidance() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("value");
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessOnNonPlace {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+        },
+        "mutate",
+    );
+
+    assert!(
+        message.contains(
+            "Call to 'mutate' cannot use `~` on a fresh or computed value for parameter 'value'."
+        ),
+        "{message}"
+    );
+    assert!(
+        message.contains("Remove `~` and pass the value directly."),
+        "{message}"
+    );
+    // The fresh/computed branch must not expose compiler-facing terminology.
+    assert!(
+        !message.contains("place"),
+        "non-place branch must not say place: {message}"
+    );
+    assert!(
+        !message.contains("non-place"),
+        "non-place branch must not say non-place: {message}"
+    );
+    assert!(
+        !message.contains("rvalue"),
+        "non-place branch must not say rvalue: {message}"
+    );
+    assert!(
+        !message.contains("variable"),
+        "non-place branch must not say variable: {message}"
+    );
+}
+
+#[test]
+fn unnamed_parameter_renders_one_based_position_without_internal_slot() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessRequired {
+            parameter_name: None,
+            parameter_index: 0,
+        },
+        "consume",
+    );
+
+    // The source-facing label is one-based: the first parameter is "parameter 1".
+    assert!(message.contains("parameter 1"), "{message}");
+    // The internal zero-based slot, parenthetical conversion and #N must never be rendered.
+    assert!(
+        !message.contains("parameter 0"),
+        "must not render zero-based slot: {message}"
+    );
+    assert!(
+        !message.contains("1-based"),
+        "must not render conversion note: {message}"
+    );
+    assert!(!message.contains("#1"), "must not render #N: {message}");
+}
+
+#[test]
+fn mutable_access_not_allowed_tells_author_to_remove_authored_marker() {
+    let mut string_table = StringTable::new();
+    let parameter = string_table.intern("value");
+    let message = render_invalid_call_shape(
+        &mut string_table,
+        InvalidCallShapeReason::MutableAccessNotAllowed {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+        },
+        "consume",
+    );
+
+    assert!(
+        message.contains("Call to 'consume' does not accept mutable access for parameter 'value'."),
+        "{message}"
+    );
+    assert!(
+        message.contains("Remove the authored `~` from this argument."),
+        "{message}"
+    );
+    // The marker must be rendered with consistent backtick punctuation, not a bare tilde.
+    assert!(
+        !message.contains("(~)"),
+        "must not render parenthetical marker: {message}"
+    );
+    assert!(
+        !message.contains("Remove the ~ "),
+        "must not render bare tilde: {message}"
+    );
+}
+
+#[test]
+fn invalid_call_shape_remap_updates_binding_name_and_parameter_name() {
+    let mut local_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut local_table);
+    let parameter = local_table.intern("values");
+    let binding = local_table.intern("values");
+    let callee = local_table.intern("consume");
+
+    let diagnostic = CompilerDiagnostic::invalid_call_shape(
+        InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+            parameter_name: Some(parameter),
+            parameter_index: 0,
+            binding_name: Some(binding),
+        },
+        Some(callee),
+        location(source_path),
+    );
+    let mut bag = DiagnosticBag::from_diagnostics(vec![diagnostic]);
+
+    let mut merged_table = StringTable::new();
+    let remap = merged_table.merge_from(&local_table);
+    bag.remap_string_ids(&remap);
+
+    let DiagnosticPayload::InvalidCallShape {
+        reason:
+            InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+                parameter_name,
+                binding_name,
+                ..
+            },
+        callee_name,
+    } = &bag.diagnostics()[0].payload
+    else {
+        panic!("expected remapped ImmutablePlaceMutableAccessRequired payload");
+    };
+
+    assert_eq!(merged_table.resolve(callee_name.unwrap()), "consume");
+    assert_eq!(merged_table.resolve(parameter_name.unwrap()), "values");
+    assert_eq!(merged_table.resolve(binding_name.unwrap()), "values");
+}
+
+fn render_invalid_receiver_call(
+    string_table: &mut StringTable,
+    reason: InvalidReceiverCallReason,
+    method_name: &str,
+    receiver_kind: Option<ReceiverCallKind>,
+    receiver_binding_name: Option<&str>,
+) -> String {
+    let source_path = InternedPath::from_single_str("main.bst", string_table);
+    let method = string_table.intern(method_name);
+    let binding = receiver_binding_name.map(|name| string_table.intern(name));
+    let diagnostic = CompilerDiagnostic::invalid_receiver_call(
+        reason,
+        None,
+        Some(method),
+        receiver_kind,
+        binding,
+        location(source_path),
+    );
+    let render_context = DiagnosticRenderContext::new(string_table);
+    terminal::format_payload_guidance(&diagnostic.payload, render_context)
+        .into_iter()
+        .next()
+        .unwrap_or_default()
+}
+
+#[test]
+fn source_method_missing_marker_renders_named_receiver_example() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::MutableReceiverMissingMarker,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        Some("p"),
+    );
+
+    assert!(
+        message.contains("Mutable receiver method `move` requires explicit mutable access."),
+        "{message}"
+    );
+    assert!(
+        message.contains("for example `~p.move(...)`"),
+        "named receiver example must use the factual binding name: {message}"
+    );
+}
+
+#[test]
+fn source_method_missing_marker_omits_example_without_binding_name() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::MutableReceiverMissingMarker,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        None,
+    );
+
+    assert!(
+        message.contains("Prefix the receiver with `~`."),
+        "{message}"
+    );
+    assert!(
+        !message.contains("~this receiver"),
+        "must not render an internal placeholder: {message}"
+    );
+    assert!(!message.contains("for example"), "{message}");
+}
+
+#[test]
+fn source_method_immutable_receiver_names_binding_to_declare_mutable() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        Some("p"),
+    );
+
+    assert!(
+        message.contains("`p` is immutable. Declare `p` as mutable, then call it with `~`."),
+        "{message}"
+    );
+    assert!(!message.contains("temporary"), "{message}");
+}
+
+#[test]
+fn source_method_non_place_receiver_requires_mutable_place() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        None,
+    );
+
+    assert!(
+        message.contains("requires a mutable place receiver."),
+        "{message}"
+    );
+    // A temporary must not be described as immutable or share an existing-binding repair.
+    assert!(!message.contains("immutable"), "{message}");
+    assert!(!message.contains("Declare"), "{message}");
+}
+
+#[test]
+fn collection_missing_marker_names_kind_and_explicit_access() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::MutableReceiverMissingMarker,
+        "push",
+        Some(ReceiverCallKind::CollectionBuiltin),
+        Some("values"),
+    );
+
+    assert!(
+        message.contains("`push` requires a mutable collection receiver"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Call it with explicit `~` access."),
+        "{message}"
+    );
+}
+
+#[test]
+fn collection_immutable_receiver_names_binding_to_declare_mutable() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
+        "push",
+        Some(ReceiverCallKind::CollectionBuiltin),
+        Some("values"),
+    );
+
+    assert!(
+        message.contains("`push` requires a mutable collection receiver"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Declare `values` as mutable, then call it with explicit `~` access."),
+        "{message}"
+    );
+}
+
+#[test]
+fn collection_non_place_receiver_requires_mutable_binding() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::NonPlaceReceiverMutableMethod,
+        "push",
+        Some(ReceiverCallKind::CollectionBuiltin),
+        None,
+    );
+
+    assert!(
+        message.contains("`push` requires a mutable collection receiver"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Bind this value in a mutable binding first, then call it with `~`."),
+        "{message}"
+    );
+    assert!(!message.contains("immutable"), "{message}");
+}
+
+#[test]
+fn map_immutable_receiver_names_kind_and_binding() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
+        "set",
+        Some(ReceiverCallKind::MapBuiltin),
+        Some("scores"),
+    );
+
+    assert!(
+        message.contains("`set` requires a mutable map receiver"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Declare `scores` as mutable, then call it with explicit `~` access."),
+        "{message}"
+    );
+}
+
+#[test]
+fn authored_marker_on_immutable_receiver_keeps_marker_wording() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::MutableMarkerOnImmutableReceiver,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        Some("p"),
+    );
+
+    assert!(
+        message.contains("`~` accepts only an existing mutable place."),
+        "{message}"
+    );
+    assert!(
+        message.contains("Declare `p` as mutable before calling it with `~`."),
+        "{message}"
+    );
+    assert!(message.contains("`p` is immutable"), "{message}");
+}
+
+#[test]
+fn authored_marker_on_non_place_receiver_explains_temporary() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::MutableMarkerOnNonPlaceReceiver,
+        "move",
+        Some(ReceiverCallKind::SourceMethod),
+        None,
+    );
+
+    assert!(
+        message.contains("`~` accepts only an existing mutable place."),
+        "{message}"
+    );
+    assert!(
+        message.contains("cannot be called on a temporary value."),
+        "{message}"
+    );
+    assert!(!message.contains("immutable"), "{message}");
+}
+
+#[test]
+fn unneeded_mutable_marker_tells_author_to_remove_it() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::UnneededMutableAccessMarker,
+        "length",
+        Some(ReceiverCallKind::CollectionBuiltin),
+        None,
+    );
+
+    assert!(
+        message.contains("`length` does not accept an explicit mutable access marker `~`."),
+        "{message}"
+    );
+    assert!(
+        message.contains("Remove the `~` from this call."),
+        "{message}"
+    );
+}
+
+#[test]
+fn const_record_runtime_call_renders_current_source_term() {
+    let mut string_table = StringTable::new();
+    let message = render_invalid_receiver_call(
+        &mut string_table,
+        InvalidReceiverCallReason::ConstRecordNoRuntimeCalls,
+        "length",
+        Some(ReceiverCallKind::SourceMethod),
+        None,
+    );
+
+    assert!(
+        message.contains("Const records are data-only"),
+        "must use the current `const record` source term: {message}"
+    );
+    assert!(
+        !message.contains("const struct record"),
+        "must not render the stale `const struct record` term: {message}"
+    );
+}
+
+#[test]
+fn invalid_receiver_call_remap_updates_receiver_binding_name() {
+    let mut local_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut local_table);
+    let method = local_table.intern("move");
+    let binding = local_table.intern("p");
+
+    let diagnostic = CompilerDiagnostic::invalid_receiver_call(
+        InvalidReceiverCallReason::ImmutableReceiverMutableMethod,
+        None,
+        Some(method),
+        Some(ReceiverCallKind::SourceMethod),
+        Some(binding),
+        location(source_path),
+    );
+    let mut bag = DiagnosticBag::from_diagnostics(vec![diagnostic]);
+
+    let mut merged_table = StringTable::new();
+    let remap = merged_table.merge_from(&local_table);
+    bag.remap_string_ids(&remap);
+
+    let DiagnosticPayload::InvalidReceiverCall {
+        method_name,
+        receiver_binding_name,
+        ..
+    } = &bag.diagnostics()[0].payload
+    else {
+        panic!("expected remapped InvalidReceiverCall payload");
+    };
+
+    assert_eq!(merged_table.resolve(method_name.unwrap()), "move");
+    assert_eq!(merged_table.resolve(receiver_binding_name.unwrap()), "p");
 }
 
 #[test]

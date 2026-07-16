@@ -21,7 +21,7 @@ use super::parse_expression_templates::parse_template_expression;
 use crate::ast_log;
 use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::field_access::{
-    ReceiverAccessMode, parse_postfix_chain_expression,
+    PostfixChainAccess, parse_postfix_chain_expression,
 };
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     CastCatchSite, fallible_catch_allowed_in_context, parse_cast_catch_handling_suffix,
@@ -41,7 +41,8 @@ use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCastReason,
-    InvalidControlFlowStatementReason, InvalidTemplateStructureReason, TypeMismatchContext,
+    InvalidControlFlowStatementReason, InvalidExpressionReason, InvalidTemplateStructureReason,
+    TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -73,6 +74,82 @@ pub(super) struct ExpressionDispatchState<'a> {
 pub(super) struct ExpressionOperandInput {
     pub(super) operand: Expression,
     pub(super) wrapper_location: SourceLocation,
+}
+
+/// Reports adjacent operands at the second expression without guessing the missing operator.
+fn reject_adjacent_operand(
+    expression: &[ExpressionRpnItem],
+    second_expression_location: &SourceLocation,
+) -> Result<(), ExpressionParseError> {
+    let previous_is_operand = matches!(expression.last(), Some(ExpressionRpnItem::Operand(_)));
+
+    if previous_is_operand {
+        return Err(CompilerDiagnostic::invalid_expression(
+            InvalidExpressionReason::ExpectedOperatorBeforeExpression,
+            second_expression_location.clone(),
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+/// `TemplateHead` stays separate because comment templates produce no value.
+fn is_value_operand_start_token(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::NumericLiteral(_)
+            | TokenKind::StringSliceLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::NoneLiteral
+            | TokenKind::Symbol(_)
+            | TokenKind::This
+            | TokenKind::Mutable
+            | TokenKind::OpenParenthesis
+            | TokenKind::OpenCurly
+            | TokenKind::Copy
+    )
+}
+
+/// Skips value-less comment templates before checking what follows a value template.
+fn reject_second_operand_after_value_template(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    consume_closing_parenthesis: bool,
+    value_mode: &ValueMode,
+    string_table: &mut StringTable,
+) -> Result<(), ExpressionParseError> {
+    while token_stream.current_token_kind() == &TokenKind::TemplateHead {
+        let next_template_start = token_stream.current_location();
+        let next_template = parse_template_expression(
+            token_stream,
+            context,
+            type_interner,
+            consume_closing_parenthesis,
+            value_mode,
+            string_table,
+        )?;
+
+        if next_template.is_some() {
+            return Err(CompilerDiagnostic::invalid_expression(
+                InvalidExpressionReason::ExpectedOperatorBeforeExpression,
+                next_template_start,
+            )
+            .into());
+        }
+    }
+
+    if is_value_operand_start_token(token_stream.current_token_kind()) {
+        return Err(CompilerDiagnostic::invalid_expression(
+            InvalidExpressionReason::ExpectedOperatorBeforeExpression,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    Ok(())
 }
 
 fn push_expression_after_suffixes(
@@ -216,7 +293,7 @@ pub(super) fn push_expression_operand_at_location(
             token_stream,
             operand_input.operand,
             operand_input.wrapper_location,
-            ReceiverAccessMode::Shared,
+            PostfixChainAccess::shared(),
             context,
             type_interner,
             string_table,
@@ -319,6 +396,11 @@ pub(super) fn dispatch_expression_token(
     state: &mut ExpressionDispatchState<'_>,
     string_table: &mut StringTable,
 ) -> Result<ExpressionTokenStep, ExpressionParseError> {
+    // Reject definite adjacency before semantic name, call or constructor parsing.
+    if is_value_operand_start_token(&token) {
+        reject_adjacent_operand(state.expression, &token_stream.current_location())?;
+    }
+
     // This state machine is intentionally flat: each token either appends one AST node, advances
     // past a nested parse, or signals the caller that the surrounding grammar owns the delimiter.
     match token {
@@ -471,18 +553,32 @@ pub(super) fn dispatch_expression_token(
         }
 
         TokenKind::TemplateHead => {
-            if let Some(template_expression) = parse_template_expression(
+            let template_start_location = token_stream.current_location();
+            let template_expression = parse_template_expression(
                 token_stream,
                 context,
                 type_interner,
                 state.consume_closing_parenthesis,
                 state.value_mode,
                 string_table,
-            )? {
-                return Ok(ExpressionTokenStep::Return(Box::new(template_expression)));
-            }
+            )?;
 
-            Ok(ExpressionTokenStep::Advance)
+            let Some(template_expression) = template_expression else {
+                return Ok(ExpressionTokenStep::Continue);
+            };
+
+            reject_adjacent_operand(state.expression, &template_start_location)?;
+
+            reject_second_operand_after_value_template(
+                token_stream,
+                context,
+                type_interner,
+                state.consume_closing_parenthesis,
+                state.value_mode,
+                string_table,
+            )?;
+
+            Ok(ExpressionTokenStep::Return(Box::new(template_expression)))
         }
 
         TokenKind::Copy => {

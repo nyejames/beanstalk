@@ -37,7 +37,7 @@ pub enum CompileTimePathBase {
 /// WHAT: carries all semantic metadata the compiler needs for validation, typed representation,
 /// and later string coercion of Beanstalk path literals.
 ///
-/// WHY: path literals must be first-class compile-time values so that `#origin` application,
+/// WHY: path literals must be first-class compile-time values so that origin prefix application,
 /// file/directory distinction, and public-path formatting can be handled consistently in one
 /// place.
 #[derive(Clone, Debug)]
@@ -50,11 +50,11 @@ pub struct CompileTimePath {
     /// absolute path into the development tree.
     pub filesystem_path: PathBuf,
 
-    /// The project-visible public path after resolution but before `#origin` application. This is
+    /// The project-visible public path after resolution but before origin prefix application. This is
     /// the path that string coercion should render with an optional origin prefix.
     pub public_path: InternedPath,
 
-    /// How the path resolved semantically. This determines whether `#origin` is applied during
+    /// How the path resolved semantically. This determines whether the origin prefix is applied during
     /// string coercion.
     pub base: CompileTimePathBase,
 

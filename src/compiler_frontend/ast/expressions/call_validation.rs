@@ -13,9 +13,7 @@ use crate::compiler_frontend::ast::expressions::constructor_views::{
     ConstructorField, ConstructorFieldAccessMode,
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::expression_rpn::{
-    ExpressionRpnItem, PlaceExpression, PlaceExpressionKind,
-};
+use crate::compiler_frontend::ast::expressions::expression_rpn::ExpressionRpnItem;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCallShapeReason, TypeMismatchContext,
@@ -564,26 +562,43 @@ fn classify_call_passing_mode(
     _location: SourceLocation,
     string_table: &mut StringTable,
 ) -> Result<CallPassingMode, CallValidationError> {
+    let callee_name = Some(string_table.intern(diagnostics.callee_name));
+    let source_state = classify_argument_source_state(&argument.value);
+
     match (argument.access_mode, &expectation.access_mode) {
         // Shared argument passed to a shared parameter: no restriction.
         (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(CallPassingMode::Shared),
 
-        // Shared argument passed to a mutable parameter: allowed only for non-place expressions.
-        // Fresh rvalues can be materialized for mutable calls; existing places require `~`.
-        (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => {
-            if !expression_is_place(&argument.value) {
-                return Ok(CallPassingMode::FreshMutableValue);
+        // Shared argument passed to a mutable parameter: fresh rvalues can be materialized for
+        // mutable calls; existing places require the explicit `~` marker.
+        (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => match source_state {
+            CallArgumentSourceState::Fresh => Ok(CallPassingMode::FreshMutableValue),
+            // An immutable place without `~` is not fixed by adding a marker: the binding itself
+            // must be declared mutable. Point at the value expression, since no `~` was authored,
+            // so the compiler does not suggest a marker-only repair.
+            CallArgumentSourceState::ImmutablePlace { binding_name } => {
+                Err(CompilerDiagnostic::invalid_call_shape(
+                    InvalidCallShapeReason::ImmutablePlaceMutableAccessRequired {
+                        parameter_name: expectation.name,
+                        parameter_index: slot_index,
+                        binding_name,
+                    },
+                    callee_name,
+                    argument.location.clone(),
+                )
+                .into())
             }
-            Err(CompilerDiagnostic::invalid_call_shape(
+            // A mutable place passed without `~` needs the explicit marker.
+            CallArgumentSourceState::MutablePlace => Err(CompilerDiagnostic::invalid_call_shape(
                 InvalidCallShapeReason::MutableAccessRequired {
                     parameter_name: expectation.name,
                     parameter_index: slot_index,
                 },
-                Some(string_table.intern(diagnostics.callee_name)),
+                callee_name,
                 argument.location.clone(),
             )
-            .into())
-        }
+            .into()),
+        },
 
         // Mutable argument passed to a shared parameter: never allowed.
         (CallAccessMode::Mutable, ExpectedAccessMode::Shared) => {
@@ -592,39 +607,54 @@ fn classify_call_passing_mode(
                     parameter_name: expectation.name,
                     parameter_index: slot_index,
                 },
-                Some(string_table.intern(diagnostics.callee_name)),
-                argument.location.clone(),
+                callee_name,
+                authored_marker_location(argument),
             )
             .into())
         }
 
-        // Mutable argument passed to a mutable parameter: allowed only for mutable places.
-        (CallAccessMode::Mutable, ExpectedAccessMode::Mutable) => {
-            if !expression_is_place(&argument.value) {
-                return Err(CompilerDiagnostic::invalid_call_shape(
-                    InvalidCallShapeReason::MutableAccessOnNonPlace {
-                        parameter_name: expectation.name,
-                        parameter_index: slot_index,
-                    },
-                    Some(string_table.intern(diagnostics.callee_name)),
-                    argument.location.clone(),
-                )
-                .into());
-            }
-            if !expression_is_mutable_place(&argument.value) {
-                return Err(CompilerDiagnostic::invalid_call_shape(
+        // Mutable argument passed to a mutable parameter: `~` accepts only an existing
+        // mutable place.
+        (CallAccessMode::Mutable, ExpectedAccessMode::Mutable) => match source_state {
+            // Fresh rvalues, including explicit `copy source`, are not places here, so the
+            // authored marker is the mistake.
+            CallArgumentSourceState::Fresh => Err(CompilerDiagnostic::invalid_call_shape(
+                InvalidCallShapeReason::MutableAccessOnNonPlace {
+                    parameter_name: expectation.name,
+                    parameter_index: slot_index,
+                },
+                callee_name,
+                authored_marker_location(argument),
+            )
+            .into()),
+            // The authored `~` is the call-site source the author wrote, so the primary label
+            // stays on the marker rather than the immutable binding declaration.
+            CallArgumentSourceState::ImmutablePlace { binding_name } => {
+                Err(CompilerDiagnostic::invalid_call_shape(
                     InvalidCallShapeReason::MutableAccessOnImmutablePlace {
                         parameter_name: expectation.name,
                         parameter_index: slot_index,
+                        binding_name,
                     },
-                    Some(string_table.intern(diagnostics.callee_name)),
-                    argument.location.clone(),
+                    callee_name,
+                    authored_marker_location(argument),
                 )
-                .into());
+                .into())
             }
-            Ok(CallPassingMode::MutablePlace)
-        }
+            CallArgumentSourceState::MutablePlace => Ok(CallPassingMode::MutablePlace),
+        },
     }
+}
+
+/// Resolve the primary diagnostic location for an argument that authored a `~` marker.
+///
+/// WHAT: prefers the authored marker location, falling back to the value expression location.
+/// WHY: when `~` was authored, the marker is the call-site source the author must change.
+fn authored_marker_location(argument: &CallArgument) -> SourceLocation {
+    argument
+        .marker_location
+        .clone()
+        .unwrap_or_else(|| argument.location.clone())
 }
 
 fn is_call_argument_type_compatible(
@@ -656,47 +686,53 @@ fn is_call_argument_type_compatible(
     )
 }
 
-/// Returns `true` if the expression can be used as a place (an addressable memory location).
+/// Call-boundary classification of an argument expression's source state.
 ///
-/// WHAT: references and single-node runtime expressions are places.
-/// WHY: call validation needs to distinguish place expressions from rvalues when enforcing
-///      mutable-access requirements.
-fn expression_is_place(expression: &Expression) -> bool {
-    match &expression.kind {
-        ExpressionKind::Reference(_) => true,
-        ExpressionKind::Copy(place) => place_is_place(place),
-        ExpressionKind::FieldAccess { base, .. } => expression_is_place(base),
-        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => {
-            matches!(rpn.items.first(), Some(ExpressionRpnItem::Operand(expression)) if expression_is_place(expression))
-        }
-        _ => false,
-    }
+/// WHAT: distinguishes fresh rvalues from existing places, and for an existing place carries
+///       its mutability and the simple root binding name when the place has a namable root.
+/// WHY: mutable-access call validation needs all three facts together to choose the right
+///      diagnostic, and computing them in one traversal keeps the call boundary's source-state
+///      ownership in one place instead of three overlapping expression walks.
+enum CallArgumentSourceState {
+    /// A fresh rvalue: a literal, constructor, computed expression, or `copy` result. Fresh
+    /// values satisfy a mutable parameter without a source `~` marker.
+    Fresh,
+    /// An existing immutable place. `binding_name` is the simple root binding name when one is
+    /// namable, so immutable-place diagnostics can name the binding to declare mutable.
+    ImmutablePlace { binding_name: Option<StringId> },
+    /// An existing mutable place. Mutable places satisfy a mutable parameter with an authored
+    /// `~` marker and need no binding name in current diagnostics.
+    MutablePlace,
 }
 
-fn place_is_place(place: &PlaceExpression) -> bool {
-    match &place.kind {
-        PlaceExpressionKind::Local(_) => true,
-        PlaceExpressionKind::Field { base, .. } => place_is_place(base),
-    }
-}
-
-/// Returns `true` if the expression is a mutable place.
+/// Classify an argument expression's call-boundary source state in a single traversal.
 ///
-/// WHAT: extends `expression_is_place` with a mutability check on the expression's value mode
-///       or the underlying AST node.
-/// WHY: mutable parameter passing requires the argument to be a mutable place, not just any place.
-fn expression_is_mutable_place(expression: &Expression) -> bool {
+/// WHAT: walks the argument expression once to decide whether it is fresh or an existing place
+///       and, for an existing place, its mutability and simple root binding name.
+/// WHY: shared and authored-`~` mutable-parameter branches share one classification, so the
+///      call boundary traverses the argument exactly once instead of once per fact.
+fn classify_argument_source_state(expression: &Expression) -> CallArgumentSourceState {
     match &expression.kind {
-        ExpressionKind::Reference(_) => expression.value_mode.is_mutable(),
-        ExpressionKind::Copy(place) => place.is_mutable(),
-        ExpressionKind::FieldAccess { base, .. } => {
-            // A field access is a mutable place when the base place is mutable, matching the
-            // previous AstNode-based contract where mutability was inherited from the receiver.
-            expression_is_mutable_place(base)
+        // A reference is the root: its mutability comes from the value mode, and its binding
+        // name is the referenced path's simple name.
+        ExpressionKind::Reference(path) => {
+            let binding_name = path.name();
+            if expression.value_mode.is_mutable() {
+                CallArgumentSourceState::MutablePlace
+            } else {
+                CallArgumentSourceState::ImmutablePlace { binding_name }
+            }
         }
-        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => {
-            matches!(rpn.items.first(), Some(ExpressionRpnItem::Operand(expression)) if expression_is_mutable_place(expression))
-        }
-        _ => false,
+        // A field access follows its base to the root place, inheriting the root's mutability
+        // and binding name when the root is immutable.
+        ExpressionKind::FieldAccess { base, .. } => classify_argument_source_state(base),
+        // A single-operand runtime projection follows that operand.
+        ExpressionKind::Runtime(rpn) if rpn.items.len() == 1 => match rpn.items.first() {
+            Some(ExpressionRpnItem::Operand(inner)) => classify_argument_source_state(inner),
+            _ => CallArgumentSourceState::Fresh,
+        },
+        // `copy` produces an independent value, so it is fresh at the call boundary even though
+        // its operand is an existing place. Every other expression kind is a fresh rvalue.
+        _ => CallArgumentSourceState::Fresh,
     }
 }

@@ -14,13 +14,17 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
 use crate::compiler_frontend::ast::expressions::parse_expression_input::{
     ExpressionParseInput, ExpressionParseResources,
 };
-use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::condition_validation::{
+    ensure_if_statement_condition, if_condition_is_missing,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchPattern, parse_option_pattern,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidMatchPatternReason};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidControlFlowStatementReason, InvalidMatchPatternReason,
+};
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringId;
@@ -73,6 +77,15 @@ pub(crate) fn parse_if_header(
 
     if is_full_match_style_header(token_stream) {
         return parse_match_style_if_header(token_stream, context, type_interner, string_table);
+    }
+
+    if if_condition_is_missing(token_stream) {
+        return Err(Box::new(
+            CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::ExpectedConditionAfterIf,
+                token_stream.current_location(),
+            ),
+        ));
     }
 
     let condition_context = if_condition_parse_context(context, string_table);

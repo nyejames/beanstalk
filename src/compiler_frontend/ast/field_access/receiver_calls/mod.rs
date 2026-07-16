@@ -28,6 +28,7 @@ pub(super) fn parse_receiver_method_call_typed(
         member_name,
         member_location,
         receiver_access_mode,
+        authored_marker_location,
         scope_context,
     } = member_step_context;
 
@@ -45,6 +46,7 @@ pub(super) fn parse_receiver_method_call_typed(
                 member_name,
                 member_location,
                 receiver_access_mode,
+                authored_marker_location,
                 scope_context,
                 source_method: source_methods::SourceReceiverMethodTarget::Declared(method_entry),
                 type_interner,
@@ -71,6 +73,7 @@ pub(super) fn parse_receiver_method_call_typed(
                 member_name,
                 member_location,
                 receiver_access_mode,
+                authored_marker_location,
                 scope_context,
                 source_method: source_methods::SourceReceiverMethodTarget::TraitSurface(
                     generic_bound_method,

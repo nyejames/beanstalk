@@ -23,20 +23,6 @@ pub(crate) fn invalid_config_message(
                 "Duplicate config key found. Each config key must be unique.".to_owned()
             }
         }
-        InvalidConfigReason::DeprecatedSrcKey => {
-            "Config key 'src' is deprecated. Use 'entry_root' instead.".to_owned()
-        }
-        InvalidConfigReason::ReplacedLibrariesKey => {
-            "Config key 'libraries' has been replaced. Use 'package_folders' instead.".to_owned()
-        }
-        InvalidConfigReason::ReplacedPackageFoldersKey => {
-            "Config key 'library_folders' has been replaced. Use 'package_folders' instead."
-                .to_owned()
-        }
-        InvalidConfigReason::ReplacedRootFoldersKey => {
-            "Config key 'root_folders' has been replaced. Use 'package_folders' instead."
-                .to_owned()
-        }
         InvalidConfigReason::ConfigImportRootViolation => {
             "Config files may only import from Core or Builder packages.".to_owned()
         }
@@ -93,7 +79,7 @@ pub(crate) fn invalid_config_message(
             invalid_package_folder_message(*folder, *reason, string_table)
         }
         InvalidConfigReason::EmptyProjectSetting => {
-            format!("Config setting '#{key_label}' cannot be empty.")
+            format!("Config setting '{key_label}' cannot be empty.")
         }
         InvalidConfigReason::UnknownKey { key } => format!(
             "Unknown config key '{}'. `config.bst` currently accepts only known project config keys. Helper declarations are not supported yet.",
@@ -104,7 +90,7 @@ pub(crate) fn invalid_config_message(
             string_table.resolve(*expected)
         ),
         InvalidConfigReason::InvalidProjectSettingValue { value, expected } => format!(
-            "Invalid value '{}' for config setting '#{key_label}'. Expected {}.",
+            "Invalid value '{}' for config setting '{key_label}'. Expected {}.",
             string_table.resolve(*value),
             string_table.resolve(*expected)
         ),
@@ -614,6 +600,52 @@ mod tests {
         assert!(
             message.contains("content as intro"),
             "message should mention grouped `content as ...` import: {message}"
+        );
+    }
+
+    #[test]
+    fn empty_project_setting_renders_authored_key_without_marker() {
+        let mut string_table = StringTable::new();
+        let key = string_table.intern("html_lang");
+        let message = invalid_config_message(
+            Some(key),
+            &InvalidConfigReason::EmptyProjectSetting,
+            &string_table,
+        );
+
+        assert_eq!(
+            message, "Config setting 'html_lang' cannot be empty.",
+            "EmptyProjectSetting should render the exact authored key name"
+        );
+    }
+
+    #[test]
+    fn invalid_project_setting_value_renders_authored_key_without_marker() {
+        let mut string_table = StringTable::new();
+        let key = string_table.intern("page_url_style");
+        let value = string_table.intern("slashy");
+        let expected = string_table.intern("'trailing_slash', 'no_trailing_slash', or 'ignore'");
+        let reason = InvalidConfigReason::InvalidProjectSettingValue { value, expected };
+        let message = invalid_config_message(Some(key), &reason, &string_table);
+
+        assert_eq!(
+            message,
+            "Invalid value 'slashy' for config setting 'page_url_style'. Expected 'trailing_slash', 'no_trailing_slash', or 'ignore'.",
+            "InvalidProjectSettingValue should render exact authored key and value facts"
+        );
+    }
+
+    #[test]
+    fn unknown_key_renders_authored_key() {
+        let mut string_table = StringTable::new();
+        let key = string_table.intern("custom_key");
+        let reason = InvalidConfigReason::UnknownKey { key };
+        let message = invalid_config_message(Some(key), &reason, &string_table);
+
+        assert_eq!(
+            message,
+            "Unknown config key 'custom_key'. `config.bst` currently accepts only known project config keys. Helper declarations are not supported yet.",
+            "UnknownKey should render the exact authored key name"
         );
     }
 }
