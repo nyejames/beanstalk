@@ -27,9 +27,6 @@ pub(crate) fn invalid_control_flow_statement_message(
         InvalidControlFlowStatementReason::ContinueOutsideLoop => {
             "Continue statements can only be used inside loops.".to_string()
         }
-        InvalidControlFlowStatementReason::TemplateInsideFunctionBody => {
-            "Templates can only be used at the top level, not inside the body of a function.".to_string()
-        }
         InvalidControlFlowStatementReason::ReturnOutsideFunction => {
             "Return statements can only be used inside functions.".to_string()
         }

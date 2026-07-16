@@ -59,7 +59,7 @@ pub(crate) fn unexpected_statement_token(
 
         // `type` in statement position looks like an attempt to declare a generic parameter.
         TokenKind::Type => CompilerDiagnostic::invalid_statement_position(
-            InvalidStatementPositionReason::ReservedGenericDeclaration,
+            InvalidStatementPositionReason::GenericParameterOutsideDeclarationHeader,
             location,
         ),
 

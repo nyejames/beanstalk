@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0051"]
-message_contains = ["only valid for Result-valued expressions"]
+message_contains = ["require a fallible expression that returns `Error!`"]

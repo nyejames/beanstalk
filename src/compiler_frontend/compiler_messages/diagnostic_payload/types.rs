@@ -599,7 +599,7 @@ pub enum InvalidTemplateStructureReason {
     HelperInConstTemplate,
     NonFoldableConstTemplate,
     NonFoldableDocComment,
-    ResultInTemplateHead,
+    FallibleValueInTemplateHead,
     UnsupportedTypeInTemplateHead { type_id: TypeId },
     RuntimeTemplateInConst,
     RuntimeValueInConstTemplateHead,
@@ -754,7 +754,6 @@ pub enum InvalidControlFlowStatementReason {
     ElseIfUnsupported,
     BreakOutsideLoop,
     ContinueOutsideLoop,
-    TemplateInsideFunctionBody,
     ReturnOutsideFunction,
     ReturnBangOutsideErrorFunction,
     ExpectedColonAfterCondition,
@@ -1113,11 +1112,11 @@ impl InvalidResultHandlingReason {
             }
 
             InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult => {
-                "This result has no success return values, so handler fallback values are not allowed here."
+                "This fallible expression has no success return values, so `catch then` fallback values are not allowed here."
             }
 
             InvalidResultHandlingReason::NotResultExpression => {
-                "The '!' result-handling suffix is only valid for Result-valued expressions."
+                "Postfix `!` and `catch` require a fallible expression that returns `Error!`."
             }
 
             InvalidResultHandlingReason::FunctionHasNoErrorSlot => {
@@ -1137,7 +1136,7 @@ impl InvalidResultHandlingReason {
             }
 
             InvalidResultHandlingReason::OptionPropagationCatchConflict => {
-                "`catch` handles fallible results. Optional values must use explicit option inspection instead of `? catch`."
+                "`catch` handles fallible expressions. Optional values must use explicit option inspection instead of `? catch`."
             }
 
             InvalidResultHandlingReason::CatchHandlerConflicts => {
@@ -1276,8 +1275,8 @@ impl DiagnosticOperator {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidResultOperandReason {
-    ResultNotUnwrapped,
-    OptionNotUnwrapped,
+    FallibleValueNotHandled,
+    OptionalValueNotInspected,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -1410,6 +1409,7 @@ pub enum OperatorOperandPosition {
 pub enum InvalidStandaloneStatementReason {
     FieldRead,
     Expression,
+    StandaloneTemplate,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1464,7 +1464,7 @@ pub enum InvalidStatementPositionReason {
     UnexpectedPipe,
     UnexpectedArrow,
     UnexpectedWildcard,
-    ReservedGenericDeclaration,
+    GenericParameterOutsideDeclarationHeader,
     UnexpectedOf,
     UnexpectedScopeCloseInExpression,
     UnexpectedScopeCloseInTemplate,

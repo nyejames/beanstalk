@@ -1,14 +1,17 @@
 use super::{
-    BorrowAccessKind, BorrowDiagnosticKind, CompilerDiagnostic, ConfigDiagnosticKind,
-    DeferredFeatureDiagnosticKind, DiagnosticBag, DiagnosticCategory, DiagnosticKind,
-    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload,
-    DiagnosticPlace, DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind,
-    ImportDiagnosticKind, IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
-    InvalidAssignmentTargetReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
-    InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
-    InvalidTemplateDirectiveReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    BorrowAccessKind, BorrowDiagnosticKind, CompileTimeEvaluationErrorReason, CompilerDiagnostic,
+    ConfigDiagnosticKind, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
+    DiagnosticCategory, DiagnosticKind, DiagnosticLabel, DiagnosticLabelMessage,
+    DiagnosticOperator, DiagnosticPayload, DiagnosticPlace, DiagnosticSeverity,
+    GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
+    IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
+    InvalidAssignmentTargetReason, InvalidCastReason, InvalidChoiceVariantReason,
+    InvalidCollectionTypeReason, InvalidConfigReason, InvalidFunctionSignatureReason,
+    InvalidGenericParameterReason, InvalidImportClauseReason, InvalidResultHandlingReason,
+    InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
+    InvalidStatementPositionReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
+    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
+    NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -1053,13 +1056,13 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
         ),
         (
             CompilerDiagnostic::invalid_result_operand(
-                InvalidResultOperandReason::ResultNotUnwrapped,
+                InvalidResultOperandReason::FallibleValueNotHandled,
                 UnsupportedOperatorCategory::Arithmetic,
                 builtin_type_ids::STRING,
                 location(source_path),
             ),
-            "arithmetic operator does not implicitly unwrap Result values",
-            "ResultNotUnwrapped",
+            "arithmetic operator cannot use a fallible value that has not been handled",
+            "FallibleValueNotHandled",
         ),
     ];
     let render_context = DiagnosticRenderContext::new(&string_table);
@@ -1083,6 +1086,103 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
         assert!(
             !terse_line.contains(debug_name),
             "Terse output should not expose '{debug_name}': {terse_line}",
+        );
+    }
+}
+
+#[test]
+fn phase_1_2_renderers_keep_source_language_terminology() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
+    let config_key = string_table.intern("homepage");
+    let diagnostics = vec![
+        CompilerDiagnostic::invalid_standalone_statement(
+            InvalidStandaloneStatementReason::StandaloneTemplate,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::GenericParameterOutsideDeclarationHeader,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedOf,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_template_structure(
+            InvalidTemplateStructureReason::FallibleValueInTemplateHead,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_template_structure(
+            InvalidTemplateStructureReason::TemplateOptionCaptureConstDeferred,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_template_structure(
+            InvalidTemplateStructureReason::TemplateIfConditionNotConst,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_result_operand(
+            InvalidResultOperandReason::FallibleValueNotHandled,
+            UnsupportedOperatorCategory::Arithmetic,
+            builtin_type_ids::STRING,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_result_operand(
+            InvalidResultOperandReason::OptionalValueNotInspected,
+            UnsupportedOperatorCategory::Arithmetic,
+            builtin_type_ids::STRING,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_result_handling(
+            InvalidResultHandlingReason::NotResultExpression,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_config_reason(
+            Some(config_key),
+            InvalidConfigReason::ValueCouldNotFold,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::invalid_cast(
+            InvalidCastReason::UserDefinedEvidenceNotConstFoldable,
+            None,
+            None,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::compile_time_evaluation_error(
+            CompileTimeEvaluationErrorReason::NoneLiteralRequiresOptionalTypeContext,
+            None,
+            location(source_path.clone()),
+        ),
+        CompilerDiagnostic::deferred_feature_reason(
+            DeferredFeatureReason::AsyncBlock,
+            location(source_path),
+        ),
+    ];
+    let render_context = DiagnosticRenderContext::new(&string_table);
+    let rendered = diagnostics
+        .iter()
+        .flat_map(|diagnostic| {
+            terminal::format_payload_guidance(&diagnostic.payload, render_context)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for expected in [
+        "A standalone template is not a valid statement here",
+        "top-level generic declaration header",
+        "`Box of String`",
+        "compatible fallible function",
+        "`if ... is |value|`",
+        "fallible expression that returns `Error!`",
+        "Config declarations cannot depend on runtime evaluation",
+        "User-defined cast evidence must be fully evaluable at compile time",
+        "`value String? = none`",
+        "future language support",
+        "This template must be fully evaluated at compile time",
+        "optional value's presence cannot be determined at compile time",
+    ] {
+        assert!(
+            rendered.contains(expected),
+            "expected source-language diagnostic text '{expected}' in: {rendered}",
         );
     }
 }

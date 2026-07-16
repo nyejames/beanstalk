@@ -289,6 +289,9 @@ pub(crate) fn invalid_standalone_statement_message(
         InvalidStandaloneStatementReason::Expression => {
             "Standalone expression is not a valid statement in this position.".to_string()
         }
+        InvalidStandaloneStatementReason::StandaloneTemplate => {
+            "A standalone template is not a valid statement here. Assign it, return it or pass it to a receiving expression.".to_string()
+        }
     }
 }
 
@@ -421,11 +424,11 @@ pub(crate) fn invalid_statement_position_message(reason: InvalidStatementPositio
         InvalidStatementPositionReason::UnexpectedWildcard => {
             "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.".to_string()
         }
-        InvalidStatementPositionReason::ReservedGenericDeclaration => {
-            "Generic declarations using `type` are reserved but not implemented yet.".to_string()
+        InvalidStatementPositionReason::GenericParameterOutsideDeclarationHeader => {
+            "`type` is valid only in a top-level generic declaration header after the declaration name.".to_string()
         }
         InvalidStatementPositionReason::UnexpectedOf => {
-            "Unexpected `of` in statement position. `of` is reserved for future generic type application syntax.".to_string()
+            "`of` is valid only in generic type annotations such as `Box of String`.".to_string()
         }
         InvalidStatementPositionReason::UnexpectedScopeCloseInExpression => {
             "Unexpected scope close. Expressions are not terminated like this.".to_string()

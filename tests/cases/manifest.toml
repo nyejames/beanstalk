@@ -7384,6 +7384,11 @@ path = "value_block_expression_statement_rejected"
 tags = ["integration", "diagnostics", "value-blocks"]
 
 [[case]]
+id = "standalone_template_in_function_body_rejected"
+path = "standalone_template_in_function_body_rejected"
+tags = ["integration", "diagnostics", "templates", "statements"]
+
+[[case]]
 id = "value_if_branch_fallthrough_rejected"
 path = "value_if_branch_fallthrough_rejected"
 tags = ["integration", "diagnostics", "value-blocks"]

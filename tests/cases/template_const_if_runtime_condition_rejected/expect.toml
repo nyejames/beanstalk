@@ -2,3 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0022"]
+message_contains = ["fully evaluated at compile time", "`if` condition", "fold to a Bool"]

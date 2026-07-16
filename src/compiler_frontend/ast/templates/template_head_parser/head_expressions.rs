@@ -70,7 +70,7 @@ fn validate_template_head_value_type(
 ) -> HeadExpressionResult<()> {
     if type_environment.is_fallible_carrier(expression.type_id) {
         return Err(Box::new(CompilerDiagnostic::invalid_template_structure(
-            InvalidTemplateStructureReason::ResultInTemplateHead,
+            InvalidTemplateStructureReason::FallibleValueInTemplateHead,
             location.to_owned(),
         )));
     }

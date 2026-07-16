@@ -12,27 +12,28 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1.2a accepted, awaiting checkpoint commit
-LAST_ACCEPTED_COMMIT: `df65c9ced`
-WORKTREE: `main` at `df65c9ced`, reviewed Phase 1.2a implementation and parent-owned plan findings
+CURRENT_SLICE: Phase 1.2b accepted, awaiting checkpoint commit
+LAST_ACCEPTED_COMMIT: `fb4d26a3b`
+WORKTREE: `main` at `fb4d26a3b`, reviewed Phase 1.2b implementation and parent-owned plan findings
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: compiler diagnostics ownership, generic and trait bounds, operator semantics, style, testing and validation contracts
-- code: exact AST `Operator`, operator-policy emitters, diagnostic payload/remapping and operator renderers/tests
+- docs: error/option, template, constant, cast and generic source terminology plus diagnostic ownership, style, testing and validation contracts
+- code: diagnostic reason taxonomies, statement/template emitters, config/cast/template/control-flow renderers and focused integration cases
 ACCEPTANCE_CRITERIA:
-- unsupported-operator diagnostics carry and render the exact source operator
-- `not`, mixed String `+` and generic-parameter failures use the Phase 1.2 wording
-- no user-facing message claims trait bounds are unsupported
+- fallible, optional, template, cast, config and statement-position diagnostics use source-visible terminology
+- standalone templates use `BST-SYNTAX-0025` while assigned, returned and argument templates remain valid
+- superseded reason variants and internal-stage prose are removed without compatibility paths
 VALIDATION_STATE:
 - Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
 - Phase 1.2a focused compiler-message tests: passed, 36 tests
 - Phase 1.2a `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,766 integration cases, docs check and 28 benchmark cases
-DOCS_IMPACT: plan state only; progress matrix unaffected by Phase 1.1
+- Phase 1.2b `just validate`: passed, including cross-target Clippy, 3,512 Rust tests, 1,767 integration cases, docs check and 28 benchmark cases
+DOCS_IMPACT: plan state only; progress matrix unaffected by Phase 1.1 or Phase 1.2 because support status did not change
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 1.2a slice, then reload for Phase 1.2b
+NEXT_RESUME_ACTION: commit the accepted Phase 1.2b slice, then reload for Phase 1.3
 
 ## Confirmed design decisions
 
@@ -109,8 +110,8 @@ Audit all messages touched by this plan for source terminology that no longer ma
 
 Implement this in two coherent slices:
 
-1. **1.2a exact operator facts (complete, pending checkpoint commit):** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
-2. **1.2b remaining terminology:** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
+1. **1.2a exact operator facts (complete in `fb4d26a3b`):** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
+2. **1.2b remaining terminology (complete, pending checkpoint commit):** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
 
 #### Required corrections
 
@@ -248,17 +249,21 @@ Raw backtick strings remain unchanged:
 ### 2.2 Make symbolic spacing diagnostics exact
 
 **Original findings:** DIAG-004, DIAG-005
+**Additional confirmed gap:** the same umbrella diagnostic currently labels plain assignment `=` and malformed mutable declaration spacing around `~=` as binary-operator errors, even though neither construct is a binary operator
 
 The tokenizer currently uses one `InvalidSymbolicBinaryOperatorSpacing` reason for binary operators and compound assignment. It does not carry the operator or missing side.
 
 #### Implementation
 
-Replace the umbrella reason with structured facts:
+Replace the umbrella reason with structured facts. The construct enum must own the
+exact symbolic spelling so invalid construct/operator combinations cannot be formed:
 
 ```rust
 enum SymbolicSpacingConstruct {
-    BinaryOperator,
-    CompoundAssignment,
+    BinaryOperator { operator: DiagnosticOperator },
+    Assignment,
+    CompoundAssignment { operator: DiagnosticOperator },
+    MutableDeclaration,
 }
 
 enum MissingWhitespace {
@@ -269,7 +274,6 @@ enum MissingWhitespace {
 
 struct SymbolicSpacingError {
     construct: SymbolicSpacingConstruct,
-    operator: DiagnosticOperator,
     missing: MissingWhitespace,
 }
 ```
@@ -278,37 +282,46 @@ struct SymbolicSpacingError {
 - Record leading and trailing whitespace independently.
 - Render the exact construct and side:
   - `Binary operator '+' requires whitespace after it.`
+  - `Assignment '=' requires whitespace before it.`
   - `Compound assignment '+=' requires whitespace before it.`
   - `Compound assignment '//=' requires whitespace on both sides.`
+  - `Mutable declaration '~=' requires whitespace after it.`
 - Keep the correction example minimal and valid.
 - Do not describe compound assignment as a binary operator.
+- Do not describe ordinary assignment or `~=` mutable declaration syntax as a binary operator.
+- Keep valid `name ~= value` tokenization unchanged. This spacing diagnostic does not decide
+  whether the name is a fresh declaration. Existing-name rejection remains owned by the normal
+  no-shadowing path.
 - Preserve the existing `BST-SYNTAX-0031` family unless descriptor policy requires a dedicated compound-assignment code.
 
 #### Tests
 
-Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
+Cover every compound-assignment token at least once and cover before, after and both missing-side branches across the operator family. Also cover plain `=` and both sides of `~=` so neither can regress to binary-operator prose. Avoid one fixture per cosmetic variant when a tokenizer table test protects the same invariant.
 
 ### 2.3 Recognise a missing `@` import prefix before `/` becomes an operator error
 
 **Original finding:** DIAG-038
+**Additional confirmed gap:** a payload-free reason cannot render the exact correction for the longer bare paths required by this phase and would misleadingly replace every path with the fixed `core/math` example
 
 `import core/math` currently reaches symbolic `/` spacing logic before header import parsing can explain the import mistake.
 
 #### Implementation
 
 - Extend the lexer's small left-context model so `/` can recognise a path-like identifier immediately following `import`.
-- Emit a dedicated `CommonSyntaxMistakeReason::ImportPathMissingAtPrefix`.
+- Emit a dedicated structured `CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path }` carrying the complete bare path spelling. Remap its `StringId` through the existing payload path.
 - Message:
 
-  > Import paths must begin with `@`. Write `import @core/math`.
+  > Import paths must begin with `@`. Write `import @<authored_path>`.
 
+- Point the primary label at the bare path, not only the `/` that exposed the mistake.
+- The lexer may scan this narrow path-like sequence to preserve the correction fact, but must not duplicate general import-path parsing or resolution.
 - Keep ordinary division tokenization unchanged outside this structural import context.
 - Do not move general import parsing into the tokenizer.
 
 #### Tests
 
 - `import core/math`
-- a longer bare path
+- a longer bare path whose rendered correction preserves every authored component
 - valid `import @core/math`
 - ordinary division after a value
 - `//` integer division and comments remain unaffected

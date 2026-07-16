@@ -62,7 +62,7 @@ pub(super) fn reject_result_operands(
         };
 
         return Err(CompilerDiagnostic::invalid_result_operand(
-            InvalidResultOperandReason::ResultNotUnwrapped,
+            InvalidResultOperandReason::FallibleValueNotHandled,
             category,
             operand_type_id,
             location.clone(),

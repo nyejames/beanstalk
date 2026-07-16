@@ -385,20 +385,19 @@ pub(crate) fn invalid_cast_message(
             format!("No cast evidence exists from '{source}' to '{target}'.")
         }
         InvalidCastReason::BuiltinEvidenceNotConstFoldable => {
-            "This builtin cast cannot be used in const-required contexts yet.".to_owned()
+            "This builtin cast cannot be fully evaluated at compile time yet.".to_owned()
         }
         InvalidCastReason::UserDefinedEvidenceNotConstFoldable => {
-            "User-defined cast evidence cannot be used in const-required contexts.".to_owned()
+            "User-defined cast evidence must be fully evaluable at compile time.".to_owned()
         }
         InvalidCastReason::GenericBoundEvidenceNotConstFoldable => {
-            "Generic-bound cast evidence cannot be used in const-required contexts.".to_owned()
+            "Generic-bound cast evidence must be fully evaluable at compile time.".to_owned()
         }
         InvalidCastReason::BuiltinCastFailedInConst => {
-            "This builtin cast failed while evaluating a const-required expression.".to_owned()
+            "This builtin cast failed while evaluating a compile-time expression.".to_owned()
         }
         InvalidCastReason::CatchHandlerNotConstFoldable => {
-            "The `catch` handler for this cast must be fully foldable in a const-required context."
-                .to_owned()
+            "The `catch` handler for this cast must be fully evaluable at compile time.".to_owned()
         }
     }
 }

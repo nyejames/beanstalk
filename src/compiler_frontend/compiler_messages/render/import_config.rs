@@ -82,7 +82,7 @@ pub(crate) fn invalid_config_message(
         }
         InvalidConfigReason::ValueCouldNotFold => {
             format!(
-                "Config value '{key_label}' could not be fully evaluated at compile time. Config declarations must fold after AST construction and cannot require runtime evaluation."
+                "Config value '{key_label}' could not be fully evaluated at compile time. Config declarations cannot depend on runtime evaluation."
             )
         }
         InvalidConfigReason::UnsupportedPackageFoldersValue => {

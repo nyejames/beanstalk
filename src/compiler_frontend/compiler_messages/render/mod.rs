@@ -361,14 +361,14 @@ pub(crate) fn invalid_result_operand_message(
     let type_name = diagnostic_type_name(operand_type, context);
 
     match reason {
-        InvalidResultOperandReason::ResultNotUnwrapped => {
+        InvalidResultOperandReason::FallibleValueNotHandled => {
             format!(
-                "{category_name} operator does not implicitly unwrap Result values (found '{type_name}')."
+                "{category_name} operator cannot use a fallible value that has not been handled. Use postfix `!` in a compatible fallible function or recover with `catch` before applying the operator (found '{type_name}')."
             )
         }
-        InvalidResultOperandReason::OptionNotUnwrapped => {
+        InvalidResultOperandReason::OptionalValueNotInspected => {
             format!(
-                "{category_name} operator does not implicitly unwrap Option values (found '{type_name}')."
+                "{category_name} operator cannot use an optional value that has not been inspected. Inspect it with an `if ... is |value|` branch before applying the operator (found '{type_name}')."
             )
         }
     }
@@ -569,7 +569,7 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
             "`checked:` blocks are reserved for future advanced validation, but are not implemented yet."
         }
         DeferredFeatureReason::AsyncBlock => {
-            "`async:` blocks are reserved for future async lowering, but are not implemented yet."
+            "`async:` blocks are reserved for future language support, but are not implemented yet."
         }
     }
 }

@@ -165,7 +165,7 @@ pub(crate) fn compile_time_evaluation_error_suggestion(
             "Use only compile-time values when constructing records or choices for top-level '#' constants"
         }
         CompileTimeEvaluationErrorReason::NoneLiteralRequiresOptionalTypeContext => {
-            "Add an explicit optional type annotation (e.g., 'value Option<Type> = none')"
+            "Add an explicit optional type annotation, for example `value String? = none`"
         }
         CompileTimeEvaluationErrorReason::ExternalTypeConstructionNotSupported => {
             "Use an external function that returns this type instead"
@@ -205,8 +205,8 @@ pub(crate) fn invalid_template_structure_message(
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::NonFoldableDocComment => {
             "'$doc' comments can only contain compile-time values.".to_string()
         }
-        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::ResultInTemplateHead => {
-            "Template head expressions do not implicitly unwrap Result values.".to_string()
+        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::FallibleValueInTemplateHead => {
+            "Template heads do not implicitly unwrap fallible values. Handle the error before using the success value, with postfix `!` in a compatible fallible function or with `catch` recovery.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead { type_id } => {
             let type_name = super::context::diagnostic_type_name(type_id, context);
@@ -339,28 +339,28 @@ pub(crate) fn invalid_template_structure_message(
             "Template `if` heads support Bool conditions and option-present capture only. Use ordinary statement/value `if value is:` blocks for pattern matching outside templates.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateIfConditionNotConst => {
-            "Template `if` condition in a const-required template must fold to a Bool at compile time.".to_string()
+            "This template must be fully evaluated at compile time, so its `if` condition must fold to a Bool.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateIfBranchNotConst => {
-            "Both branches of a const-required template `if` must be fully foldable, even when one branch is inactive.".to_string()
+            "This template must be fully evaluated at compile time, so both `if` branches must be compile-time values even when one branch is inactive.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateOptionCaptureConstDeferred => {
-            "Option-present template `if` folding in const-required templates is deferred because the current const value model cannot decide option presence here.".to_string()
+            "This template must be fully evaluated at compile time, but the optional value's presence cannot be determined at compile time.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst => {
-            "Template range loop bounds in a const-required template must fold to numeric values at compile time.".to_string()
+            "This template must be fully evaluated at compile time, so its range-loop bounds must fold to numeric values.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateLoopSourceNotConst => {
-            "Template collection loop source in a const-required template must fold to a collection at compile time.".to_string()
+            "This template must be fully evaluated at compile time, so its collection-loop source must fold to a collection.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateLoopConditionNotConst => {
-            "Template conditional loop condition in a const-required template must fold to a Bool at compile time.".to_string()
+            "This template must be fully evaluated at compile time, so its conditional-loop condition must fold to a Bool.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateConditionalLoopConstTrue => {
-            "Const-required template conditional loops with a true condition are rejected because they may not terminate.".to_string()
+            "A conditional loop that is true at compile time cannot appear in a template that must be fully evaluated at compile time because it may not terminate.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateLoopBodyNotConst => {
-            "Template loop body in a const-required template must be fully foldable for every iteration.".to_string()
+            "This template must be fully evaluated at compile time, so its loop body must be a compile-time value for every iteration.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded { limit } => {
             format!(

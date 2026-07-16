@@ -32,7 +32,7 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidControlFlowStatementReason,
-    InvalidMatchArmReason, InvalidResultHandlingReason,
+    InvalidMatchArmReason, InvalidResultHandlingReason, InvalidStandaloneStatementReason,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::syntax_errors::statement_position::check_statement_common_mistake;
@@ -353,8 +353,8 @@ pub(crate) fn parse_function_body_statements(
             TokenKind::TemplateHead => {
                 if context.kind != ContextKind::Module {
                     return Err(statement_dispatch_error(
-                        CompilerDiagnostic::invalid_control_flow_statement(
-                            InvalidControlFlowStatementReason::TemplateInsideFunctionBody,
+                        CompilerDiagnostic::invalid_standalone_statement(
+                            InvalidStandaloneStatementReason::StandaloneTemplate,
                             token_stream.current_location(),
                         ),
                     ));

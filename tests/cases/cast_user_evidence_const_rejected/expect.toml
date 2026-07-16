@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0083"]
-message_contains = ["User-defined cast evidence cannot be used in const-required contexts"]
+message_contains = ["User-defined cast evidence must be fully evaluable at compile time"]

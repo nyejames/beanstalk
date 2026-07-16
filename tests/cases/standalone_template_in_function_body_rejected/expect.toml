@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0025"]
+message_contains = ["A standalone template is not a valid statement here. Assign it, return it or pass it to a receiving expression."]
