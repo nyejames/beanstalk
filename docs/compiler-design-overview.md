@@ -1,13 +1,5 @@
 # Beanstalk Compiler Design Overview
 
-> Legacy consolidated reference
->
-> Compiler architecture is now maintained under
-> `docs/src/docs/codebase/compiler-design/`.
->
-> This file is retained temporarily and should not be used as the primary
-> design reference.
-
 Beanstalk is a high-level language with first-class string templates. The compiler is modular, exposed as a library, and used by the built-in project tooling, dev server, and backend builders.
 
 This document records Beanstalk's accepted compiler architecture and intended end-state contracts. It includes design decisions that may not yet be fully implemented. The compiler and its backends should converge on these contracts unless an explicit design change updates them.
