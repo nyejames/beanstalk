@@ -7,12 +7,15 @@
 //!      inequality, and lookup/insert behavior without relying on the full
 //!      fold pipeline.
 
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
-use crate::compiler_frontend::ast::templates::template::SlotKey;
+use crate::compiler_frontend::ast::templates::template::{SlotKey, Template};
 use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateFoldBinding;
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateBranchSelector, TemplateFoldBinding,
+};
 use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
@@ -21,26 +24,34 @@ use crate::compiler_frontend::ast::templates::tir::fold::fold_tir_template;
 use crate::compiler_frontend::ast::templates::tir::fold_cache::{TirFoldCache, TirFoldCacheKey};
 use crate::compiler_frontend::ast::templates::tir::fold_safety::classify_view_native_fold_safety;
 use crate::compiler_frontend::ast::templates::tir::ids::{
-    SlotOccurrenceId, TemplateIrId, TemplateWrapperSetId,
+    ChildTemplateOccurrenceId, SlotOccurrenceId, TemplateIrId, TemplateIrNodeId,
+    TemplateSlotPlanId, TemplateWrapperSetId,
 };
 use crate::compiler_frontend::ast::templates::tir::node::{
-    TemplateIr, TemplateIrNode, TemplateIrNodeKind,
+    TemplateIr, TemplateIrBranch, TemplateIrNode, TemplateIrNodeKind,
 };
 use crate::compiler_frontend::ast::templates::tir::overlays::{
-    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlayId, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirExpressionOverlayId,
+    TirSlotResolution, TirSlotResolutionOverlay, TirWrapperApplicationMode, TirWrapperContext,
+    TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{
     TemplateRef, TemplateStoreId, TemplateTirChildReference, TemplateWrapperReference,
+    TemplateWrapperSetRef,
 };
 use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::slot_plan::TemplateSlotPlan;
 use crate::compiler_frontend::ast::templates::tir::store::{TemplateIrStore, TemplateWrapperSet};
 use crate::compiler_frontend::ast::templates::tir::summary::TemplateIrSummary;
+use crate::compiler_frontend::ast::templates::tir::summary::summarize_existing_root;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::templates::tir::{
-    fold_tir_view, fold_tir_view_read_only, tir_view_is_expression_overlay_linear_fold_safe,
+    TemplateTirReference, fold_tir_view, fold_tir_view_prepared, fold_tir_view_read_only,
+    prepare_tir_view_fold, tir_view_is_expression_overlay_linear_fold_safe,
     tir_view_is_read_only_fold_safe,
+};
+use crate::compiler_frontend::compiler_messages::{
+    DiagnosticPayload, InvalidTemplateStructureReason,
 };
 #[cfg(feature = "benchmark_counters")]
 use crate::compiler_frontend::instrumentation::ast_counters::{
@@ -51,6 +62,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -419,6 +431,183 @@ fn fold_tir_view_matches_fold_tir_template_for_simple_text() {
 }
 
 #[test]
+fn prepared_view_fold_rejects_root_phase_and_overlay_identity_mismatches() {
+    let mut string_table = StringTable::new();
+    let mut fixture = build_text_template_registry(&mut string_table, "prepared identity");
+    let alternate_template_id = {
+        let store_handle = fixture
+            .registry
+            .store_handle(fixture.store_id)
+            .expect("store handle should exist");
+        let mut store = store_handle.borrow_mut();
+        finish_text_template(
+            &mut store,
+            string_table.intern("alternate root"),
+            "alternate root".len() as u32,
+        )
+    };
+    let alternate_expression_overlay_id = fixture
+        .registry
+        .allocate_expression_overlay(TirExpressionOverlay::default());
+    let alternate_overlay_set_id = fixture.registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(alternate_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+
+    assert_ne!(alternate_template_id, fixture.template_id);
+    assert_ne!(alternate_overlay_set_id, fixture.overlay_set_id);
+
+    let original_view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, fixture.template_id),
+        TemplateTirPhase::Composed,
+        fixture.overlay_set_id,
+    )
+    .expect("original view should construct");
+    let different_root_view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, alternate_template_id),
+        TemplateTirPhase::Composed,
+        fixture.overlay_set_id,
+    )
+    .expect("different-root view should construct");
+    let different_phase_view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, fixture.template_id),
+        TemplateTirPhase::Formatted,
+        fixture.overlay_set_id,
+    )
+    .expect("different-phase view should construct");
+    let different_overlay_view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, fixture.template_id),
+        TemplateTirPhase::Composed,
+        alternate_overlay_set_id,
+    )
+    .expect("different-overlay view should construct");
+
+    let store = fixture
+        .registry
+        .store_handle(fixture.store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+
+    let mut assert_mismatch = |target: &TirView<'_>, expected: &str| {
+        let preparation = prepare_tir_view_fold(&original_view, &store, &string_table)
+            .expect("original view preparation should succeed");
+        let mut fold_context =
+            build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+        let error = fold_tir_view_prepared(target, &store, &mut fold_context, preparation)
+            .expect_err("prepared identity mismatch must fail before folding");
+        assert!(
+            format!("{error:?}").contains(expected),
+            "expected {expected} identity error, got {error:?}"
+        );
+    };
+
+    assert_mismatch(&different_root_view, "root");
+    assert_mismatch(&different_phase_view, "phase");
+    assert_mismatch(&different_overlay_view, "overlay set");
+}
+
+#[test]
+fn prepared_view_fold_rejects_same_numeric_identity_with_different_store_owners() {
+    let mut string_table = StringTable::new();
+    let original_fixture = build_text_template_registry(&mut string_table, "original owner");
+    let foreign_fixture = build_text_template_registry(&mut string_table, "foreign owner");
+
+    assert_eq!(original_fixture.store_id, foreign_fixture.store_id);
+    assert_eq!(original_fixture.template_id, foreign_fixture.template_id);
+    assert_eq!(
+        original_fixture.overlay_set_id,
+        foreign_fixture.overlay_set_id
+    );
+
+    let original_view = TirView::new(
+        &original_fixture.registry,
+        TemplateRef::new(original_fixture.store_id, original_fixture.template_id),
+        TemplateTirPhase::Composed,
+        original_fixture.overlay_set_id,
+    )
+    .expect("original view should construct");
+    let foreign_view = TirView::new(
+        &foreign_fixture.registry,
+        TemplateRef::new(foreign_fixture.store_id, foreign_fixture.template_id),
+        TemplateTirPhase::Composed,
+        foreign_fixture.overlay_set_id,
+    )
+    .expect("foreign view should construct");
+    let original_store = original_fixture
+        .registry
+        .store_handle(original_fixture.store_id)
+        .expect("original store handle should exist")
+        .borrow()
+        .clone();
+    let foreign_store = foreign_fixture
+        .registry
+        .store_handle(foreign_fixture.store_id)
+        .expect("foreign store handle should exist")
+        .borrow()
+        .clone();
+
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let cache_key = TirFoldCacheKey {
+        root: TemplateRef::new(original_fixture.store_id, original_fixture.template_id),
+        phase: TemplateTirPhase::Composed,
+        overlay_set_id: original_fixture.overlay_set_id,
+        loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        bindings_empty: true,
+    };
+
+    let preparation = prepare_tir_view_fold(&original_view, &original_store, &string_table)
+        .expect("original view preparation should succeed");
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+    let error = fold_tir_view_prepared(
+        &original_view,
+        &foreign_store,
+        &mut fold_context,
+        preparation,
+    )
+    .expect_err("foreign supplied store must be rejected before cache lookup");
+    assert!(
+        format!("{error:?}").contains("store owner does not match the supplied store"),
+        "unexpected supplied-store owner error: {error:?}"
+    );
+    assert!(
+        fold_context.fold_cache.get(&cache_key).is_none(),
+        "supplied-store owner rejection must not touch the cache"
+    );
+
+    let preparation = prepare_tir_view_fold(&original_view, &original_store, &string_table)
+        .expect("original view preparation should succeed again");
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+    let error = fold_tir_view_prepared(
+        &foreign_view,
+        &original_store,
+        &mut fold_context,
+        preparation,
+    )
+    .expect_err("foreign view owner must be rejected before cache lookup");
+    assert!(
+        format!("{error:?}").contains("store owner does not match the view's registered store"),
+        "unexpected view-store owner error: {error:?}"
+    );
+    assert!(
+        fold_context.fold_cache.get(&cache_key).is_none(),
+        "view-store owner rejection must not touch the cache"
+    );
+}
+
+#[test]
 fn fold_tir_view_caches_result_for_empty_bindings() {
     let mut string_table = StringTable::new();
     let fixture = build_text_template_registry(&mut string_table, "cache me");
@@ -461,6 +650,1043 @@ fn fold_tir_view_caches_result_for_empty_bindings() {
     let second =
         fold_tir_view(&view, &store, &mut fold_context).expect("second fold should succeed");
     assert_eq!(first, second);
+}
+
+#[test]
+fn fold_tir_view_cache_hit_still_validates_malformed_authority() {
+    let mut string_table = StringTable::new();
+    let fixture = build_text_template_registry(&mut string_table, "cached authority");
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, fixture.template_id),
+        TemplateTirPhase::Composed,
+        fixture.overlay_set_id,
+    )
+    .expect("view should construct");
+
+    let mut store = fixture
+        .registry
+        .store_handle(fixture.store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    fold_tir_view(&view, &store, &mut fold_context).expect("first fold should populate cache");
+    store.nodes.clear();
+
+    let error = fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("cache hits must not hide malformed current-store authority");
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("missing cached node should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected a stable cache-boundary authority error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_runtime_plan_early_return_validates_plan_authority() {
+    let mut string_table = StringTable::new();
+    let fixture = build_text_template_registry(&mut string_table, "runtime plan");
+    let missing_slot_plan_id = TemplateSlotPlanId::new(999);
+    fixture
+        .registry
+        .store_handle(fixture.store_id)
+        .expect("store handle should exist")
+        .borrow_mut()
+        .templates[fixture.template_id.index()]
+    .runtime_slot_plan = Some(missing_slot_plan_id);
+
+    let view = TirView::new(
+        &fixture.registry,
+        TemplateRef::new(fixture.store_id, fixture.template_id),
+        TemplateTirPhase::Composed,
+        fixture.overlay_set_id,
+    )
+    .expect("view should construct");
+    let store = fixture
+        .registry
+        .store_handle(fixture.store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    let error = fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("runtime-plan early return must validate its required plan");
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("missing runtime slot plan should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: slot plan"),
+        "expected a stable runtime-plan authority error, got: {}",
+        error.msg
+    );
+}
+
+fn fold_dynamic_ast_template_with_malformed_authority(
+    malformed_runtime_slot_plan: bool,
+) -> TemplateError {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let outer_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+
+        let nested_template_id = if malformed_runtime_slot_plan {
+            let nested_text = string_table.intern("nested");
+            let nested_template_id = {
+                let mut builder = TemplateIrBuilder::new(&mut store);
+                let nested_text_node = builder.push_text_node(
+                    nested_text,
+                    "nested".len() as u32,
+                    TemplateSegmentOrigin::Body,
+                    empty_location(),
+                );
+                let nested_root =
+                    builder.push_sequence_node(vec![nested_text_node], empty_location());
+                builder.finish_template(
+                    nested_root,
+                    Style::default(),
+                    TemplateType::String,
+                    TemplateIrSummary::empty(),
+                    empty_location(),
+                )
+            };
+            store.templates[nested_template_id.index()].runtime_slot_plan =
+                Some(TemplateSlotPlanId::new(999));
+            nested_template_id
+        } else {
+            store.push_template(TemplateIr::new(
+                TemplateIrNodeId::new(999),
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::empty(),
+                empty_location(),
+            ))
+        };
+
+        let nested_template = Template {
+            kind: TemplateType::String,
+            tir_reference: TemplateTirReference {
+                root: TemplateRef::new(store_id, nested_template_id),
+                store_owner: store.owner(),
+                phase: TemplateTirPhase::Composed,
+                overlay_set_id,
+            },
+            location: empty_location(),
+        };
+
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let dynamic_node = builder.push_dynamic_expression_node(
+            Expression::template(nested_template, ValueMode::ImmutableOwned),
+            TemplateSegmentOrigin::Body,
+            None,
+            empty_location(),
+        );
+        let outer_root = builder.push_sequence_node(vec![dynamic_node], empty_location());
+        builder.finish_template(
+            outer_root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+
+    let registry = Rc::new(RefCell::new(registry));
+    let registry_borrow = registry.borrow();
+    let view = TirView::new(
+        &registry_borrow,
+        TemplateRef::new(store_id, outer_template_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("outer view should construct");
+    let store = registry_borrow
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("dynamic AST templates must enter their own fold authority boundary")
+}
+
+#[test]
+fn fold_tir_view_dynamic_ast_template_validates_malformed_root_authority() {
+    let error = fold_dynamic_ast_template_with_malformed_authority(false);
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed dynamic template root should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected dynamic-template root authority failure, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_dynamic_ast_template_validates_runtime_slot_plan_authority() {
+    let error = fold_dynamic_ast_template_with_malformed_authority(true);
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed dynamic template slot plan should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: slot plan"),
+        "expected dynamic-template runtime-plan authority failure, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_validates_local_wrapper_context_before_foreign_child_opacity() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let parent_store_id = registry.allocate_store();
+    let foreign_store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let foreign_child_text = string_table.intern("foreign child");
+
+    let foreign_child_template_id = {
+        let mut foreign_store = registry
+            .store_mut(foreign_store_id)
+            .expect("foreign store should be mutable");
+        finish_text_template(
+            &mut foreign_store,
+            foreign_child_text,
+            "foreign child".len() as u32,
+        )
+    };
+
+    let parent_template_id = {
+        let mut parent_store = registry
+            .store_mut(parent_store_id)
+            .expect("parent store should be mutable");
+        finish_single_child_template(
+            &mut parent_store,
+            TemplateTirChildReference::new(
+                TemplateRef::new(foreign_store_id, foreign_child_template_id),
+                TemplateTirPhase::Composed,
+                empty_overlay_set_id,
+            ),
+        )
+    };
+
+    let wrapper_context_overlay_id =
+        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+            contexts: vec![(
+                ChildTemplateOccurrenceId::new(0),
+                TirWrapperContext {
+                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
+                        parent_store_id,
+                        TemplateWrapperSetId::new(999),
+                    )),
+                    application_mode: TirWrapperApplicationMode::Always,
+                    skip_parent_child_wrappers: false,
+                },
+            )],
+        });
+    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: None,
+        slot_resolution: None,
+        wrapper_context: Some(wrapper_context_overlay_id),
+    });
+
+    let registry = Rc::new(RefCell::new(registry));
+    let registry_borrow = registry.borrow();
+    let view = TirView::new(
+        &registry_borrow,
+        TemplateRef::new(parent_store_id, parent_template_id),
+        TemplateTirPhase::Composed,
+        parent_overlay_set_id,
+    )
+    .expect("parent view should construct");
+    let parent_store = registry_borrow
+        .store_handle(parent_store_id)
+        .expect("parent store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    let error = fold_tir_view(&view, &parent_store, &mut fold_context)
+        .expect_err("local wrapper authority must be checked before foreign fallback");
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed local wrapper context should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: wrapper set"),
+        "expected local wrapper-set authority failure, got: {}",
+        error.msg
+    );
+}
+
+fn fold_foreign_wrapper_with_malformed_authority(
+    malformed_runtime_slot_plan: bool,
+    application_mode: TirWrapperApplicationMode,
+    child_emits: bool,
+) -> TemplateError {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let parent_store_id = registry.allocate_store();
+    let wrapper_store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let wrapper_template_id = {
+        let mut wrapper_store = registry
+            .store_mut(wrapper_store_id)
+            .expect("wrapper store should be mutable");
+        if malformed_runtime_slot_plan {
+            let wrapper_text = string_table.intern("wrapper");
+            let wrapper_template_id = {
+                let mut builder = TemplateIrBuilder::new(&mut wrapper_store);
+                let wrapper_text_node = builder.push_text_node(
+                    wrapper_text,
+                    "wrapper".len() as u32,
+                    TemplateSegmentOrigin::Body,
+                    empty_location(),
+                );
+                let wrapper_root =
+                    builder.push_sequence_node(vec![wrapper_text_node], empty_location());
+                builder.finish_template(
+                    wrapper_root,
+                    Style::default(),
+                    TemplateType::String,
+                    TemplateIrSummary::empty(),
+                    empty_location(),
+                )
+            };
+            wrapper_store.templates[wrapper_template_id.index()].runtime_slot_plan =
+                Some(TemplateSlotPlanId::new(999));
+            wrapper_template_id
+        } else {
+            wrapper_store.push_template(TemplateIr::new(
+                TemplateIrNodeId::new(999),
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::empty(),
+                empty_location(),
+            ))
+        }
+    };
+
+    let (parent_template_id, wrapper_set_id) = {
+        let mut parent_store = registry
+            .store_mut(parent_store_id)
+            .expect("parent store should be mutable");
+        let child_template_id = if child_emits {
+            finish_text_template(
+                &mut parent_store,
+                string_table.intern("child"),
+                "child".len() as u32,
+            )
+        } else {
+            let hidden_text = string_table.intern("hidden");
+            let mut builder = TemplateIrBuilder::new(&mut parent_store);
+            let hidden_node = builder.push_text_node(
+                hidden_text,
+                "hidden".len() as u32,
+                TemplateSegmentOrigin::Body,
+                empty_location(),
+            );
+            let branch = TemplateIrBranch::new(
+                TemplateBranchSelector::Bool(Expression::bool(
+                    false,
+                    empty_location(),
+                    ValueMode::ImmutableOwned,
+                )),
+                hidden_node,
+                empty_location(),
+            );
+            let root = builder.push_branch_chain_node(vec![branch], None, empty_location());
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary {
+                    has_control_flow: true,
+                    ..TemplateIrSummary::empty()
+                },
+                empty_location(),
+            )
+        };
+        let child_reference = TemplateTirChildReference::same_store(
+            child_template_id,
+            parent_store_id,
+            TemplateTirPhase::Composed,
+            empty_overlay_set_id,
+        );
+        let child_node = {
+            let mut builder = TemplateIrBuilder::new(&mut parent_store);
+            builder.push_child_template_node_with_reference(child_reference, empty_location())
+        };
+        let wrapper_set_id = parent_store.push_wrapper_set(TemplateWrapperSet {
+            wrappers: vec![TemplateWrapperReference::new(
+                TemplateRef::new(wrapper_store_id, wrapper_template_id),
+                TemplateTirPhase::Composed,
+                empty_overlay_set_id,
+            )],
+        });
+        let parent_root = parent_store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![child_node],
+            },
+            empty_location(),
+        ));
+        let parent_template_id = parent_store.push_template(TemplateIr::new(
+            parent_root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ));
+
+        (parent_template_id, wrapper_set_id)
+    };
+
+    let wrapper_context_overlay_id =
+        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+            contexts: vec![(
+                ChildTemplateOccurrenceId::new(0),
+                TirWrapperContext {
+                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
+                        parent_store_id,
+                        wrapper_set_id,
+                    )),
+                    application_mode,
+                    skip_parent_child_wrappers: false,
+                },
+            )],
+        });
+    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: None,
+        slot_resolution: None,
+        wrapper_context: Some(wrapper_context_overlay_id),
+    });
+
+    let registry = Rc::new(RefCell::new(registry));
+    let registry_borrow = registry.borrow();
+    let view = TirView::new(
+        &registry_borrow,
+        TemplateRef::new(parent_store_id, parent_template_id),
+        TemplateTirPhase::Composed,
+        parent_overlay_set_id,
+    )
+    .expect("parent view should construct");
+    let parent_store = registry_borrow
+        .store_handle(parent_store_id)
+        .expect("parent store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    fold_tir_view(&view, &parent_store, &mut fold_context)
+        .expect_err("foreign wrapper authority must be validated at its fold boundary")
+}
+
+#[test]
+fn fold_tir_view_foreign_wrapper_validates_malformed_root_authority() {
+    let error = fold_foreign_wrapper_with_malformed_authority(
+        false,
+        TirWrapperApplicationMode::Always,
+        true,
+    );
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed foreign wrapper root should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected foreign-wrapper root authority failure, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_foreign_wrapper_validates_runtime_slot_plan_authority() {
+    let error = fold_foreign_wrapper_with_malformed_authority(
+        true,
+        TirWrapperApplicationMode::Always,
+        true,
+    );
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed foreign wrapper slot plan should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: slot plan"),
+        "expected foreign-wrapper runtime-plan authority failure, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_preflights_malformed_foreign_root_for_if_child_emits_no_output() {
+    let error = fold_foreign_wrapper_with_malformed_authority(
+        false,
+        TirWrapperApplicationMode::IfChildEmits,
+        false,
+    );
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed foreign wrapper root should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected malformed foreign root validation before NoOutput shortcut, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_preflights_malformed_foreign_runtime_plan_for_if_child_emits_no_output() {
+    let error = fold_foreign_wrapper_with_malformed_authority(
+        true,
+        TirWrapperApplicationMode::IfChildEmits,
+        false,
+    );
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("malformed foreign wrapper slot plan should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: slot plan"),
+        "expected malformed foreign runtime-plan validation before NoOutput shortcut, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_folds_production_summary_constant_dynamic_child_to_text() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let constant_text = string_table.intern("constant child");
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+
+        let site_id = store.next_expression_site_id();
+        let dynamic_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(Expression::string_slice(
+                    constant_text,
+                    empty_location(),
+                    ValueMode::ImmutableOwned,
+                )),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id,
+            },
+            empty_location(),
+        ));
+        let child_summary = summarize_existing_root(&store, dynamic_node);
+        let child_template_id = store.push_template(TemplateIr::new(
+            dynamic_node,
+            Style::default(),
+            TemplateType::String,
+            child_summary,
+            empty_location(),
+        ));
+        assert_eq!(
+            store
+                .get_template(child_template_id)
+                .expect("child template should exist")
+                .summary
+                .dynamic_expression_count,
+            1,
+            "fixture must use the production dynamic-expression summary"
+        );
+
+        let occurrence_id = store.next_child_template_occurrence_id();
+        let child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: TemplateTirChildReference::same_store(
+                    child_template_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    overlay_set_id,
+                ),
+                occurrence_id,
+            },
+            empty_location(),
+        ));
+        let parent_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![child_node],
+            },
+            empty_location(),
+        ));
+        let parent_summary = summarize_existing_root(&store, parent_root);
+        store.push_template(TemplateIr::new(
+            parent_root,
+            Style::default(),
+            TemplateType::String,
+            parent_summary,
+            empty_location(),
+        ))
+    };
+
+    let registry_borrow = registry;
+    let store = registry_borrow
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let view = TirView::new(
+        &registry_borrow,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("parent view should construct");
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    let emission = fold_tir_view(&view, &store, &mut fold_context)
+        .expect("constant dynamic child should fold successfully");
+    assert_eq!(
+        emission,
+        TemplateEmission::Output(constant_text),
+        "constant dynamic expressions remain foldable despite structural summary counts"
+    );
+}
+
+#[test]
+fn fold_tir_view_below_composed_child_ignores_unconsumed_overlay_identity() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let missing_overlay_set_id = TemplateOverlaySetId::new(999);
+    let child_text = string_table.intern("parsed child");
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Text {
+                text: child_text,
+                byte_len: "parsed child".len() as u32,
+                origin: TemplateSegmentOrigin::Body,
+            },
+            empty_location(),
+        ));
+        let child_summary = summarize_existing_root(&store, child_node);
+        let child_template_id = store.push_template(TemplateIr::new(
+            child_node,
+            Style::default(),
+            TemplateType::String,
+            child_summary,
+            empty_location(),
+        ));
+        let occurrence_id = store.next_child_template_occurrence_id();
+        let parent_child_node = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: TemplateTirChildReference::same_store(
+                    child_template_id,
+                    store_id,
+                    TemplateTirPhase::Parsed,
+                    missing_overlay_set_id,
+                ),
+                occurrence_id,
+            },
+            empty_location(),
+        ));
+        let parent_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![parent_child_node],
+            },
+            empty_location(),
+        ));
+        let parent_summary = summarize_existing_root(&store, parent_root);
+        store.push_template(TemplateIr::new(
+            parent_root,
+            Style::default(),
+            TemplateType::String,
+            parent_summary,
+            empty_location(),
+        ))
+    };
+
+    let store = registry
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, parent_template_id),
+        TemplateTirPhase::Composed,
+        parent_overlay_set_id,
+    )
+    .expect("parent view should construct");
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    assert_eq!(
+        fold_tir_view(&view, &store, &mut fold_context)
+            .expect("below-Composed child should fold from its structural root"),
+        TemplateEmission::Output(child_text)
+    );
+}
+
+#[test]
+fn fold_tir_view_preserves_registry_for_later_phase_descendant_of_parsed_child() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let expression_overlay_id =
+        registry.allocate_expression_overlay(TirExpressionOverlay::default());
+    let formatted_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let child_text = string_table.intern("later-phase child");
+
+    let outer_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let leaf_template_id =
+            finish_text_template(&mut store, child_text, "later-phase child".len() as u32);
+        let parsed_middle_template_id = finish_single_child_template(
+            &mut store,
+            TemplateTirChildReference::same_store(
+                leaf_template_id,
+                store_id,
+                TemplateTirPhase::Formatted,
+                formatted_overlay_set_id,
+            ),
+        );
+
+        finish_single_child_template(
+            &mut store,
+            TemplateTirChildReference::same_store(
+                parsed_middle_template_id,
+                store_id,
+                TemplateTirPhase::Parsed,
+                root_overlay_set_id,
+            ),
+        )
+    };
+
+    let store = registry
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, outer_template_id),
+        TemplateTirPhase::Composed,
+        root_overlay_set_id,
+    )
+    .expect("outer view should construct");
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    assert_eq!(
+        fold_tir_view(&view, &store, &mut fold_context)
+            .expect("later-phase descendant overlay should resolve through the root registry"),
+        TemplateEmission::Output(child_text)
+    );
+}
+
+#[test]
+fn fold_tir_view_rejects_direct_sequence_node_cycle_as_infrastructure() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::Sequence {
+                children: vec![TemplateIrNodeId::new(0)],
+            },
+            empty_location(),
+        ));
+        store.push_template(TemplateIr::new(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ))
+    };
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, template_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("cyclic view should construct");
+    let store = registry
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let mut string_table = StringTable::new();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    let TemplateError::Infrastructure(error) =
+        fold_tir_view(&view, &store, &mut fold_context).expect_err("direct cycle must fail")
+    else {
+        panic!("direct node cycle must remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("recursively referenced directly"),
+        "expected a direct-cycle authority error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn fold_tir_view_reports_same_store_child_cycle_as_non_foldable_diagnostic() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template_a_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let template_a_id = store.push_template(TemplateIr::new(
+            TemplateIrNodeId::new(0),
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ));
+        let template_b_id = store.push_template(TemplateIr::new(
+            TemplateIrNodeId::new(0),
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ));
+        let occurrence_a = store.next_child_template_occurrence_id();
+        let node_a = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: TemplateTirChildReference::same_store(
+                    template_b_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    overlay_set_id,
+                ),
+                occurrence_id: occurrence_a,
+            },
+            empty_location(),
+        ));
+        let occurrence_b = store.next_child_template_occurrence_id();
+        let node_b = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::ChildTemplate {
+                reference: TemplateTirChildReference::same_store(
+                    template_a_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    overlay_set_id,
+                ),
+                occurrence_id: occurrence_b,
+            },
+            empty_location(),
+        ));
+        store.templates[template_a_id.index()].root = node_a;
+        store.templates[template_b_id.index()].root = node_b;
+        template_a_id
+    };
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, template_a_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("cyclic view should construct");
+    let store = registry
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let mut string_table = StringTable::new();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    let TemplateError::Diagnostic(diagnostic) =
+        fold_tir_view(&view, &store, &mut fold_context).expect_err("child cycle must terminate")
+    else {
+        panic!("same-store child cycle must use the ordinary diagnostic lane");
+    };
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidTemplateStructure {
+            reason: InvalidTemplateStructureReason::NonFoldableConstTemplate,
+        }
+    ));
+}
+
+#[test]
+fn fold_tir_view_reports_cross_store_child_cycle_as_non_foldable_diagnostic() {
+    let mut registry = TemplateIrRegistry::new();
+    let store_a_id = registry.allocate_store();
+    let store_b_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let template_a_id = {
+        let mut store_a = registry
+            .store_mut(store_a_id)
+            .expect("store A should be mutable");
+        let mut builder = TemplateIrBuilder::new(&mut store_a);
+        let child = builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::new(
+                TemplateRef::new(store_b_id, TemplateIrId::new(0)),
+                TemplateTirPhase::Composed,
+                overlay_set_id,
+            ),
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![child], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+    let _template_b_id = {
+        let mut store_b = registry
+            .store_mut(store_b_id)
+            .expect("store B should be mutable");
+        let mut builder = TemplateIrBuilder::new(&mut store_b);
+        let child = builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::new(
+                TemplateRef::new(store_a_id, template_a_id),
+                TemplateTirPhase::Composed,
+                overlay_set_id,
+            ),
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![child], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+
+    let registry = Rc::new(RefCell::new(registry));
+    let registry_borrow = registry.borrow();
+    let view = TirView::new(
+        &registry_borrow,
+        TemplateRef::new(store_a_id, template_a_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("cross-store cycle view should construct");
+    let store_a = registry_borrow
+        .store_handle(store_a_id)
+        .expect("store A handle should exist")
+        .borrow()
+        .clone();
+    let mut string_table = StringTable::new();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    let TemplateError::Diagnostic(diagnostic) = fold_tir_view(&view, &store_a, &mut fold_context)
+        .expect_err("cross-store child cycle must terminate")
+    else {
+        panic!("cross-store child cycle must use the ordinary diagnostic lane");
+    };
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidTemplateStructure {
+            reason: InvalidTemplateStructureReason::NonFoldableConstTemplate,
+        }
+    ));
 }
 
 #[test]
@@ -1826,6 +3052,78 @@ fn fold_safety_reports_malformed_authority_as_error() {
 }
 
 #[test]
+fn fold_tir_view_rejects_missing_node_in_untaken_branch() {
+    use crate::compiler_frontend::ast::expressions::expression::Expression;
+    use crate::compiler_frontend::ast::templates::template_control_flow::TemplateBranchSelector;
+    use crate::compiler_frontend::value_mode::ValueMode;
+
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("store should be mutable");
+        let fallback_text = string_table.intern("fallback");
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let fallback_node = builder.push_text_node(
+            fallback_text,
+            "fallback".len() as u32,
+            TemplateSegmentOrigin::Body,
+            empty_location(),
+        );
+        let branch = crate::compiler_frontend::ast::templates::tir::node::TemplateIrBranch::new(
+            TemplateBranchSelector::Bool(Expression::bool(
+                false,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+            crate::compiler_frontend::ast::templates::tir::ids::TemplateIrNodeId::new(999),
+            empty_location(),
+        );
+        let root =
+            builder.push_branch_chain_node(vec![branch], Some(fallback_node), empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(store_id, template_id),
+        TemplateTirPhase::Composed,
+        overlay_set_id,
+    )
+    .expect("view should construct");
+    let store = registry
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context =
+        build_test_fold_context(&mut string_table, &resolver, &path_format, &source_scope);
+
+    let error = fold_tir_view(&view, &store, &mut fold_context)
+        .expect_err("untaken branch authority must be validated before selection");
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("missing untaken-branch node should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected a stable untaken-branch authority error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
 fn read_only_fold_safety_reports_missing_child_before_overlay_fallback() {
     let mut registry = TemplateIrRegistry::new();
     let store_id = registry.allocate_store();
@@ -2631,6 +3929,184 @@ fn fold_tir_view_with_expression_overlay_uses_effective_expression() {
         result,
         TemplateEmission::Output(expected),
         "expression overlay must replace the structural expression during view-native folding"
+    );
+}
+
+/// A root expression overlay remains active through multiple same-store child
+/// entries, and a nested child result is not cached without that outer context.
+#[test]
+fn fold_tir_view_preserves_root_expression_overlay_through_nested_children() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let (root_template_id, leaf_template_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let structural_text = string_table.intern("structural-leaf");
+
+        let leaf_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let leaf_expression = builder.push_dynamic_expression_node(
+                Expression::string_slice(
+                    structural_text,
+                    empty_location(),
+                    ValueMode::ImmutableOwned,
+                ),
+                TemplateSegmentOrigin::Body,
+                None,
+                empty_location(),
+            );
+            let leaf_root = builder.push_sequence_node(vec![leaf_expression], empty_location());
+            builder.finish_template(
+                leaf_root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                empty_location(),
+            )
+        };
+
+        let middle_template_id = finish_single_child_template(
+            &mut store,
+            TemplateTirChildReference::same_store(
+                leaf_template_id,
+                store_id,
+                TemplateTirPhase::Composed,
+                empty_overlay_set_id,
+            ),
+        );
+        let root_template_id = finish_single_child_template(
+            &mut store,
+            TemplateTirChildReference::same_store(
+                middle_template_id,
+                store_id,
+                TemplateTirPhase::Composed,
+                empty_overlay_set_id,
+            ),
+        );
+
+        (root_template_id, leaf_template_id)
+    };
+
+    // The builder assigns the expression site while creating the dynamic node;
+    // recover the authoritative site from the leaf node before allocating the
+    // root overlays.
+    let leaf_site_id = {
+        let store_handle = registry
+            .store_handle(store_id)
+            .expect("store handle should exist");
+        let store = store_handle.borrow();
+        let leaf_root = store
+            .get_template(leaf_template_id)
+            .expect("leaf template should exist")
+            .root;
+        let leaf_node = store.get_node(leaf_root).expect("leaf root should exist");
+        let TemplateIrNodeKind::Sequence { children } = &leaf_node.kind else {
+            panic!("leaf root should be a sequence");
+        };
+        let expression_node = store
+            .get_node(children[0])
+            .expect("leaf expression node should exist");
+        let TemplateIrNodeKind::DynamicExpression { site_id, .. } = expression_node.kind else {
+            panic!("leaf child should be a dynamic expression");
+        };
+        site_id
+    };
+
+    let first_text = string_table.intern("first-root-overlay");
+    let second_text = string_table.intern("second-root-overlay");
+    let first_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            leaf_site_id,
+            Box::new(Expression::string_slice(
+                first_text,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+        )],
+    });
+    let second_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            leaf_site_id,
+            Box::new(Expression::string_slice(
+                second_text,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            )),
+        )],
+    });
+    let first_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(first_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let second_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(second_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+
+    let registry = Rc::new(RefCell::new(registry));
+    let store = registry
+        .borrow()
+        .store_handle(store_id)
+        .expect("store handle should exist")
+        .borrow()
+        .clone();
+    let resolver = test_project_path_resolver();
+    let path_format = PathStringFormatConfig::default();
+    let source_scope = InternedPath::new();
+    let mut fold_context = TemplateFoldContext {
+        string_table: &mut string_table,
+        project_path_resolver: &resolver,
+        path_format_config: &path_format,
+        source_file_scope: &source_scope,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        template_ir_registry: Some(Rc::clone(&registry)),
+        bindings: vec![],
+        fold_cache: TirFoldCache::new(),
+    };
+
+    let first = {
+        let registry_borrow = registry.borrow();
+        let view = TirView::new(
+            &registry_borrow,
+            TemplateRef::new(store_id, root_template_id),
+            TemplateTirPhase::Composed,
+            first_overlay_set_id,
+        )
+        .expect("first root view should construct");
+        fold_tir_view(&view, &store, &mut fold_context).expect("first root fold should succeed")
+    };
+    let second = {
+        let registry_borrow = registry.borrow();
+        let view = TirView::new(
+            &registry_borrow,
+            TemplateRef::new(store_id, root_template_id),
+            TemplateTirPhase::Composed,
+            second_overlay_set_id,
+        )
+        .expect("second root view should construct");
+        fold_tir_view(&view, &store, &mut fold_context).expect("second root fold should succeed")
+    };
+
+    assert_eq!(first, TemplateEmission::Output(first_text));
+    assert_eq!(second, TemplateEmission::Output(second_text));
+    assert!(
+        fold_context
+            .fold_cache
+            .get(&TirFoldCacheKey {
+                root: TemplateRef::new(store_id, leaf_template_id),
+                phase: TemplateTirPhase::Composed,
+                overlay_set_id: empty_overlay_set_id,
+                loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+                bindings_empty: true,
+            })
+            .is_none(),
+        "nested child cache must be suppressed while an outer expression overlay is active"
     );
 }
 

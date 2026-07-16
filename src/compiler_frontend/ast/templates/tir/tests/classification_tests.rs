@@ -481,6 +481,78 @@ fn view_const_evaluation_follows_foreign_embedded_template_overlay() {
 }
 
 #[test]
+fn view_const_evaluation_ignores_foreign_parsed_child_overlay_identity() {
+    let mut string_table = StringTable::new();
+    let child_text = string_table.intern("foreign parsed child");
+    let mut registry = TemplateIrRegistry::new();
+    let parent_store_id = registry.allocate_store();
+    let child_store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let missing_overlay_set_id = TemplateOverlaySetId::new(999);
+
+    let child_template_id = {
+        let mut store = registry
+            .store_mut(child_store_id)
+            .expect("foreign child store should be mutable");
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let text_node = builder.push_text_node(
+            child_text,
+            "foreign parsed child".len() as u32,
+            TemplateSegmentOrigin::Body,
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![text_node], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(parent_store_id)
+            .expect("parent store should be mutable");
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let child_node = builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::new(
+                TemplateRef::new(child_store_id, child_template_id),
+                TemplateTirPhase::Parsed,
+                missing_overlay_set_id,
+            ),
+            empty_location(),
+        );
+        let root = builder.push_sequence_node(vec![child_node], empty_location());
+        builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        )
+    };
+
+    let view = TirView::new(
+        &registry,
+        TemplateRef::new(parent_store_id, parent_template_id),
+        TemplateTirPhase::Finalized,
+        empty_overlay_set_id,
+    )
+    .expect("parent view should resolve");
+    let parent_store = view.store().expect("parent store should resolve");
+
+    let classification = classify_effective_tir_view_template(&view, &parent_store, &string_table)
+        .expect("a foreign Parsed child must not consume its missing overlay");
+    assert_eq!(
+        classification.const_value_kind,
+        TemplateConstValueKind::RenderableString,
+        "the foreign Parsed child should remain structurally const-evaluable"
+    );
+}
+
+#[test]
 fn tir_view_classification_returns_renderable_string_for_text_root() {
     let mut string_table = StringTable::new();
 

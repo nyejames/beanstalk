@@ -29,7 +29,10 @@
 
 use super::finalizer::AstFinalizer;
 use super::normalize_ast::TemplateNormalizationError;
-use super::template_helpers::{TemplateFinalizationFoldInputs, try_fold_template_to_string};
+use super::template_helpers::{
+    TemplateFinalizationFoldDisposition, TemplateFinalizationFoldInputs,
+    try_fold_template_to_string,
+};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::const_values::resolver::classify_template_from_effective_tir;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -38,6 +41,9 @@ use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind,
 use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
 use crate::compiler_frontend::ast::templates::tir::TemplateIrRegistry;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidTemplateStructureReason,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -123,65 +129,28 @@ impl AstFinalizer<'_, '_> {
                 )
             };
 
+        if let ExpressionKind::Template(template) = &expression.kind {
+            return normalize_module_constant_template_expression(
+                expression,
+                template,
+                TemplateFinalizationFoldInputs {
+                    source_file_scope,
+                    path_format_config: &self.context.path_format_config,
+                    project_path_resolver,
+                    string_table,
+                    template_const_loop_iteration_limit: self
+                        .context
+                        .template_const_loop_iteration_limit,
+                    template_ir_store: self.context.registered_template_ir_store.store(),
+                    template_ir_registry: Rc::clone(
+                        self.context.registered_template_ir_store.registry(),
+                    ),
+                },
+            );
+        }
+
         let mut normalized = expression.to_owned();
         normalized.kind = match &expression.kind {
-            ExpressionKind::Template(template) => {
-                validate_const_required_template_control_flow(
-                    template,
-                    &self
-                        .context
-                        .registered_template_ir_store
-                        .registry()
-                        .borrow(),
-                    string_table,
-                )
-                .map_err(|diagnostic| {
-                    TemplateNormalizationError::Diagnostic(Box::new(diagnostic))
-                })?;
-
-                let fold_result = try_fold_template_to_string(
-                    template,
-                    TemplateFinalizationFoldInputs {
-                        source_file_scope,
-                        path_format_config: &self.context.path_format_config,
-                        project_path_resolver,
-                        string_table,
-                        template_const_loop_iteration_limit: self
-                            .context
-                            .template_const_loop_iteration_limit,
-                        template_ir_store: self.context.registered_template_ir_store.store(),
-                        template_ir_registry: Rc::clone(
-                            self.context.registered_template_ir_store.registry(),
-                        ),
-                    },
-                )?;
-
-                if let Some(folded) = fold_result.folded {
-                    normalized.diagnostic_type = DataType::StringSlice;
-                    ExpressionKind::StringSlice(folded)
-                } else {
-                    match fold_result.const_value_kind {
-                        TemplateConstValueKind::LoopControlSignal
-                        | TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
-
-                        TemplateConstValueKind::RenderableString
-                        | TemplateConstValueKind::WrapperTemplate => {
-                            return Err(CompilerError::compiler_error(
-                                "Foldable module-constant template did not produce a folded string.",
-                            )
-                            .into());
-                        }
-
-                        TemplateConstValueKind::NonConst => {
-                            return Err(CompilerError::compiler_error(
-                                "Non-constant template reached AST finalization in module constant metadata.",
-                            )
-                            .into());
-                        }
-                    }
-                }
-            }
-
             ExpressionKind::Collection(items) => ExpressionKind::Collection(
                 items
                     .iter()
@@ -228,6 +197,74 @@ impl AstFinalizer<'_, '_> {
         };
         Ok(normalized)
     }
+}
+
+/// Normalizes one template-valued module constant through the shared fold owner.
+///
+/// WHAT: converts a folded template to `StringSlice` and rejects a valid runtime
+///       fallback before it can be mistaken for HIR constant metadata.
+/// WHY: HIR's module-constant pool stores only `HirConstValue`; runtime handoffs
+///      are executable AST expressions and therefore cannot cross this boundary.
+pub(super) fn normalize_module_constant_template_expression(
+    expression: &Expression,
+    template: &Template,
+    fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
+) -> Result<Expression, TemplateNormalizationError> {
+    {
+        let registry = fold_inputs.template_ir_registry.borrow();
+        validate_const_required_template_control_flow(
+            template,
+            &registry,
+            fold_inputs.string_table,
+        )
+        .map_err(|diagnostic| TemplateNormalizationError::Diagnostic(Box::new(diagnostic)))?;
+    }
+
+    let fold_result = try_fold_template_to_string(template, fold_inputs)?;
+    let mut normalized = expression.to_owned();
+
+    match fold_result.disposition {
+        TemplateFinalizationFoldDisposition::Folded => {
+            let folded = fold_result.folded.ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "Folded module-constant template did not produce folded output.",
+                )
+            })?;
+            normalized.diagnostic_type = DataType::StringSlice;
+            normalized.kind = ExpressionKind::StringSlice(folded);
+        }
+
+        TemplateFinalizationFoldDisposition::NotFoldable => match fold_result.const_value_kind {
+            TemplateConstValueKind::LoopControlSignal
+            | TemplateConstValueKind::SlotInsertHelper => {}
+
+            TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {
+                return Err(CompilerError::compiler_error(
+                    "Foldable module-constant template did not produce a folded string.",
+                )
+                .into());
+            }
+
+            TemplateConstValueKind::NonConst => {
+                return Err(CompilerError::compiler_error(
+                    "Non-constant template reached AST finalization in module constant metadata.",
+                )
+                .into());
+            }
+        },
+
+        TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
+            // Runtime handoffs are valid executable AST values, but HIR module
+            // constants are compile-time metadata and accept only HirConstValue.
+            return Err(CompilerDiagnostic::invalid_template_structure(
+                InvalidTemplateStructureReason::NonFoldableConstTemplate,
+                template.location.to_owned(),
+            )
+            .into());
+        }
+    }
+
+    Ok(normalized)
 }
 
 // --------------------------

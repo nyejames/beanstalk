@@ -20,7 +20,7 @@ use super::super::refs::{
 use super::super::registry::TemplateIrRegistry;
 
 use super::super::store::TemplateIrStore;
-use super::super::summary::TemplateIrSummary;
+use super::super::summary::{TemplateIrSummary, summarize_existing_root};
 use super::super::{TemplateOverlaySet, TemplateOverlaySetId, TemplateTirPhase, TirView};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
@@ -142,7 +142,7 @@ fn finish_text_template(store: &mut TemplateIrStore, root: TemplateIrNodeId) -> 
         root,
         Style::default(),
         TemplateType::StringFunction,
-        TemplateIrSummary::empty(),
+        summarize_existing_root(store, root),
         empty_location(),
     ))
 }
@@ -405,6 +405,203 @@ fn parent_root_expression_overlay_applies_inside_same_store_child() {
     assert!(
         matches!(expression.kind, ExpressionKind::Bool(true)),
         "parent root override should win over the child's empty overlay"
+    );
+}
+
+#[test]
+fn folded_child_shortcut_preserves_root_overlay_through_nested_same_store_children() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let (root_template_id, leaf_site_id) = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+
+        let leaf_site_id = store.next_expression_site_id();
+        let stale_structural_text = string_table.intern("stale-structural");
+        let leaf_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(Expression::string_slice(
+                    stale_structural_text,
+                    empty_location(),
+                    ValueMode::ImmutableOwned,
+                )),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id: leaf_site_id,
+            },
+            empty_location(),
+        ));
+        let leaf_template_id = finish_text_template(&mut store, leaf_root);
+
+        let middle_child = child_template_node_id(
+            &mut store,
+            child_reference(store_id, leaf_template_id, empty_overlay_set_id),
+        );
+        let middle_template_id = finish_text_template(&mut store, middle_child);
+
+        let root_child = child_template_node_id(
+            &mut store,
+            child_reference(store_id, middle_template_id, empty_overlay_set_id),
+        );
+        let root_template_id = finish_text_template(&mut store, root_child);
+
+        (root_template_id, leaf_site_id)
+    };
+
+    let effective_root_text = string_table.intern("effective-root");
+    let root_overlay_set_id = expression_overlay_set(
+        &mut registry,
+        vec![(
+            leaf_site_id,
+            Expression::string_slice(
+                effective_root_text,
+                empty_location(),
+                ValueMode::ImmutableOwned,
+            ),
+        )],
+    );
+
+    let body = materialize_parent_handoff(
+        registry,
+        store_id,
+        root_template_id,
+        &mut string_table,
+        root_overlay_set_id,
+    );
+
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
+        template: middle_template,
+    }) = &body
+    else {
+        panic!("expected root child template handoff, got {body:?}");
+    };
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
+        template: leaf_template,
+    }) = &middle_template.body
+    else {
+        panic!(
+            "expected nested leaf child template handoff, got {:?}",
+            middle_template.body
+        );
+    };
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression {
+        expression,
+        ..
+    }) = &leaf_template.body
+    else {
+        panic!(
+            "stale structural leaf must not be folded into text, got {:?}",
+            leaf_template.body
+        );
+    };
+
+    let ExpressionKind::StringSlice(text) = expression.kind else {
+        panic!(
+            "expected the root expression overlay to survive structurally, got {:?}",
+            expression.kind
+        );
+    };
+    assert_eq!(string_table.resolve(text), "effective-root");
+}
+
+#[test]
+fn folded_child_runtime_reference_falls_back_to_structural_handoff() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+
+        let child_site_id = store.next_expression_site_id();
+        let child_expression = bool_reference_expression(&mut string_table, "runtime");
+        let child_root = store.push_node(TemplateIrNode::new(
+            TemplateIrNodeKind::DynamicExpression {
+                expression: Box::new(child_expression),
+                origin: TemplateSegmentOrigin::Body,
+                reactive_subscription: None,
+                site_id: child_site_id,
+            },
+            empty_location(),
+        ));
+        let child_template_id = finish_text_template(&mut store, child_root);
+        let child_node = child_template_node_id(
+            &mut store,
+            child_reference(store_id, child_template_id, empty_overlay_set_id),
+        );
+        finish_text_template(&mut store, child_node)
+    };
+
+    let body = materialize_parent_handoff_result(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        empty_overlay_set_id,
+    )
+    .expect("runtime reference should use structural handoff");
+
+    let OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::ChildTemplate {
+        template, ..
+    }) = body
+    else {
+        panic!("expected same-store child template handoff, got {body:?}");
+    };
+    assert!(
+        matches!(
+            template.body,
+            OwnedRuntimeTemplateBody::Render(OwnedRuntimeTemplateNode::DynamicExpression { .. })
+        ),
+        "runtime-reference child should remain an owned dynamic expression"
+    );
+}
+
+#[test]
+fn folded_child_infrastructure_error_propagates_through_hir_handoff() {
+    let mut string_table = StringTable::new();
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.allocate_store();
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let parent_template_id = {
+        let mut store = registry
+            .store_mut(store_id)
+            .expect("registry store should be mutable");
+        let missing_child_root = TemplateIrNodeId::new(999);
+        let child_template_id = store.push_template(TemplateIr::new(
+            missing_child_root,
+            Style::default(),
+            TemplateType::StringFunction,
+            TemplateIrSummary::empty(),
+            empty_location(),
+        ));
+        let child_node = child_template_node_id(
+            &mut store,
+            child_reference(store_id, child_template_id, empty_overlay_set_id),
+        );
+        finish_text_template(&mut store, child_node)
+    };
+
+    let error = materialize_parent_handoff_result(
+        registry,
+        store_id,
+        parent_template_id,
+        &mut string_table,
+        empty_overlay_set_id,
+    )
+    .expect_err("malformed child authority must reach the HIR handoff caller");
+
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected a stable infrastructure lane, got: {}",
+        error.msg
     );
 }
 

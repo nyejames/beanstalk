@@ -24,7 +24,7 @@ STATUS: active
 CURRENT_SLICE: Slice 3E3c2e - propagate folded-child authority and close lazy fold validation gaps
 LAST_ACCEPTED_COMMIT: `c1ecc2c58`
 BRANCH: `main`
-WORKTREE: `main`; unaccepted Slice 3E3c2e source, focused-test and plan changes plus unrelated user-owned `style-guide.bd` edits to preserve and ignore
+WORKTREE: `main`; unaccepted Slice 3E3c2e source, focused-test and plan changes. Concurrent user-owned documentation updates are committed through `450cbb591` and remain outside this slice
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
@@ -55,12 +55,17 @@ VALIDATION_STATE:
 - Slice 3E3c2e cross-owner Codex audit: not acceptable; below-Composed classification still consumes child overlay authority and virtual-wrapper safety does not traverse the exact views used by folding
 - Slice 3E3c2e phase-gated safety correction: full `just validate` passed with 3498 unit tests, 1764 integration cases, docs clean and bench-check 28/28; cross-target Clippy and scoped diff check passed
 - Slice 3E3c2e phase-gated Codex audit: not acceptable; runtime plans remain fold-eligible, wrapper safety misses effective sources/expressions/cycles, prepared authority is not view-bound and cross-store fold cycles are unguarded
+- Slice 3E3c2e preparation/wrapper/cycle correction: full `just validate` passed with 3504 unit tests, 1764 integration cases, docs clean and bench-check 28/28; cross-target Clippy, formatting and scoped diff check passed
+- Slice 3E3c2e preparation/wrapper/cycle Codex audit: not acceptable; renderable semantic fallback does not enter owned runtime handoff, wrapper eligibility drops the active outer expression stack and prepared owner identity lacks same-ID/different-owner coverage
+- Slice 3E3c2e finalization/stack/owner correction: full `just validate` passed with 3508 unit tests, 1764 integration cases, docs clean and bench-check 28/28; implementation completed for AST expressions, wrapper stack parity and prepared owner identity but the direct module-constant caller was outside the worker's allowed scope
+- Slice 3E3c2e module-constant disposition correction: full `just validate` passed with 3509 unit tests, 1764 integration cases, docs clean and bench-check 28/28; module constants now use the established non-foldable-const diagnostic instead of an internal transformation error
+- Slice 3E3c2e final complete Codex audit: not acceptable; prepared authority remains store-local across foreign children/wrappers/resolved sources and nested foreign safety transitions compare against the original root store instead of the current owning store
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: correct prepared eligibility/identity, complete exact-wrapper shape safety and add a registry-qualified foreign fold cycle guard. Preserve all concurrent user-owned docs edits
+BLOCKERS_OR_OPEN_DECISIONS: make the sole authority walk registry-qualified and exhaustive before fallback classification, then correct nested foreign expression-stack transitions to use the current owning store. Preserve all concurrent user-owned docs edits
 DELEGATION_DECISION: codex-cli implementation - user selected Codex CLI as the primary worker for all remaining slices
 NEXT_WORKER_ORDER: codex-cli, ollama, parent-direct; Ollama is fallback-only after a Codex CLI blocker
 STOP_REASON: none
-NEXT_RESUME_ACTION: implement the four bounded preparation, wrapper-safety and cross-store-cycle corrections through Codex CLI, then re-audit
+NEXT_RESUME_ACTION: implement the two bounded foreign-authority and nested-stack corrections through Codex CLI, then re-audit the complete slice
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 

@@ -251,15 +251,17 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
     fn nested_foreign_store_materializer<'foreign>(
         &self,
         foreign_store: &'foreign TemplateIrStore,
-        overlay_set_id: TemplateOverlaySetId,
+        overlay_set_id: Option<TemplateOverlaySetId>,
     ) -> Result<RuntimeHandoffMaterializer<'foreign, 'static, 'static>, CompilerError> {
-        self.validate_overlay_set(overlay_set_id)?;
+        if let Some(overlay_set_id) = overlay_set_id {
+            self.validate_overlay_set(overlay_set_id)?;
+        }
         let registry = self.registry.as_ref().map(Rc::clone);
         Ok(RuntimeHandoffMaterializer {
             store: foreign_store,
             registry,
             fold_context: None,
-            overlay_set_stack: vec![overlay_set_id],
+            overlay_set_stack: overlay_set_id.into_iter().collect(),
             template_stack: self.template_stack.clone(),
             node_stack: Vec::new(),
         })
@@ -991,9 +993,13 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // Without this, child templates with expression or slot overlays
         // would materialize from stale structural payloads. The scoped helper
         // validates registry authority and restores the stack on errors.
-        let handoff = self.with_overlay_set(reference.overlay_set_id, |materializer| {
-            materializer.materialize_template(template_id, active_slot_plan, injection)
-        });
+        let handoff = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+            self.with_overlay_set(reference.overlay_set_id, |materializer| {
+                materializer.materialize_template(template_id, active_slot_plan, injection)
+            })
+        } else {
+            self.materialize_template(template_id, active_slot_plan, injection)
+        };
 
         Ok(OwnedRuntimeTemplateNode::ChildTemplate {
             template: Box::new(handoff?),
@@ -1057,8 +1063,13 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
         // ancestor template stack for qualified cycle detection. The child's
         // overlay set is pushed so expression, slot-resolution, and
         // wrapper-context lookups read through the child's overlay context.
-        let mut nested = self
-            .nested_foreign_store_materializer(&foreign_store_borrow, reference.overlay_set_id)?;
+        let mut nested = self.nested_foreign_store_materializer(
+            &foreign_store_borrow,
+            reference
+                .phase
+                .is_at_least(TemplateTirPhase::Composed)
+                .then_some(reference.overlay_set_id),
+        )?;
 
         // `TemplateSlotPlanId` is store-local: do not forward the parent's
         // active slot plan. The foreign template's own slot plan (if any) is
@@ -1342,7 +1353,10 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
             // resolving `wrapper_store_rc` above.
             let mut wrapper_materializer = self.nested_foreign_store_materializer(
                 wrapper_store,
-                wrapper_reference.overlay_set_id,
+                wrapper_reference
+                    .phase
+                    .is_at_least(TemplateTirPhase::Composed)
+                    .then_some(wrapper_reference.overlay_set_id),
             )?;
 
             Self::materialize_wrapper_with_child(
@@ -1352,14 +1366,26 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 child_handoff,
             )
         } else {
-            self.with_overlay_set(wrapper_reference.overlay_set_id, |materializer| {
+            if wrapper_reference
+                .phase
+                .is_at_least(TemplateTirPhase::Composed)
+            {
+                self.with_overlay_set(wrapper_reference.overlay_set_id, |materializer| {
+                    Self::materialize_wrapper_with_child(
+                        materializer,
+                        wrapper_root,
+                        fill_target_key,
+                        child_handoff,
+                    )
+                })
+            } else {
                 Self::materialize_wrapper_with_child(
-                    materializer,
+                    self,
                     wrapper_root,
                     fill_target_key,
                     child_handoff,
                 )
-            })
+            }
         }
     }
 
@@ -1412,7 +1438,33 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 "TIR HIR handoff folded-child text shortcut requires a registry, but the fold context has none.",
             ));
         };
+
+        // The shortcut builds a view for the child's own overlay set, while
+        // structural handoff resolves the full root-first overlay stack. An
+        // outer expression or slot overlay must stay on the structural path
+        // so a valid root-level override is not lost. Wrapper-context-only
+        // overlays remain safe because the caller applies them after the
+        // folded child emission is produced.
         let registry_borrow = registry.borrow();
+        for active_overlay_set_id in self.overlay_set_stack.iter().copied() {
+            if active_overlay_set_id == reference.overlay_set_id {
+                continue;
+            }
+
+            let active_overlay_set = registry_borrow
+                .overlay_set(active_overlay_set_id)
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "TIR HIR handoff materialization referenced missing overlay set {}",
+                        active_overlay_set_id
+                    ))
+                })?;
+            if active_overlay_set.expression_overrides.is_some()
+                || active_overlay_set.slot_resolution.is_some()
+            {
+                return Ok(None);
+            }
+        }
 
         // Propagate child root, phase and overlay-set authority failures.
         // A malformed child overlay must not silently fall through to
@@ -1447,7 +1499,12 @@ impl<'store, 'context, 'fold> RuntimeHandoffMaterializer<'store, 'context, 'fold
                 }))
             }
             Ok(_) => Ok(None),
-            Err(TemplateError::Infrastructure(_)) | Err(TemplateError::Diagnostic(_)) => Ok(None),
+            Err(TemplateError::Infrastructure(error)) => Err(*error),
+
+            // Earlier source validation owns ordinary non-const and source
+            // diagnostics. Keep those as shortcut-unavailable structural
+            // handoff instead of changing their diagnostic lane here.
+            Err(TemplateError::Diagnostic(_)) => Ok(None),
         }
     }
 }

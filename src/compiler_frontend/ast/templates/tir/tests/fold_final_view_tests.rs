@@ -366,6 +366,33 @@ fn final_view_fold_zero_iteration_loop_is_no_output() {
 }
 
 #[test]
+fn final_view_fold_zero_iteration_loop_rejects_missing_body_authority() {
+    let mut string_table = StringTable::new();
+    let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
+        build_range_loop_template(
+            string_table,
+            store,
+            0,
+            0,
+            crate::compiler_frontend::ast::templates::tir::ids::TemplateIrNodeId::new(999),
+            None,
+        )
+    });
+
+    let error = fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Composed)
+        .expect_err("zero-iteration loops must not hide malformed body authority");
+
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("missing loop-body authority should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected a stable fold-safety node error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
 fn final_view_fold_loop_preserves_output_before_break() {
     let mut string_table = StringTable::new();
     let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
@@ -460,6 +487,35 @@ fn final_view_fold_aggregate_wrapper_preserves_aggregate_output_position() {
         emission_to_string(emission, &string_table),
         "[xxx]",
         "aggregate wrapper should replace AggregateOutput with the folded aggregate"
+    );
+}
+
+#[test]
+fn final_view_fold_validates_present_aggregate_wrapper_without_body_output() {
+    let mut string_table = StringTable::new();
+    let fixture = build_final_view_fixture(&mut string_table, |string_table, store| {
+        let mut builder = TemplateIrBuilder::new(store);
+        let empty_body = builder.push_sequence_node(vec![], empty_location());
+        build_range_loop_template(
+            string_table,
+            store,
+            0,
+            1,
+            empty_body,
+            Some(crate::compiler_frontend::ast::templates::tir::ids::TemplateIrNodeId::new(999)),
+        )
+    });
+
+    let error = fold_final_view_fixture(&fixture, &mut string_table, TemplateTirPhase::Composed)
+        .expect_err("a present aggregate wrapper must be validated even when the body is empty");
+
+    let TemplateError::Infrastructure(error) = error else {
+        panic!("missing aggregate-wrapper authority should remain on the infrastructure lane");
+    };
+    assert!(
+        error.msg.contains("TIR fold safety: node"),
+        "expected a stable aggregate-wrapper authority error, got: {}",
+        error.msg
     );
 }
 

@@ -39,7 +39,8 @@
 
 use super::finalizer::AstFinalizer;
 use super::template_helpers::{
-    TemplateFinalizationFoldInputs, make_fold_context, try_fold_template_to_string,
+    TemplateFinalizationFoldDisposition, TemplateFinalizationFoldInputs, make_fold_context,
+    try_fold_template_to_string,
 };
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, LoopBindings, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
@@ -560,13 +561,15 @@ fn normalize_expression_templates_with_context(
             let final_classification = classify_final_effective_template_view(template, context)?;
             let template_const_kind = final_classification.const_value_kind;
 
-            // Fold only fully renderable final template values.
-            // Wrapper-shaped values may still represent runtime templates in this path.
+            // Fold renderable values through the preparation owner. A renderable
+            // shape can still require runtime lowering when its prepared proof
+            // finds a runtime slot plan, so that disposition must reach the
+            // existing owned handoff materializer.
             if matches!(
                 template_const_kind,
                 TemplateConstValueKind::RenderableString
             ) {
-                try_fold_template_to_string(
+                let fold_result = try_fold_template_to_string(
                     template,
                     TemplateFinalizationFoldInputs {
                         source_file_scope: context.source_file_scope,
@@ -578,9 +581,29 @@ fn normalize_expression_templates_with_context(
                         template_ir_store: &context.template_ir_store,
                         template_ir_registry: Rc::clone(&context.template_ir_registry),
                     },
-                )?
-                .folded
-                .map(NormalizedTemplateExpression::Folded)
+                )?;
+
+                match fold_result.disposition {
+                    TemplateFinalizationFoldDisposition::Folded => {
+                        let folded = fold_result.folded.ok_or_else(|| {
+                            CompilerError::compiler_error(
+                                "Renderable template folding completed without folded output.",
+                            )
+                        })?;
+                        Some(NormalizedTemplateExpression::Folded(folded))
+                    }
+
+                    TemplateFinalizationFoldDisposition::RuntimeHandoffRequired => {
+                        materialize_runtime_template_handoff_for_hir(
+                            template,
+                            context,
+                            &final_classification,
+                            reactive_template_metadata_from_current_store(template, context)?,
+                        )?
+                    }
+
+                    TemplateFinalizationFoldDisposition::NotFoldable => None,
+                }
             } else {
                 // Nested helper-owned contribution structure can be legal inside wrapper
                 // templates. Reject only when this expression's final value itself is a
@@ -1039,9 +1062,7 @@ fn materialize_runtime_template_handoff_for_hir(
     // not by the HIR runtime-template path.
     if matches!(
         classification.const_value_kind,
-        TemplateConstValueKind::RenderableString
-            | TemplateConstValueKind::LoopControlSignal
-            | TemplateConstValueKind::SlotInsertHelper
+        TemplateConstValueKind::LoopControlSignal | TemplateConstValueKind::SlotInsertHelper
     ) {
         return Ok(None);
     }

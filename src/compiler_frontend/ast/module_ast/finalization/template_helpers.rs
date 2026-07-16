@@ -13,9 +13,8 @@ use crate::compiler_frontend::ast::templates::template_folding::{
     TemplateEmission, TemplateFoldContext,
 };
 use crate::compiler_frontend::ast::templates::tir::{
-    TemplateIrRegistry, TemplateIrStore, TemplateTirPhase, TirFoldCache, TirView,
-    classify_effective_tir_view_template, fold_tir_view, fold_tir_view_read_only,
-    tir_view_is_read_only_fold_safe,
+    PreparedTirViewFold, TemplateIrRegistry, TemplateIrStore, TemplateTirPhase, TirFoldCache,
+    TirView, classify_effective_tir_view_template, fold_tir_view_prepared, prepare_tir_view_fold,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
@@ -35,7 +34,9 @@ use std::sync::Arc;
 /// WHY: This pattern is repeated in both AST node and module constant
 /// normalization. Consolidating it ensures consistent folding behavior.
 ///
-/// Returns `None` if the template is not foldable (NonConst or SlotInsertHelper).
+/// The result explicitly records when preparation found a semantic runtime
+/// fallback. Callers must route that disposition through the owned handoff
+/// materializer instead of inferring it from `TemplateConstValueKind`.
 pub(super) fn try_fold_template_to_string(
     template: &Template,
     mut fold_inputs: TemplateFinalizationFoldInputs<'_, '_>,
@@ -98,6 +99,15 @@ fn fold_registry_backed_template_to_string(
         reference.overlay_set_id,
     )?;
 
+    // Complete authority validation and view-native preparation before making
+    // any semantic fallback decision. The preparation proof is tied to this
+    // exact root, phase, overlay set, and store owner.
+    increment_ast_counter(AstCounter::TirReadOnlyFoldAttempts);
+    let fold_preparation: PreparedTirViewFold = {
+        let store_borrow = fold_inputs.template_ir_store.borrow();
+        prepare_tir_view_fold(&view, &store_borrow, fold_inputs.string_table)?
+    };
+
     // Classification and folding must observe the same effective overlays.
     // Non-const and helper-only shapes stop here without entering the fold
     // walker. Renderable slots with no contribution remain valid and fold to
@@ -116,28 +126,33 @@ fn fold_registry_backed_template_to_string(
             return Ok(TemplateFinalizationFoldResult {
                 folded: None,
                 const_value_kind: template_const_kind,
+                disposition: TemplateFinalizationFoldDisposition::NotFoldable,
             });
         }
 
         TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {}
     }
 
-    // --- Read-only fold path (Phase 3A) ---
+    // --- Prepared fold path ---
     //
-    // Attempt to fold without cloning the store. The safety check verifies
-    // the structural tree can be folded read-only: no conditional child
-    // wrappers, no overlays, no reactive subscriptions, no runtime slot
-    // plans. When the check passes, the fold walker only reads structural
-    // nodes and never pushes synthetic wrapper nodes, so the live module
-    // store can be borrowed directly instead of cloned.
+    // Attempt to fold without cloning the store. The preparation proof covers
+    // the exact structural and overlay shape, rejecting runtime plans,
+    // reactive content, and unsupported wrapper/slot paths. A read-only proof
+    // additionally guarantees that the fold walker only reads the live store
+    // and never pushes synthetic wrapper nodes.
     //
     // The fold context retains the registry so store-qualified child references
     // keep their exact overlay identity and can cross into registered stores.
-    increment_ast_counter(AstCounter::TirReadOnlyFoldAttempts);
-    let read_only_safe = {
-        let store_borrow = fold_inputs.template_ir_store.borrow();
-        tir_view_is_read_only_fold_safe(&view, &store_borrow)?
-    };
+    let read_only_safe = fold_preparation.read_only_safe();
+
+    if !fold_preparation.fold_eligible() {
+        increment_ast_counter(AstCounter::TirReadOnlyFoldFallbacks);
+        return Ok(TemplateFinalizationFoldResult {
+            folded: None,
+            const_value_kind: template_const_kind,
+            disposition: TemplateFinalizationFoldDisposition::RuntimeHandoffRequired,
+        });
+    }
 
     if read_only_safe {
         let store = fold_inputs.template_ir_store.borrow();
@@ -151,7 +166,7 @@ fn fold_registry_backed_template_to_string(
             Some(Rc::clone(&registry)),
         );
 
-        let result = fold_tir_view_read_only(&view, &store, &mut fold_context)?;
+        let result = fold_tir_view_prepared(&view, &store, &mut fold_context, fold_preparation)?;
         let folded = template_emission_to_string_id(result, &mut fold_context)?;
         increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
         increment_ast_counter(AstCounter::TirReadOnlyFoldSuccesses);
@@ -159,6 +174,7 @@ fn fold_registry_backed_template_to_string(
         return Ok(TemplateFinalizationFoldResult {
             folded: Some(folded),
             const_value_kind: template_const_kind,
+            disposition: TemplateFinalizationFoldDisposition::Folded,
         });
     }
 
@@ -173,14 +189,29 @@ fn fold_registry_backed_template_to_string(
         fold_inputs.template_const_loop_iteration_limit,
         Some(Rc::clone(&registry)),
     );
-    let result = fold_tir_view(&view, &store, &mut fold_context)?;
+    let result = fold_tir_view_prepared(&view, &store, &mut fold_context, fold_preparation)?;
     let folded = template_emission_to_string_id(result, &mut fold_context)?;
     increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
     increment_ast_counter(AstCounter::TirRegistryBackedFoldSuccesses);
     Ok(TemplateFinalizationFoldResult {
         folded: Some(folded),
         const_value_kind: template_const_kind,
+        disposition: TemplateFinalizationFoldDisposition::Folded,
     })
+}
+
+/// Semantic outcome of finalization-time folding preparation.
+///
+/// WHAT: distinguishes a folded string from a valid runtime template that
+///       needs owned HIR handoff materialization and from non-foldable helper
+///       or runtime shapes.
+/// WHY: `TemplateConstValueKind` describes template shape, while preparation
+///      owns the decision about whether the fold proof is semantically usable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TemplateFinalizationFoldDisposition {
+    Folded,
+    RuntimeHandoffRequired,
+    NotFoldable,
 }
 
 /// Classification and optional folded output from one authoritative TIR view.
@@ -191,6 +222,7 @@ fn fold_registry_backed_template_to_string(
 pub(super) struct TemplateFinalizationFoldResult {
     pub(super) folded: Option<StringId>,
     pub(super) const_value_kind: TemplateConstValueKind,
+    pub(super) disposition: TemplateFinalizationFoldDisposition,
 }
 
 fn template_emission_to_string_id(

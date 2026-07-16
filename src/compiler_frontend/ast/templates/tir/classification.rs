@@ -42,6 +42,7 @@ use crate::compiler_frontend::ast::templates::tir::overlays::{
     TemplateOverlaySetId, TirSlotResolutionKind,
 };
 use crate::compiler_frontend::ast::templates::tir::refs::{TemplateRef, TemplateTirChildReference};
+use crate::compiler_frontend::ast::templates::tir::registry::TemplateIrRegistry;
 use crate::compiler_frontend::ast::templates::tir::store::TemplateIrStore;
 use crate::compiler_frontend::ast::templates::tir::view::{TemplateTirPhase, TirView};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -71,8 +72,34 @@ struct TirViewConstEvaluationContext<'view, 'store> {
     view: TirView<'view>,
     store: &'store TemplateIrStore,
     string_table: &'view StringTable,
+    expression_overlay_stack: Vec<TemplateOverlaySetId>,
     visiting_templates: HashSet<TemplateRef>,
     string_function_child_policy: StringFunctionChildConstPolicy,
+}
+
+impl<'view, 'store> TirViewConstEvaluationContext<'view, 'store> {
+    /// Resolves one expression site through the active root-first overlay stack.
+    ///
+    /// WHAT: delegates expression lookup to the registry owner while the
+    ///       current view remains responsible for slot and wrapper dimensions.
+    /// WHY: nested same-store views can change those dimensions without
+    ///       discarding an outer finalized root expression override.
+    fn effective_expression_for_site(
+        &self,
+        site_id: ExpressionSiteId,
+    ) -> Result<Option<&'view Expression>, TemplateError> {
+        let registry: &TemplateIrRegistry = self.view.registry_ref();
+        Ok(registry.expression_for_overlay_stack(&self.expression_overlay_stack, site_id)?)
+    }
+
+    fn expression_stack_with_overlay(
+        &self,
+        overlay_set_id: TemplateOverlaySetId,
+    ) -> Vec<TemplateOverlaySetId> {
+        let mut stack = self.expression_overlay_stack.clone();
+        stack.push(overlay_set_id);
+        stack
+    }
 }
 
 // -------------------------
@@ -688,6 +715,7 @@ fn tir_view_template_is_const_evaluable_value(
         view: view.clone(),
         store,
         string_table,
+        expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
     };
@@ -711,10 +739,38 @@ pub(crate) fn tir_view_subtree_is_const_evaluable_value(
     node_id: TemplateIrNodeId,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
+    let expression_overlay_stack = [view.overlay_set_id()];
+    tir_view_subtree_is_const_evaluable_value_with_expression_stack(
+        view,
+        store,
+        string_table,
+        node_id,
+        loop_binding_paths,
+        &expression_overlay_stack,
+    )
+}
+
+/// Checks one TIR subtree with an explicit root-first expression-overlay stack.
+///
+/// WHAT: uses the caller's active expression context while retaining this
+///       module's effective-view traversal for branch selectors, loop headers,
+///       child templates, and nested expression templates.
+/// WHY: wrapper eligibility can enter a child view without discarding an outer
+///      finalized root override. Folding and eligibility must resolve the same
+///      effective expression at every wrapper boundary.
+pub(crate) fn tir_view_subtree_is_const_evaluable_value_with_expression_stack(
+    view: &TirView<'_>,
+    store: &TemplateIrStore,
+    string_table: &StringTable,
+    node_id: TemplateIrNodeId,
+    loop_binding_paths: &[InternedPath],
+    expression_overlay_stack: &[TemplateOverlaySetId],
+) -> Result<bool, TemplateError> {
     let mut context = TirViewConstEvaluationContext {
         view: view.clone(),
         store,
         string_table,
+        expression_overlay_stack: expression_overlay_stack.to_vec(),
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::Strict,
     };
@@ -734,6 +790,7 @@ pub(crate) fn tir_view_expression_is_const_evaluable_value_with_bindings(
         view: view.clone(),
         store,
         string_table,
+        expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
     };
@@ -753,6 +810,7 @@ pub(crate) fn tir_view_option_capture_presence_is_const_decidable(
         view: view.clone(),
         store,
         string_table,
+        expression_overlay_stack: vec![view.overlay_set_id()],
         visiting_templates: HashSet::new(),
         string_function_child_policy: StringFunctionChildConstPolicy::StructuralHeadFunction,
     };
@@ -810,20 +868,16 @@ fn tir_view_child_template_is_const_evaluable_value(
 /// Follows one store-qualified child through its exact registry view.
 ///
 /// Same-store children reuse the active store borrow. Foreign children borrow
-/// their registered store for the read-only classification walk. Both paths
-/// preserve the original root, phase and overlay identity without rebuilding
-/// template content.
+/// their registered store for the read-only classification walk. Composed-or-
+/// later references preserve their exact view identity; below-Composed
+/// references intentionally remain structural and do not consume their
+/// recorded overlay.
 fn tir_view_qualified_child_is_const_evaluable_value(
     context: &mut TirViewConstEvaluationContext<'_, '_>,
     reference: TemplateTirChildReference,
     expected_store_owner: Option<&Arc<super::store::TemplateIrStoreOwner>>,
     loop_binding_paths: &[InternedPath],
 ) -> Result<bool, TemplateError> {
-    let child_view =
-        context
-            .view
-            .child_view(reference.root, reference.phase, reference.overlay_set_id)?;
-
     if reference.root.store_id == context.store.store_id() {
         if let Some(expected_store_owner) = expected_store_owner
             && !Arc::ptr_eq(expected_store_owner, &context.store.owner())
@@ -847,7 +901,29 @@ fn tir_view_qualified_child_is_const_evaluable_value(
             return Ok(true);
         }
 
+        // Parsed children are structural shortcuts. Their recorded overlay is
+        // not authoritative yet, so keep the active parent view and expression
+        // stack while descending instead of consuming child dimensions.
+        if !reference.phase.is_at_least(TemplateTirPhase::Composed) {
+            return tir_view_child_template_is_const_evaluable_value(
+                context,
+                reference.root,
+                child_root,
+                loop_binding_paths,
+            );
+        }
+
+        let child_view =
+            context
+                .view
+                .child_view(reference.root, reference.phase, reference.overlay_set_id)?;
+        let child_expression_overlay_stack =
+            context.expression_stack_with_overlay(reference.overlay_set_id);
         let parent_view = std::mem::replace(&mut context.view, child_view);
+        let parent_expression_overlay_stack = std::mem::replace(
+            &mut context.expression_overlay_stack,
+            child_expression_overlay_stack,
+        );
         let result = tir_view_child_template_is_const_evaluable_value(
             context,
             reference.root,
@@ -855,19 +931,37 @@ fn tir_view_qualified_child_is_const_evaluable_value(
             loop_binding_paths,
         );
         context.view = parent_view;
+        context.expression_overlay_stack = parent_expression_overlay_stack;
         return result;
     }
 
-    let child_store = context
-        .view
-        .registry_ref()
-        .store(reference.root.store_id)
+    let registry = context.view.registry_ref();
+    let child_store_handle = registry
+        .store_handle(reference.root.store_id)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
                 "TIR const classification child store {} is not registered.",
                 reference.root.store_id
             ))
         })?;
+
+    // A foreign below-Composed child starts a new structural boundary. Use the
+    // canonical empty overlay only for that fresh view; never resolve the
+    // child's recorded overlay until its phase makes that dimension authoritative.
+    let child_view = if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+        context
+            .view
+            .child_view(reference.root, reference.phase, reference.overlay_set_id)?
+    } else {
+        TirView::new(
+            registry,
+            reference.root,
+            reference.phase,
+            TemplateOverlaySetId::empty(),
+        )?
+    };
+
+    let child_store = child_store_handle.borrow();
     if let Some(expected_store_owner) = expected_store_owner
         && !Arc::ptr_eq(expected_store_owner, &child_store.owner())
     {
@@ -893,6 +987,11 @@ fn tir_view_qualified_child_is_const_evaluable_value(
         view: child_view,
         store: &child_store,
         string_table: context.string_table,
+        expression_overlay_stack: if reference.phase.is_at_least(TemplateTirPhase::Composed) {
+            vec![reference.overlay_set_id]
+        } else {
+            Vec::new()
+        },
         visiting_templates,
         string_function_child_policy: context.string_function_child_policy,
     };
@@ -1129,7 +1228,6 @@ fn tir_view_tree_is_const_evaluable_value(
             ..
         } => {
             let effective_expression = context
-                .view
                 .effective_expression_for_site(site_id)?
                 .unwrap_or(expression.as_ref());
 
@@ -1175,8 +1273,8 @@ fn tir_view_tree_is_const_evaluable_value(
 
         TemplateIrNodeKind::BranchChain { branches, fallback } => {
             for branch in branches {
-                let selector = effective_branch_selector_for_view(
-                    &context.view,
+                let selector = effective_branch_selector_for_context(
+                    context,
                     &branch.selector,
                     branch.selector_site_id,
                 )?;
@@ -1218,7 +1316,7 @@ fn tir_view_tree_is_const_evaluable_value(
             ..
         } => {
             let effective_header =
-                effective_loop_header_for_view(&context.view, &header, header_sites)?;
+                effective_loop_header_for_context(context, &header, header_sites)?;
             if !tir_view_loop_header_is_const_evaluable(context, &effective_header)? {
                 return Ok(false);
             }
@@ -1242,6 +1340,84 @@ fn tir_view_tree_is_const_evaluable_value(
 
         TemplateIrNodeKind::RuntimeSlotSite { .. } => Ok(false),
     }
+}
+
+fn effective_branch_selector_for_context(
+    context: &TirViewConstEvaluationContext<'_, '_>,
+    selector: &TemplateBranchSelector,
+    site_id: ExpressionSiteId,
+) -> Result<TemplateBranchSelector, TemplateError> {
+    let Some(expression) = context.effective_expression_for_site(site_id)? else {
+        return Ok(selector.clone());
+    };
+
+    Ok(match selector {
+        TemplateBranchSelector::Bool(_) => TemplateBranchSelector::Bool(expression.clone()),
+        TemplateBranchSelector::OptionPresentCapture { pattern, .. } => {
+            TemplateBranchSelector::OptionPresentCapture {
+                scrutinee: expression.clone(),
+                pattern: pattern.clone(),
+            }
+        }
+    })
+}
+
+fn effective_loop_header_for_context(
+    context: &TirViewConstEvaluationContext<'_, '_>,
+    header: &TemplateLoopHeader,
+    header_sites: TemplateLoopHeaderExpressionSites,
+) -> Result<TemplateLoopHeader, TemplateError> {
+    Ok(match (header, header_sites) {
+        (
+            TemplateLoopHeader::Conditional { condition },
+            TemplateLoopHeaderExpressionSites::Conditional { condition: site_id },
+        ) => TemplateLoopHeader::Conditional {
+            condition: Box::new(
+                context
+                    .effective_expression_for_site(site_id)?
+                    .cloned()
+                    .unwrap_or_else(|| condition.as_ref().clone()),
+            ),
+        },
+
+        (
+            TemplateLoopHeader::Range { bindings, range },
+            TemplateLoopHeaderExpressionSites::Range { start, end, step },
+        ) => {
+            let mut range = range.as_ref().clone();
+            if let Some(expression) = context.effective_expression_for_site(start)? {
+                range.start = expression.clone();
+            }
+            if let Some(expression) = context.effective_expression_for_site(end)? {
+                range.end = expression.clone();
+            }
+            if let Some(step_site_id) = step
+                && let Some(expression) = context.effective_expression_for_site(step_site_id)?
+            {
+                range.step = Some(expression.clone());
+            }
+
+            TemplateLoopHeader::Range {
+                bindings: bindings.clone(),
+                range: Box::new(range),
+            }
+        }
+
+        (
+            TemplateLoopHeader::Collection { bindings, iterable },
+            TemplateLoopHeaderExpressionSites::Collection { iterable: site_id },
+        ) => TemplateLoopHeader::Collection {
+            bindings: bindings.clone(),
+            iterable: Box::new(
+                context
+                    .effective_expression_for_site(site_id)?
+                    .cloned()
+                    .unwrap_or_else(|| iterable.as_ref().clone()),
+            ),
+        },
+
+        _ => header.clone(),
+    })
 }
 
 pub(crate) fn effective_branch_selector_for_view(

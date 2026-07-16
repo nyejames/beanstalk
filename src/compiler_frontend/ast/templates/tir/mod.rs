@@ -202,6 +202,8 @@ pub(crate) use summary::TemplateIrSummary;
 // Registry-qualified handles used by production TIR registry and view consumers.
 #[cfg(test)]
 pub(crate) use refs::TemplateTirChildReference;
+#[cfg(test)]
+pub(crate) use refs::TemplateWrapperSetRef;
 pub(crate) use refs::{TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateWrapperReference};
 pub(crate) use wrapper_sets::{attach_wrapper_context_overlay, wrapper_reference_for_template};
 
@@ -217,7 +219,11 @@ pub(crate) use registry::{RegisteredTemplateIrStore, TemplateIrRegistry};
 // template creation and finalization.
 pub(crate) use overlays::{TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay};
 #[cfg(test)]
-pub(crate) use overlays::{TirSlotResolution, TirSlotResolutionOverlay};
+pub(crate) use overlays::{
+    TirSlotResolution, TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
+};
+#[cfg(test)]
+pub(crate) use store::TemplateWrapperSet;
 
 // Builder: narrow parser-facing facade for direct TIR emission.
 pub(crate) use builder::TemplateIrBuilder;
@@ -266,11 +272,15 @@ pub(crate) use classification::{
 // TirView-aware fold entrypoint is used internally by recursive child folding
 // and by production template folding paths.
 pub(crate) use fold::fold_tir_view;
+pub(crate) use fold::fold_tir_view_prepared;
+#[cfg(test)]
 pub(crate) use fold::fold_tir_view_read_only;
 pub(crate) use fold_safety::tir_view_is_empty_overlay_linear_fold_safe;
 #[cfg(test)]
 pub(crate) use fold_safety::tir_view_is_expression_overlay_linear_fold_safe;
+#[cfg(test)]
 pub(crate) use fold_safety::tir_view_is_read_only_fold_safe;
+pub(crate) use fold_safety::{PreparedTirViewFold, prepare_tir_view_fold};
 
 // Fold cache: AST-phase-local cache for TIR fold results. The primary cache is
 // production state used by template folding and HIR handoff.

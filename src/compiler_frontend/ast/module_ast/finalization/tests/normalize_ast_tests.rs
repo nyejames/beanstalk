@@ -14,11 +14,13 @@ use crate::compiler_frontend::ast::templates::template_control_flow::{
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateIr, TemplateIrBranch, TemplateIrBuilder, TemplateIrNode, TemplateIrNodeKind,
     TemplateIrRegistry, TemplateIrStore, TemplateIrSummary, TemplateLoopHeaderExpressionSites,
-    TemplateNodeRef, TemplateRef, TemplateStoreId, TemplateTirPhase, TemplateTirReference, TirView,
+    TemplateNodeRef, TemplateRef, TemplateSlotPlan, TemplateStoreId, TemplateTirChildReference,
+    TemplateTirPhase, TemplateTirReference, TemplateWrapperReference, TemplateWrapperSet,
+    TemplateWrapperSetRef, TirView,
 };
 use crate::compiler_frontend::ast::templates::tir::{
     TemplateOverlaySet, TemplateOverlaySetId, TirExpressionOverlay, TirSlotResolution,
-    TirSlotResolutionOverlay,
+    TirSlotResolutionOverlay, TirWrapperContext, TirWrapperContextOverlay,
 };
 use crate::compiler_frontend::ast::templates::{
     OwnedRuntimeSlotSiteRenderPiece, OwnedRuntimeTemplateBody, OwnedRuntimeTemplateHandoff,
@@ -104,6 +106,293 @@ fn registered_text_template(
         TemplateType::String,
         SourceLocation::default(),
     )
+}
+
+/// Builds a nested wrapper-context graph whose wrapper references carry their
+/// own exact overlay views. The unsafe variant places a runtime slot plan only
+/// on the nested wrapper reached through the outer wrapper's overlay.
+fn nested_wrapper_finalization_fixture(
+    string_table: &mut StringTable,
+    unsafe_nested_wrapper: bool,
+) -> (
+    Template,
+    Rc<RefCell<TemplateIrStore>>,
+    Rc<RefCell<TemplateIrRegistry>>,
+) {
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let (
+        parent_template_id,
+        parent_occurrence_id,
+        outer_wrapper_set_id,
+        nested_occurrence_id,
+        outer_expression_site_id,
+        inner_wrapper_set_id,
+    ) = {
+        let mut store = template_ir_store.borrow_mut();
+
+        let child_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let text = string_table.intern("parent");
+            let text_node = builder.push_text_node(
+                text,
+                "parent".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(vec![text_node], SourceLocation::default());
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            )
+        };
+
+        let nested_child_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let text = string_table.intern("nested");
+            let text_node = builder.push_text_node(
+                text,
+                "nested".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(vec![text_node], SourceLocation::default());
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            )
+        };
+
+        let inner_wrapper_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let before = string_table.intern("inner-before");
+            let after = string_table.intern("inner-after");
+            let before_node = builder.push_text_node(
+                before,
+                "inner-before".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let slot_node = builder.push_slot_node(SlotKey::Default, SourceLocation::default());
+            let after_node = builder.push_text_node(
+                after,
+                "inner-after".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(
+                vec![before_node, slot_node, after_node],
+                SourceLocation::default(),
+            );
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            )
+        };
+
+        if unsafe_nested_wrapper {
+            let runtime_slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+                location: SourceLocation::default(),
+                contribution_sources: Vec::new(),
+                slot_sites: Vec::new(),
+            });
+            store.templates[inner_wrapper_template_id.index()].runtime_slot_plan =
+                Some(runtime_slot_plan_id);
+        }
+
+        let inner_wrapper_reference = TemplateWrapperReference::new(
+            store.qualify_template_ref(inner_wrapper_template_id),
+            TemplateTirPhase::Finalized,
+            empty_overlay_set_id,
+        );
+        let inner_wrapper_set_id = store.push_wrapper_set(TemplateWrapperSet {
+            wrappers: vec![inner_wrapper_reference],
+        });
+
+        let (outer_wrapper_template_id, nested_child_node, outer_dynamic_node) = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let outer_dynamic_text = string_table.intern("outer-structural");
+            let outer_dynamic_node = builder.push_dynamic_expression_node(
+                Expression::string_slice(
+                    outer_dynamic_text,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableOwned,
+                ),
+                TemplateSegmentOrigin::Body,
+                None,
+                SourceLocation::default(),
+            );
+            let nested_child_node = builder.push_child_template_node_with_reference(
+                TemplateTirChildReference::same_store(
+                    nested_child_template_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    empty_overlay_set_id,
+                ),
+                SourceLocation::default(),
+            );
+            let slot_node = builder.push_slot_node(SlotKey::Default, SourceLocation::default());
+            let after = string_table.intern("outer-after");
+            let after_node = builder.push_text_node(
+                after,
+                "outer-after".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(
+                vec![outer_dynamic_node, nested_child_node, slot_node, after_node],
+                SourceLocation::default(),
+            );
+            let template_id = builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            );
+            (template_id, nested_child_node, outer_dynamic_node)
+        };
+        let nested_occurrence_id = match &store
+            .get_node(nested_child_node)
+            .expect("nested child node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::ChildTemplate { occurrence_id, .. } => *occurrence_id,
+            _ => panic!("expected nested child-template node"),
+        };
+        let outer_expression_site_id = match &store
+            .get_node(outer_dynamic_node)
+            .expect("outer dynamic node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::DynamicExpression { site_id, .. } => *site_id,
+            _ => panic!("expected outer dynamic-expression node"),
+        };
+        let outer_wrapper_reference = TemplateWrapperReference::new(
+            store.qualify_template_ref(outer_wrapper_template_id),
+            TemplateTirPhase::Finalized,
+            empty_overlay_set_id,
+        );
+        let outer_wrapper_set_id = store.push_wrapper_set(TemplateWrapperSet {
+            wrappers: vec![outer_wrapper_reference],
+        });
+
+        let parent_child_node = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            builder.push_child_template_node_with_reference(
+                TemplateTirChildReference::same_store(
+                    child_template_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    empty_overlay_set_id,
+                ),
+                SourceLocation::default(),
+            )
+        };
+        let parent_occurrence_id = match &store
+            .get_node(parent_child_node)
+            .expect("parent child node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::ChildTemplate { occurrence_id, .. } => *occurrence_id,
+            _ => panic!("expected parent child-template node"),
+        };
+        let parent_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let root =
+                builder.push_sequence_node(vec![parent_child_node], SourceLocation::default());
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            )
+        };
+
+        (
+            parent_template_id,
+            parent_occurrence_id,
+            outer_wrapper_set_id,
+            nested_occurrence_id,
+            outer_expression_site_id,
+            inner_wrapper_set_id,
+        )
+    };
+
+    let nested_context_overlay_id =
+        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+            contexts: vec![(
+                nested_occurrence_id,
+                TirWrapperContext {
+                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
+                        store_id,
+                        inner_wrapper_set_id,
+                    )),
+                    ..TirWrapperContext::default()
+                },
+            )],
+        });
+    let outer_expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            outer_expression_site_id,
+            Box::new(Expression::string_slice(
+                string_table.intern("outer-overlay"),
+                SourceLocation::default(),
+                ValueMode::ImmutableOwned,
+            )),
+        )],
+    });
+    let outer_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(outer_expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: Some(nested_context_overlay_id),
+    });
+    template_ir_store.borrow_mut().wrapper_sets[outer_wrapper_set_id.index()].wrappers[0]
+        .overlay_set_id = outer_overlay_set_id;
+
+    let parent_context_overlay_id =
+        registry.allocate_wrapper_context_overlay(TirWrapperContextOverlay {
+            contexts: vec![(
+                parent_occurrence_id,
+                TirWrapperContext {
+                    inherited_wrapper_set: Some(TemplateWrapperSetRef::new(
+                        store_id,
+                        outer_wrapper_set_id,
+                    )),
+                    ..TirWrapperContext::default()
+                },
+            )],
+        });
+    let parent_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: None,
+        slot_resolution: None,
+        wrapper_context: Some(parent_context_overlay_id),
+    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, parent_template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: parent_overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    );
+
+    (template, template_ir_store, Rc::new(RefCell::new(registry)))
 }
 
 fn location_at(line: i32, column: i32) -> SourceLocation {
@@ -772,6 +1061,611 @@ fn finalization_fold_uses_finalized_expression_overlay_view() {
         test_read_ast_counter(AstCounter::TirStoreCloneFinalization),
         0,
         "finalized expression-overlay folding must borrow the live store instead of cloning it"
+    );
+}
+
+#[test]
+fn finalization_classifies_root_expression_overlay_through_nested_same_store_children() {
+    let mut string_table = StringTable::new();
+    let dynamic_text = string_table.intern("root-overlay-dynamic");
+    let branch_text = string_table.intern("root-overlay-branch");
+    let loop_text = string_table.intern("root-overlay-loop");
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+
+    let (root_template_id, dynamic_site_id, selector_site_id, loop_site_id) = {
+        let mut store = template_ir_store.borrow_mut();
+        let (leaf_template_id, dynamic_node, branch_node, loop_node) = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+
+            let dynamic_node = builder.push_dynamic_expression_node(
+                Expression::reference_with_type_id(
+                    InternedPath::from_single_str("nested_dynamic", &mut string_table),
+                    DataType::StringSlice,
+                    builtin_type_ids::STRING,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableReference,
+                    ConstRecordState::RuntimeValue,
+                ),
+                TemplateSegmentOrigin::Body,
+                None,
+                SourceLocation::default(),
+            );
+            let branch_text_node = builder.push_text_node(
+                branch_text,
+                "root-overlay-branch".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let branch_node = builder.push_branch_chain_node(
+                vec![TemplateIrBranch::new(
+                    TemplateBranchSelector::Bool(Expression::reference_with_type_id(
+                        InternedPath::from_single_str("nested_selector", &mut string_table),
+                        DataType::Bool,
+                        builtin_type_ids::BOOL,
+                        SourceLocation::default(),
+                        ValueMode::ImmutableReference,
+                        ConstRecordState::RuntimeValue,
+                    )),
+                    branch_text_node,
+                    SourceLocation::default(),
+                )],
+                None,
+                SourceLocation::default(),
+            );
+            let loop_text_node = builder.push_text_node(
+                loop_text,
+                "root-overlay-loop".len() as u32,
+                TemplateSegmentOrigin::Body,
+                SourceLocation::default(),
+            );
+            let loop_node = builder.push_loop_node(
+                TemplateLoopHeader::Conditional {
+                    condition: Box::new(Expression::reference_with_type_id(
+                        InternedPath::from_single_str("nested_loop", &mut string_table),
+                        DataType::Bool,
+                        builtin_type_ids::BOOL,
+                        SourceLocation::default(),
+                        ValueMode::ImmutableReference,
+                        ConstRecordState::RuntimeValue,
+                    )),
+                },
+                loop_text_node,
+                None,
+                SourceLocation::default(),
+            );
+            let leaf_root = builder.push_sequence_node(
+                vec![dynamic_node, branch_node, loop_node],
+                SourceLocation::default(),
+            );
+            let leaf_template_id = builder.finish_template(
+                leaf_root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            );
+            (leaf_template_id, dynamic_node, branch_node, loop_node)
+        };
+
+        let dynamic_site_id = match &store
+            .get_node(dynamic_node)
+            .expect("dynamic node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::DynamicExpression { site_id, .. } => *site_id,
+            _ => panic!("expected a dynamic-expression node"),
+        };
+        let (selector_site_id, loop_site_id) = match &store
+            .get_node(branch_node)
+            .expect("branch node should exist")
+            .kind
+        {
+            TemplateIrNodeKind::BranchChain { branches, .. } => {
+                let selector_site_id = branches[0].selector_site_id;
+                let loop_site_id = match &store
+                    .get_node(loop_node)
+                    .expect("loop node should exist")
+                    .kind
+                {
+                    TemplateIrNodeKind::Loop {
+                        header_sites: TemplateLoopHeaderExpressionSites::Conditional { condition },
+                        ..
+                    } => *condition,
+                    _ => panic!("expected a conditional loop node"),
+                };
+                (selector_site_id, loop_site_id)
+            }
+            _ => panic!("expected a branch-chain node"),
+        };
+
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let mut descendant_template_id = leaf_template_id;
+        for _ in 0..3 {
+            let child_reference = TemplateTirChildReference::same_store(
+                descendant_template_id,
+                store_id,
+                TemplateTirPhase::Composed,
+                empty_overlay_set_id,
+            );
+            let child_node = builder.push_child_template_node_with_reference(
+                child_reference,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(vec![child_node], SourceLocation::default());
+            descendant_template_id = builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            );
+        }
+
+        (
+            descendant_template_id,
+            dynamic_site_id,
+            selector_site_id,
+            loop_site_id,
+        )
+    };
+
+    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![
+            (
+                dynamic_site_id,
+                Box::new(Expression::string_slice(
+                    dynamic_text,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableOwned,
+                )),
+            ),
+            (
+                selector_site_id,
+                Box::new(Expression::bool(
+                    true,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableOwned,
+                )),
+            ),
+            (
+                loop_site_id,
+                Box::new(Expression::bool(
+                    false,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableOwned,
+                )),
+            ),
+        ],
+    });
+    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, root_template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: root_overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    );
+
+    let folded = try_fold_template_to_string(
+        &template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry: Rc::new(RefCell::new(registry)),
+        },
+    )
+    .expect("root overlay should classify and fold through nested descendants")
+    .folded
+    .expect("root overlay should produce a folded string");
+
+    assert_eq!(
+        string_table.resolve(folded),
+        "root-overlay-dynamicroot-overlay-branch",
+        "dynamic, branch-selector, and loop-header overlays must all reach the nested leaf"
+    );
+}
+
+#[test]
+fn finalization_ignores_parsed_child_overlay_before_later_composed_descendant() {
+    let mut string_table = StringTable::new();
+    let structural_text = string_table.intern("structural");
+    let override_text = string_table.intern("root-override");
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let empty_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let missing_overlay_set_id = TemplateOverlaySetId::new(999);
+
+    let (root_template_id, descendant_site_id) = {
+        let mut store = template_ir_store.borrow_mut();
+        let (descendant_template_id, descendant_site_id) = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let dynamic_node = builder.push_dynamic_expression_node(
+                Expression::string_slice(
+                    structural_text,
+                    SourceLocation::default(),
+                    ValueMode::ImmutableOwned,
+                ),
+                TemplateSegmentOrigin::Body,
+                None,
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(vec![dynamic_node], SourceLocation::default());
+            let template_id = builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            );
+            let site_id = match &store
+                .get_node(dynamic_node)
+                .expect("descendant dynamic node should exist")
+                .kind
+            {
+                TemplateIrNodeKind::DynamicExpression { site_id, .. } => *site_id,
+                _ => panic!("expected descendant dynamic-expression node"),
+            };
+            (template_id, site_id)
+        };
+
+        let parsed_child_template_id = {
+            let mut builder = TemplateIrBuilder::new(&mut store);
+            let child_node = builder.push_child_template_node_with_reference(
+                TemplateTirChildReference::same_store(
+                    descendant_template_id,
+                    store_id,
+                    TemplateTirPhase::Composed,
+                    empty_overlay_set_id,
+                ),
+                SourceLocation::default(),
+            );
+            let root = builder.push_sequence_node(vec![child_node], SourceLocation::default());
+            builder.finish_template(
+                root,
+                Style::default(),
+                TemplateType::String,
+                TemplateIrSummary::default(),
+                SourceLocation::default(),
+            )
+        };
+
+        let mut builder = TemplateIrBuilder::new(&mut store);
+        let child_node = builder.push_child_template_node_with_reference(
+            TemplateTirChildReference::same_store(
+                parsed_child_template_id,
+                store_id,
+                TemplateTirPhase::Parsed,
+                missing_overlay_set_id,
+            ),
+            SourceLocation::default(),
+        );
+        let root = builder.push_sequence_node(vec![child_node], SourceLocation::default());
+        let root_template_id = builder.finish_template(
+            root,
+            Style::default(),
+            TemplateType::String,
+            TemplateIrSummary::default(),
+            SourceLocation::default(),
+        );
+
+        (root_template_id, descendant_site_id)
+    };
+
+    let expression_overlay_id = registry.allocate_expression_overlay(TirExpressionOverlay {
+        overrides: vec![(
+            descendant_site_id,
+            Box::new(Expression::string_slice(
+                override_text,
+                SourceLocation::default(),
+                ValueMode::ImmutableOwned,
+            )),
+        )],
+    });
+    let root_overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet {
+        expression_overrides: Some(expression_overlay_id),
+        slot_resolution: None,
+        wrapper_context: None,
+    });
+    let template = template_with_reference(
+        TemplateTirReference {
+            root: TemplateRef::new(store_id, root_template_id),
+            store_owner: template_ir_store.borrow().owner(),
+            phase: TemplateTirPhase::Finalized,
+            overlay_set_id: root_overlay_set_id,
+        },
+        TemplateType::String,
+        SourceLocation::default(),
+    );
+
+    let folded = try_fold_template_to_string(
+        &template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry: Rc::new(RefCell::new(registry)),
+        },
+    )
+    .expect("a Parsed child must not consume its missing overlay during finalization")
+    .folded
+    .expect("the composed descendant should remain foldable");
+
+    assert_eq!(
+        folded, override_text,
+        "the finalized root expression overlay must reach the later composed descendant"
+    );
+}
+
+#[test]
+fn finalization_rejects_nested_runtime_wrapper_in_exact_wrapper_overlay() {
+    let mut string_table = StringTable::new();
+    let (template, template_ir_store, template_ir_registry) =
+        nested_wrapper_finalization_fixture(&mut string_table, true);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+
+    let result = try_fold_template_to_string(
+        &template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry,
+        },
+    )
+    .expect("runtime nested wrapper should be a valid non-foldable shape");
+
+    assert!(
+        result.folded.is_none(),
+        "the production safety gate must not fold through a runtime nested wrapper hidden in the exact wrapper overlay"
+    );
+}
+
+#[test]
+fn finalization_keeps_valid_runtime_slot_plan_out_of_folded_string() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let text = string_table.intern("runtime root");
+    let template = registered_text_template(
+        text,
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &string_table,
+    );
+    let template_id = template.tir_reference.root.template_id;
+
+    {
+        let mut store = template_ir_store.borrow_mut();
+        let slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+            location: SourceLocation::default(),
+            contribution_sources: Vec::new(),
+            slot_sites: Vec::new(),
+        });
+        store.templates[template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+    }
+
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let result = try_fold_template_to_string(
+        &template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry: Rc::new(RefCell::new(registry)),
+        },
+    )
+    .expect("valid runtime slot plan should use the handoff path");
+
+    assert!(
+        result.folded.is_none(),
+        "a valid runtime slot plan must not become a folded empty string"
+    );
+    assert!(
+        template_ir_store.borrow().templates[template_id.index()]
+            .runtime_slot_plan
+            .is_some(),
+        "the runtime slot plan must remain available for owned handoff"
+    );
+}
+
+#[test]
+fn finalization_replaces_renderable_runtime_slot_plan_with_owned_handoff() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let text = string_table.intern("runtime handoff");
+    let template = registered_text_template(
+        text,
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &string_table,
+    );
+    let template_id = template.tir_reference.root.template_id;
+
+    {
+        let mut store = template_ir_store.borrow_mut();
+        let slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+            location: SourceLocation::default(),
+            contribution_sources: Vec::new(),
+            slot_sites: Vec::new(),
+        });
+        store.templates[template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+    }
+
+    let mut expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let template_ir_registry = Rc::new(RefCell::new(registry));
+    let mut context = TemplateNormalizationContext {
+        source_file_scope: &source_file_scope,
+        path_format_config: &path_format_config,
+        project_path_resolver: &project_path_resolver,
+        template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        string_table: &mut string_table,
+        template_ir_store: Rc::clone(&template_ir_store),
+        template_ir_registry,
+    };
+
+    normalize_expression_templates(&mut expression, &mut context)
+        .expect("renderable runtime slot plans should use the owned handoff path");
+
+    let ExpressionKind::RuntimeSlotApplicationHandoff(handoff) = expression.kind else {
+        panic!("expected renderable runtime slot plan to become an owned slot handoff");
+    };
+    assert!(
+        handoff.slot_sites.is_empty(),
+        "the owned handoff must retain the valid empty slot plan"
+    );
+    assert!(
+        template_ir_store.borrow().templates[template_id.index()]
+            .runtime_slot_plan
+            .is_some(),
+        "normalization must retain the source runtime slot plan"
+    );
+}
+
+#[test]
+fn module_constant_normalization_rejects_runtime_slot_plan_with_structured_diagnostic() {
+    let mut string_table = StringTable::new();
+    let template_ir_store = Rc::new(RefCell::new(TemplateIrStore::new()));
+    let mut registry = TemplateIrRegistry::new();
+    let store_id = registry.adopt_store(Rc::clone(&template_ir_store));
+    let overlay_set_id = registry.allocate_overlay_set(TemplateOverlaySet::empty());
+    let text = string_table.intern("module constant runtime plan");
+    let template = registered_text_template(
+        text,
+        store_id,
+        overlay_set_id,
+        &template_ir_store,
+        &string_table,
+    );
+    let template_id = template.tir_reference.root.template_id;
+
+    {
+        let mut store = template_ir_store.borrow_mut();
+        let slot_plan_id = store.push_slot_plan(TemplateSlotPlan {
+            location: SourceLocation::default(),
+            contribution_sources: Vec::new(),
+            slot_sites: Vec::new(),
+        });
+        store.templates[template_id.index()].runtime_slot_plan = Some(slot_plan_id);
+    }
+
+    let expression = Expression::template(template, ValueMode::ImmutableOwned);
+    let ExpressionKind::Template(template) = &expression.kind else {
+        panic!("module constant regression must start from a template expression");
+    };
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+    let result = super::super::normalize_constants::normalize_module_constant_template_expression(
+        &expression,
+        template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry: Rc::new(RefCell::new(registry)),
+        },
+    );
+
+    let TemplateNormalizationError::Diagnostic(diagnostic) =
+        result.expect_err("runtime-plan module constants must be rejected structurally")
+    else {
+        panic!(
+            "runtime-plan module constants must not report the old internal fold transformation error"
+        );
+    };
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidTemplateStructure {
+            reason: InvalidTemplateStructureReason::NonFoldableConstTemplate,
+        }
+    ));
+    assert_eq!(
+        diagnostic.primary_location, expression.location,
+        "the established const diagnostic must retain the template source location"
+    );
+}
+
+#[test]
+fn finalization_accepts_supported_nested_wrapper_exact_view() {
+    let mut string_table = StringTable::new();
+    let (template, template_ir_store, template_ir_registry) =
+        nested_wrapper_finalization_fixture(&mut string_table, false);
+    let project_path_resolver = test_project_path_resolver();
+    let path_format_config = PathStringFormatConfig::default();
+    let source_file_scope = InternedPath::new();
+
+    let folded = try_fold_template_to_string(
+        &template,
+        TemplateFinalizationFoldInputs {
+            source_file_scope: &source_file_scope,
+            path_format_config: &path_format_config,
+            project_path_resolver: &project_path_resolver,
+            string_table: &mut string_table,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+            template_ir_store: &template_ir_store,
+            template_ir_registry,
+        },
+    )
+    .expect("supported nested wrapper should fold through the exact views")
+    .folded
+    .expect("supported nested wrapper should produce const output");
+
+    assert_eq!(
+        string_table.resolve(folded),
+        "outer-overlayinner-beforenestedinner-afterparentouter-after",
+        "supported exact-view wrapper traversal must preserve fold output and wrapper order"
     );
 }
 
