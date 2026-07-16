@@ -27,7 +27,7 @@ This document is not an implementation-status report. Use
 `docs/src/docs/progress/#page.bst` for current support, partial coverage,
 experimental paths, and major gaps.
 
-A task-oriented split of this guide is maintained under
+Focused memory references are maintained under
 `docs/src/docs/codebase/memory-management/`. New work should read and update
 those pages.
 
@@ -55,8 +55,7 @@ Use the split pages for task-focused reading:
 
 - `docs/language-overview.md` for user-facing syntax such as `~`, explicit
   copies, and no-shadowing.
-- `docs/src/docs/codebase/compiler-design/overview.bd` for compiler stage ownership and where
-  borrow validation fits in the pipeline.
+- `docs/compiler-design-overview.md` for compiler stage ownership and where borrow validation fits in the pipeline.
 - `docs/src/docs/progress/#page.bst` for current implementation status.
 
 Implementation map:

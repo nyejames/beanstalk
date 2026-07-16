@@ -20,3 +20,4 @@ Shared reads, explicit copies and `~` access.
 ## Read next
 
 - `docs/src/docs/codebase/memory-management/access-and-aliasing/access-and-aliasing.bd`
+- `docs/compiler-design-overview.md`, especially Stage 4 and Stage 5

@@ -39,13 +39,16 @@ RELEVANT_DOCS_THIS_SLICE:
 - `docs/src/docs/codebase/style-guide/style-guide.bd`
 - `docs/src/docs/codebase/style-guide/testing.bd`
 - `docs/src/docs/codebase/style-guide/validation.bd`
-- `docs/src/docs/codebase/compiler-design/overview.bd`
-- `docs/src/docs/codebase/compiler-design/stages/project-structure/project-structure.bd`
-- `docs/src/docs/codebase/compiler-design/imports-packages-and-bindings/imports-packages-and-bindings.bd`
-- `docs/src/docs/codebase/compiler-design/build-system-and-frontend-boundary/build-system-and-frontend-boundary.bd`
-- `docs/src/docs/codebase/compiler-design/parallelism-and-determinism/parallelism-and-determinism.bd`
-- `docs/src/docs/codebase/compiler-design/stages/hir-generation/hir-generation.bd`
-- `docs/src/docs/codebase/compiler-design/stages/borrow-validation/borrow-validation.bd`
+- `docs/compiler-design-overview.md`, especially:
+  - Architectural invariants
+  - Build-system and frontend boundary
+  - Diagnostics, path identity and deterministic aggregation
+  - Type identity contract
+  - Module, package, import and binding contract
+  - Stage 0: Project structure
+  - Stage 5: HIR generation
+  - Stage 6: Borrow validation
+  - Stage 7: Backend lowering
 - `docs/language-overview.md` because syntax, module semantics, imports, diagnostics and tests are changed
 - `docs/src/docs/codebase/memory-management/borrow-validation/borrow-validation.bd` because exported call summaries and cross-module borrow behavior are changed
 - `docs/src/docs/codebase/memory-management/overview.bd`
@@ -117,7 +120,7 @@ VALIDATION_STATE:
 
 DOCS_IMPACT:
 - progress matrix needed: yes, for module roots, support packages, import semantics, compile-once artifacts, package facades, generics and deferred incremental/output sharing
-- other docs stale: `docs/language-overview.md`, project-structure pages, package/import pages, getting-started examples, codebase compiler-design pages and the Wasm plan's current-state section
+- other docs stale: `docs/compiler-design-overview.md`, `docs/language-overview.md`, project-structure pages, package/import pages, getting-started examples and the Wasm plan's current-state section
 - authorized docs updates: yes. The user explicitly requested complete documentation alignment as part of this plan.
 
 NEXT_ACTION:

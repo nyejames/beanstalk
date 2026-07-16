@@ -189,3 +189,5 @@ programs or unlock more optimisation while preserving existing semantics.
 - @../ (Memory management): core memory contract
 - @../access-and-aliasing (Access and aliasing): source access semantics
 - @../ownership-and-drops (Ownership and drops): consumers of move and drop facts
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler HIR generation): validated HIR input
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler borrow validation): module ownership and exported call effects

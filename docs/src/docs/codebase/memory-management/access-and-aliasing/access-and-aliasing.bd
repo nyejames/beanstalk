@@ -217,3 +217,5 @@ no-shadowing rule remains in `docs/language-overview.md`.
 - @../borrow-validation (Borrow validation): how shared and exclusive access are checked
 - @../ownership-and-drops (Ownership and drops): inferred transfer after access validation
 - @https://github.com/nyejames/beanstalk/blob/main/docs/language-overview.md (Language overview): full source syntax
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler AST construction): source access and coercion ownership
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler HIR generation): places and hidden mutable-rvalue locals

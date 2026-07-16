@@ -22,29 +22,45 @@ Completion means one authoritative TIR path from parsing through AST finalizatio
 ACTIVE_PLAN: `docs/roadmap/plans/final-tir-completion-plan.md`
 STATUS: active
 CURRENT_SLICE: Slice 3E3c2e - propagate folded-child authority and close lazy fold validation gaps
-LAST_ACCEPTED_COMMIT: `61ecabed1`; Slice 3E3c2d is validated and awaiting its checkpoint commit
+LAST_ACCEPTED_COMMIT: `c1ecc2c58`
 BRANCH: `main`
-WORKTREE: `main`; intended Slice 3E3c2d source, focused-test and plan changes only
+WORKTREE: `main`; unaccepted Slice 3E3c2e source, focused-test and plan changes plus unrelated user-owned `style-guide.bd` edits to preserve and ignore
 REQUIRED_RELOADS: startup files, this plan, relevant template/language references and current source/diff
 RELEVANT_CONTEXT_NOW:
 - docs: compiler AST template/TIR contract, focused template language references, testing and validation standards
-- code: `tir/handoff_materialization.rs::materialize_folded_child_text`, `tir/fold.rs` direct fold boundaries, output-size estimation and focused fold/handoff authority tests
-- below-Composed roots, foreign stores, missing fold context, active bindings, unsupported shapes and genuine non-const diagnostics remain structural fold fallbacks. Missing current-store roots, nodes, templates, wrappers and contradictory authority must propagate even when a branch or loop would emit no output.
+- code: `tir/fold_safety.rs::PreparedTirViewFold` and virtual-wrapper eligibility, `tir/fold.rs` prepared entry plus foreign child recursion and focused finalization/fold/handoff authority tests
+- below-Composed roots, active bindings, runtime plans, unsupported shapes, cycles and genuine non-const diagnostics remain semantic non-folding outcomes. Prepared authority must bind to one exact view, and wrapper safety must inspect every effective source/expression consumed by folding.
 ACCEPTANCE_CRITERIA:
-- Propagate folded-child `TemplateError::Infrastructure` through HIR handoff while retaining only documented shortcut-unavailable fallbacks.
-- Make direct fold and output-size boundaries reject missing required authority instead of returning zero, empty output or skipping validation through untaken branches and zero-iteration loops.
-- Validate present aggregate wrappers independently from whether a loop body emits output.
+- Make prepared eligibility explicit so runtime plans and every unsupported reason remain non-folded unless the fold path demonstrably preserves them.
+- Bind prepared authority to exact root, phase, overlay and store-owner identity and reject mismatched consumption before cache lookup.
+- Make exact wrapper safety inspect non-injected resolved slot sources, effective expressions and one shared wrapper-context cycle stack.
+- Guard registry-qualified cross-store fold cycles and return the established non-foldable diagnostic without cache or authority recursion.
 - Add focused malformed-authority regressions without changing valid fold output or user-facing diagnostics.
 VALIDATION_STATE:
 - Slice 3E3c2d focused schema, HIR-handoff, wrapper-context and runtime-site suites: passed
 - Slice 3E3c2d post-correction Codex re-audit: acceptable with no blocking findings
 - Slice 3E3c2d parent `just validate`: passed cross-target Clippy, 3467 unit tests, 1764 integration cases, docs checking and `bench-check` 28/28 with a 5 ms average improvement, 23 faster and 0 slower
+- Slice 3E3c2e correction worker focused tests and formatting: passed
+- Slice 3E3c2e parent `cargo run --quiet -- check docs`: passed with no errors or warnings
+- Slice 3E3c2e post-correction Codex re-audit: not acceptable; dynamic-template token reuse and foreign child/wrapper boundary validation remain
+- Slice 3E3c2e final Codex re-audit: not acceptable; same-store wrappers are redundantly preflighted per application
+- Slice 3E3c2e acceptance Codex re-audit: not acceptable; nested folded-child shortcut can discard an outer root expression overlay
+- Slice 3E3c2e overlay correction focused HIR/fold tests, docs and bench-check: passed
+- Slice 3E3c2e worker `just validate`: failed at five in-slice `fold.rs` `too_many_arguments` Clippy diagnostics
+- Slice 3E3c2e fold traversal refactor: 102 focused tests, cross-target Clippy, docs and bench-check passed
+- Slice 3E3c2e combined Codex audit: not acceptable; direct child folds lose outer expression overlays and virtual wrapper folds validate but do not consume exact overlays
+- Slice 3E3c2e fold overlay correction: 490 focused TIR tests, cross-target Clippy, docs and bench-check passed; full diff check is blocked only by unrelated `style-guide.bd` trailing whitespace
+- Slice 3E3c2e post-overlay Codex audit: not acceptable; production classification loses root-first expression context, nested virtual-wrapper children skip occurrence context and `IfChildEmits` can hide malformed foreign wrappers
+- Slice 3E3c2e cross-owner correction: 501 focused TIR tests, 41 finalization tests, cross-target Clippy, docs, bench-check and full `just validate` passed
+- Slice 3E3c2e cross-owner Codex audit: not acceptable; below-Composed classification still consumes child overlay authority and virtual-wrapper safety does not traverse the exact views used by folding
+- Slice 3E3c2e phase-gated safety correction: full `just validate` passed with 3498 unit tests, 1764 integration cases, docs clean and bench-check 28/28; cross-target Clippy and scoped diff check passed
+- Slice 3E3c2e phase-gated Codex audit: not acceptable; runtime plans remain fold-eligible, wrapper safety misses effective sources/expressions/cycles, prepared authority is not view-bound and cross-store fold cycles are unguarded
 DOCS_IMPACT: progress matrix unchanged for this representation-only phase. Source module docs update with final owners. Phase 5 owns final external docs and deferred-performance handoff
-BLOCKERS_OR_OPEN_DECISIONS: none
+BLOCKERS_OR_OPEN_DECISIONS: correct prepared eligibility/identity, complete exact-wrapper shape safety and add a registry-qualified foreign fold cycle guard. Preserve all concurrent user-owned docs edits
 DELEGATION_DECISION: codex-cli implementation - user selected Codex CLI as the primary worker for all remaining slices
 NEXT_WORKER_ORDER: codex-cli, ollama, parent-direct; Ollama is fallback-only after a Codex CLI blocker
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit accepted Slice 3E3c2d, refresh its commit hash and delegate Slice 3E3c2e through Codex CLI
+NEXT_RESUME_ACTION: implement the four bounded preparation, wrapper-safety and cross-store-cycle corrections through Codex CLI, then re-audit
 
 SELF_AUDIT_NOTE: parser-owned text, head values, nested templates, slots, inserts, control flow, wrappers, formatting, and runtime handoff already have TIR owners. The remaining work is deletion, state thinning, final API consolidation, targeted low-risk efficiency cleanup, test ownership, documentation, and closure.
 

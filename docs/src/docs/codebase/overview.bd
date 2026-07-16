@@ -22,8 +22,8 @@ reviewing a non-trivial change.
 Read `docs/src/docs/codebase/style-guide/testing.bd` when work changes
 behaviour, diagnostics, compiler stages, backends, tests or fixtures.
 
-For compiler work, use
-`docs/compiler-design-overview.md`. This remains the canonical, sourth of truth reference for the overall compiler design.
+For compiler architecture and stage ownership, use
+`docs/compiler-design-overview.md`, the canonical technical design reference.
 
 For design-boundary questions, read
 `docs/src/docs/codebase/design-scope/overview.bd`.
@@ -32,35 +32,39 @@ For design-boundary questions, read
 
 [codeblock, $code("text"):
     project files
-        -> Stage 0: project structure and source discovery
+        -> Stage 0: canonical project graph and source ownership
         -> Stage 1: tokenization
         -> Stage 2: header parsing
         -> Stage 3: dependency sorting
         -> Stage 4: AST construction
         -> Stage 5: HIR generation
         -> Stage 6: borrow validation
-        -> Stage 7: backend lowering
+        -> Stage 7: project assembly and backend lowering
         -> output files
 ]
 
 ## Core architectural rules
 
 - User-facing source, syntax, import, type, rule, borrow, config and deferred-feature failures use `CompilerDiagnostic`. `CompilerError` is for internal compiler, filesystem, backend, dev-server and tooling failures.
-- `TypeEnvironment` owns semantic type identity. Use `TypeId` equality in the active environment for semantic decisions.
+- Stage 0 builds one canonical module graph, assigns file ownership and compiles each module once in dependency order.
+- Each module owns one local `TypeEnvironment`. Use local `TypeId` equality for module-local decisions and canonical project identities across module interfaces.
 - Header parsing owns top-level declaration discovery and declaration shells. AST consumes sorted headers and header-built visibility.
 - Import preparation builds the visibility environment used by dependency sorting and AST. Expression and type resolution use the active `ScopeContext`.
 - Generics, traits and explicit cast evidence resolve before HIR.
-- AST owns template composition, constant folding, slot routing, runtime render-plan preparation and compile-time page fragment metadata.
-- HIR is the first backend-facing semantic IR. It makes control flow explicit.
+- AST owns template composition, constant folding, slot routing, runtime handoff preparation and compile-time page fragment metadata. TIR remains AST-local.
+- HIR is the first backend-facing semantic IR. It makes control flow and cross-module call targets explicit.
 - Borrow validation reads HIR and writes side-table facts. It doesn't mutate HIR or decide final runtime ownership.
 - GC is the semantic baseline. Ownership and deterministic destruction are optimisation layers.
 - Existing values use shared, read-only access by default. Copies are explicit, `~` requests exclusive access and ownership transfer remains compiler-inferred.
-- Backend lowerers consume validated HIR, the paired `TypeEnvironment`, borrow facts and builder metadata. They should not reinterpret source syntax.
+- Backend builders consume the compiled project graph, entry or package link plans, validated module HIR, paired type environments and borrow facts. They don't rediscover source imports or reinterpret source syntax.
 
-## Design scope in one minute
+## Design in one minute
 
 - Keep the source language small, explicit and statically inspectable.
-- Prefer templates, constants and directives over general macro systems.
-- Prefer generic trait bounds for static reuse and choices for runtime heterogeneity.
-- Keep ownership and lifetime optimisation behind the compiler rather than in source syntax.
-- Treat deferred implementation and outside-scope design as different categories.
+- Prefer constrained mechanisms over general metaprogramming.
+- Prefer static reuse through generics and trait bounds.
+- Use choices for runtime heterogeneity.
+- Keep ownership and backend optimisation behind stable source semantics.
+- Distinguish unimplemented design from intentionally excluded design.
+
+See `docs/src/docs/codebase/design-scope/overview.bd` for the high-level rationale and `docs/compiler-design-overview.md` for concrete compiler architecture.

@@ -1,31 +1,35 @@
 # Beanstalk Compiler Design Overview
 
-Beanstalk is a high-level language with first-class string templates. The compiler is modular, exposed as a library, and used by the built-in project tooling, dev server, and backend builders.
+Beanstalk is a high-level language with first-class string templates. Its compiler is a staged, backend-neutral library used by the project tool, development server and backend builders.
 
-This document records Beanstalk's accepted compiler architecture and intended end-state contracts. It includes design decisions that may not yet be fully implemented. The compiler and its backends should converge on these contracts unless an explicit design change updates them.
+This document is the single source of truth for accepted compiler architecture and cross-stage contracts. It describes the final design the compiler and backends implement, including contracts that the progress matrix still reports as incomplete.
 
-This is not an implementation-status report. Use `docs/src/docs/progress/#page.bst` for current support, partial coverage, experimental paths, and major implementation gaps.
+This is not an implementation-status report. Use:
 
-A task-oriented split of this guide is maintained under `docs/src/docs/codebase/compiler-design/`. New work should read and update the split pages.
+- [`language-overview.md`](language-overview.md) for compiler-facing language semantics and syntax
+- [`src/docs/codebase/design-scope/overview.bd`](src/docs/codebase/design-scope/overview.bd) for the high-level design bias and scope boundaries
+- [`src/docs/codebase/memory-management/overview.bd`](src/docs/codebase/memory-management/overview.bd) for access, borrow, GC and ownership semantics
+- [`src/docs/codebase/style-guide/style-guide.bd`](src/docs/codebase/style-guide/style-guide.bd) for implementation standards
+- [`src/docs/progress/#page.bst`](src/docs/progress/#page.bst) for current support and backend coverage
+- [`roadmap/roadmap.md`](roadmap/roadmap.md) for sequencing and unaccepted proposals
 
-Use these related documents for adjacent concerns:
+User-facing pages under `docs/src/docs/**` contain examples and teaching material. They do not replace this compiler architecture reference.
 
-- [`language-overview.md`](language-overview.md) for compiler-facing language facts, syntax shape, semantic invariants, and deferred language surface
-- [`docs/src/docs/codebase/memory-management/overview.bd`](src/docs/codebase/memory-management/overview.bd) for GC fallback, ownership, borrow analysis strategy and lowering implications
-- [`docs/src/docs/codebase/style-guide/style-guide.bd`](src/docs/codebase/style-guide/style-guide.bd) for implementation standards
-- [`roadmap/roadmap.md`](roadmap/roadmap.md) for planning
-- [`src/docs/progress/#page.bst`](src/docs/progress/#page.bst) for implementation status, backend coverage, and feature progress
+## Architectural invariants
 
-User-facing docs-site pages contain examples and beginner-oriented explanations:
-
-- [`src/docs/project-structure/#page.bst`](src/docs/project-structure/#page.bst) for projects, config, modules, entries, and output folders
-- [`src/docs/packages/#page.bst`](src/docs/packages/#page.bst) for imports, source-backed packages, binding-backed packages and JavaScript imports
-- [`src/docs/packages/core/#page.bst`](src/docs/packages/core/#page.bst) for Core package pages
-- [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst) for template syntax, directives, markdown behavior, and slots
-- [`src/docs/beandown/#page.bst`](src/docs/beandown/#page.bst) for Beandown authoring and import rules
-- [`src/docs/markdown/#page.bst`](src/docs/markdown/#page.bst) for plain Markdown `.md` import rules
-
-Build systems use the compiler through HIR and borrow validation, then apply their own backend lowering. They assemble one or more compiled modules into runnable artifacts such as HTML, JavaScript, Wasm, or other target outputs.
+- A directory-scoped module is the canonical semantic compilation unit and is compiled once per build.
+- Stage 0 owns the canonical module graph, file ownership, legal topology and import namespace identities.
+- Header parsing discovers top-level declarations once and builds the visibility consumed by dependency sorting and AST.
+- Each module owns one local `TypeEnvironment`, local HIR identities and local borrow facts.
+- Cross-module references use stable project semantic identities, never donor-local indexes or `TypeId` values.
+- User-facing failures use `CompilerDiagnostic`. Internal, infrastructure and impossible-state failures use `CompilerError`.
+- Generics, traits, cast evidence, constants and template semantics resolve before executable HIR reaches a backend.
+- TIR is AST-local. HIR receives only folded strings or neutral owned runtime handoff data.
+- HIR is the first backend-facing semantic IR and carries explicit cross-module call targets.
+- Borrow validation reads HIR and produces side tables and exported call-effect summaries without rewriting HIR.
+- GC remains the semantic baseline. Ownership-aware lowering is an optimisation with identical source semantics.
+- Backends consume compiled project graphs and entry link plans. They do not rediscover source structure.
+- Parallel work must preserve deterministic identities, diagnostics and output ordering.
 
 ## Frontend structure at a glance
 
@@ -64,7 +68,7 @@ Build systems use the compiler through HIR and borrow validation, then apply the
   [`statements/`](../src/compiler_frontend/ast/statements/),
   [`templates/`](../src/compiler_frontend/ast/templates/),
   and [`generic_functions/`](../src/compiler_frontend/ast/generic_functions/).
-- HIR, analysis, and backend validation:
+- HIR, analysis and backend validation:
   [`hir/`](../src/compiler_frontend/hir/),
   [`hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs),
   [`analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/),
@@ -86,43 +90,45 @@ Build systems use the compiler through HIR and borrow validation, then apply the
 - [`src/compiler_frontend/mod.rs`](../src/compiler_frontend/mod.rs) is the frontend module map.
 - [`src/compiler_frontend/pipeline.rs`](../src/compiler_frontend/pipeline.rs) owns the `CompilerFrontend` stage flow: source file preparation → sorted headers → AST → HIR → borrow report. Source file preparation tokenizes and header-parses each file against a worker-local string table before module-wide aggregation.
 
-### Input, paths, diagnostics, and symbols
+### Input, paths, diagnostics and symbols
 
 - [`src/compiler_frontend/tokenizer/`](../src/compiler_frontend/tokenizer/) converts source text into located tokens and handles string/template delimiter context.
-- [`src/compiler_frontend/compiler_messages/`](../src/compiler_frontend/compiler_messages/) owns typed diagnostics, labels, source locations, stable diagnostic descriptors, render-boundary message aggregation, and terminal/terse/dev-server renderers. `CompilerDiagnostic` is the user-facing source/config/import/type/rule/borrow diagnostic path. `CompilerError` is reserved for internal compiler, filesystem, backend, and dev-server infrastructure failures. Type diagnostics carry semantic `TypeId`s and render source-level names through `DiagnosticRenderContext` when the relevant module `TypeEnvironment` is available.
-- [`src/compiler_frontend/symbols/`](../src/compiler_frontend/symbols/), [`symbols/interned_path.rs`](../src/compiler_frontend/symbols/interned_path.rs), and [`src/compiler_frontend/paths/`](../src/compiler_frontend/paths/) own interned source identities, path formatting/resolution, and canonical symbol identity shared across diagnostics, imports, and lowering.
+- [`src/compiler_frontend/compiler_messages/`](../src/compiler_frontend/compiler_messages/) owns typed diagnostics, labels, source locations, stable diagnostic descriptors, render-boundary aggregation and terminal, terse and development-server renderers.
+- [`src/compiler_frontend/symbols/`](../src/compiler_frontend/symbols/), [`symbols/interned_path.rs`](../src/compiler_frontend/symbols/interned_path.rs) and [`src/compiler_frontend/paths/`](../src/compiler_frontend/paths/) own interned source identities, path formatting/resolution and canonical symbol identity shared across diagnostics, imports and lowering.
 
-### Declarations, imports, and type surface
+### Declarations, imports and type surface
 
-- [`src/compiler_frontend/headers/`](../src/compiler_frontend/headers/) discovers top-level declarations, imports, normalized path/reference shells, declaration shells, constant initializer dependency hints, and start-body separation.
+- [`src/compiler_frontend/headers/`](../src/compiler_frontend/headers/) discovers top-level declarations, imports, normalised path/reference shells, declaration shells, constant initializer dependency hints and start-body separation.
 - [`src/compiler_frontend/module_dependencies.rs`](../src/compiler_frontend/module_dependencies.rs) orders top-level declaration headers by header-provided dependency edges.
 - [`src/compiler_frontend/declaration_syntax/`](../src/compiler_frontend/declaration_syntax/) owns shared declaration-shell parsing used by headers and body-local AST parsing. It keeps syntactically equivalent declaration shapes on one parser path, but it does not own semantic type resolution.
 - [`src/compiler_frontend/datatypes/`](../src/compiler_frontend/datatypes/) owns `TypeEnvironment` as canonical semantic type identity and `DataType` as parse-only or diagnostic-only type syntax. Semantic identity is `TypeId` equality in the relevant `TypeEnvironment`. `DataType` must not be used for semantic decisions in executable AST or HIR.
 - [`src/compiler_frontend/type_coercion/`](../src/compiler_frontend/type_coercion/) owns implicit contextual compatibility and promotion rules layered on top of type identity. Explicit `cast` resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the coercion path.
-- [`src/compiler_frontend/value_mode.rs`](../src/compiler_frontend/value_mode.rs) tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`. Runtime ownership is a later borrow/lowering concern.
-- [`src/compiler_frontend/traits/`](../src/compiler_frontend/traits/) owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path.
-- [`src/compiler_frontend/source_packages/`](../src/compiler_frontend/source_packages/) owns generic hash-root identity and prepared source-backed package root data shared across Stage 0, header import preparation, dependency sorting and AST visibility checks. Source-backed package root discovery and project-local package scanning are Stage 0 build-system responsibilities.
-- [`src/compiler_frontend/external_packages/`](../src/compiler_frontend/external_packages/) stores backend-provided virtual package metadata, package-local symbol paths, and stable external symbol IDs. External package symbols are resolved by package path plus symbol path. The prelude `io` namespace alias is the only bare-name external namespace exception.
-- [`src/compiler_frontend/builtins/`](../src/compiler_frontend/builtins/) owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages, including builtin cast target classification, policy metadata, runtime error codes, and core cast trait definitions/evidence.
+- [`src/compiler_frontend/value_mode.rs`](../src/compiler_frontend/value_mode.rs) tracks frontend access classification for bindings, expressions, call arguments and receiver use. It keeps mutability/reference state separate from `DataType`. Runtime ownership is a later borrow/lowering concern.
+- [`src/compiler_frontend/traits/`](../src/compiler_frontend/traits/) owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path.
+- Stage 0 owns canonical module identity, file ownership, legal topology and source-package roots. Builder-supplied source packages use the same compiled-interface model as project modules.
+- [`src/compiler_frontend/external_packages/`](../src/compiler_frontend/external_packages/) stores backend-provided virtual package metadata, package-local symbol paths and stable external symbol IDs. External package symbols are resolved by package path plus symbol path. The prelude `io` namespace alias is the only bare-name external namespace exception.
+- [`src/compiler_frontend/builtins/`](../src/compiler_frontend/builtins/) owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages, including builtin cast target classification, policy metadata, runtime error codes and core cast trait definitions/evidence.
 - [`src/compiler_frontend/style_directives/`](../src/compiler_frontend/style_directives/) owns the merged frontend and builder directive registry used by tokenizer and template parsing.
-- Design-scope and deferred-feature diagnostics should be centralized through typed `CompilerDiagnostic` constructors. Deferred features and outside-design-scope rejections must remain distinct diagnostic reasons.
+- Design-scope and deferred-feature diagnostics should be centralised through typed `CompilerDiagnostic` constructors. Deferred features and outside-design-scope rejections must remain distinct diagnostic reasons.
 
 ### Semantic lowering and analysis
 
-- [`src/compiler_frontend/ast/`](../src/compiler_frontend/ast/) builds the typed AST from sorted headers, resolves semantic information, parses executable bodies, folds constants/templates, validates function terminality, and prepares HIR input.
+- [`src/compiler_frontend/ast/`](../src/compiler_frontend/ast/) builds the typed AST from sorted headers, resolves semantic information, parses executable bodies, folds constants/templates, validates function terminality and prepares HIR input.
 - [`src/compiler_frontend/ast/const_eval/`](../src/compiler_frontend/ast/const_eval/) owns AST compile-time evaluation for constants and foldable template expressions.
 - [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/) lowers the typed AST into the first backend-facing semantic IR.
 - [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/) validates borrow/exclusivity rules and produces side-table facts for later lowering.
 
 ## Build-system and frontend boundary
 
-Build systems provide a `BackendBuilder` implementation and wrap it in a `ProjectBuilder`. The frontend compiles modules up to HIR and borrow validation. The backend builder consumes those compiled modules and emits project artifacts.
+The build system prepares one canonical project graph, compiles each module once and passes an immutable project compilation to the selected backend builder.
+
+The architectural handoff is:
 
 ```rust
 pub trait BackendBuilder {
     fn build_backend(
         &self,
-        modules: Vec<Module>,
+        compilation: ProjectCompilation,
         config: &Config,
         flags: &[Flag],
         string_table: &mut StringTable,
@@ -137,6 +143,14 @@ pub trait BackendBuilder {
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
     fn frontend_surface(&self) -> BuilderSurface;
+}
+
+pub struct ProjectCompilation {
+    pub structure: ProjectModuleGraph,
+    pub modules: Vec<CompiledModuleArtifact>,
+    pub generated: Vec<ModuleGeneratedArtifacts>,
+    pub entries: Vec<EntryAssembly>,
+    pub package_facade: Option<ProjectPackageAssembly>,
 }
 
 pub struct ProjectBuilder {
@@ -155,9 +169,41 @@ pub struct BuilderSurface {
 }
 ```
 
-Backend builders do not load source files, discover modules, load or parse `config.bst`, or perform semantic frontend compilation.
+The exact Rust type names may vary. The ownership boundaries do not.
 
-They declare the frontend-visible build surface:
+The build system owns:
+
+- project and config discovery
+- the canonical source index
+- module roots, file ownership and legal dependency topology
+- deterministic module scheduling
+- project-wide generic instance materialisation
+- entry assemblies and the optional external package facade
+- output writing and stale-artifact cleanup
+
+Each `CompiledModuleArtifact` owns:
+
+- its immutable public interface
+- validated module-local HIR
+- its local `TypeEnvironment`
+- borrow facts and exported function-effect summaries
+- diagnostics and warnings
+- dormant root activity and page-fragment metadata
+- backend-neutral runtime dependency facts
+
+Generated concrete generic functions live in generated-artifact sidecars. They do not mutate immutable base module artifacts.
+
+Backend builders do not:
+
+- load source files
+- discover module topology
+- parse `config.bst`
+- perform semantic frontend compilation
+- materialise generic functions from source templates
+- reconstruct imports or package visibility
+- write final project outputs directly
+
+Builders declare the frontend-visible surface:
 
 - source-backed packages
 - binding-backed packages
@@ -167,36 +213,48 @@ They declare the frontend-visible build surface:
 - builder runtime packages
 - supported source file kinds
 
-They receive a validated `Config`, may validate or interpret backend-owned config keys, and lower compiled `Module` values into artifacts.
+Source and binding registries remain separate because their compiler and runtime needs differ. Shared `PackageMetadata` classifies both through independent `PackageOrigin` and `PackageBacking` axes.
 
-`ProjectConfigKeyRegistry` is declarative Stage 0 metadata. It lists allowed core and backend-owned keys plus value shapes so `config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored.
+`ProjectConfigKeyRegistry` is declarative Stage 0 metadata. It defines allowed core and builder-owned keys plus their folded value shapes.
 
-Source and binding registries stay separate. Shared `PackageMetadata` classifies every package by independent `PackageOrigin` and `PackageBacking` axes, while binding-specific runtime metadata remains in the binding and provider owners. Config keys, providers and source file kinds are also part of `BuilderSurface`.
+`config.bst` is build-system-owned compile-time Beanstalk source. It is compiled through AST so it can use normal constants, folding, allowed Core or Builder imports and typed diagnostics. It is not a module, produces no HIR, has no `start` and exports no language-visible declarations.
 
-`config.bst` is a build-system-owned compile-time Beanstalk source file. It is parsed through the frontend up to AST so config values can use normal compile-time constants, folded templates, core/builder support imports, and typed diagnostics. It is not compiled as a module, does not produce HIR, does not create runtime `start` semantics, and does not export language-visible declarations.
+Authored config entries are known top-level `#` constants. Imported constants and support types may contribute to expressions but never become config entries. Config rejects project-local or relative imports, runtime declarations, mutable bindings, functions, traits, conformances, standalone templates and page fragments.
 
-Authored config entries must be known top-level `#` constants. Plain top-level bindings are runtime Beanstalk syntax and are rejected in config. Imported constants and support types may participate in config expressions, but imported declarations are support surface only and never become config entries. Authored config may contain imports, type aliases, structs, and choices as support declarations. Traits, trait conformances, trait incompatibility declarations, functions, mutable bindings, runtime statements, local helper constants, standalone templates, project-local imports, relative imports, and `#[...]` page fragments are rejected.
+External import providers convert supported non-Beanstalk files into typed binding-backed package surfaces before AST consumes visibility. Provider results may also record runtime imports and assets for later link planning.
 
-External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST. Provider results may also carry registered runtime imports discovered while parsing the external source.
+Builder-runtime packages such as `@web/canvas` use the same binding identity and runtime asset path as provider-created packages.
 
-Builder-runtime package metadata covers builder-owned virtual packages such as `@web/canvas`. These packages are registered directly in `binding_packages`, then attached to module external-import metadata when reachable HIR references one of their functions.
+Builder-supported source file kinds participate in extensionless source discovery without becoming modules. Beandown `.bd` and Markdown `.md` inputs become ordinary synthetic compile-time declarations during header preparation.
 
-Source file kind metadata lets builders opt in to source assets that participate in normal source import discovery without becoming Beanstalk modules. HTML registers Beandown `.bd` and plain Markdown `.md` content assets this way.
+Project-specific config validation remains in `BackendBuilder::validate_project_config`. User config mistakes remain `CompilerDiagnostic` values while infrastructure failures remain `CompilerError` values.
 
-Project-specific config validation remains in `BackendBuilder::validate_project_config`, which returns `ProjectConfigError` so normal user config mistakes stay as typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
+Complex release optimisation stays outside the fast frontend path unless correctness requires it.
 
-Complex release optimizations should remain outside the fast frontend path unless they are required for correctness.
+### Diagnostics, path identity and deterministic aggregation
 
-### Diagnostic and path identity contract
+Diagnostics are compiler data, not a final formatting step.
 
-A build lifecycle uses a `StringTable` across config loading, frontend compilation, backend validation/build, and diagnostic rendering.
+- `CompilerDiagnostic` represents source, syntax, import, type, rule, borrow, config and target-contract failures.
+- `CompilerError` represents compiler invariants, filesystem failures, backend failures and tooling infrastructure failures.
+- `DiagnosticBag` owns stage-local accumulation.
+- `CompilerMessages` is used only at build and rendering boundaries.
+- Diagnostic payloads carry structured facts, stable reasons, source locations, symbols and semantic IDs instead of pre-rendered prose.
 
-- `SourceLocation` stores interned path/scope identity, not owned diagnostic paths.
-- Rendering and filesystem-adjacent code resolve interned paths through the `StringTable`.
-- Boundary types such as `BuildResult` and failed `CompilerMessages` carry the string table so later output writing, terminal rendering, and dev-server reporting can resolve paths consistently.
-- Directory project compilation creates one shared string-table fork source for the module batch. Each module compiles with a local delta over that immutable base, then the build system merges local suffixes in deterministic entry-path order and remaps module payloads, diagnostics, and render type environments only when the returned remap is non-identity.
-- Inside a module, source files are prepared in parallel. Each file tokenizes and header-parses against a local string-table fork, then the module frontend merges those file deltas back into the module table in deterministic input order and remaps tokens, headers, warnings, and diagnostics before module-wide header aggregation, dependency sorting, and AST construction.
-- Full `StringTable` cloning and full-table merging remain available for true independent table boundaries. They should not be used for ordinary parallel module compilation.
+`SourceLocation` stores interned path and scope identity. Rendering and filesystem-adjacent code resolve that identity through the build's `StringTable`. Boundary results carry the string table needed to render diagnostics after later build stages fail.
+
+Each canonical module owns its diagnostics. A shared module is compiled once and its diagnostics are emitted once. A dependent module is not compiled when a required public interface failed, avoiding secondary unknown-name and type cascades. Independent graph branches continue compiling.
+
+Parallel work may fork string tables only when deltas are merged and remapped in deterministic order:
+
+- module deltas merge in canonical module order
+- file-preparation deltas merge in original source-file order
+- diagnostics and warnings never merge in worker-completion order
+- tokens, headers, type-rendering contexts and module payloads are remapped before later stages consume them
+
+Full table cloning remains available for genuinely independent identity boundaries. It is not the ordinary module-compilation path.
+
+Provider-backed discovery remains serial while it mutates shared package IDs, provider caches, resolution tables or diagnostic identity. Parallel provider discovery requires deterministic provider deltas and remapping.
 
 ### Style directive contract
 
@@ -207,84 +265,265 @@ Project builders can register style directives through `frontend_style_directive
 - Tokenizer and template parsing use the same merged registry.
 - Unknown directives are rejected strictly.
 
-Individual directive syntax and behavior belong in [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst) and [`language-overview.md`](language-overview.md).
+Individual directive syntax and behaviour belong in [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst) and [`language-overview.md`](language-overview.md).
 
 ### Type identity contract
 
-The frontend owns a single `TypeEnvironment` per module. It is the canonical source of semantic type identity.
+Each compiled module owns one local `TypeEnvironment`. `TypeId` equality in that environment is the only valid comparison for module-local semantic decisions.
 
-- `TypeId` equality in the active `TypeEnvironment` is the only valid way to compare types for semantic decisions.
-- `DataType` is parse-only or diagnostic-only. It must not be used for semantic decisions in executable AST or HIR.
-- Collection type identity is a canonical `TypeEnvironment` shape. Growable `{T}` and fixed `{N T}` collections are distinct `TypeId`s, and backends recover element type plus optional fixed capacity through collection-shape queries rather than parse syntax or backend side tables.
-- Hashmap type identity is a separate canonical `TypeEnvironment` constructed shape. `{K = V}` maps store key and value `TypeId`s directly and are not represented as collection capacity variants or backend side tables.
-- Type diagnostics should carry canonical `TypeId`s plus context enums. They should not store rendered type names or cloned `DataType` payloads for display.
-- Diagnostic renderers resolve type names at the render boundary through `DiagnosticRenderContext`, which borrows the `StringTable` and optionally the module `TypeEnvironment`.
-- `TypeEnvironment` is built during AST environment construction and populated with builtins, nominal structs, choices, and generic instances before AST body emission begins. Early nominal registration records identity and generic parameter metadata only. Canonical field and variant members are written after AST-owned constructor shells are resolved to semantic `TypeId`s.
-- `TypeEnvironment` member queries expose borrowed field/variant views and direct member lookup helpers. AST, HIR, and backend-facing lowering should use those semantic views instead of cloning member lists for lookup.
-- AST body emission receives `AstTypeInterner`, a narrow facade over `TypeEnvironment` that allows derived type interning and module-local compatibility caching without permitting nominal declaration mutation.
-- Function signatures store canonical `TypeId`s on `ReturnSlot` and `Declaration` after resolution. The parallel `DataType` values remain available for diagnostics only.
-- HIR `HirStruct` and `HirChoice` carry `frontend_type_id` to trace lowering-local layouts back to the canonical `TypeEnvironment` entry. Validation asserts these IDs resolve to real type definitions.
-- External package types that have no frontend mapping use `ExpectedParameterType::UnknownExternal` instead of sentinel `TypeId`s. Call validation skips type compatibility for unknown external parameters.
+Cross-module interfaces use canonical project type identities rather than donor-local `TypeId` values. The canonical representation covers:
 
-### Import, package and binding contract
+- builtins
+- module-owned structs and choices
+- transparent aliases
+- options, collections, maps and fallible carriers
+- concrete generic nominal instances
+- generic parameters inside exported generic templates
+- external package types
 
-Stage 0 discovers source-backed packages, builder-supported source assets, and provider-backed external files as normal build inputs.
+A consumer module may intern compact local `TypeId` handles for imported canonical types. Its `TypeEnvironment` retains the origin mapping back to canonical identity. Cross-module equality compares canonical identity, never rendered names or unrelated local handles.
 
-Header parsing/import preparation resolves imports, aliases, module public-surface boundaries, `export:` metadata, namespace/import records, receiver-method visibility, external package symbols, prelude symbols, builtins and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
+`DataType` is parse-only or diagnostic-only after semantic resolution. It must not drive executable AST, HIR or backend semantic decisions.
 
-Dependency sorting uses header-provided dependency edges.
+Collection and map identity remain canonical constructed shapes:
 
-AST consumes file-local visibility through `ScopeContext`. It validates semantic use of visible symbols, but it does not rebuild import bindings or rediscover import visibility.
+- growable `{T}` and fixed `{N T}` collections are distinct
+- fixed capacity is semantic identity, not an allocation hint
+- `{K = V}` maps store key and value identities directly
+- backends query semantic shapes rather than parse syntax or private side tables
 
-Compiler-facing rules:
+Type diagnostics carry semantic identities plus context enums. Renderers resolve source-level names through `DiagnosticRenderContext` at the output boundary.
 
-- Source-backed packages are normal modules with exactly one direct `#*.bst` root file and participate in module-level dependency sorting. The filename after `#` is cosmetic.
-- Builder-supported source file kinds, such as Beandown `.bd`, resolve through the same extensionless source import path as `.bst` files when the active builder declares support. Recognized but unsupported source kinds are rejected with typed import diagnostics.
-- Module public API maps are built from declarations and grouped imports inside the root file's strict `export:` block. Root-file items outside that block remain private.
-- Binding-backed packages are virtual typed symbols provided by backend metadata, not `.bst` source files.
-- Binding package membership uses stable `ExternalPackageId` values, readable package paths, structured package-local symbol paths and `PackageMetadata`. Builtin and provider-created packages share one identity model.
-- External package namespace imports may expose recursive child namespace records for package-local symbol paths such as `io.input.*`. Source and module namespace records remain shallow and field-access-only.
-- External import providers live under `BuilderSurface` and resolve non-Beanstalk import sources into typed package/type/function IDs before AST consumes visibility.
-- Builder-runtime package metadata lets builder-owned packages share the same backend runtime asset/glue emission path as provider-created imports without pretending they were project-local files.
-- External imports resolve to stable frontend IDs such as `ExternalFunctionId`.
-- Grouped imports for virtual external packages resolve through external package metadata before source module-boundary enforcement. Source imports still go through public-surface checks before source target resolution, so virtual package lookup does not weaken source-backed package or module privacy.
-- Header import preparation does not import source-authored receiver methods as independent symbols. Source-authored receiver methods belong to their receiver type's declaring file and become callable wherever the receiver type is visible. Namespace imports may make a receiver type visible, but methods are never namespace fields and cannot be grouped-imported or aliased independently.
-- Binding-backed packages expose opaque types, constants and free functions only. They do not register receiver methods or receiver-call visibility. Use source-owned wrapper types for method-style ergonomics over external handles.
-- Expression/type resolution uses the active `ScopeContext` visibility maps and import records, not global bare-name lookup.
-- HIR carries stable external call IDs only. Backends map those IDs to target-specific helpers, imports, generated glue, runtime names, or target-native operations.
+AST builds the local `TypeEnvironment`. Early nominal registration records identity and generic parameter metadata. Canonical fields and variants are written after AST resolves their type shells.
 
-User-facing import syntax, module visibility, package origin/backing and deferred package features are detailed in [`src/docs/packages/#page.bst`](src/docs/packages/#page.bst) and [`language-overview.md`](language-overview.md).
+Member queries expose borrowed field or variant views and direct lookup helpers. Later stages do not clone member lists for semantic lookup.
 
-Project-local and Builder source-backed packages resolve through `SourcePackageRegistry`. Core, Builder and ProjectLocal binding-backed packages resolve through `ExternalPackageRegistry`. Package metadata doesn't alter import syntax or module visibility. The prelude remains separate implicit-import policy for the bare `io` alias.
+AST body emission receives `AstTypeInterner`, a narrow facade over `TypeEnvironment` that allows derived type interning and module-local compatibility caching without permitting nominal declaration mutation.
+
+Imported canonical types are interned through the same narrow AST-owned boundary. Consumer-local handles retain their canonical origin and do not mutate the exporting module's environment.
+
+Function signatures store local semantic `TypeId` values after resolution. Exported signatures also project canonical cross-module types into the immutable public interface.
+
+HIR structs and choices retain their local frontend type links. Cross-module call targets and public interfaces use stable module semantic identities.
+
+External parameters with no frontend mapping use `ExpectedParameterType::UnknownExternal`, never sentinel `TypeId` values.
+
+### Module, package, import and binding contract
+
+Terminology is strict:
+
+- **Module**: one directory-scoped compilation and visibility unit rooted by `#*.bst` or `+*.bst`
+- **Package**: a named reusable `@...` import root and future dependency or distribution unit
+- **Binding**: a typed bridge to an implementation outside Beanstalk source
+- **Prelude**: implicit import policy, not a package kind
+- **Library**: informal wording only
+
+Packages are classified on independent axes:
+
+```rust
+enum PackageOrigin {
+    Core,
+    Standard,
+    Builder,
+    ProjectLocal,
+    Dependency,
+}
+
+enum PackageBacking {
+    BeanstalkSource,
+    ExternalBinding,
+}
+```
+
+Current mappings include:
 
 | Package | Origin | Backing |
 |---|---|---|
 | `@html` | Builder | BeanstalkSource |
 | `@core/collections`, `@core/io`, `@core/math`, `@core/text`, `@core/random`, `@core/time` | Core | ExternalBinding |
 | `@web/canvas` | Builder | ExternalBinding |
-| configured package-folder child | ProjectLocal | BeanstalkSource |
+| scoped `+*.bst` package | ProjectLocal | BeanstalkSource |
+| project-root package facade | ProjectLocal | BeanstalkSource |
 | annotated project-local `.js` import | ProjectLocal | ExternalBinding |
 
-`Standard` and `Dependency` remain reserved origins.
+`Standard` and `Dependency` remain valid origins even when no current package uses them.
 
-### Active-root start and page fragments
+#### Module roots
 
-The active module root has an implicit `start()` function containing top-level runtime code. Imported module roots expose declarations without replaying their top-level runtime body. Normal files contribute declarations only.
+A directory contains at most one module root:
 
-Header parsing captures the active module root's top-level runtime code as a `HeaderKind::StartFunction`. The implicit `start` header is not part of dependency sorting. It is appended after sorted top-level declarations and lowered by AST.
+- `#*.bst` defines a normal module
+- `+*.bst` defines an API-only support module that exposes a scoped package
+- one optional project-root `+*.bst` beside `config.bst` defines the project's external package facade
+- the suffix after `#` or `+` is cosmetic
+- `config.bst` is not a module root
 
-Active-root page fragments are split:
+Every project source file belongs to its nearest containing module root.
 
-- Top-level runtime templates remain runtime code inside `start()`.
-- `start()` returns runtime fragment strings in source order.
-- Active-root top-level const templates fold in AST into builder-facing compile-time fragments.
-- Each compile-time fragment records a runtime insertion index.
-- Builders merge compile-time fragments into the runtime fragment list.
-- HIR does not carry compile-time page fragments or a separate ordered start-fragment stream.
+A normal module may own dormant top-level runtime work and page fragments. A support module and project package facade are API-only: they have no implicit `start`, top-level runtime statements, page fragments, route or builder artifact. Functions and ordinary runtime code inside functions remain valid.
+
+`export:` is the only public visibility marker for every root kind.
+
+#### Canonical module graph
+
+Stage 0 builds one canonical module graph and compiles each module once in dependency order.
+
+A normal module may import:
+
+- ordinary files and unrooted directories it owns
+- direct child normal modules
+- support packages visible in its lexical module scope
+- registered Core, Builder and dependency packages
+- builder-supported provider files with an explicit owner
+
+A normal module may not import:
+
+- its parent or any ancestor
+- a normal sibling
+- a grandchild directly
+- a sibling's descendant
+- an unrelated branch
+- another module's private file path
+
+A child module re-exports anything its parent should see from deeper descendants.
+
+Valid project structure is acyclic by construction. The compiler still validates cycles defensively.
+
+#### Scoped support packages
+
+A `+*.bst` support root exposes a package named by its containing directory.
+
+For support package `S` whose nearest ancestor normal module is `P`:
+
+- `S` is visible to `P`
+- `S` is visible to normal sibling modules and their descendants
+- `S` is not visible above `P` or outside `P`'s subtree
+- `S` is not imported from its own private implementation descendants
+- another support package in the same owner scope cannot import `S`
+
+The support facade may import:
+
+- ordinary files it owns
+- any descendant module in its private subtree
+- support packages from a strictly outer scope
+- registered packages
+
+It may not import its parent, normal sibling consumers or same-scope support siblings.
+
+Consumers see only the support facade's `export:` surface. They cannot address its private descendant modules.
+
+#### Project package facade
+
+A project may contain one `+*.bst` root beside `config.bst`.
+
+- The facade defines the project's external Beanstalk package surface.
+- Its package identity comes from the canonical project config `name`.
+- It is not visible to internal project modules.
+- It may assemble exported surfaces from any descendant module below `entry_root`.
+- It receives only each descendant's public interface.
+- It emits no route or runtime entry.
+- A project can be both an application and a package.
+- Without this facade the project has no externally consumable Beanstalk package surface.
+
+#### Import roots
+
+All project source imports resolve from the importing file's owning module root, not the file's physical directory.
+
+- `@./...` has no supported meaning.
+- `..` is always invalid.
+- Paths may traverse ordinary unrooted directories owned by the same module.
+- Reaching a child module or support package ends filesystem traversal and exposes only its facade.
+- Import paths cannot bypass a facade with forms such as `@child/internal`.
+- Scoped support packages are injected by package name.
+- The project-root package facade is the sole assembly exception and resolves project paths from `entry_root`.
+- Provider imports use an explicit owner and do not silently reintroduce file-relative resolution.
+
+Header import preparation consumes the Stage 0 namespace. It does not probe ordered fallback candidates.
+
+#### Namespace and collision policy
+
+No import uses precedence, nearest-match shadowing or ordered fallback.
+
+Reject overlapping visible identities between:
+
+- support packages
+- direct child modules
+- extensionless source files
+- internal directory path segments
+- the project package name
+- Core or Builder package roots
+- dependency aliases
+- case-only variants
+
+Recognised extensionless source kinds share one namespace. `docs.bst`, `docs.bd`, `docs.md` and `docs/` cannot coexist where each would mean `@docs`.
+
+Explicit-extension provider files may coexist with a same-stem directory only when syntax remains unambiguous.
+
+The same support-package name may appear in disjoint scopes. Overlapping scopes are rejected with diagnostics pointing to both declarations.
+
+#### Public interfaces
+
+A compiled module exports an immutable semantic interface containing:
+
+- exported declarations
+- canonical type identities
+- folded constant facts
+- generic templates
+- trait and conformance evidence
+- receiver surfaces
+- function access and effect summaries
+
+Private declarations never receive consumer-visible identities.
+
+Aliases affect source spelling, not semantic identity.
+
+Receiver methods remain attached to their receiver type's exported source surface. They are not independently imported, aliased or re-exported.
+
+#### Binding-backed packages
+
+Binding-backed packages are virtual typed symbols, not Beanstalk modules. They expose opaque types, constants and free functions only.
+
+All binding-backed packages use stable package and symbol IDs. Direct builder packages and provider-created packages share one identity model.
+
+External package namespace imports may expose recursive package-local paths such as `io.input.*`. Source-module namespace records remain shallow and field-access-only.
+
+External import providers resolve supported non-Beanstalk sources before AST. HIR carries stable external symbol IDs. Backends map those IDs to target helpers, imports, generated glue or native operations.
+
+Binding-backed packages do not expose source receiver methods. Use source-owned wrapper types for method-style APIs.
+
+The bare `io` name is prelude policy for `@core/io`, not a package category.
+
+### Module root activity, entry assembly and page fragments
+
+A normal module stores dormant root activity in its canonical compiled artifact. Compiling the module does not decide whether its root is active.
+
+An `EntryAssembly` selects one normal module as the active entry and activates only that module's:
+
+- implicit `start()`
+- top-level runtime work
+- runtime page fragments
+- compile-time page fragments
+- entry-owned runtime dependencies
+
+Imported normal modules expose their public interfaces without executing root work. Support modules and project package facades never have root runtime activity.
+
+Header parsing records normal-root top-level runtime code as a dormant `HeaderKind::StartFunction`. It is excluded from local declaration dependency sorting and emitted after sorted declarations.
+
+Page fragments split before HIR:
+
+- runtime templates remain runtime code inside dormant `start()`
+- compile-time templates fold once into owned module artifact data
+- each compile-time fragment records its runtime insertion index
+- entry assembly merges compile-time and runtime fragments in source order
+- HIR never carries compile-time fragments or document structure
+
+Project builders use root activity and entry assemblies to decide artifact eligibility. API-only modules remain importable but do not produce routes, runtime glue or tracked assets.
 
 ### Top-level declaration shape
 
 Header parsing owns top-level declaration discovery and declaration shell parsing. These headers participate in strict top-level dependency sorting.
+
+Top-level declarations are owned by the module's immutable public or private semantic state. Cross-module consumers use the public interface rather than merging provider headers into their own declaration graph.
 
 ```beanstalk
 site_name #= "Beanstalk"
@@ -304,73 +543,68 @@ render_card |title String| -> String:
 ;
 ```
 
-Top-level constants, type aliases, structs, choices, function signatures, and relevant type annotations can create header-provided dependency edges. Executable body references do not.
+Top-level constants, type aliases, structs, choices, function signatures and relevant type annotations can create header-provided dependency edges. Executable body references do not.
 
 Binding-mode syntax, constant rules, module visibility and top-level template syntax are specified in [`language-overview.md`](language-overview.md).
 
 ## Pipeline stages
 
-The compiler frontend and build system process modules through these stages:
+The compiler and build system process a project through these stages:
 
-0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source-backed packages, and external package namespaces. Plain Markdown `.md` files are builder-supported source assets discovered through the same extensionless source import candidate path.
-1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables and a source-kind-specific tokenizer entry mode. Plain Markdown `.md` files bypass tokenization because they are raw content assets, not Beanstalk syntax.
-2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, fixed-capacity reference edges, constant initializer reference edges and captures the active-root start body separately. Source-kind adapters such as Beandown and plain Markdown synthesize ordinary declaration headers here. In project builds this is fused with tokenization or source-kind preparation as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
-3. **Dependency Sorting**: orders top-level declaration headers by all header-provided top-level dependency edges.
-4. **AST Construction**: consumes sorted headers linearly, resolves and validates semantic information, parses executable bodies, type-checks expressions, validates terminality, and prepares templates/constants for HIR/builders.
-5. **HIR Generation**: lowers the typed AST into backend-facing semantic IR with explicit control flow.
-6. **Borrow Validation**: validates borrow/exclusivity rules and produces side-table facts for later lowering.
-7. **Backend Lowering**: project builders lower compiled modules into backend-specific artifacts.
+0. **Project structure**: parse config, build one canonical source index, assign file ownership, discover normal and support roots, validate package scopes, build the acyclic module graph and establish deterministic compile order.
+1. **Tokenization**: convert Beanstalk source into located tokens using source-kind entry modes.
+2. **Header parsing**: parse imports, root exports, declaration shells, dependency edges and dormant normal-root start metadata.
+3. **Dependency sorting**: order declarations within each module from header-provided edges. Project module order is already owned by Stage 0.
+4. **AST construction**: resolve module-local semantics, project imported canonical types, fold constants and templates, validate bodies and emit generic instance requests.
+5. **HIR generation**: lower each module and generated function into explicit backend-facing control flow with stable cross-module call targets.
+6. **Borrow validation**: validate each canonical module and generated function, producing side tables and public call-effect summaries.
+7. **Project assembly and backend lowering**: build entry and package-facade link plans, then lower the compiled project graph into target artifacts.
 
-## Stage 0: Project Structure
+## Stage 0: Project structure
 
-Path: [`src/build_system/create_project_modules/`](../src/build_system/create_project_modules/)
+Stage 0 converts project files and builder metadata into one canonical module and package graph.
 
-Stage 0 builds the module inputs consumed by the frontend.
+It owns:
 
-Implementation map:
+- parsing `config.bst` through AST and extracting known folded config constants
+- validating `entry_root` as a relative directory strictly below the project root
+- building one canonical source-tree index
+- discovering normal `#*.bst` roots, support `+*.bst` roots and the optional project package facade
+- assigning every source file to its nearest module owner
+- classifying root roles once
+- discovering builder-supported source assets and provider imports
+- establishing extensionless import namespace identities
+- validating file, directory, module and package collisions
+- computing direct child-module relationships by nearest-module ancestry
+- computing support-package visibility scopes
+- rejecting illegal structural dependencies before semantic compilation
+- building the acyclic project module graph
+- assigning deterministic module and semantic identities
+- producing dependency-order compile waves
+- recording source identities for diagnostics
 
-- [`project_config.rs`](../src/build_system/project_config.rs) and [`project_config/`](../src/build_system/project_config/) own `config.bst` parsing, AST-backed value extraction, and shape validation.
-- [`compilation.rs`](../src/build_system/create_project_modules/compilation.rs), [`project_roots.rs`](../src/build_system/create_project_modules/project_roots.rs), and [`frontend_orchestration.rs`](../src/build_system/create_project_modules/frontend_orchestration.rs) own single-file/directory dispatch, root interpretation, path-resolver setup, and per-module frontend orchestration.
-- [`source_tree_index.rs`](../src/build_system/create_project_modules/source_tree_index.rs), [`module_inventory.rs`](../src/build_system/create_project_modules/module_inventory.rs), [`reachable_file_discovery.rs`](../src/build_system/create_project_modules/reachable_file_discovery.rs), [`import_scanning.rs`](../src/build_system/create_project_modules/import_scanning.rs) and [`source_loading.rs`](../src/build_system/create_project_modules/source_loading.rs) own the source-tree index, module inventory, import-graph traversal and source loading.
-- [`source_package_discovery.rs`](../src/build_system/create_project_modules/source_package_discovery.rs), [`root_validation.rs`](../src/build_system/create_project_modules/root_validation.rs), [`collision_detection.rs`](../src/build_system/create_project_modules/collision_detection.rs), [`project_structure_diagnostics.rs`](../src/build_system/create_project_modules/project_structure_diagnostics.rs) and [`source_discovery_error.rs`](../src/build_system/create_project_modules/source_discovery_error.rs) own source-backed package scanning, generic hash-root preflight, package-prefix collision checks, typed Stage 0 diagnostics and diagnostic/infrastructure error boundaries.
+Directory-project `entry_root` rejects:
 
-Stage 0 owns:
+- an empty path
+- `.`
+- parent components
+- absolute paths
+- paths outside the project root
+- symlink-resolved equality with the project root
 
-- parsing `config.bst` and reachable core/builder source-backed package support files through the frontend up to AST
-- extracting only authored known top-level `#` config-key constants from shared AST const facts
-- enforcing each config key's registered value shape before applying core fields or storing backend settings
-- allowing config imports only from Core or Builder packages
-- rejecting project-local and relative config imports by design
-- stopping config compilation at AST because config does not need HIR
-- building one source-tree index after config establishes `entry_root`, `package_folders` and output roots
-- discovering exactly one non-config hash root per module directory from that index
-- expanding each module to reachable `.bst` files and builder-supported source assets through imports
-- detecting source-backed package roots visible to imports
-- preparing immutable source-backed package root identities before constructing the filesystem-free path resolver
-- recognizing external package prefixes so virtual imports are not treated as filesystem paths
-- resolving source-kind candidates through the builder-provided registry, including HTML `.bd` and `.md` content assets
-- resolving provider-backed external file imports before AST and storing typed package metadata in the external import resolution table
-- rejecting sibling `.bst` file/folder import-name collisions and special-file imports before semantic compilation
-- recording source file identities for later diagnostics and path rendering
+Single-file compilation remains an explicit synthetic-module mode.
 
-Stage 0 is build-system-owned input preparation, not semantic frontend compilation. Private inferred const facts are collected after dependency sorting and AST construction. They do not participate in header dependency sorting and do not become importable declarations.
+Stage 0 imports are resolved from the importing file's module owner. The path resolver consumes the prepared graph and namespace. It does not scan parents or try precedence-based fallback candidates.
 
-For directory builds, Stage 0 owns the build-boundary string-table fork/merge lifecycle. Module frontend jobs receive local string-table deltas, and the build system merges those deltas back into the shared build table after compilation has completed. The module frontend owns its own internal per-file fork/merge lifecycle before dependency sorting.
+Builder-supported `.bd` and `.md` assets participate in the same extensionless namespace as `.bst` source. Provider-backed explicit-extension imports retain their registered provider contract and explicit owner.
 
-Multi-entry directory builds may run module inventory discovery in parallel only after a serial
-provider-free classification proves that no reachable import needs an external import provider or
-unsupported external-extension diagnostic. That classification also carries scanned Beanstalk
-source text forward so provider-free workers do not re-read the same files. Provider-capable
-discovery remains serial because it mutates the external package registry, provider cache,
-resolution table, and shared diagnostic string table; parallel provider-backed discovery requires
-deterministic provider deltas and ID remapping before it can be implemented safely.
+Project-local source packages are structural `+` packages or the project-root facade. `package_folders` and default `/lib` scanning do not exist.
 
-Reachable-file discovery reuses Beanstalk source text read during import scanning when assembling
-`InputFile` values. Files not scanned for imports, such as plain Markdown and Beandown assets, are
-loaded through a threshold-gated missing-source path: small miss sets stay serial and larger miss
-sets use Rayon, then rejoin in deterministic inventory order before header preparation sees them.
+Builder source packages use the same canonical public-interface and compiled-artifact model as project source modules. Binding-backed packages remain registry metadata.
 
-User-facing project layout, config, module root, and output-folder rules are in [`src/docs/project-structure/#page.bst`](src/docs/project-structure/#page.bst).
+Stage 0 enforces the build-boundary deterministic aggregation contract above while scheduling dependency-respecting module waves.
+
+Stage 0 produces structure and inputs. It does not type-check executable bodies, generate HIR or perform borrow validation.
 
 ## Stage 1: Tokenization
 
@@ -381,7 +615,7 @@ Tokenization converts source text into structured tokens with source locations. 
 - basic lexical recognition
 - source location tracking
 - string and template delimiter context
-- numeric literal scanning and source-location diagnostics. The tokenizer consumes literal text, classifies attached negative literals, and reports spacing-sensitive syntax errors. [`numeric_text/`](../src/compiler_frontend/numeric_text/) owns shared numeric grammar, normalization, separator/exponent validation, and materialization helpers used by later semantic consumers.
+- numeric literal scanning and source-location diagnostics. The tokenizer consumes literal text, classifies attached negative literals and reports spacing-sensitive syntax errors. [`numeric_text/`](../src/compiler_frontend/numeric_text/) owns shared numeric grammar, normalisation, separator/exponent validation and materialisation helpers used by later semantic consumers.
 - symbolic binary-operator spacing and unary-negation spacing diagnostics
 - style directive token recognition through the merged directive registry
 - syntax-level rejection of unsupported or unknown directive forms where applicable
@@ -396,15 +630,19 @@ Header parsing is the only stage that discovers module-wide top-level declaratio
 
 Header parsing owns:
 
-- import and re-export parsing
-- root-only strict `export:` parsing and public/private module metadata
-- import path validation and normalization
-- file-local import/visibility environment construction
-- declaration shell parsing for constants, functions, structs, choices, type aliases, traits, and conformance metadata
-- top-level dependency edge generation
-- start-body token separation
-- top-level const fragment placement metadata
-- source-kind preparation hooks that turn non-`.bst` inputs into ordinary headers
+- import and public re-export syntax
+- root-role-aware `export:` parsing
+- import binding against the Stage 0 namespace
+- file-local visibility construction
+- declaration shells for constants, functions, structs, choices, aliases, traits and conformances
+- local declaration dependency edges
+- dormant normal-root start-body separation
+- compile-time fragment placement metadata
+- source-kind adapters that synthesise ordinary declarations
+
+Support roots and project package facades reject root runtime activity before AST. Normal roots retain dormant start and fragment metadata for entry assembly.
+
+Imported module and package references resolve to stable public-interface identities. Header parsing does not copy provider declarations into the consumer or bypass a facade to reach private files.
 
 Header dependency edges include every top-level declaration dependency needed before AST can resolve declarations linearly:
 
@@ -417,24 +655,23 @@ Header dependency edges include every top-level declaration dependency needed be
 - constant initializer references to other constants
 - structurally exposed const-template condition/control references when header parsing can identify them without parsing full template body semantics
 
-Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalized, validated path/reference forms instead of raw import/path syntax where enough context exists for later stages to consume.
+Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalised, validated path/reference forms instead of raw import/path syntax where enough context exists for later stages to consume.
 
 Declaration-shell parsers are shared with AST body-local declaration parsing so top-level and body-local declaration syntax stays equivalent. Header parsing records parsed type-reference shells and dependency edges. AST owns resolving those shells into canonical `TypeId`s.
 
-Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST. It validates and normalizes source imports, root export-block re-exports, external package imports, aliases, prelude/builtin reservations, namespace records and collision rules where they can be checked structurally.
+Header import preparation consumes the Stage 0 module graph and namespace, then builds the file-local visibility used by dependency sorting and AST. It resolves module interfaces, support packages, source assets, binding-backed packages, aliases, prelude names and collision rules without probing filesystem fallbacks.
 
 Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants.
 
-Executable function/start body references do not participate in dependency sorting. Body-local declarations do not participate in dependency sorting. The implicit active-root start header is always appended last.
+Executable function/start body references do not participate in dependency sorting. Body-local declarations do not participate in dependency sorting. The dormant normal-root start header is always appended last.
 
-Beandown header preparation lives in [`headers/beandown_prepare.rs`](../src/compiler_frontend/headers/beandown_prepare.rs). A `.bd` input contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$md` template over the original `.bd` body tokens. During AST template parsing, that Beandown source-kind context also defaults nested templates with no explicit directive to the Markdown formatter. Any explicit nested template directive overrides the Beandown default. Plain Markdown preparation lives in [`headers/plain_markdown_prepare.rs`](../src/compiler_frontend/headers/plain_markdown_prepare.rs). A `.md` input renders the raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer. Later dependency sorting and AST folding treat both declarations like any other compile-time constant. There is no Beandown- or Markdown-specific AST node, HIR path, borrow-checker path, or backend path.
+Beandown header preparation lives in [`headers/beandown_prepare.rs`](../src/compiler_frontend/headers/beandown_prepare.rs). A `.bd` input contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$md` template over the original `.bd` body tokens. During AST template parsing, that Beandown source-kind context also defaults nested templates with no explicit directive to the Markdown formatter. Any explicit nested template directive overrides the Beandown default. Plain Markdown preparation lives in [`headers/plain_markdown_prepare.rs`](../src/compiler_frontend/headers/plain_markdown_prepare.rs). A `.md` input renders the raw Markdown to HTML and contributes the same private `content #String` declaration shape with a synthetic string-literal initializer. Later dependency sorting and AST folding treat both declarations like any other compile-time constant. There is no Beandown- or Markdown-specific AST node, HIR path, borrow-checker path or backend path.
 
 Project builds prepare source files through one deterministic Stage 1/2 scheduling path. Tiny
 modules stay serial, medium modules cross to per-file Rayon only when source bytes justify the
-overhead, and larger modules use chunked Rayon scheduling. Every strategy produces ordered
-chunk-local results, then merges string-table deltas and remaps tokens, headers, warnings, and
-diagnostics in original source-file order. `RAYON_NUM_THREADS` remains the external concurrency
-control; the compiler does not create a custom frontend Rayon pool.
+overhead and larger modules use chunked Rayon scheduling. Every strategy satisfies the
+deterministic file-preparation merge contract above. `RAYON_NUM_THREADS` remains the external
+concurrency control. The compiler does not create a custom frontend Rayon pool.
 
 User-facing Beandown authoring and import rules are in [`src/docs/beandown/#page.bst`](src/docs/beandown/#page.bst).
 User-facing plain Markdown authoring and import rules are in [`src/docs/markdown/#page.bst`](src/docs/markdown/#page.bst).
@@ -445,176 +682,168 @@ A declaration shell is a structured top-level header payload, not a fully resolv
 
 Examples:
 
-- constant shell: name, export flag, explicit type annotation, initializer token span/tokens, initializer reference hints, and source order
-- function shell: name, generic parameters, parsed signature, and body tokens
-- struct shell: name, generic parameters, parsed field names/types, and default token data where applicable
-- choice shell: name, generic parameters, variant names, and payload field type shells
-- type alias shell: name and target type annotation. Parameterized generic aliases are rejected before shell creation.
-- trait shell: name, requirement signature shells, and requirement type-reference dependency edges
-- conformance shell: target type reference, trait references, and declaration source context
-- start shell: active-root executable token body, excluded from dependency sorting
+- constant shell: name, export flag, explicit type annotation, initializer token span/tokens, initializer reference hints and source order
+- function shell: name, generic parameters, parsed signature and body tokens
+- struct shell: name, generic parameters, parsed field names/types and default token data where applicable
+- choice shell: name, generic parameters, variant names and payload field type shells
+- type alias shell: name and target type annotation. Parameterised generic aliases are rejected before shell creation.
+- trait shell: name, requirement signature shells and requirement type-reference dependency edges
+- conformance shell: target type reference, trait references and declaration source context
+- start shell: dormant normal-root executable token body, excluded from dependency sorting
 
 ### Header and AST ownership boundary
 
 Header parsing owns top-level discovery and declaration shell parsing. AST must not rediscover top-level symbols or reconstruct top-level declaration shells from raw tokens.
 
-Header parsing builds `ModuleSymbols`, the order-independent top-level symbol, import, export, builtin, type-alias, and source-file metadata package. Dependency sorting finalizes the sorted declaration list. AST consumes that package directly.
+Header parsing builds `ModuleSymbols`, the order-independent top-level symbol, import, export, builtin, type-alias and source-file metadata package. Dependency sorting finalises the sorted declaration list. AST consumes that package directly.
 
-## Stage 3: Dependency Sorting
+## Stage 3: Dependency sorting
 
-Path: [`src/compiler_frontend/module_dependencies.rs`](../src/compiler_frontend/module_dependencies.rs)
-
-Dependency sorting operates only on top-level declaration headers and header-provided dependency edges.
+Stage 0 orders modules in the project graph. Stage 3 orders top-level declarations inside one canonical module.
 
 It owns:
 
-- topological sorting of parsed top-level declaration headers
-- cycle detection in the strict top-level declaration graph
-- missing header-provided dependency diagnostics
-- source-order stability among otherwise independent declarations
-- finalizing `ModuleSymbols.declarations` in sorted order and appending builtin declarations
-- appending the implicit active-root `start` header after sorted declarations
+- topological sorting of local declaration shells
+- cycle detection in the local declaration graph
+- source-order stability among independent declarations
+- constant initializer dependency ordering
+- finalising the module's declaration order
+- appending builtin declarations
+- appending the dormant normal-root start header after declarations
 
-It does not use executable function/start body references or body-local declarations. Constant initializer references are not body references. They are top-level compile-time declaration dependencies and belong in the header dependency graph.
+It does not:
 
-Dependency sorting orders constants using header-provided constant initializer dependency edges. Same-file constants keep source-order semantics. Same-file forward references are rejected. Cross-file constant cycles are dependency cycles.
+- order project modules
+- copy imported module declarations into the local graph
+- inspect executable function or start-body references
+- order body-local declarations
+- rediscover imports
 
-Same-file symbol hints that do not materialize as headers are not always dependency-sort errors. When a hint looks like a same-file declaration reference but no graph header exists, Stage 3 defers to AST type/expression resolution so the later stage can report the more precise semantic diagnostic.
+Cross-module dependencies are satisfied by compiled immutable public interfaces. A provider module is compiled before its consumers according to the Stage 0 graph.
 
-### Module public surfaces and source-backed packages in dependency sorting
+Same-file constants retain source-order semantics. Same-file forward references are rejected. Cross-file constants inside one module use header-provided edges. Cross-module exported constants are already folded owned facts in the provider interface.
 
-Module root files participate in dependency sorting like other top-level declaration providers. Their `export:` blocks define the visibility boundary, but public declarations, re-exports, constants and type surfaces must still be ordered before declarations in outside modules that import them through that boundary.
-
-Other files inside the same module should not depend on private symbols declared directly inside the module root. Header import visibility, not dependency sorting, enforces that boundary.
-
-Source-backed package roots provided by Builder packages such as `@html` also participate in dependency sorting. Their declarations are first-class providers to the consuming module, not opaque boundaries. Because source-backed packages have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
-
-Source-backed package export edges may use the public import path rather than the concrete cosmetic root-file path. Stage 3 treats those as satisfied public-export edges, not as new graph nodes. This allows public source-backed package API names to order consumers without leaking root-file filesystem identity into the dependency graph.
-
-### Header/dependency/AST contract
-
-Header parsing and dependency sorting are responsible for making top-level declarations linearly consumable by AST.
-
-Declaration-shell parsing is intentionally shared through `declaration_syntax`: headers parse the top-level shells needed for dependency discovery and declaration registration, while AST uses the same shell shapes for body-local declarations and owns all semantic resolution from those shells.
+A source-backed Builder package is compiled through the same module-interface model. Consumers do not treat its private headers as local graph nodes.
 
 After dependency sorting:
 
-- AST receives headers in dependency order. It does not topologically sort constants, structs, choices, functions, or aliases again.
-- AST must not rediscover top-level declarations from raw file tokens or rebuild file import visibility from scratch.
-- AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment.
-- AST may register nominal identity and generic parameter metadata before constants so constructors are name-resolvable. Unresolved field and variant constructor shells stay in AST-owned side tables until semantic `TypeId`s are checked and final member definitions are written to `TypeEnvironment`.
-- If AST needs a top-level declaration to be resolved before another declaration, that dependency belongs in the header dependency graph.
-- If a new feature introduces a top-level dependency, add it to header parsing/dependency sorting rather than adding another AST ordering pass.
-- The implicit active-root `start` header is never a dependency participant and is always emitted after sorted declarations.
+- AST consumes declarations linearly
+- AST does not rebuild import visibility
+- AST may register nominal identities before resolving members
+- any missing local ordering edge is fixed in header parsing
+- any project dependency belongs in the Stage 0 module graph
+- dormant `start` is never a dependency participant
 
 ## Stage 4: AST Construction
 
 Path: [`src/compiler_frontend/ast/mod.rs`](../src/compiler_frontend/ast/mod.rs)
 
-AST consumes already-sorted declaration headers and the header-built module environment. It resolves declarations in order, folds constants/templates, parses executable bodies, type-checks expressions, validates function terminality, and emits typed AST nodes.
+AST consumes already-sorted declaration headers and the header-built module environment. It resolves declarations in order, folds constants/templates, parses executable bodies, type-checks expressions, validates function terminality and emits typed AST nodes.
 
-Internally, AST construction is organized around three phase owners:
+Internally, AST construction is organised around three phase owners:
 
-- [`build_ast_environment`](../src/compiler_frontend/ast/module_ast/environment/) consumes header-built file visibility, then resolves declaration metadata, constants, nominal types, function signatures, receiver catalog data, trait metadata, and shared environment side channels.
-- [`emit_ast_nodes`](../src/compiler_frontend/ast/module_ast/emission/) parses function/start/template bodies against the completed environment, validates function terminality, emits AST nodes, and emits const-template output.
-- [`finalize_ast`](../src/compiler_frontend/ast/module_ast/finalization/) performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, reactive template metadata propagation, template normalization, module constant normalization, type-boundary validation, const-fact collection, concrete choice-definition gathering, builtin AST merging, and final `Ast` construction.
+- [`build_ast_environment`](../src/compiler_frontend/ast/module_ast/environment/) consumes header-built file visibility, then resolves declaration metadata, constants, nominal types, function signatures, receiver catalogue data, trait metadata and shared environment side channels.
+- [`emit_ast_nodes`](../src/compiler_frontend/ast/module_ast/emission/) parses function/start/template bodies against the completed environment, validates function terminality, emits AST nodes and emits const-template output.
+- [`finalize_ast`](../src/compiler_frontend/ast/module_ast/finalization/) performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, reactive template metadata propagation, template normalisation, module constant normalisation, type-boundary validation, const-fact collection, concrete choice-definition gathering, builtin AST merging and final `Ast` construction.
 
 ### Frontend arenas and capacity policy
 
 Frontend arenas are stage/module-owned implementation details. They provide stable IDs and reduce
 clone/allocation pressure inside the owning stage, but they do not change source semantics,
-diagnostics, declaration ordering, HIR shape, or backend artifacts.
+diagnostics, declaration ordering, HIR shape or backend artifacts.
 
 Token/header statistics and `FrontendArenaCapacityEstimate` produce conservative `Vec` capacity
 seeds. These estimates are policy-only: undersized estimates grow normally, oversized estimates
-only reserve bounded extra capacity, and capacity formulas must remain centralized in the frontend
+only reserve bounded extra capacity and capacity formulas must remain centralised in the frontend
 arena policy modules.
 
 The scope-frame arena is AST-owned. It replaces cloned body-local scope maps with parent-linked
 frames while continuing to consume header-built visibility through `ScopeContext`. `StringTable`
-remains the path and string identity system, and AST/HIR ownership boundaries remain unchanged.
+remains the path and string identity system and AST/HIR ownership boundaries remain unchanged.
 
-### AST parallelism readiness
+### AST parallelism and determinism
 
-AST body emission remains serial in production. `AstEmitter` consumes a mutable
-`AstModuleEnvironment`, parses bodies through `ScopeContext` values backed by `Rc`/`RefCell`
-state, emits warnings and rendered-path usages through shared sinks, and accumulates generic
-instantiation requests before concrete instances are emitted. Wrapping those structures in locks or
-converting them broadly to `Arc` would add contention and ownership churn without solving the
-deterministic merge problem.
+AST body emission remains serial within one module. `AstEmitter` consumes mutable module-local semantic state, emits warnings and rendered paths and records generic instance requests.
 
-Future AST parallelism requires an explicit ownership split before any Rayon execution is added:
-an immutable environment snapshot for worker reads, worker-local string-table forks or pre-interned
-body symbols, read-only lookup surfaces that are `Send`/`Sync` by design, deterministic merge of
-warnings/rendered path usages/generic instantiation requests/emitted nodes, and a clear owner for
-the generic instance worklist. Until those preconditions exist, AST measurement stays focused on
-stable timings and counters such as body-root counts, root scope arenas, generic templates and
-instances, and const-template parse/fold time.
+Independent modules may compile in dependency-respecting parallel waves. Their public interfaces are immutable before consumers begin.
 
-HIR generation, borrow validation, backend lowering, and Wasm lowering remain intentionally out of
-scope for this frontend parallelism pass. They should not be parallelized as a follow-on cleanup to
-Stage 0 or file-preparation scheduling changes.
+Generic requests are worker-local outputs. The build system merges them deterministically by stable generic declaration identity and canonical type arguments into the project-wide materialisation worklist.
+
+Wrapping mutable AST state in locks does not make body emission safely parallel. Parallel body emission requires immutable lookup snapshots, worker-local diagnostics and requests plus deterministic merge ownership.
+
+HIR generation, borrow validation and backend lowering are not parallelised as incidental follow-up work. Each stage needs its own ownership and deterministic merge design.
 
 Important AST subowners:
 
-- [`type_resolution/`](../src/compiler_frontend/ast/type_resolution/) owns parsed type-reference resolution to canonical `TypeId`, including source-visible lookup, aliases, fixed collection capacity, maps, and generic nominal instantiation.
+- [`type_resolution/`](../src/compiler_frontend/ast/type_resolution/) owns parsed type-reference resolution to canonical `TypeId`, including source-visible lookup, aliases, fixed collection capacity, maps and generic nominal instantiation.
 - [`module_ast/environment/public_surface.rs`](../src/compiler_frontend/ast/module_ast/environment/public_surface.rs) owns semantic module public API validation after type and trait identities are resolved.
-- [`generic_functions/`](../src/compiler_frontend/ast/generic_functions/) owns generic free-function templates, call inference, and concrete instance emission before HIR.
+- [`generic_functions/`](../src/compiler_frontend/ast/generic_functions/) owns generic free-function templates, call inference and concrete instance request emission before project-wide materialisation.
 - [`generic_bounds.rs`](../src/compiler_frontend/ast/generic_bounds.rs) owns static trait-bound validation for concrete nominal generic instances.
-- [`templates/`](../src/compiler_frontend/ast/templates/) owns template parsing, composition, folding, slot routing, runtime slot plan preparation, control-flow validation, and template structural metadata traversal.
-- [`templates/tir/`](../src/compiler_frontend/ast/templates/tir/) owns the AST-local Template IR (TIR): a typed-ID store for parsed and finalized template nodes, summaries, wrapper sets, slot plans, and HIR handoff conversion. TIR is the authoritative internal representation for templates the parser emits directly into the module-scoped `TemplateIrStore`. It is local to AST construction and finalization, is not returned on the completed `Ast`, and never crosses into HIR or the backend. HIR receives only folded string constants or neutral owned runtime handoff payloads from [`runtime_handoff.rs`](../src/compiler_frontend/ast/templates/runtime_handoff.rs). TIR is internal and behaviour-preserving — it does not change template language semantics.
-- [`module_ast/finalization/const_fact_collection.rs`](../src/compiler_frontend/ast/module_ast/finalization/const_fact_collection.rs) owns explicit module, private top-level, and body-local const-fact collection after AST finalization.
-- [`builtins/casts/`](../src/compiler_frontend/builtins/casts/) owns builtin cast target classification, evidence, policies, and core cast-trait metadata. [`builtins/casts/resolution.rs`](../src/compiler_frontend/builtins/casts/resolution.rs) owns AST cast resolver wiring at explicit typed boundaries.
-- [`field_access/`](../src/compiler_frontend/ast/field_access/) owns source fields, receiver calls, and compiler-owned collection/map builtin member access.
+- [`templates/`](../src/compiler_frontend/ast/templates/) owns template parsing, composition, folding, slot routing, runtime slot plan preparation, control-flow validation and template structural metadata traversal.
+- [`templates/tir/`](../src/compiler_frontend/ast/templates/tir/) owns the AST-local Template IR store. [`runtime_handoff.rs`](../src/compiler_frontend/ast/templates/runtime_handoff.rs) owns its neutral HIR handoff payloads.
+- [`module_ast/finalization/const_fact_collection.rs`](../src/compiler_frontend/ast/module_ast/finalization/const_fact_collection.rs) owns explicit module, private top-level and body-local const-fact collection after AST finalisation.
+- [`builtins/casts/`](../src/compiler_frontend/builtins/casts/) owns builtin cast target classification, evidence, policies and core cast-trait metadata. [`builtins/casts/resolution.rs`](../src/compiler_frontend/builtins/casts/resolution.rs) owns AST cast resolver wiring at explicit typed boundaries.
+- [`field_access/`](../src/compiler_frontend/ast/field_access/) owns source fields, receiver calls and compiler-owned collection/map builtin member access.
 
 AST owns:
 
-- semantic declaration resolution from header shells into canonical `TypeId`, function signature, constant, nominal type, trait, and receiver-method metadata
-- module-root public API validation, including private type leakage in exported signatures, fields, aliases and constants plus private trait leakage in exported trait metadata
-- executable body parsing, body-local declarations, expression parsing, and type checking
-- function terminality validation for non-unit success returns before HIR lowering
-- contextual coercion at explicit frontend-owned boundaries: declarations, assignments, returns, template/string content, casts, and backend/prelude call contracts
-- generic validation, generic free-function template storage, call inference, and concrete instance emission before HIR
-- trait declaration/evidence validation, static generic-bound evidence checks, and bound-provided receiver-call resolution before HIR
-- explicit cast target/evidence resolution and builtin cast folding
-- constant folding, const-fact collection, and const-only validation
-- template composition, compile-time folding, runtime render-plan preparation, reactivity metadata preservation, and HIR-boundary template normalization
-- TIR-based template representation: parser-emitted TIR drafts, finalized parser-TIR sync, TIR-based folding, TIR formatter view, and TIR-to-HIR handoff conversion
+- module-local semantic declaration resolution
+- imported canonical type projection into local `TypeId` handles
+- public interface validation and canonical export projection
+- executable body parsing and type checking
+- body-local declarations
+- function terminality validation
+- contextual coercion at explicit receiving boundaries
+- generic template validation and concrete request emission
+- trait, conformance and generic-bound evidence validation
+- explicit cast evidence resolution and builtin folding
+- constant and const-record folding
+- exported folded constant facts
+- template composition, slot routing, folding and runtime handoff preparation
+- reactive source and subscription metadata
+- module-local TIR from parser emission through finalisation
 
 AST should be described by this ownership and data-flow contract, not by a fixed internal pass count. The internal substeps inside each phase are implementation details and may change as the stage is simplified.
 
-The direct HTML-project Beandown API uses the same tokenizer, synthetic-header preparation, dependency sorting, and AST folding path as compiler-integrated `.bd` imports, then extracts the folded `content` constant. It deliberately stops before HIR generation, borrow validation, backend lowering, artifact writing, and output cleanup.
+The direct HTML-project Beandown API uses the same tokenizer, synthetic-header preparation, dependency sorting and AST folding path as compiler-integrated `.bd` imports, then extracts the folded `content` constant. It deliberately stops before HIR generation, borrow validation, backend lowering, artifact writing and output cleanup.
 
 ### Generics contract
 
-Generics are resolved before HIR. Header parsing records declaration-site generic parameter metadata on declaration shells, but AST owns semantic registration, validation, inference, and concrete instance emission.
+The declaring module owns and validates each immutable generic template.
 
-- Header parsing records generic parameter lists and declaration metadata. It does not infer or substitute generic types.
-- AST registers generic parameter lists in `TypeEnvironment` and resolves generic signatures to canonical `TypeId`s.
-- AST stores generic free-function templates and validates generic bodies before concrete calls are emitted.
-- AST infers generic function calls from immediate argument evidence and immediate expected result context only.
-- AST emits concrete generic function instances before HIR generation.
-- HIR must never carry unresolved generic executable types or unsolved generic function calls.
-- Borrow validation receives concrete HIR and does not consume generic template state.
-- Backends never solve generic type arguments or generic function instances.
+Consumers infer concrete arguments from immediate call arguments and immediate expected result context, then emit requests keyed by:
+
+- stable generic declaration identity
+- canonical concrete type identities
+- required visible trait evidence
+
+The build system owns a deterministic project-wide worklist. It deduplicates requests, materialises concrete functions into generated-artifact sidecars and continues until no generated function requests another instance.
+
+Invalid generic templates are diagnosed when the declaring module compiles. Inference failures, missing evidence and invalid concrete substitutions are diagnosed at the requesting call site with declaration context where useful.
+
+Generated executable functions are lowered to concrete HIR and borrow-validated independently. Base module artifacts remain immutable.
+
+HIR and backends receive only concrete executable targets. They never solve generic arguments or consume unresolved generic template state.
 
 ### Traits contract
 
-Trait declarations and conformances are resolved before HIR. Header parsing records trait and conformance shells. AST owns semantic trait identity, requirement type resolution, conformance evidence validation, reusable evidence visibility, and generic-bound evidence checks.
+Trait declarations and conformances are compile-time frontend metadata.
 
-- Traits are compile-time metadata in `TraitEnvironment`, not `DataType` values.
-- Trait names are valid in trait declarations, conformance declarations, and generic bounds only.
-- Trait names in ordinary type position are rejected with a structured static-contract diagnostic.
-- Explicit conformance evidence lives in `TraitEvidenceEnvironment` with stable evidence IDs and requirement-to-method mappings.
-- Static generic bounds use visible reusable evidence during generic function calls and concrete generic nominal instantiation.
-- Static trait-bound receiver calls are resolved to concrete source calls before HIR.
-- HIR and backends do not carry trait-object construction, erased dispatch, or trait evidence metadata for runtime dispatch.
+Header parsing records trait and conformance shells. AST owns semantic trait identity, requirement type resolution, explicit conformance validation, evidence visibility, generic-bound checks and bound-provided receiver-call resolution.
+
+Exported traits and reusable conformance evidence use stable module semantic identities. Consumers do not reconstruct conformance structurally.
+
+Receiver methods remain tied to the receiver type's exported source surface. Methods are not independently imported, aliased or re-exported.
+
+Traits are not value types. Trait names are valid only in trait declarations, conformance declarations and generic bounds.
+
+Static bound calls resolve to concrete executable targets before HIR. HIR and backends do not carry trait objects, erased dispatch or trait evidence for runtime dispatch.
 
 ### Imports and visibility
 
 AST consumes the header-built file visibility environment through `ScopeContext`. It may validate semantic use of visible symbols, but it must not rebuild import bindings or rediscover top-level visibility.
 
-All user-visible names go through one collision policy. Same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins cannot silently shadow each other.
+All user-visible names go through one collision policy. Same-file declarations, source imports, external imports, type aliases, prelude symbols and builtins cannot silently shadow each other.
 
 External expression and type resolution must go through the active `ScopeContext` visibility lookup. If AST cannot resolve a top-level declaration by walking sorted headers in order, the missing dependency belongs in header parsing or dependency sorting, not in a new AST pass.
 
@@ -622,37 +851,62 @@ External expression and type resolution must go through the active `ScopeContext
 
 Expression evaluation determines the natural type of an expression and stays strict. Contextual coercion is applied only by the frontend site that owns the boundary.
 
-AST emission should carry canonical `TypeId`s through field access, receiver lookup, builtin receiver validation, call validation, operator result typing, and compatibility checks. `DataType` remains parse-only or diagnostic spelling once a semantic `TypeId` exists.
+AST emission should carry canonical `TypeId`s through field access, receiver lookup, builtin receiver validation, call validation, operator result typing and compatibility checks. `DataType` remains parse-only or diagnostic spelling once a semantic `TypeId` exists.
 
 Examples of boundary owners:
 
-- declarations
-- assignments
+- declarations and assignments
 - returns
-- template/string content
+- concrete function parameters
+- struct and choice fields
+- default values
+- typed collection and map entries
+- template and string content
 - explicit `cast` target boundaries
-- backend/prelude call contracts
+- `then` arms whose enclosing value-producing block has an explicit receiver
+- backend and prelude call contracts
 
-Detailed numeric rules, match syntax, cast syntax, and string coercion rules belong in [`language-overview.md`](language-overview.md).
+Detailed numeric rules, match syntax, cast syntax and string coercion rules belong in [`language-overview.md`](language-overview.md).
+
+### Value-producing blocks and terminality
+
+Value-producing `if`, match and block-form `catch` are closed receiving constructs, not general expressions.
+
+They are valid only where the receiver is explicit, including declarations, assignments, multi-bind, returns and nested `then`. Every producing path must satisfy the receiver arity.
+
+AST owns user-facing receiving-context, arity and terminality diagnostics. Non-unit success returns must be terminal before HIR lowering.
+
+If HIR receives a non-unit function that can fall through, the AST contract was violated and HIR reports an internal transformation error.
 
 ### Constants and folding
 
-The AST consumes parsed compile-time constants directly and type-checks their initializers. Module constants are compile-time metadata, not runtime top-level declaration statements.
+Constants are compile-time declarations and module metadata, not runtime top-level statements.
 
-Constants and top-level const templates must fold at compile time. Runtime expressions in constants are rejected.
+Header parsing records initializer references for dependency ordering. AST owns semantic checking and folding.
 
-Runtime expressions that cannot fold are currently represented in AST as stack-oriented RPN node vectors before HIR lowering. Those expression vectors are expression-only structures, not broad statement fragments. `ExpressionKind::Runtime` carries `ExpressionRpn`, copy expressions carry `PlaceExpression`, and `ExpressionKind::ValueBlock` is the only expression variant allowed to carry statement bodies.
+A module folds its constants and const templates once. Exported folded facts are copied into the immutable public interface as owned backend-neutral values. Consumers do not parse or fold provider templates again.
+
+Private inferred const facts are advisory optimisation metadata. They do not affect semantics, dependency sorting or visibility.
+
+Fully folded struct constants may become const records. Const records are compile-time field-access-only groups. They are not runtime values and cannot be passed, returned, stored or used through runtime methods.
+
+Compile-time and runtime semantics must agree:
+
+- checked numeric failure rules match
+- cast range and non-finite checks match
+- Float formatting matches
+- template interpolation output does not depend on the backend
 
 ### Templates
 
-AST owns template semantic preparation.
+AST owns all template semantics.
 
-Templates are represented in the AST-local Template IR (TIR). The `Template` value is a thin TIR handle that references the module-scoped `TemplateIrStore`; the TIR registry is not part of the returned `Ast`.
+TIR is the single AST-local structural authority from parser emission through composition, formatting, folding and finalisation. `Template` is a thin handle into the module-scoped TIR registry while AST construction is active.
 
 AST owns:
 
 - parsing template bodies and emitting them into TIR
-- composing slots, inserts, wrappers, and child templates in TIR
+- composing slots, inserts, wrappers and child templates in TIR
 - folding fully constant templates into string literals
 - preserving structured template `if` and `loop` bodies for runtime lazy lowering
 - preparing runtime slot source/site plans after AST-owned schema extraction and contribution routing
@@ -662,14 +916,13 @@ AST owns:
 - replacing runtime templates with owned runtime handoff payloads before HIR
 - removing helper-only template artifacts before HIR
 - emitting builder-facing const top-level fragment metadata
+- exporting only folded owned const-template facts through module interfaces
 
-AST finalization folds const templates or replaces runtime templates with owned runtime handoff payloads from [`runtime_handoff.rs`](../src/compiler_frontend/ast/templates/runtime_handoff.rs). HIR receives no TIR refs, stores, views, overlays, or registry values.
+AST finalisation folds const templates or replaces runtime templates with neutral owned handoff payloads. The TIR registry and stores are dropped before the completed AST leaves the stage. No TIR reference, store, view, overlay or registry value crosses a module interface or enters HIR.
 
-HIR only lowers finalized runtime templates that remain after AST folding. Runtime template control flow lowers inline as ordinary HIR branches, loops, accumulator appends, and AST-prepared runtime slot source/site plans in the enclosing function, not as backend-specific template control-flow nodes. HIR consumes AST-prepared slot source/site plans and owned runtime handoff payloads only. It does not parse directives, validate slot schemas, or reconstruct TIR.
+HIR only lowers finalised runtime templates that remain after AST folding. Runtime template control flow lowers inline as ordinary HIR branches, loops, accumulator appends and AST-prepared runtime slot source/site plans in the enclosing function, not as backend-specific template control-flow nodes. HIR consumes AST-prepared slot source/site plans and owned runtime handoff payloads only. It does not parse directives, validate slot schemas or reconstruct TIR.
 
-Compile-time page fragments stay outside HIR.
-
-User-facing template syntax, directives, markdown behavior, and slots are in [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst).
+User-facing template syntax, directives, markdown behaviour and slots are in [`src/docs/templates/#page.bst`](src/docs/templates/#page.bst).
 
 ### Reactivity V1
 
@@ -677,56 +930,58 @@ Reactivity V1 is frontend-owned source and template metadata that later stages p
 
 Stage ownership:
 
-- Declaration syntax parses `$Type`, `$=`, and `$T` parameter access markers as syntax only.
-- AST resolves the underlying ordinary `TypeId`, assigns reactive source identity, validates `$(source)` template subscriptions, and preserves reactive template string metadata.
-- HIR carries backend-facing reactive source/template metadata and reachability facts without reparsing template directives or becoming a backend render-plan language. HIR consumes finalized runtime template metadata from the AST stage; it does not parse template directives, slot schemas, or TIR nodes.
+- Declaration syntax parses `$Type`, `$=` and `$T` parameter access markers as syntax only.
+- AST resolves the underlying ordinary `TypeId`, assigns reactive source identity, validates `$(source)` template subscriptions and preserves reactive template string metadata.
+- HIR carries backend-facing reactive source/template metadata and reachability facts without reparsing template directives or becoming a backend render-plan language. HIR consumes finalised runtime template metadata from the AST stage. It does not parse template directives, slot schemas or TIR nodes.
 - Borrow validation treats subscriptions as read-only source dependencies, not active borrow lifetimes, while ordinary mutations continue to follow existing mutable/exclusive rules.
-- Backend feature validation applies the selected target contract before lowering. Runtime reactive behavior remains backend-owned artifact policy.
+- Backend feature validation applies the selected target contract before lowering. Runtime reactive behaviour remains backend-owned artifact policy.
 
-## Stage 5: HIR Generation
+## Stage 5: HIR generation
 
 Path: [`src/compiler_frontend/hir/`](../src/compiler_frontend/hir/)
 
-HIR generation lowers the fully typed AST into the first backend-facing semantic IR. HIR is structured enough for borrow/exclusivity analysis: control flow, locals, calls, regions, and terminators are explicit, while ordinary value construction and pure operators may remain as nested expression trees.
+HIR lowers fully typed module AST and generated concrete functions into the first backend-facing semantic IR.
 
-HIR stores compact frontend `TypeId`s but does not own a separate semantic type table. `lower_module` returns the completed `HirModule` beside the AST-built `TypeEnvironment`. Borrow validation and backends must use that paired environment for semantic type queries.
+Each module retains local HIR IDs and its paired local `TypeEnvironment`. Cross-module executable references use stable project targets such as a module-function identity. The callee body is not copied into the caller.
+
+HIR makes control flow, locals, regions, calls and terminators explicit. Pure value construction may remain nested while effectful work is linearised into statements and temporary locals.
 
 HIR owns:
 
-- explicit control-flow structure
-- block, jump, terminator, loop, branch, return, and match representation
-- explicit locals, regions, and call targets
-- expression side-effect linearization. Calls, checked operations, casts, map operations, and other effectful expression work become explicit statement preludes plus temporary locals before the final value expression is used.
-- lowered runtime template expressions
-- inline runtime template control flow as ordinary CFG
-- runtime slot source/site plans lowered as ordinary string accumulators and appends
-- hashmap literals and map member operations as first-class HIR operations for borrow validation and backend feature validation
-- module constants as compile-time metadata
-- advisory private const-fact metadata projected from AST for future optimization consumers
-- function-origin metadata such as active-root start versus normal functions
-- doc fragments, rendered path usages, warnings, and other module metadata that survives from AST into builder-facing compiled modules
-- stable external function IDs selected during AST resolution
-- builtin runtime cast expressions and fallible cast operations that survive AST folding
-- direct user-function calls emitted during HIR lowering for user-defined cast evidence selected by AST
-- checked numeric effects represented as `HirStatementKind::NumericOp` with the selected `NumericFailureMode`
-- Float formatting and external Float boundary validation represented as `FormatFloat` and `ValidateFloat` statements
-- backend-neutral syntactic reachability over functions, blocks, external call IDs, maps, reactive metadata, runtime casts, checked numeric operations, and Float statements from explicit roots
-- enough structure for borrow validation and later backend lowering
+- explicit local control flow
+- locals, places, regions and terminators
+- stable local and cross-module call targets
+- concrete generated-function targets
+- expression side-effect linearisation
+- runtime template string construction
+- template control flow as ordinary CFG
+- runtime slot accumulators and appends
+- map operations
+- checked numeric operations
+- runtime casts
+- Float formatting and validation
+- reactive metadata
+- module constants and advisory private const facts
+- function-origin metadata
+- backend-neutral reachability facts
+- stable external package call IDs
 
 HIR does not:
 
-- fold templates
-- reconstruct missing template plans
-- carry backend-specific template control-flow nodes
-- carry compile-time top-level page fragments
-- use private const facts to change semantics in this plan
-- solve generic functions or carry unresolved generic parameter executable types
-- decide trait conformance or generic-bound evidence
-- carry user-defined cast trait evidence or generic-bound cast evidence into backend lowering
+- merge provider module bodies into consumers
+- carry donor-local type or function indexes across modules
+- fold constants or templates
+- reconstruct slot or render plans
+- carry TIR
+- carry compile-time page fragments
+- solve generic arguments
+- decide trait conformance
+- carry runtime trait evidence
 - decide final runtime ownership
 - model exact lifetimes
+- assemble routes or project artifacts
 
-Plain `HirBinOp` remains valid for booleans, comparisons, and string concatenation. Runtime scalar arithmetic and unary negation must lower through `HirStatementKind::NumericOp`. HIR validation rejects regressions where numeric arithmetic survives as ordinary expression ops.
+Plain `HirBinOp` remains valid for booleans, comparisons and string concatenation. Runtime scalar arithmetic and unary negation must lower through `HirStatementKind::NumericOp`. HIR validation rejects regressions where numeric arithmetic survives as ordinary expression ops.
 
 HIR lowering treats user-facing source errors as already diagnosed by AST or earlier stages. HIR lowering and HIR validation use `CompilerError` for internal transformation invariants. If a non-unit function can fall through after AST terminality validation, that is a compiler invariant breach.
 
@@ -734,57 +989,73 @@ HIR lowering treats user-facing source errors as already diagnosed by AST or ear
 
 [`src/compiler_frontend/hir/validation.rs`](../src/compiler_frontend/hir/validation.rs) and [`src/compiler_frontend/hir/validation/`](../src/compiler_frontend/hir/validation/) validate the freshly lowered module before it leaves Stage 5. Borrow validation and backend feature validation should receive already-coherent HIR, not defensively repair it.
 
-HIR validation checks definition IDs, frontend `TypeId` links, region graph shape, start-function and function-origin metadata, CFG ownership, doc fragments, module constants, reactive metadata, side-table mappings, local/place references, terminators, patterns, and expression invariants.
+HIR validation checks definition IDs, frontend `TypeId` links, region graph shape, start-function and function-origin metadata, CFG ownership, doc fragments, module constants, reactive metadata, side-table mappings, local/place references, terminators, patterns and expression invariants.
 
 Important examples:
 
 - Plain arithmetic `HirBinOp` and `HirUnaryOp::Neg` that should have been lowered to checked `NumericOp` statements are rejected as HIR shape errors.
 - `HirExpressionKind::Float` values must be finite `f64`. `NaN` and `Infinity` literals are rejected as internal invariant breaches.
-- Control-flow structure, block terminators, local references, side-table mappings, and expression shapes are validated for borrow validation and backend consumption.
+- Control-flow structure, block terminators, local references, side-table mappings and expression shapes are validated for borrow validation and backend consumption.
 
 Validation failures are `CompilerError` with `ErrorType::HirTransformation`, not user-facing `CompilerDiagnostic`, because they represent compiler-internal lowering invariants.
 
 ### Reachable backend features
 
-[`src/compiler_frontend/hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs) records syntactic reachability for functions, blocks, external calls, map literals/operations, reactive template-backed values, reactive sinks, runtime casts, checked numeric operations, and Float formatting/validation statements. It does not fold constants, eliminate dead branches, inspect borrow facts, or perform backend lowering.
+[`src/compiler_frontend/hir/reachability.rs`](../src/compiler_frontend/hir/reachability.rs) records syntactic reachability for functions, blocks, external calls, map literals/operations, reactive template-backed values, reactive sinks, runtime casts, checked numeric operations and Float formatting/validation statements. It does not fold constants, eliminate dead branches, inspect borrow facts or perform backend lowering.
 
 Some target-gated checks need more than backend-neutral reachability. For example, generic runtime value validation scans reachable blocks with the module `TypeEnvironment` because generic-instance detection is semantic type analysis, not a raw HIR reachability fact.
 
-### External calls
+### Call targets
 
-Calls to builder-provided package functions lower to stable external call targets such as `CallTarget::ExternalFunction(ExternalFunctionId)`.
+Source calls use one of three explicit target classes:
 
-HIR does not store package import syntax or backend runtime names. Borrow validation can resolve external IDs through the external package registry to recover access rules and return-alias metadata. Backends map the same IDs to target-specific helpers, imports, generated glue, runtime names, or target-native operations.
+- module-local function target
+- stable cross-module function target
+- stable binding-backed external function ID
 
-The HTML builder and backend validators use HIR reachability for runtime artifact planning and target-contract validation. This is syntactic CFG/function reachability, not constant-condition dead-code elimination, optimization, or ownership analysis.
+Cross-module targets resolve through the compiled project graph and entry or package link plan. HIR does not store import aliases, package source syntax or backend runtime names.
+
+Borrow validation resolves source function targets to exported access and effect summaries. Backends resolve source and external targets to generated functions, linked module functions, imports, glue or target-native operations.
+
+The HTML builder and backend validators use HIR reachability for runtime artifact planning and target-contract validation. This is syntactic CFG/function reachability, not constant-condition dead-code elimination, optimisation or ownership analysis.
 
 ### Mutable rvalues
 
-Fresh rvalues passed to mutable (`~T`) call slots are materialized into compiler-introduced hidden locals before borrow validation. Borrow validation then sees ordinary local access, not a special temporary node kind.
+Fresh rvalues passed to mutable (`~T`) call slots are materialised into compiler-introduced hidden locals before borrow validation. Borrow validation then sees ordinary local access, not a special temporary node kind.
 
-## Stage 6: Borrow Validation
+## Stage 6: Borrow validation
 
-Path: [`src/compiler_frontend/analysis/borrow_checker/`](../src/compiler_frontend/analysis/borrow_checker/)
+Borrow validation runs once for each canonical module and once for each generated concrete function.
 
-Borrow validation enforces borrow/exclusivity rules and produces side-table facts used by later ownership-aware lowering. It does not mutate HIR, compute exact lifetimes, or decide final runtime ownership.
+It enforces:
 
-GC remains the semantic fallback. Ownership and deterministic destruction are optimization layers described in [`docs/src/docs/codebase/memory-management/overview.bd`](src/docs/codebase/memory-management/overview.bd).
+- shared and exclusive access rules
+- use-after-consumption safety
+- conservative aliasing for collections and maps
+- legal mutable call access
+- control-flow joins
+- inferred move safety
+- reactive invalidation facts
 
-Borrow validation is mandatory for backend semantic parity:
+It reads validated HIR and writes read-only side tables. It does not rewrite HIR, compute exact lifetimes or decide final runtime ownership.
 
-- invalid overlapping mutable/shared access is rejected before backend lowering
-- use-after-move and invalid access patterns are rejected before backend lowering
-- hashmap `get` results alias the receiver conservatively, so later map mutation is rejected while the shared result is live
-- valid programs may expose additional facts for ownership-aware lowerings
-- GC-only backends can ignore ownership-specific optimization facts while preserving semantics
+Public function interfaces export the facts consumers need:
 
-Current borrow facts include function summaries, block and statement state snapshots, statement/terminator/value access facts, conservative reactive invalidation facts, and advisory drop sites for later ownership-aware lowering. These facts are read-only side tables. They do not rewrite HIR.
+- parameter access modes
+- mutation effects
+- possible ownership consumption
+- return aliasing
+- relevant reactive effects
 
-Reactive subscriptions are not active borrows. Borrow validation records conservative invalidation facts for assignments, place writes, map mutations, and mutable call arguments that may dirty reactive sources, while ordinary alias/exclusivity rules continue to apply to the underlying values.
+Cross-module call transfer consumes these summaries. It never opens the callee's HIR as local control flow.
 
-Borrow validation does not track per-field or per-projection aliasing yet. HIR remains the stable semantic representation. Borrow facts live in side tables keyed by HIR/value IDs.
+Missing or inconsistent exported summaries are `CompilerError` invariant failures.
 
-The language-level no-shadowing rule supports simpler name and borrow analysis, but the rule itself is specified in [`language-overview.md`](language-overview.md).
+GC-only backends may ignore ownership optimisation facts but cannot skip borrow validation. GC and ownership-aware lowering accept and reject the same programs.
+
+Reactive subscriptions are read-only source dependencies, not active borrow lifetimes.
+
+Borrow facts remain keyed by module-local HIR identity. Exported summaries use stable module function identity.
 
 ## Stage 7: Backend lowering
 
@@ -793,78 +1064,91 @@ Backend lowering belongs to project builders after frontend compilation.
 ### Navigation
 
 - [`src/backends/js/`](../src/backends/js/) owns HIR-to-JavaScript lowering and JS runtime helper emission.
-- [`src/backends/wasm/`](../src/backends/wasm/) owns HIR-to-Wasm-LIR lowering, Wasm runtime contracts, request validation, debug output, and optional binary emission.
+- [`src/backends/wasm/`](../src/backends/wasm/) owns HIR-to-Wasm-LIR lowering, Wasm runtime contracts, request validation, debug output and optional binary emission.
 - [`src/projects/html_project/html_project_builder.rs`](../src/projects/html_project/html_project_builder.rs) owns the HTML `BackendBuilder` implementation and route-level artifact assembly.
 - [`src/projects/html_project/js_path.rs`](../src/projects/html_project/js_path.rs) owns the HTML JS page-bundle path.
-- [`src/projects/html_project/wasm/`](../src/projects/html_project/wasm/) owns HTML-Wasm export planning, bootstrap JS, and artifact assembly around the core Wasm backend.
-- [`src/projects/html_project/external_js/`](../src/projects/html_project/external_js/) owns provider-backed JavaScript imports, runtime module planning, generated glue, import maps, and runtime asset emission.
+- [`src/projects/html_project/wasm/`](../src/projects/html_project/wasm/) owns HTML-Wasm export planning, bootstrap JS and artifact assembly around the core Wasm backend.
+- [`src/projects/html_project/external_js/`](../src/projects/html_project/external_js/) owns provider-backed JavaScript imports, runtime module planning, generated glue, import maps and runtime asset emission.
 - [`src/projects/html_project/tracked_assets.rs`](../src/projects/html_project/tracked_assets.rs) owns HTML tracked-asset planning and passthrough emission.
 
 ### Backend handoff
 
-Backend builders consume `Module` values containing:
+Backend builders consume `ProjectCompilation`, containing:
 
-- canonical entry-point path
-- validated HIR
-- the paired `TypeEnvironment`
-- borrow-analysis facts
-- warnings
-- resolved const top-level fragments
-- `ModuleRootActivity` with non-trivial root-body, const-fragment and runtime-fragment facts
-- the effective external package registry for the module
-- deduplicated provider/runtime external-import metadata
+- the canonical module graph
+- immutable compiled module artifacts
+- generated concrete-function sidecars
+- entry assemblies
+- the optional project package facade assembly
+- canonical public interfaces
+- module-local HIR and type environments
+- borrow facts and exported function-effect summaries
+- diagnostics and warnings
+- root activity and page-fragment metadata
+- backend-neutral runtime dependency facts
+- binding-backed package metadata
 
 Backend lowering has three boundaries:
 
-- The build system owns orchestration and output writing. It calls the selected `BackendBuilder`, receives a `Project` containing explicit `OutputFile` artifacts and a cleanup policy, then writes those artifacts through the shared output writer.
-- Project builders own project-specific artifact assembly policy. The HTML builder resolves page routes, validates project-level output conflicts, chooses a backend path, merges page fragments, plans tracked assets, and returns builder-owned artifacts.
-- Backend lowerers own target-specific code generation from validated HIR and companion metadata. They do not rediscover frontend imports, traits, generic evidence, source config, or template syntax.
+- The build system owns compilation scheduling, link-plan construction and output writing.
+- Project builders own artifact policy such as routes, entry selection, fragment assembly and tracked assets.
+- Backend lowerers own target code generation from validated HIR and explicit link plans.
 
-Language-owned HIR operations such as maps, checked numeric operations, Float formatting, Float validation, builtin casts, and reactive metadata lower through backend-owned runtime helpers or target-native code selected by the backend. They must not be silently reinterpreted as unchecked target-native behavior when Beanstalk semantics require checks or helper calls.
+Backends do not rediscover source imports, module topology, generic templates, trait evidence, config syntax or template syntax.
 
-Ownership-aware backends may use borrow facts and memory-model metadata for optimization. GC-only backends can lower through the semantic baseline without deterministic drop behavior.
+Language-owned HIR operations lower through backend helpers or target-native operations that preserve Beanstalk semantics.
+
+Ownership-aware backends may consume borrow facts for optimisation. GC-only paths preserve the same source behaviour without deterministic destruction.
 
 ### Build-system output writing
 
-Backends and project builders produce `OutputFile` records. They should not write final project outputs directly. The build system owns output-root validation, skip-unchanged writes, manifest tracking, and stale artifact cleanup through `write_project_outputs`.
+Backends and project builders produce `OutputFile` records. They should not write final project outputs directly. The build system owns output-root validation, skip-unchanged writes, manifest tracking and stale artifact cleanup through `write_project_outputs`.
 
-### HTML runtime fragment assembly contract
+### HTML entry and fragment assembly
 
-The HTML project builder owns the target-independent page-fragment plan for both HTML-JS and HTML-Wasm routes. It receives resolved const top-level fragments and `ModuleRootActivity` from the compiled module. Modules with no HTML artifact activity are filtered before route, runtime asset and tracked asset planning. For each remaining module the builder:
+The HTML project builder consumes entry assemblies rather than treating every compiled module as an independent page.
 
-1. Merges compile-time fragments into their source-order positions.
-2. Creates placeholders or slots for runtime fragments.
-3. Executes active-root `start` once through the selected runtime path.
-4. Hydrates returned runtime fragments into those slots in source order.
-5. Assembles the final route HTML artifact and any companion files.
+For each artifact-producing entry it:
 
-This keeps fragment ordering, route assembly and document shell policy in the builder. HIR carries runtime code only and does not carry compile-time page fragments or document structure.
+1. Selects the active normal module.
+2. Activates that module's dormant `start` and root fragment metadata.
+3. Merges compile-time fragments at their recorded runtime insertion indexes.
+4. Creates runtime fragment slots.
+5. Executes active `start` once through the selected runtime path.
+6. Hydrates runtime fragments in source order.
+7. Assembles route HTML and companion artifacts.
+
+Imported normal modules, support packages and the project package facade never execute root work.
+
+Modules without HTML artifact activity remain available to the graph but are excluded from route, runtime-glue and tracked-asset planning.
+
+HIR carries runtime code only. Entry assemblies and the HTML builder own document and route semantics.
 
 ### External package and backend feature validation
 
-Backend validation runs before target lowering. External package validation checks reachable external calls against the selected target’s lowering metadata. Backend feature validation checks target-gated HIR features through explicit reachability roots and returns structured diagnostics for user-visible target-contract violations. Backend lowerers should receive only HIR features and external calls that their selected target contract can lower.
+Backend validation runs before target lowering. External package validation checks reachable external calls against the selected target's lowering metadata. Backend feature validation checks target-gated HIR features through explicit reachability roots and returns structured diagnostics for user-visible target-contract violations. Backend lowerers should receive only HIR features and external calls that their selected target contract can lower.
 
-Backend feature validation does not hard-code one execution root. The project builder selects a root policy for the artifact being produced, such as entry-start reachability for page bundles or an explicit exported-function set for artifacts whose callable surface is builder-defined.
+Backend feature validation does not hard-code one execution root. The project builder supplies roots from the entry or package link plan, including active start, reachable linked module functions, generated functions and explicit exported surfaces.
 
 ### JS lowering
 
-The HTML-JS path lowers HIR through the JS backend, then uses the shared fragment contract: const fragments render into the document, runtime fragment slots are emitted, the generated JS bundle is embedded or module-loaded, active-root `start` is called once, and returned runtime fragments hydrate the slots in source order. The HTML page-bundle path emits only the active-root-reachable function set and uses the JS backend's referenced external-function metadata to generate only the glue wrappers that the emitted bundle calls.
+The HTML-JS path lowers HIR through the JS backend, then uses the shared fragment contract: const fragments render into the document, runtime fragment slots are emitted, the generated JS bundle is embedded or module-loaded, the active entry's `start` is called once and returned runtime fragments hydrate the slots in source order. The HTML page-bundle path emits only the entry link plan's reachable concrete function set and uses the JS backend's referenced external-function metadata to generate only the glue wrappers that the emitted bundle calls.
 
 The direct JS backend path can emit a complete standalone JS bundle when configured to include every HIR function. The HTML page-bundle path selects the reachable subset needed for the route artifact.
 
-HTML-JS reactive runtime fragments are a separate, JS-only concern. Ordinary runtime page-fragment assembly is shared with HTML-Wasm; reactive mounting is not.
+HTML-JS reactive runtime fragments are a separate, JS-only concern. Ordinary runtime page-fragment assembly is shared with HTML-Wasm. Reactive mounting is not.
 
 ### Wasm lowering
 
-The core Wasm backend owns HIR-to-Wasm-LIR lowering, Wasm runtime contracts, request validation, optional binary emission, and backend debug output. The HTML-Wasm path is builder orchestration around that backend. It chooses exported functions, requests helper exports, invokes Wasm lowering, generates bootstrap JS, and assembles route HTML, JS, and Wasm files using the same shared fragment contract as HTML-JS.
+The core Wasm backend owns HIR-to-Wasm-LIR lowering, Wasm runtime contracts, request validation, optional binary emission and backend debug output. It consumes explicit linked module and generated-function targets. The HTML-Wasm path is builder orchestration around that backend. It chooses exported functions, requests helper exports, invokes Wasm lowering, generates bootstrap JS and assembles route HTML, JS and Wasm files using the same shared fragment contract as HTML-JS.
 
 ### External JS runtime assets and glue
 
 Provider-backed external JS has two emission levels:
 
-- Build-level runtime emission deduplicates JS runtime assets and required runtime module specifiers across all compiled modules.
-- Module-level glue generation inspects external functions referenced by the emitted JS bundle and emits only the wrapper module, import preamble, and import-map entries needed for that page bundle.
+- Build-level runtime emission deduplicates JS runtime assets and required runtime module specifiers across the linked project compilation.
+- Module-level glue generation inspects external functions referenced by the emitted JS bundle and emits only the wrapper module, import preamble and import-map entries needed for that page bundle.
 
 ### Tracked assets
 
-Tracked assets are a builder policy over frontend-rendered path usages. The frontend records semantic path facts while rendering paths. The HTML builder decides which file paths become emitted assets, chooses output paths relative to the final page route, reports asset warnings/conflicts, and returns asset bytes as ordinary `OutputFile` artifacts.
+Tracked assets are a builder policy over frontend-rendered path usages. The frontend records semantic path facts while rendering paths. The HTML builder decides which file paths become emitted assets, chooses output paths relative to the final page route, reports asset warnings/conflicts and returns asset bytes as ordinary `OutputFile` artifacts.

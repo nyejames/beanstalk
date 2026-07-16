@@ -179,3 +179,5 @@ and GC fallback.
 - @../borrow-validation (Borrow validation): move and drop facts
 - @../runtime-and-backend-lowering
   (Runtime and backend memory lowering): ABI realisation and GC fallback
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler borrow validation): move and drop facts
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler Wasm lowering): ownership-aware backend seam

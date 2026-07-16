@@ -203,4 +203,4 @@ covers shared reads, explicit copies and `~` access.
 
 ## Compiler ownership
 
-`docs/compiler-design-overview.md`
+`docs/compiler-design-overview.md` defines the compiler stages, semantic owners and cross-stage handoff for the language surface.

@@ -132,7 +132,7 @@ If implementation work makes documentation inaccurate, report the affected files
 - The progress matrix records current support, partial support, clean rejection, experimental paths, and coverage.
 - The roadmap records sequencing, active plans, and proposals not yet accepted as design.
 - Update the progress matrix when current status changed. Do not make a meaningless matrix edit for a pure refactor or prose-only correction.
-- Put architecture in the narrowest relevant codebase page.
+- Put compiler architecture and stage ownership in `docs/compiler-design-overview.md`. Keep memory, language-scope, testing and validation rules in their existing canonical references.
 
 ## Benchmarking
 

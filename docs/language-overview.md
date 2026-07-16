@@ -56,7 +56,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 ## Related references
 
 - `docs/src/docs/**` — user-facing docs-site pages and real `.bst` examples
-- `docs/compiler-design-overview.md` — compiler design overview
+- `docs/compiler-design-overview.md`: compiler stage ownership and cross-stage architecture
 - `docs/src/docs/codebase/memory-management/overview.bd` — GC fallback, ownership optimisation and borrow-analysis strategy
 - `docs/src/docs/codebase/design-scope/overview.bd` — accepted mechanisms, constraints and outside-scope families
 - `docs/src/docs/progress/#page.bst` — current implementation status
@@ -1291,7 +1291,7 @@ Aliases are transparent type spellings, not constructors. Construct a nominal st
 
 ## Module System, Config, and Imports
 
-A module is a directory-scoped set of Beanstalk source files compiled together. A directory becomes a module root when it contains exactly one non-config `#*.bst` file. More than one root file in the same directory is rejected. A project contains one or more modules plus packages and other builder inputs.
+A module is a directory-scoped set of Beanstalk source files compiled together. A directory becomes a module root when it contains one `#*.bst` or `+*.bst` file. The suffix after either marker is cosmetic. More than one root file in the same directory is rejected. A project contains normal modules, scoped support packages, an optional project package facade and other builder inputs.
 
 ### Project config
 
@@ -1309,7 +1309,6 @@ Known config key shapes include:
 - string settings: string literals or folded templates;
 - `project`: currently only `"html"`;
 - boolean HTML settings: folded `Bool`, not strings;
-- `package_folders`: one string or a collection of strings;
 - `template_const_loop_iteration_limit`: positive folded `Int`, default `10_000`, max `1_000_000`.
 
 ```beanstalk
@@ -1317,7 +1316,6 @@ project #= "html"
 entry_root #= "src"
 dev_folder #= "dev"
 output_folder #= "release"
-package_folders #= {"lib", "packages"}
 ```
 
 Config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`. Structured typed config values such as `project #= Project::Html(...)` remain deferred.
@@ -1345,6 +1343,8 @@ import @docs {
 ```
 
 Rules:
+- Project source imports resolve from the importing file's owning module root, not the file's directory.
+- `@./...` has no supported meaning and paths containing `..` are rejected.
 - Imports target exported symbols, not file-level start functions.
 - Source namespace imports create shallow, field-access-only import records.
 - External package namespace imports can expose nested package-local symbol paths such as `io.input.*`.
@@ -1368,41 +1368,49 @@ export:
 - `.bst` source imports are extensionless.
 - Direct project/local JavaScript imports require `.js` and a builder `.js` external import provider.
 - Invalid namespace path stems require explicit aliases.
-- Direct imports of any `#*.bst` root file and `config.bst` are invalid.
+- Direct imports of any `#*.bst` or `+*.bst` root file and `config.bst` are invalid.
 
 ### Module roots, runtime, public APIs and packages
 
 | File/root | Role |
 |---|---|
-| one non-config `#*.bst` file per module directory | Module root with a cosmetic filename |
-| active module root | Owns top-level runtime/start code and direct page fragments |
-| imported module root | Provides only its `export:` public surface; root runtime is suppressed |
+| one `#*.bst` file per normal module directory | Normal module root with a cosmetic filename |
+| one `+*.bst` file per support directory | API-only scoped package root named by its directory |
+| optional project-root `+*.bst` beside `config.bst` | API-only external package facade named by project config |
+| entry-selected normal module | Owns active top-level runtime/start code and direct page fragments |
+| imported normal module | Provides only its `export:` public surface and never executes root runtime |
 | implicit `start` | Contains active-root top-level runtime code; build-system-only; not importable |
 | normal `.bst` files | Declarations only; no top-level executable statements |
 | `config.bst` | Affects build behavior; creates no language-visible imports |
 
 Execution and visibility:
-- The active module root executes top-level runtime code automatically.
+- An entry assembly activates one normal module's top-level runtime code and page fragments exactly once.
 - Other files contribute declarations that must be imported explicitly.
-- An imported module root never replays its top-level runtime code or page fragments in the importer.
-- A module root may contain private imports, private declarations, one strict `export:` block, runtime start code and direct page fragments.
+- An imported normal module never replays its top-level runtime code or page fragments in the importer.
+- Support modules and the project package facade have no implicit `start`, top-level runtime work, page fragments, routes or builder artifacts.
+- A normal module root may contain private imports, private declarations, one strict `export:` block, runtime start code and direct page fragments.
+- A support root may contain private imports, private declarations and one strict `export:` block. Runtime work and fragments are rejected.
 - Declarations outside `export:` stay private to the module. A root with no `export:` exports nothing.
 - Grouped imports inside `export:` re-export symbols, and grouped aliases define the public API name.
 - Public APIs must not expose private root-only types in signatures, fields, aliases, generic bounds, or exported constant types.
 - Receiver methods are visible across a module boundary when `export:` exposes the receiver type's source surface. Type aliases do not automatically re-export private implementation methods.
 - Legacy inline `export`, bare namespace exports, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
-- API-only roots with no runtime code or direct fragments produce no HTML artifact.
+- A support package is visible only within its nearest ancestor normal module's subtree. It is visible to that owner, normal sibling modules and their descendants, but not above the owner, outside its subtree or from another support package in the same scope.
+- A support package is unavailable inside its own private implementation subtree.
+- A project package facade is not visible to the project's internal modules. It may assemble public descendant surfaces below `entry_root` for external consumers.
+- API-only roots produce no HTML artifact.
 
 Import resolution:
-- `@./x` resolves from the importing file’s directory.
-- Parent-directory imports with `..` are unsupported.
-- Imports cannot escape module, package or project boundaries.
-- Package-prefix imports resolve from the matching package root.
-- Other non-relative imports resolve from the configured module entry root.
-- Configured package folders are scan roots; each direct child directory becomes an import prefix.
-- `/lib` is the default scan folder when `package_folders` is omitted.
-- Importing a folder across or into a module boundary requires one unique `#*.bst` root, and only declarations in its `export:` block are visible.
-- Sibling `name.bst` and `name/` folder imports are ambiguous; `.js` files are excluded from that collision rule.
+- Every source import starts from the importing file's owning module root.
+- A normal module may import files and unrooted directories it owns, direct child normal modules, support packages visible in its lexical scope and registered packages.
+- A normal module may not import its parent, an ancestor, a normal sibling, a grandchild directly, a sibling's descendant, an unrelated branch or another module's private file path.
+- Reaching a child module or support package ends filesystem traversal and exposes only its `export:` facade. Imports cannot bypass that facade with paths such as `@child/internal`.
+- A child module re-exports anything its parent should see from deeper descendants.
+- A support root may import files it owns, descendant modules in its private subtree, support packages from a strictly outer scope and registered packages. It may not import its parent, normal sibling consumers or same-scope support siblings.
+- The project package facade is the only assembly exception. It resolves project paths from `entry_root` and receives only descendant public interfaces.
+- `@./...`, parent components and importing-file-relative resolution are unsupported.
+- Extensionless `.bst`, `.bd`, `.md` and directory identities share one strict namespace. Same-name files, directories, modules and visible packages are rejected instead of resolved by precedence.
+- Explicit-extension provider files such as `.js` may coexist with a same-stem directory only when syntax remains unambiguous.
 - Grouped imports expand into individual symbol imports.
 - Same-module file cycles are accepted when declarations resolve through the dependency graph. Circular compile-time constant dependencies are rejected. Cross-module and package visibility still applies.
 
@@ -1413,12 +1421,13 @@ Package metadata has two orthogonal axes:
 | `@html` | Builder | BeanstalkSource |
 | `@core/collections`, `@core/io`, `@core/math`, `@core/text`, `@core/random`, `@core/time` | Core | ExternalBinding |
 | `@web/canvas` | Builder | ExternalBinding |
-| configured package-folder child | ProjectLocal | BeanstalkSource |
+| scoped `+*.bst` package | ProjectLocal | BeanstalkSource |
+| project-root package facade | ProjectLocal | BeanstalkSource |
 | annotated project-local `.js` import | ProjectLocal | ExternalBinding |
 
-`Standard` and `Dependency` are reserved future origins. The prelude is implicit-import policy, not a package origin or backing. It exposes the bare `io` namespace as an alias to `@core/io`.
+`Standard` and `Dependency` are valid origins even when no current package uses them. The prelude is implicit-import policy, not a package origin or backing. It exposes the bare `io` namespace as an alias to `@core/io`.
 
-Core packages require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source-backed packages are normal modules with one cosmetic `#*.bst` root and an `export:` public surface.
+Core packages require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source-backed packages expose compiled immutable interfaces backed by support roots, the project package facade or builder-supplied source.
 
 The HTML builder's `@html` source-backed package exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Its cosmetic root filename is currently `packages/html/#mod.bst`, but its public API comes from the root's `export:` block. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
 
@@ -1459,7 +1468,7 @@ The HTML builder supports annotated single-file `.js` imports through `@bst.opaq
 
 Deferred package-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules
-- source-backed package HIR caching
+- persistent canonical module artifacts and dependency-package caches
 - user-authored external binding files
 - wildcard imports/exports and namespace exports
 - automatic docs/API extraction from module-root `export:` blocks

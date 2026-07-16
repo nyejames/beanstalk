@@ -32,7 +32,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
       not been accepted as design in `docs/roadmap/roadmap.md`.
     - Put accepted end-state architecture in the relevant compiler, memory or
       language design reference even when the implementation is incomplete.
-    - Put compiler architecture and stage ownership in: `docs/compiler-design-overview.md`.
+    - Put compiler architecture and stage ownership in `docs/compiler-design-overview.md`.
     - Put contributor workflow, benchmarking and tooling details in `CONTRIBUTING.md`.
     - Prefer short coverage summaries over long fixture lists unless fixture names identify a fragile surface.
     - Use the status labels from this page's legend. Put nuance such as removed, reserved,
@@ -814,8 +814,8 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     - Move workflow and benchmark details to `CONTRIBUTING.md`.
     - Move implementation sequencing, active project plans and proposals that have
       not been accepted as design to `docs/roadmap/roadmap.md`.
-    - Move accepted end-state architecture to the narrowest relevant compiler,
-      memory or language design reference, even when implementation is incomplete.
+    - Move accepted end-state architecture to the canonical compiler, memory or
+      language design reference, even when implementation is incomplete.
     - Move syntax examples and beginner explanations to docs pages under `docs/src/docs/**`.
     - Move compiler architecture details to `docs/compiler-design-overview.md`.
     - Keep this page focused on support status, coverage level, clean rejection, target-gating, and experimental status.

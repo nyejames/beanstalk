@@ -174,3 +174,6 @@ A missing optimisation is valid. A semantic divergence isn't.
 - @../ (Memory management): core contract
 - @../ownership-and-drops (Ownership and drops): unified ABI and destruction
 - @../borrow-validation (Borrow validation): analysis facts
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler JavaScript lowering)
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler Wasm lowering)
+- @https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md (Compiler backend lowering)
