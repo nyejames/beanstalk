@@ -228,6 +228,10 @@ pub(crate) fn common_syntax_mistake_message(
         CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {
             "Unary plus is not supported in Beanstalk.".to_string()
         }
+        CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path } => {
+            let authored_path = string_table.resolve(*authored_path);
+            format!("Import paths must begin with `@`. Write `import @{authored_path}`.")
+        }
     }
 }
 
@@ -320,6 +324,9 @@ pub(crate) fn common_syntax_mistake_suggestion(reason: &CommonSyntaxMistakeReaso
         }
         CommonSyntaxMistakeReason::UnsupportedUnaryPlus => {
             "Remove the leading `+`; use the value directly".to_owned()
+        }
+        CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { .. } => {
+            "Insert `@` before the import path".to_owned()
         }
     }
 }

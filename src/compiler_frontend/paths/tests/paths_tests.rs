@@ -568,11 +568,14 @@ fn collect_import_paths_from_tokens_supports_newline_after_import() {
 
 #[test]
 fn collect_import_paths_from_tokens_rejects_missing_path() {
+    // A bare identifier-led path such as `import footer` is now caught by the tokenizer's
+    // missing-`@` diagnostic before import collection runs. This case uses an import with no
+    // path token at all, which remains owned by the import-clause collector.
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
-        "import\nfooter\n",
+        "import\n",
         &source_path,
         TokenizerEntryMode::SourceFile,
         &style_directives,

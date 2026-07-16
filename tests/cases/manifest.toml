@@ -2544,6 +2544,11 @@ path = "import_syntax_test"
 tags = ["integration","language","imports", "dependency-resolution"]
 
 [[case]]
+id = "import_path_missing_at_prefix_rejected"
+path = "import_path_missing_at_prefix_rejected"
+tags = ["integration","language","imports", "diagnostics"]
+
+[[case]]
 id = "imported_start_function_callable_not_auto_run"
 path = "imported_start_function_callable_not_auto_run"
 tags = ["integration","functions","imports","entry-start", "dependency-resolution"]

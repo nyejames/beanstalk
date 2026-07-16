@@ -1,9 +1,10 @@
 use super::{
-    BorrowAccessKind, BorrowDiagnosticKind, CompileTimeEvaluationErrorReason, CompilerDiagnostic,
-    ConfigDiagnosticKind, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
-    DiagnosticCategory, DiagnosticCompoundAssignmentOperator, DiagnosticKind, DiagnosticLabel,
-    DiagnosticLabelMessage, DiagnosticOperator, DiagnosticPayload, DiagnosticPlace,
-    DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
+    BorrowAccessKind, BorrowDiagnosticKind, CommonSyntaxMistakeReason,
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic, ConfigDiagnosticKind,
+    DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticCategory,
+    DiagnosticCompoundAssignmentOperator, DiagnosticKind, DiagnosticLabel, DiagnosticLabelMessage,
+    DiagnosticOperator, DiagnosticPayload, DiagnosticPlace, DiagnosticSeverity,
+    GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidCastReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidConfigReason, InvalidFunctionSignatureReason,
@@ -538,6 +539,37 @@ fn remap_string_ids_updates_locations_payloads_labels_and_tokens() {
             ..
         } => assert_eq!(merged_table.resolve(*name), "Button"),
         payload => panic!("unexpected borrow payload: {payload:?}"),
+    }
+}
+
+#[test]
+fn remap_string_ids_updates_missing_at_prefix_authored_path() {
+    let mut local_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("main.bst", &mut local_table);
+    let authored_path = local_table.intern("vendor/drawing.js");
+
+    let diagnostic = CompilerDiagnostic::common_syntax_mistake(
+        CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path },
+        location(source_path),
+    );
+
+    let mut bag = DiagnosticBag::from_diagnostics(vec![diagnostic]);
+
+    let mut merged_table = StringTable::new();
+    let remap = merged_table.merge_from(&local_table);
+    bag.remap_string_ids(&remap);
+
+    match &bag.diagnostics()[0].payload {
+        DiagnosticPayload::CommonSyntaxMistake {
+            reason: CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path },
+        } => {
+            assert_eq!(
+                merged_table.resolve(*authored_path),
+                "vendor/drawing.js",
+                "authored import path StringId must remain valid after table merge/remap"
+            );
+        }
+        payload => panic!("unexpected missing-@ payload after remap: {payload:?}"),
     }
 }
 

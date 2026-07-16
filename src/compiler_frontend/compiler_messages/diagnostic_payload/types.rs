@@ -1576,6 +1576,7 @@ pub enum CommonSyntaxMistakeReason {
     InvalidSymbolicSpacing { error: SymbolicSpacingError },
     InvalidUnaryNegationSpacing,
     UnsupportedUnaryPlus,
+    ImportPathMissingAtPrefix { authored_path: StringId },
 }
 
 impl CommonSyntaxMistakeReason {
@@ -1584,6 +1585,10 @@ impl CommonSyntaxMistakeReason {
             CommonSyntaxMistakeReason::FunctionKeyword { keyword }
             | CommonSyntaxMistakeReason::StructKeyword { keyword } => {
                 *keyword = remap.get(*keyword);
+            }
+
+            CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path } => {
+                *authored_path = remap.get(*authored_path);
             }
 
             CommonSyntaxMistakeReason::EqualityOperator
