@@ -1,1 +1,0 @@
-#import thing = 1

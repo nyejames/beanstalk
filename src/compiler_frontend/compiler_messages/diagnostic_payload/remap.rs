@@ -14,8 +14,7 @@ impl DiagnosticPayload {
             | DiagnosticPayload::UnexpectedTrailingComma
             | DiagnosticPayload::UnescapedImplicitTemplateClose { .. }
             | DiagnosticPayload::TypeMismatch { .. }
-            | DiagnosticPayload::UnreachableMatchArm
-            | DiagnosticPayload::OldPrefixDeclarationSyntax => {}
+            | DiagnosticPayload::UnreachableMatchArm => {}
 
             DiagnosticPayload::ExpectedToken { expected, found } => {
                 expected.remap_string_ids(remap);

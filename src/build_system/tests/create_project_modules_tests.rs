@@ -244,17 +244,6 @@ fn first_error_diagnostic(messages: &CompilerMessages) -> &CompilerDiagnostic {
         .expect("expected at least one typed error diagnostic")
 }
 
-fn first_rendered_error_message(messages: &CompilerMessages) -> String {
-    let diagnostics = messages.error_diagnostics().cloned().collect::<Vec<_>>();
-    crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
-        &diagnostics,
-        &messages.string_table,
-    )
-    .into_iter()
-    .next()
-    .expect("expected at least one rendered diagnostic")
-}
-
 #[test]
 fn source_tree_index_collects_one_scan_and_applies_skip_policy() {
     let root = temp_dir("source_tree_index_outputs");
@@ -1427,28 +1416,6 @@ fn package_prefix_collision_with_entry_root_folder_rejected() {
         first_invalid_config_reason(&messages),
         InvalidConfigReason::EntryRootPackagePrefixCollision { .. }
     ));
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_hash_config_assignment_syntax() {
-    let root = temp_dir("config_invalid_assignment");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "#output_folder dist\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    let error_message = first_rendered_error_message(&messages);
-    assert!(
-        error_message.contains("Use standard constant syntax: 'output_folder #= value'."),
-        "unexpected error message: {error_message}"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

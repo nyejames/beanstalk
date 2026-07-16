@@ -98,7 +98,6 @@ pub enum InvalidMutableAccessReason {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidConfigReason {
     MissingKey,
-    ShorthandDeclaration,
     DuplicateKey,
     DeprecatedSrcKey,
     ReplacedLibrariesKey,
@@ -330,7 +329,6 @@ impl InvalidConfigReason {
             }
 
             Self::MissingKey
-            | Self::ShorthandDeclaration
             | Self::DuplicateKey
             | Self::DeprecatedSrcKey
             | Self::ReplacedLibrariesKey

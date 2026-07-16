@@ -217,9 +217,6 @@ fn render_payload_message(
         DiagnosticPayload::MalformedTemplate { message } => {
             format!("Malformed template: {}", string_table.resolve(*message))
         }
-        DiagnosticPayload::OldPrefixDeclarationSyntax => {
-            "`#` is no longer a declaration prefix".to_owned()
-        }
         DiagnosticPayload::InvalidCharacter { character } => {
             format!("Invalid character: '{character}'")
         }

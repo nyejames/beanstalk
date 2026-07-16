@@ -191,11 +191,11 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> ImportClauseResult<Vec<Int
     while index < tokens.len() {
         if matches!(tokens[index].kind, TokenKind::Import) {
             if previous_significant_token_kind(tokens, index)
-                .is_some_and(|kind| matches!(kind, TokenKind::Hash | TokenKind::Export))
+                .is_some_and(|kind| matches!(kind, TokenKind::Export))
             {
-                // Stage 0 only gathers reachable files. Header parsing owns diagnostics for
-                // legacy `#import` and other removed export-prefixed forms, while imports inside
-                // an `export:` block remain ordinary Import tokens after the block colon.
+                // Stage 0 only gathers reachable files. Imports inside an `export:` block are
+                // not separate top-level imports; they remain ordinary Import tokens after the
+                // block colon and are recorded by header export-block handling instead.
                 index += 1;
                 continue;
             }

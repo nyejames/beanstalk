@@ -12,28 +12,29 @@ This is an implementation plan, not a research backlog. Each phase should leave 
 
 ACTIVE_PLAN: `docs/roadmap/plans/compiler-diagnostics-improvement-plan.md`
 STATUS: active
-CURRENT_SLICE: Phase 1.2b accepted, awaiting checkpoint commit
-LAST_ACCEPTED_COMMIT: `fb4d26a3b`
-WORKTREE: `main` at `fb4d26a3b`, reviewed Phase 1.2b implementation and parent-owned plan findings
+CURRENT_SLICE: Phase 1.3 complete, preparing the accepted slice commit
+LAST_ACCEPTED_COMMIT: `99ec971b9`
+WORKTREE: `main` at `99ec971b9` with the validated Phase 1.3 slice pending commit
 REQUIRED_RELOADS: startup files, this plan and current source/diff
 RELEVANT_CONTEXT_NOW:
-- docs: error/option, template, constant, cast and generic source terminology plus diagnostic ownership, style, testing and validation contracts
-- code: diagnostic reason taxonomies, statement/template emitters, config/cast/template/control-flow renderers and focused integration cases
+- docs: import syntax, package/module ownership, compiler diagnostics, testing, validation and documentation rebuild contracts
+- code: validated compatibility deletion across syntax boundaries, Stage 0 path collection, config parsing, diagnostic ownership and fixtures
 ACCEPTANCE_CRITERIA:
-- fallible, optional, template, cast, config and statement-position diagnostics use source-visible terminology
-- standalone templates use `BST-SYNTAX-0025` while assigned, returned and argument templates remain valid
-- superseded reason variants and internal-stage prose are removed without compatibility paths
+- compatibility-only kinds, payloads, constructors, recognisers and pre-scans are deleted
+- compatibility-only fixtures and migration prose are removed without replacement diagnostics
+- canonical documentation and generated documentation were updated through the normal compiler path
 VALIDATION_STATE:
 - Phase 1.1 `just validate`: passed, including 3,511 Rust tests and 1,764 integration cases
 - Phase 1.2a focused compiler-message tests: passed, 36 tests
 - Phase 1.2a `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,766 integration cases, docs check and 28 benchmark cases
 - Phase 1.2b `just validate`: passed, including cross-target Clippy, 3,512 Rust tests, 1,767 integration cases, docs check and 28 benchmark cases
-DOCS_IMPACT: plan state only; progress matrix unaffected by Phase 1.1 or Phase 1.2 because support status did not change
+- Phase 1.3 `just validate`: passed, including cross-target Clippy, 3,511 Rust tests, 1,755 integration cases, docs check and 28 benchmark cases
+DOCS_IMPACT: obsolete migration prose was removed from canonical and generated docs; the progress matrix was reviewed and needs no update because current syntax support and rejection status are unchanged
 BLOCKERS_OR_OPEN_DECISIONS: none
 DELEGATION_DECISION: Ollama - explicitly required for every implementation worker slice
 NEXT_WORKER_ORDER: Ollama only for implementation slices
 STOP_REASON: none
-NEXT_RESUME_ACTION: commit the accepted Phase 1.2b slice, then reload for Phase 1.3
+NEXT_RESUME_ACTION: commit Phase 1.3, perform the mandatory post-commit reload and prepare the Phase 2.1 Ollama worker
 
 ## Confirmed design decisions
 
@@ -45,7 +46,7 @@ NEXT_RESUME_ACTION: commit the accepted Phase 1.2b slice, then reload for Phase 
   - `\t`
 - Every other quoted-string escape is rejected.
 - Raw backtick strings do not process escapes. Backslashes and newlines remain literal.
-- Legacy `#import` recognition, diagnostics, tests and documentation references are removed completely. It receives no migration-specific compatibility diagnostic.
+- Discontinued syntax receives no migration-specific compatibility diagnostics.
 - Incompatible template directives are rejected.
 - A directive-conflict diagnostic must name both conflicting items and explain the semantic reason they cannot be combined.
 - Existing mutable places require explicit `~place` only at mutable call and receiver-call boundaries.
@@ -111,7 +112,7 @@ Audit all messages touched by this plan for source terminology that no longer ma
 Implement this in two coherent slices:
 
 1. **1.2a exact operator facts (complete in `fb4d26a3b`):** replace the broad operator-category payload with the exact source operator and complete the operator wording formerly listed in Phase 7.2. This must land first because the generic message cannot name `<op>` from `UnsupportedOperatorCategory`.
-2. **1.2b remaining terminology (complete, pending checkpoint commit):** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
+2. **1.2b remaining terminology (complete in `99ec971b9`):** correct fallible, optional, template and statement-position messages plus the source-hostile internal-stage wording listed below.
 
 #### Required corrections
 
@@ -175,28 +176,33 @@ Implement this in two coherent slices:
 - No user-facing message describes `async` lowering or calls a source context `const-required`.
 - Repository search finds no stale wording after superseded variants are removed.
 
-### 1.3 Remove legacy `#import` completely
+### 1.3 Remove obsolete compatibility-only diagnostic paths
 
 **Original finding:** DIAG-039
 **Decision:** Strict removal
+**Status:** Complete
+**User expansion:** Beanstalk is early Alpha with no compatibility obligation. Remove every
+dedicated compiler path, diagnostic, fixture and migration reference for discontinued syntax.
+Current language and project syntax remain unaffected.
 
 #### Implementation
 
 Remove:
 
-- `RuleDiagnosticKind::LegacyImportSyntax`
-- descriptor `BST-RULE-0025`
-- its payload, constructor and renderer branches
-- tokenizer or header recognition that exists only to identify `#import`
+- compatibility-only diagnostic kinds, descriptors, payloads, constructors and render branches
+- tokenizer, header and config recognition that exists only to identify discontinued syntax
 - dedicated fixtures and unit tests
-- documentation and comments that describe `#import` as a legacy syntax
+- migration documentation and comments for the removed forms
 - generated documentation references through a normal docs rebuild, never direct edits under `docs/release/**`
 
-Do not replace this with a new compatibility diagnostic. The remaining current grammar may reject the token sequence through its ordinary syntax rules.
+Do not replace these with new compatibility diagnostics. The remaining current grammar may reject
+the token sequences through its ordinary syntax rules. Do not remove or weaken current syntax.
 
 #### Acceptance
 
-A repository search for `LegacyImportSyntax`, `BST-RULE-0025` and source-facing ``#import`` migration prose returns no active implementation or documentation references.
+A repository search finds no active implementation, fixture or documentation references to the
+removed compatibility surface. Ordinary current syntax remains covered by its existing positive
+tests.
 
 ## Phase 2: Tokenizer and structural syntax diagnostics
 
@@ -204,6 +210,13 @@ A repository search for `LegacyImportSyntax`, `BST-RULE-0025` and source-facing 
 
 **Original finding:** DIAG-028
 **Original DIAG-029 disposition:** Removed. Raw strings intentionally preserve backslashes and newlines.
+**Additional confirmed constraint:** expression-position raw backtick slices remain outside the
+accepted Alpha language surface and are already covered by
+`raw_backtick_string_expression_rejected`. This phase must preserve the tokenizer's raw-token
+behaviour without enabling raw backticks as source expressions.
+**Additional confirmed gap:** a physical newline after a backslash cannot be rendered through
+`UnsupportedEscape { escaped: '\n' }`. That would appear to reject the supported two-character
+`\\n` escape. Physical line continuation needs its own reason and prose.
 
 The current quoted-string tokenizer discards `\` and accepts any following character. This does not implement a defined escape grammar.
 
@@ -214,6 +227,7 @@ Add `SyntaxDiagnosticKind::InvalidStringEscape` with stable code `BST-SYNTAX-003
 ```rust
 enum InvalidStringEscapeReason {
     UnsupportedEscape { escaped: char },
+    PhysicalNewline,
     TrailingBackslash,
 }
 ```
@@ -230,7 +244,15 @@ Update quoted-string tokenization to decode only:
 
 Reject `\0`, `\x`, `\u`, `\q`, a backslash before a physical newline and every other escape.
 
+Render:
+
+- `Unsupported string escape '<escape>'. Quoted strings support '\\', '\"', '\n', '\r' and '\t'.`
+- `A backslash cannot continue a quoted string across a physical newline. Remove the backslash or use the two-character '\n' escape.`
+- `The string ends with a backslash. Add a supported escaped character or remove the backslash.`
+
 The primary span should cover the backslash and escaped character where both exist. A trailing backslash should point at the backslash.
+The physical-newline reason should point at the backslash without formatting the line break as
+the supported `\\n` spelling. Treat both LF and CRLF as the same source mistake.
 
 Raw backtick strings remain unchanged:
 
@@ -238,13 +260,17 @@ Raw backtick strings remain unchanged:
 - no invalid-escape diagnostics
 - physical newlines remain allowed
 - backslashes remain literal
+- no AST or language-surface change. Expression-position raw backticks remain rejected through
+  the existing ordinary syntax path.
 
 #### Tests
 
 - Unit tests for every accepted escape and decoded value
 - Unit tests for unsupported escapes and a trailing backslash
+- Unit tests for LF and CRLF physical-newline continuation
 - Integration case proving invalid escapes use `BST-SYNTAX-0034`
-- Positive raw-string cases containing `\n`, `\q`, backslashes and physical newlines
+- Tokenizer unit cases for raw tokens containing `\n`, `\q`, backslashes and physical newlines
+- Preserve the existing integration rejection for expression-position raw backticks
 
 ### 2.2 Make symbolic spacing diagnostics exact
 
@@ -302,12 +328,17 @@ Cover every compound-assignment token at least once and cover before, after and 
 
 **Original finding:** DIAG-038
 **Additional confirmed gap:** a payload-free reason cannot render the exact correction for the longer bare paths required by this phase and would misleadingly replace every path with the fixed `core/math` example
+**Additional confirmed gap:** `import ./utils` is the same missing-`@` mistake but currently reaches
+the generic `BST-SYNTAX-0019` "expected a path" branch. The structured reason must cover relative
+bare paths as well as identifier-led paths.
 
 `import core/math` currently reaches symbolic `/` spacing logic before header import parsing can explain the import mistake.
 
 #### Implementation
 
-- Extend the lexer's small left-context model so `/` can recognise a path-like identifier immediately following `import`.
+- Extend the lexer's small left-context model so `/` can recognise an identifier-led path
+  immediately following `import`, and recognise a relative `./...` spelling in the same import
+  position before the generic import-clause fallback.
 - Emit a dedicated structured `CommonSyntaxMistakeReason::ImportPathMissingAtPrefix { authored_path }` carrying the complete bare path spelling. Remap its `StringId` through the existing payload path.
 - Message:
 
@@ -322,6 +353,7 @@ Cover every compound-assignment token at least once and cover before, after and 
 
 - `import core/math`
 - a longer bare path whose rendered correction preserves every authored component
+- a relative bare path such as `import ./utils`
 - valid `import @core/math`
 - ordinary division after a value
 - `//` integer division and comments remain unaffected
@@ -1055,7 +1087,7 @@ These items must not be implemented as originally proposed.
 
 Implement in this order to avoid parallel diagnostic paths:
 
-1. Phase 1 render fallback, terminology cleanup and `#import` deletion
+1. Phase 1 render fallback, terminology cleanup and compatibility deletion
 2. Phase 2 tokenizer and parser boundary reasons
 3. Phase 3 mutable access, assignment and copy reasons
 4. Phase 4 fallible/optional handling and value receivers
@@ -1125,7 +1157,7 @@ Update the narrowest canonical source documents:
 
 - quoted-string escape set and raw-string preservation
 - template directive incompatibility rule
-- removal of all `#import` references
+- removal of obsolete compatibility migration references
 - any progress-matrix rows affected by:
   - newly rejected invalid string escapes
   - newly rejected single-target multi-return receiving
@@ -1162,7 +1194,7 @@ Also perform the manual diagnostic audit required by the compiler style guide:
 - All removed findings are absent from the implementation backlog.
 - Quoted strings implement exactly the confirmed escape set.
 - Raw strings preserve literal backslashes and newlines.
-- `#import` has no dedicated compatibility surface.
+- No deleted syntax has a dedicated compatibility surface.
 - Every incompatible directive diagnostic names both items and explains the conflict.
 - Mutable diagnostics distinguish missing `~`, immutable places, fresh values and invalid assignment markers.
 - Fallible and optional diagnostics name the authored operator and correct Beanstalk carrier.

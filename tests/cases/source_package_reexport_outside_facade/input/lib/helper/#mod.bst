@@ -1,2 +1,0 @@
-public #= [: ok]
-greet #= "Hello"

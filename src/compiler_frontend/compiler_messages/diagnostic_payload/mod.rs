@@ -264,8 +264,6 @@ pub enum DiagnosticPayload {
         message: StringId,
     },
 
-    OldPrefixDeclarationSyntax,
-
     // -----------------
     //  Syntax Payloads
     // -----------------

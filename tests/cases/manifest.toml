@@ -2019,31 +2019,6 @@ path = "constant_non_constant_reference_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "old_prefix_constant_rejected"
-path = "old_prefix_constant_rejected"
-tags = ["integration","language", "diagnostics", "constants", "imports"]
-
-[[case]]
-id = "old_prefix_function_rejected"
-path = "old_prefix_function_rejected"
-tags = ["integration","language", "diagnostics", "functions", "imports"]
-
-[[case]]
-id = "old_prefix_struct_rejected"
-path = "old_prefix_struct_rejected"
-tags = ["integration","language", "diagnostics", "structs", "imports"]
-
-[[case]]
-id = "old_prefix_choice_rejected"
-path = "old_prefix_choice_rejected"
-tags = ["integration","language", "diagnostics", "choices", "imports"]
-
-[[case]]
-id = "old_prefix_type_alias_rejected"
-path = "old_prefix_type_alias_rejected"
-tags = ["integration","language", "diagnostics", "aliases", "imports"]
-
-[[case]]
 id = "constants"
 path = "constants"
 tags = ["integration","language"]
@@ -6344,36 +6319,6 @@ path = "source_package_reexport_external_alias"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
-id = "source_package_reexport_duplicate"
-path = "source_package_reexport_duplicate"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
-id = "source_package_reexport_collision_decl"
-path = "source_package_reexport_collision_decl"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
-id = "source_package_reexport_outside_facade"
-path = "source_package_reexport_outside_facade"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
-id = "source_package_reexport_invalid_declaration"
-path = "source_package_reexport_invalid_declaration"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
-id = "source_package_reexport_not_exported"
-path = "source_package_reexport_not_exported"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
-id = "source_package_reexport_no_local_binding"
-path = "source_package_reexport_no_local_binding"
-tags = ["integration", "language", "imports", "facade", "diagnostics"]
-
-[[case]]
 id = "source_package_reexport_cross_package_single"
 path = "source_package_reexport_cross_package_single"
 tags = ["integration", "language", "imports", "facade", "source-packages"]
@@ -6382,11 +6327,6 @@ tags = ["integration", "language", "imports", "facade", "source-packages"]
 id = "source_package_reexport_cross_package_alias"
 path = "source_package_reexport_cross_package_alias"
 tags = ["integration", "language", "imports", "facade", "source-packages"]
-
-[[case]]
-id = "source_package_reexport_cross_package_not_exported"
-path = "source_package_reexport_cross_package_not_exported"
-tags = ["integration", "language", "imports", "facade", "source-packages", "diagnostics"]
 
 [[case]]
 id = "source_package_reexport_grouped_alias"

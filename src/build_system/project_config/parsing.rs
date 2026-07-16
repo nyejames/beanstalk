@@ -31,7 +31,7 @@ use crate::compiler_frontend::paths::path_resolution::{ImportRootPolicy, Project
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizerEntryMode};
+use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
 use std::collections::{BTreeSet, VecDeque};
@@ -527,12 +527,9 @@ fn prepare_one_config_file(
     };
     token_stream.canonical_os_path = Some(file_path.to_path_buf());
 
-    // Only the authored config file carries config-key declarations. Comparing the already-interned
+    // Only the authored config file needs structural validation. Comparing the already-interned
     // scope to the authored identity keeps classification exact without filesystem recanonicalization.
     let is_authored_config = &scope == authored_scope;
-    if is_authored_config {
-        errors.extend(validate_config_hash_assignments(&token_stream.tokens));
-    }
 
     let output = match prepare_file_from_tokens(
         token_stream,
@@ -622,7 +619,7 @@ fn validate_authored_config_surface(headers: &[Header]) -> Vec<CompilerDiagnosti
 }
 
 // -------------------------
-//  Shorthand Validation
+//  Duplicate Classification
 // -------------------------
 
 fn is_duplicate_config_header_error(diagnostic: &CompilerDiagnostic) -> bool {
@@ -645,82 +642,10 @@ fn is_authored_config_duplicate(
         && diagnostic.primary_location.scope == *authored_scope
 }
 
-/// Validate that all config declarations use standard constant syntax (`key #= value`).
-///
-/// WHY: the old shorthand `#key value` was removed. Collecting all violations at once lets users
-/// fix them in a single iteration rather than one error at a time.
-fn validate_config_hash_assignments(tokens: &[Token]) -> Vec<CompilerDiagnostic> {
-    let mut errors = Vec::new();
-    let mut index = 0usize;
-
-    while index < tokens.len() {
-        if !matches!(tokens[index].kind, TokenKind::Hash) {
-            index += 1;
-            continue;
-        }
-
-        index += 1;
-        skip_newlines(tokens, &mut index);
-
-        let Some(name_token) = tokens.get(index) else {
-            break;
-        };
-        let TokenKind::Symbol(name_id) = name_token.kind else {
-            continue;
-        };
-
-        index += 1;
-        skip_newlines(tokens, &mut index);
-
-        let Some(next_token) = tokens.get(index) else {
-            break;
-        };
-
-        // Current binding-mode syntax is left to the normal frontend parser. This
-        // check only reports the older removed shorthand where a scalar value
-        // followed `#name` without a declaration operator.
-        if matches!(
-            next_token.kind,
-            TokenKind::Assign | TokenKind::DoubleColon | TokenKind::TypeParameterBracket
-        ) {
-            continue;
-        }
-
-        // Scalar-like tokens immediately after `#name` indicate the removed shorthand form.
-        if matches!(
-            next_token.kind,
-            TokenKind::StringSliceLiteral(_)
-                | TokenKind::RawStringLiteral(_)
-                | TokenKind::Symbol(_)
-                | TokenKind::NumericLiteral(_)
-                | TokenKind::BoolLiteral(_)
-                | TokenKind::Path(_)
-                | TokenKind::OpenCurly
-        ) {
-            errors.push(config_diagnostic(
-                Some(name_id),
-                InvalidConfigReason::ShorthandDeclaration,
-                next_token.location.clone(),
-            ));
-        }
-    }
-
-    errors
-}
-
 fn config_diagnostic(
     key: Option<StringId>,
     reason: InvalidConfigReason,
     location: SourceLocation,
 ) -> CompilerDiagnostic {
     CompilerDiagnostic::invalid_config_reason(key, reason, location)
-}
-
-fn skip_newlines(tokens: &[Token], index: &mut usize) {
-    while let Some(token) = tokens.get(*index) {
-        if !matches!(token.kind, TokenKind::Newline) {
-            break;
-        }
-        *index += 1;
-    }
 }

@@ -1451,22 +1451,6 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn legacy_import_syntax(location: SourceLocation) -> Self {
-        Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::LegacyImportSyntax),
-            location,
-            DiagnosticPayload::None,
-        )
-    }
-
-    pub(crate) fn old_prefix_declaration_syntax(location: SourceLocation) -> Self {
-        Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::OldPrefixDeclarationSyntax),
-            location,
-            DiagnosticPayload::OldPrefixDeclarationSyntax,
-        )
-    }
-
     pub(crate) fn reserved_builtin_name(name: StringId, location: SourceLocation) -> Self {
         Self::new(
             DiagnosticKind::Rule(RuleDiagnosticKind::ReservedBuiltinName),

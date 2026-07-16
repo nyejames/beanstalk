@@ -1,9 +1,8 @@
 //! Top-level `#` item handling for header parsing.
 //!
-//! WHAT: handles boundary `#` items, including valid active-root const templates and removed
-//! legacy prefix forms such as `#import` and `#name`.
-//! WHY: the parser should keep valid and invalid hash-prefixed top-level forms in one place so
-//! `file_parser` can remain a high-level loop over classified items.
+//! WHAT: handles boundary `#` items, currently the active-root const-template form (`#[]`).
+//! WHY: the parser keeps hash-prefixed top-level forms in one place so `file_parser` can remain a
+//! high-level loop over classified items.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::const_fragments::create_top_level_const_template;
@@ -43,14 +42,6 @@ pub(super) fn handle_hash_item(
 
             handle_top_level_const_template(token_stream, state, context, current_location)
         }
-
-        TokenKind::Import => Err(Box::new(CompilerDiagnostic::legacy_import_syntax(
-            current_location,
-        ))),
-
-        TokenKind::Symbol(_) => Err(Box::new(CompilerDiagnostic::old_prefix_declaration_syntax(
-            current_location,
-        ))),
 
         _ => {
             state.push_start_body_token(current_token);

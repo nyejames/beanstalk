@@ -1394,7 +1394,7 @@ Execution and visibility:
 - Grouped imports inside `export:` re-export symbols, and grouped aliases define the public API name.
 - Public APIs must not expose private root-only types in signatures, fields, aliases, generic bounds, or exported constant types.
 - Receiver methods are visible across a module boundary when `export:` exposes the receiver type's source surface. Type aliases do not automatically re-export private implementation methods.
-- Legacy inline `export`, bare namespace exports, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
+- Legacy inline `export`, bare namespace exports, wildcard exports and function alias exports are not part of the Alpha surface.
 - A support package is visible only within its nearest ancestor normal module's subtree. It is visible to that owner, normal sibling modules and their descendants, but not above the owner, outside its subtree or from another support package in the same scope.
 - A support package is unavailable inside its own private implementation subtree.
 - A project package facade is not visible to the project's internal modules. It may assemble public descendant surfaces below `entry_root` for external consumers.

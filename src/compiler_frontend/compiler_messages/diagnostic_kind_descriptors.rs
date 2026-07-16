@@ -299,16 +299,6 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid top-level runtime statement",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::LegacyImportSyntax => DiagnosticDescriptor::new(
-            "BST-RULE-0025",
-            "Legacy `#import` syntax is no longer supported",
-            DiagnosticSeverity::Error,
-        ),
-        RuleDiagnosticKind::OldPrefixDeclarationSyntax => DiagnosticDescriptor::new(
-            "BST-RULE-0064",
-            "`#` is no longer a declaration prefix",
-            DiagnosticSeverity::Error,
-        ),
         RuleDiagnosticKind::ReservedBuiltinName => DiagnosticDescriptor::new(
             "BST-RULE-0027",
             "Reserved builtin name",

@@ -31,7 +31,7 @@ Module public API maps are built from:
 - grouped imports inside `export:`
 - grouped aliases inside those imports
 
-Legacy inline `export`, bare namespace exports, wildcard exports and legacy `#import` are outside the current surface.
+Legacy inline `export`, bare namespace exports and wildcard exports are outside the current surface.
 
 ## Namespace records
 

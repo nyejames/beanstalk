@@ -16,9 +16,6 @@ pub(crate) fn invalid_config_message(
 
     match reason {
         InvalidConfigReason::MissingKey => "Config constant is missing a key name.".to_owned(),
-        InvalidConfigReason::ShorthandDeclaration => format!(
-            "Invalid config declaration '#{key_label} ...'. Use standard constant syntax: '{key_label} #= value'."
-        ),
         InvalidConfigReason::DuplicateKey => {
             if let Some(key_name) = key_name {
                 format!("Duplicate config key '{key_name}' found. Each config key must be unique.")

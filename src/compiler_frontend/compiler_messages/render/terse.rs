@@ -9,17 +9,6 @@ use crate::compiler_frontend::compiler_messages::render::{
     relative_display_path_from_root, resolve_source_file_path, terse_payload_message,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticSeverity};
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-
-#[cfg(test)]
-pub(crate) fn format_terse_diagnostics(
-    diagnostics: &[CompilerDiagnostic],
-    string_table: &StringTable,
-) -> Vec<String> {
-    let context = DiagnosticRenderContext::new(string_table);
-    format_terse_diagnostics_with_context(diagnostics, context)
-}
 
 #[cfg(test)]
 pub(crate) fn format_terse_diagnostics_with_context(
